@@ -72,8 +72,16 @@
     'tick-fs626659': 0.47, 'btn-fs690300': 0.5456, 'syn-03-click-crisp': 0.6167,
     'syn-04-tick-micro': 1.0, 'syn-26-bakelite-bright': 0.3536,
     'syn-33-ratchet-tooth': 0.5394, 'syn-34-knife-seat': 0.3153,
-    'syn-35-relay-pull': 0.4581, 'syn-36-bolt-home': 0.3314,
-    'syn-37-spring-release': 0.2386
+    'syn-35-relay-pull': 0.4581, 'syn-36-bolt-home': 0.3314, 'syn-37-spring-release': 0.2386,
+    /* fax 系官方增益（Mach-O HandheldSound.Sample.gainTrim 静态逆向，.work/spec/sfx-reverse.md） */
+    'fax-send-key': 0.3770, 'fax-offhook': 0.1223,
+    'fax-dial-1': 0.2476, 'fax-dial-2': 0.2534, 'fax-dial-3': 0.2368,
+    'fax-dial-4': 0.2606, 'fax-dial-5': 0.2522, 'fax-dial-6': 0.2367,
+    'fax-carrier': 0.0881,
+    'fax-feed-1': 0.3216, 'fax-feed-2': 0.3175, 'fax-feed-3': 0.2928,
+    'fax-print-1': 0.7727, 'fax-print-2': 0.5556, 'fax-print-3': 0.7605,
+    'fax-load-1': 0.3107, 'fax-load-2': 0.3151, 'fax-load-3': 0.3034,
+    'fax-ding': 0.0997, 'fax-tear': 0.2950, 'fax-error': 0.3681
   };
   /* 全部音效文件清单（含完整 .wav 路径）。既是装配路径的来源，也让引用可 grep。 */
   var SOUND_FILES = [
