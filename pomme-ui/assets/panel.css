@@ -1647,7 +1647,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-clear {                       /* 官版底部图实测：白底清除键（LINE 右、发送左） */
   flex: none; appearance: none; border: 0; cursor: pointer; text-align: center;
   width: 60px; height: 43px; box-sizing: border-box;    /* 官版新图 49×35px×1.216 */
-  border-radius: 4px; padding: 4px 8px;
+  border-radius: 8px; padding: 4px 8px;
   background: linear-gradient(180deg, #FCFAF6 0%, #F1EDE6 100%);
   color: #453F3B;
   font-family: inherit; letter-spacing: .05em;
@@ -1665,7 +1665,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
                                   白字两行（发送/TRANSMIT）、扁平无立体阴影 */
   flex: none; appearance: none; border: 0; cursor: pointer; text-align: center; position: relative;
   width: 103px; height: 43px; box-sizing: border-box;    /* 官版新图 85×35px×1.216 */
-  border-radius: 4px; padding: 4px 10px;
+  border-radius: 8px; padding: 4px 10px;
   background: linear-gradient(180deg, #D26B5F 0%, #C05A4E 100%);
   color: #FFF;
   font-family: inherit; letter-spacing: .05em; line-height: 1.1;
