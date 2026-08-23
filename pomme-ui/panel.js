@@ -207,7 +207,8 @@
       src.connect(g).connect(waMaster);
       src.start();
       if (typeof window.__sfxLog === 'function') window.__sfxLog(name);   /* 测试观测口（函数版） */
-      (window.__sfxLogArr = window.__sfxLogArr || []).push(name);           /* 数组版：真实页面也能观测音效序列 */
+      (window.__sfxLogArr = window.__sfxLogArr || []).push(name);
+      if (window.__log) window.__log.push([performance.now(), 'SFX:' + name]);   /* 音画同步观测 */
     } else if (waCtx) {
       /* 解码未完成：下次触发即有声 */
     }
@@ -1348,6 +1349,7 @@
       playFax('fax-offhook');
       setTimeout(function () {
         fxSetPhase('dialing');
+        playFax('fax-dial-' + (1 + Math.floor(Math.random() * 6)), 0.7);   /* 进入即响第一声（循环首拍有延迟） */
         fxSfxIv(function () {
           if (fxPhase !== 'dialing') { fxSfxClear(); return; }
           playFax('fax-dial-' + (1 + Math.floor(Math.random() * 6)), 0.7);
@@ -1424,7 +1426,7 @@
           playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1);      /* 新纸落位（官版 24.85 峰） */
           /* 新纸段（官版 24.9-26.9 持续密集）：机器信息打印全程有声——print 低音量连响 */
           fxSfxIv(function () {
-            if (fxPhase !== 'loading' && fxPhase !== 'ready') { fxSfxClear(); return; }
+            if (fxPhase !== 'loading') { fxSfxClear(); return; }   /* 只在 loading 响；ready 一到就停（修越界） */
             playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 0.5);
           }, 150);
           fxSfxTo(function () {
