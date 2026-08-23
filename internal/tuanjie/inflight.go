@@ -10,13 +10,13 @@ import (
 
 // InflightReq 是一条进行中请求的快照。
 type InflightReq struct {
-	RID       string  `json:"rid"`
-	Model     string  `json:"model"`
-	UserID    string  `json:"user_id"`
-	Stream    bool    `json:"stream"`
-	Elapsed   float64 `json:"elapsed"`   // 总耗时秒
-	Idle      float64 `json:"idle"`      // 距上个 chunk 的静默秒数
-	Bytes     int64   `json:"bytes"`     // 已收字节
+	RID     string  `json:"rid"`
+	Model   string  `json:"model"`
+	UserID  string  `json:"user_id"`
+	Stream  bool    `json:"stream"`
+	Elapsed float64 `json:"elapsed"` // 总耗时秒
+	Idle    float64 `json:"idle"`    // 距上个 chunk 的静默秒数
+	Bytes   int64   `json:"bytes"`   // 已收字节
 }
 
 type registryEntry struct {
@@ -140,12 +140,11 @@ func newRID() string {
 	return string(buf)
 }
 
-
 // ActivityEvent 实时动态的一条事件（学群友 ActivityLog）。
 type ActivityEvent struct {
 	Seq       int    `json:"seq"`
-	Time      string `json:"time"`       // HH:MM:SS
-	Kind      string `json:"kind"`       // ok | error | info
+	Time      string `json:"time"` // HH:MM:SS
+	Kind      string `json:"kind"` // ok | error | info
 	Message   string `json:"message"`
 	Model     string `json:"model,omitempty"`
 	UserID    string `json:"user_id,omitempty"`

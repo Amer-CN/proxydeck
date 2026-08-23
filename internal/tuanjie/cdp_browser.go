@@ -99,6 +99,22 @@ func cdpFetchCodelyCreds(port string) (*CDPBrowserCreds, error) {
 		}
 	}
 	if token == "" {
+		// cookie 没读到：可能是页面还停在营销首页（登录态未激活）。
+		// 让第一个页面导航到 dashboard/usage 触发 cookie 域激活，等 1.5s 再读一次。
+		_ = cdpNavigate(wsURL, "https://codely.tuanjie.cn/dashboard/usage")
+		time.Sleep(1500 * time.Millisecond)
+		cookies2, err2 := cdpBrowserGetCookies(wsURL)
+		if err2 == nil {
+			for _, c := range cookies2 {
+				value, _ := c["value"].(string)
+				if strings.HasPrefix(value, "eyJ") && len(value) >= 60 {
+					token = value
+					break
+				}
+			}
+		}
+	}
+	if token == "" {
 		return nil, errors.New("cookie 里没找到团结登录态（浏览器里登录 codely.tuanjie.cn 了吗？）")
 	}
 	// 4. 解 JWT 拿 user_id（sub）
@@ -228,7 +244,7 @@ func launchBrowserWithCDP(port string) (string, error) {
 			"--remote-debugging-port="+port,
 			"--no-first-run",
 			"--no-default-browser-check",
-			"https://codely.tuanjie.cn",
+			"https://codely.tuanjie.cn/dashboard/usage",
 		)
 		if err := cmd.Start(); err != nil {
 			continue
@@ -285,7 +301,13 @@ func cdpBrowserGetCookies(pageWS string) ([]map[string]any, error) {
 	if !bytes.Contains(head, []byte("101")) {
 		return nil, fmt.Errorf("WebSocket 握手失败: %s", string(head[:minInt(120, len(head))]))
 	}
-	msg := []byte(`{"id":1,"method":"Network.getCookies","params":{"urls":["` + codelyCookieURL + `"]}}`)
+	// 多域匹配：团结的登录 cookie 可能挂 codely 子域，也可能挂 tuanjie.cn 父域——
+	// 两个根 URL 都传，CDP 按域匹配 cookie 存储全覆盖
+	msg := []byte(`{"id":1,"method":"Network.getCookies","params":{"urls":[
+		"https://codely.tuanjie.cn",
+		"https://tuanjie.cn",
+		"https://codely.tuanjie.cn/dashboard/usage"
+	]}}`)
 	if err := cdpWriteWSFrame(conn, msg); err != nil {
 		return nil, err
 	}
@@ -307,6 +329,68 @@ func cdpBrowserGetCookies(pageWS string) ([]map[string]any, error) {
 		}
 		if len(payload) > 1<<20 {
 			return nil, errors.New("CDP 响应过大")
+		}
+	}
+}
+
+// cdpNavigate 让指定页面导航到目标 URL（触发 cookie 激活用）。
+// cdpNavigate 让指定页面导航到目标 URL（触发 cookie 激活用）。
+func cdpNavigate(pageWS, targetURL string) error {
+	u, err := url.Parse(pageWS)
+	if err != nil {
+		return err
+	}
+	host := u.Host
+	if !strings.Contains(host, ":") {
+		host += ":80"
+	}
+	conn, err := net.DialTimeout("tcp", host, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(8 * time.Second))
+	key := uuid.NewString()[:16] + "=="
+	req := "GET " + u.RequestURI() + " HTTP/1.1\r\nHost: " + u.Host + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\n\r\n"
+	if _, err := conn.Write([]byte(req)); err != nil {
+		return err
+	}
+	buf := make([]byte, 1)
+	var head []byte
+	for len(head) < 4 || !bytes.HasSuffix(head, []byte("\r\n\r\n")) {
+		if _, err := io.ReadFull(conn, buf); err != nil {
+			return err
+		}
+		head = append(head, buf[0])
+		if len(head) > 8192 {
+			return errors.New("握手响应过长")
+		}
+	}
+	if !bytes.Contains(head, []byte("101")) {
+		return errors.New("WebSocket 握手失败")
+	}
+	msg, _ := json.Marshal(map[string]any{
+		"id": 2, "method": "Page.navigate",
+		"params": map[string]any{"url": targetURL},
+	})
+	if err := cdpWriteWSFrame(conn, msg); err != nil {
+		return err
+	}
+	var payload []byte
+	for {
+		frame, err := cdpReadWSFrame(conn)
+		if err != nil {
+			return err
+		}
+		payload = append(payload, frame...)
+		var resp struct {
+			ID int `json:"id"`
+		}
+		if json.Unmarshal(payload, &resp) == nil && resp.ID == 2 {
+			return nil
+		}
+		if len(payload) > 1<<20 {
+			return errors.New("CDP 响应过大")
 		}
 	}
 }

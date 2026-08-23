@@ -16,16 +16,16 @@ import (
 // GLM/codely 等一律直通零影响（验收标准 4 的判定函数）。
 func TestIsPacingModel(t *testing.T) {
 	cases := map[string]bool{
-		"KIMI-K3":                  true,
-		"kimi-k3":                  true,
-		"kimi/K3-thinking-public":  true,
-		"GLM-5.3":                  false,
-		"glm-5.3":                  false,
-		"codely-core":              false,
-		"codely-vl-public":         false,
-		"deepseek-v4-flash-0731":   false,
-		"?":                        false,
-		"":                         false,
+		"KIMI-K3":                 true,
+		"kimi-k3":                 true,
+		"kimi/K3-thinking-public": true,
+		"GLM-5.3":                 false,
+		"glm-5.3":                 false,
+		"codely-core":             false,
+		"codely-vl-public":        false,
+		"deepseek-v4-flash-0731":  false,
+		"?":                       false,
+		"":                        false,
 	}
 	for model, want := range cases {
 		if got := IsPacingModel(model); got != want {

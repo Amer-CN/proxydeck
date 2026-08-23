@@ -19,9 +19,9 @@ func TestSignLitellm(t *testing.T) {
 func TestSignLitellmSensitivity(t *testing.T) {
 	base := SignLitellm("/v1/models", "sk-a", time.Unix(1750000000, 0))
 	cases := map[string]string{
-		"path":  SignLitellm("/v1/chat/completions", "sk-a", time.Unix(1750000000, 0)),
-		"key":   SignLitellm("/v1/models", "sk-b", time.Unix(1750000000, 0)),
-		"time":  SignLitellm("/v1/models", "sk-a", time.Unix(1750000001, 0)),
+		"path": SignLitellm("/v1/chat/completions", "sk-a", time.Unix(1750000000, 0)),
+		"key":  SignLitellm("/v1/models", "sk-b", time.Unix(1750000000, 0)),
+		"time": SignLitellm("/v1/models", "sk-a", time.Unix(1750000001, 0)),
 	}
 	for name, v := range cases {
 		if v == base {

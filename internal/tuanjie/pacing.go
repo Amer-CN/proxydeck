@@ -20,13 +20,13 @@ import (
 // 等待自动重发，客户端永不（在 30 分钟总预算内）收到 KIMI 的 429。
 // 关闭时：调用方（handleChat）短路判定，行为与无节奏器完全一致。
 const (
-	pacingUpstreamCap = 200000              // 上游 TPM cap（窗口回补速率 = cap/60）
-	pacingEffectiveCap = 180000             // 有效预算（留安全余量）
-	pacingMargin       = 20000              // 放行余量（吸收上游计数偏差）
-	pacingWindow       = 60 * time.Second   // 滑动窗口
-	pacingMaxWait      = 30 * time.Minute   // 单请求总等待上限
-	pacingFallbackWait = 65 * time.Second   // 429 错误体解析失败时的固定等待
-	pacing429Extra     = 5 * time.Second    // 429 等待换算的固定附加
+	pacingUpstreamCap  = 200000           // 上游 TPM cap（窗口回补速率 = cap/60）
+	pacingEffectiveCap = 180000           // 有效预算（留安全余量）
+	pacingMargin       = 20000            // 放行余量（吸收上游计数偏差）
+	pacingWindow       = 60 * time.Second // 滑动窗口
+	pacingMaxWait      = 30 * time.Minute // 单请求总等待上限
+	pacingFallbackWait = 65 * time.Second // 429 错误体解析失败时的固定等待
+	pacing429Extra     = 5 * time.Second  // 429 等待换算的固定附加
 )
 
 // pacingRefillPerSec 窗口回补速率（token/秒）：上游 cap/60。
@@ -46,8 +46,8 @@ type Pacer struct {
 	enabled atomic.Bool
 	path    string // 持久化路径（exe 同目录 tuanjie-pacing.json）
 
-	mu     sync.Mutex
-	window []tokenUse // 最近 60s 放行请求的 token 记录（滑动）
+	mu      sync.Mutex
+	window  []tokenUse // 最近 60s 放行请求的 token 记录（滑动）
 	pending atomic.Int64
 }
 
