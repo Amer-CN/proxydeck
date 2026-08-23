@@ -1337,9 +1337,11 @@
         }, 160);
         setTimeout(function () {
           fxSetPhase('connecting');
-          /* 接通=回铃连响（所有者试听指认 B1 fax-ding 连续多次；送达为单声 ding，区分在次数） */
+          /* 接通=回铃（所有者最终指认 A6 fax-dial-6 交替 6 次：dial-6 与 dial-1 双音交替） */
           for (var ri = 0; ri < 6; ri++) {
-            (function (ri) { setTimeout(function () { playFax('fax-ding', 0.9); }, ri * 170); })(ri);
+            (function (ri) { setTimeout(function () {
+              playFax(ri % 2 ? 'fax-dial-1' : 'fax-dial-6', 0.9);
+            }, ri * 170); })(ri);
           }
           setTimeout(function () {
             fxSetPhase('sending');
