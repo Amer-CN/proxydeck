@@ -1402,7 +1402,8 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25); }
 
 /* ————— 纸笼（纸从灰过渡带里长出，顶裁在盖板斜坡下）————— */
-.fx-cage { position: relative; z-index: 2; margin: -26px 0 0; padding: 0 16px 12px; overflow: hidden;  /* 底 padding 12=底板下延补缝（纸高不受影响） */  /* 纸顶贴槽底；slot 实体段下延压住纸顶 2px=插缝观感 */
+.fx-cage { position: relative; z-index: 2; margin: -26px 0 0; padding: 0 16px 30px; overflow: hidden;
+  border-radius: 0 0 12px 12px;   /* 底板圆角收尾（所有者：底板止于键行上方） */  /* 纸顶贴槽底；slot 实体段下延压住纸顶 2px=插缝观感 */
   /* 底板（2026-08-23 所有者修正：浅灰——底板要浅，纸回收时的深灰阴影才有对比空间）。
      底部止于控制条上方并圆角收尾（不越过发送按钮） */
   background: linear-gradient(180deg, #E3DED8 0%, #DDD7D0 100%);
@@ -1557,11 +1558,9 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 
 /* ————— 底控台面 FaxDeckView（60px 奶油渐变）+ 台面斜坡（15px 灰渐变）————— */
-.fx-controls {                     /* 所有者最终定案：键行下移贴底 + 底板跟随拉长包住键行（与键行保持原间距）+ 纸不动 */
+.fx-controls {                     /* 键行区=外壳浅色（所有者：不是全灰——底板只加长下移量，不铺键行区） */
   display: flex; align-items: center; gap: 14px; margin-top: 0;
-  background: linear-gradient(180deg, #E3DED8 0%, #DDD7D0 100%);  /* 底板色铺满键行区 */
-  border-radius: 0 0 12px 12px;                                   /* 底板圆角收尾在块底 */
-  margin-bottom: -16px;             /* 吃掉 fx padding-bottom，底板贴块底 */
+  margin-bottom: -16px;             /* 键行下移贴底：吃掉 fx padding-bottom */
   padding: 18px 0 14px 2px;          /* 键行下移（灰线删除后占位还原）：开关/清除/发送整体贴向底部 */
   text-align: left;
   --fx-key-gap: 8px;                /* 发送键右缘=上方 LCD/底板右缘（所有者定：右边界平齐） */
@@ -1719,7 +1718,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   .fx-feed { margin: 13px 0 7px; }
   .fx-feed .fl-lb { font-size: 9px; }
   .fx-feed-cap { height: 14px; }
-  .fx-cage { margin-top: -14px; padding: 0 8px 5px; }
+  .fx-cage { margin-top: -14px; padding: 0 8px 30px; }   /* 底 30 与主规则一致（底板加长量） */
   .fx-holes { width: 15px; background-size: 15px 22px;
     background-image: radial-gradient(circle at 50% 50%, var(--pp-hole) 0 2.1px, transparent 2.3px); }
   .fx-light-catch { left: 15px; right: 15px; height: 6px; }
