@@ -1644,21 +1644,25 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 
 /* 发送 TRANSMIT：红键帽（渐变极浅）+ 2px 深红侧壁（实测 86×35、圆角 8、#DB534D→#DB4D48）*/
-.fx-clear {                       /* 官版底部图实测：白底清除键（LINE 右、发送左） */
+.fx-clear {                       /* 官版 3D 剖面实测：上暗线+顶面渐亮+主面+底亮沿（凸起键四层） */
   flex: none; appearance: none; border: 0; cursor: pointer; text-align: center;
-  width: 60px; height: 43px; box-sizing: border-box;    /* 官版新图 49×35px×1.216 */
+  width: 60px; height: 43px; box-sizing: border-box;
   border-radius: 8px; padding: 4px 8px;
-  background: linear-gradient(180deg, #FCFAF6 0%, #F1EDE6 100%);
+  background:
+    linear-gradient(180deg, #B8B2A8 0, #DDD7CC 8%, #EFEAE2 32%, #E6E0D7 100%);  /* 顶面渐亮→主面 */
   color: #453F3B;
   font-family: inherit; letter-spacing: .05em;
   display: flex; flex-direction: column; justify-content: center; gap: 1px;
-  box-shadow: inset 0 0 0 1px rgba(66, 58, 42, .14), inset 0 1px 0 rgba(255, 255, 255, .8);
+  box-shadow:
+    0 2px 3px rgba(66, 58, 42, .30),                     /* 键下方投影（官版 y0-2 深带） */
+    inset 0 -2px 0 rgba(255, 253, 248, .85);             /* 底边亮沿（官版 y50-52） */
   transition: transform 60ms ease, box-shadow 60ms ease;
 }
 .fx-clear .zh { font-size: 12.5px; font-weight: 700; line-height: 1; }
 .fx-clear .en { font-family: var(--mono-ui); font-size: 8.5px; font-weight: 600; letter-spacing: .1em; line-height: 1; opacity: .8; }
 .fx-clear:hover { filter: brightness(1.02); }
-.fx-clear:active { transform: translateY(1px); }
+.fx-clear:active { transform: translateY(2px);
+  box-shadow: 0 0 1px rgba(66, 58, 42, .2), inset 0 2px 4px rgba(66, 58, 42, .22); }  /* 按下=凹陷 */
 .fx-send {                        /* 官版：104×37px、与清除键间距 40px（所有者反馈） */
   margin-left: calc(var(--fx-key-gap, 8px) - 14px);   /* 对冲 flex gap 14 */
   /* 官版特写实测：105×37px 胶囊、砖红 (210,108,100)、
@@ -1678,6 +1682,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-send:hover:not(:disabled) { filter: brightness(1.04); }
 .fx-send:active:not(:disabled) {
   transform: translateY(2px);
+  box-shadow: 0 0 1px rgba(66, 58, 42, .2), inset 0 2px 4px rgba(66, 58, 42, .30);  /* 按下=凹陷 */
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, calc(var(--fx-send-catch) * .6)),
               0 0 0 var(--fx-send-riser);
 }
