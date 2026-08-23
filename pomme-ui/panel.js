@@ -114,6 +114,7 @@
     'assets/sounds/fax-load-2.wav',
     'assets/sounds/fax-load-3.wav',
     'assets/sounds/fax-offhook.wav',
+    'assets/sounds/fax-carrier.wav',       /* 传真载波（官方 bundle 提取——'已接通'握手音） */
     'assets/sounds/fax-print-1.wav',
     'assets/sounds/fax-print-2.wav',
     'assets/sounds/fax-print-3.wav',
@@ -1337,12 +1338,7 @@
         }, 160);
         setTimeout(function () {
           fxSetPhase('connecting');
-          /* 接通=回铃（所有者明确：B1 fax-ding 与 A6 fax-dial-6 交替 6 次：叮-嗒-叮-嗒…） */
-          for (var ri = 0; ri < 6; ri++) {
-            (function (ri) { setTimeout(function () {
-              playFax(ri % 2 ? 'fax-dial-6' : 'fax-ding', 0.9);
-            }, ri * 170); })(ri);
-          }
+          playFax('fax-carrier', 1);   /* 接通=传真载波握手音（官方 bundle 逆向提取 fax-carrier.wav 0.70s——之前资产里缺失，试听台自然没有） */
           setTimeout(function () {
             fxSetPhase('sending');
             playFax('fax-send-key');
