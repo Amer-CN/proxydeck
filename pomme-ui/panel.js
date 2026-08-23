@@ -1354,21 +1354,20 @@
         }, 160);
         setTimeout(function () {
           fxSetPhase('connecting');
-          /* 官版 5.52-7.40 强声区 1.9s（载波握手）：carrier 0.70s 连播 3 次覆盖 */
-          playFax('fax-carrier', 1);
-          setTimeout(function () { if (fxPhase === 'connecting') playFax('fax-carrier', 1); }, 700);
-          setTimeout(function () { if (fxPhase === 'connecting' || fxPhase === 'sending') playFax('fax-carrier', 1); }, 1400);
+          playFax('fax-carrier', 1);   /* 载波握手音 0.70s 播一次（官版第二轮 19.9-20.35 实测仅 0.5s 强声区——连播 3 次是误读第一轮混音） */
           setTimeout(function () {
             fxSetPhase('sending');
             playFax('fax-send-key');
             setTimeout(function () { playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3))); }, 400);
             var p0 = performance.now();
             /* 传送段持续走纸音：滚轮声循环（官版 SENDING 全程有音，间隔渐宽=纸加速） */
-            fxSfxIv(function () {
+            /* 走纸音随进度加速：前段 240ms（匀速）→ 末段 120ms（吞纸加速收尾），与 2400ms 位移动画同步 */
+            fxSfxTo(function tick() {
               if (fxPhase !== 'sending') { fxSfxClear(); return; }
               var k = Math.min(1, (performance.now() - p0) / 2400);
               playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.2);
-            }, 220);
+              fxSfxTo(tick, 240 - k * 120);
+            }, 240);
             var iv = setInterval(function () {
               var k = Math.min(1, (performance.now() - p0) / 2400);
               fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
