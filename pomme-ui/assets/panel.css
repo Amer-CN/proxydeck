@@ -1556,6 +1556,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 /* ————— 底控台面 FaxDeckView（60px 奶油渐变）+ 台面斜坡（15px 灰渐变）————— */
 .fx-controls {                     /* 官版底部图：浅色平面背景 (233,228,223)、紧凑高度 */
   display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 8px 14px 2px; text-align: left;
+  --fx-key-gap: 40px;               /* 官版白键右缘→红键左缘 33px×1.226 */
   border-bottom: 3px solid rgba(66, 58, 42, .18);   /* 官版底部收边阴影线（y116-120 亮度145-161） */
 }
 .fx-ramp {                             /* 台面斜坡：#A5A09E→#B8B5AF→#94948C */
@@ -1584,9 +1585,12 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-attach-copy span { display: block; margin-top: 2px; font-size: 10.5px; line-height: 1.5; color: var(--fine); opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* LINE 指示灯：待命灰 / 拨号·传送·占线红（占线红闪）/ 已送达·回执绿 */
-.fx-lamp-wrap { display: flex; align-items: center; gap: 5px; flex: none; }
+.fx-lamp-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: none; }
+                                       /* 官版：LINE 文字在灯正下方（灯=横长条） */
 .fx-line-silk { font-family: var(--mono-ui); font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--ink-2); }
-.fx-lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-2); opacity: .4; }
+.fx-lamp { width: 51px; height: 11px; border-radius: 5.5px;   /* 官版 LINE 灯=横向长条 42×9px×1.226 */
+  background: linear-gradient(180deg, #8A8580 0%, #6E6963 100%);
+  opacity: .55; box-shadow: inset 0 1px 2px rgba(0,0,0,.25); }
 .fx[data-fx-phase="dialing"] .fx-lamp,
 .fx[data-fx-phase="connecting"] .fx-lamp,
 .fx[data-fx-phase="sending"] .fx-lamp {
@@ -1642,7 +1646,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 /* 发送 TRANSMIT：红键帽（渐变极浅）+ 2px 深红侧壁（实测 86×35、圆角 8、#DB534D→#DB4D48）*/
 .fx-clear {                       /* 官版底部图实测：白底清除键（LINE 右、发送左） */
   flex: none; appearance: none; border: 0; cursor: pointer; text-align: center;
-  width: 68px; height: 37px; box-sizing: border-box;
+  width: 94px; height: 37px; box-sizing: border-box;   /* 官版 77px×1.226 */
   border-radius: 18px; padding: 4px 8px;
   background: linear-gradient(180deg, #FCFAF6 0%, #F1EDE6 100%);
   color: #453F3B;
@@ -1655,7 +1659,9 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-clear .en { font-family: var(--mono-ui); font-size: 8.5px; font-weight: 600; letter-spacing: .1em; line-height: 1; opacity: .8; }
 .fx-clear:hover { filter: brightness(1.02); }
 .fx-clear:active { transform: translateY(1px); }
-.fx-send {                        /* 官版特写实测：105×37px 胶囊、砖红 (210,108,100)、
+.fx-send {                        /* 官版：104×37px、与清除键间距 40px（所有者反馈） */
+  margin-left: calc(var(--fx-key-gap, 40px) - 14px);   /* 对冲 flex gap 14 */
+  /* 官版特写实测：105×37px 胶囊、砖红 (210,108,100)、
                                   白字两行（发送/TRANSMIT）、扁平无立体阴影 */
   flex: none; appearance: none; border: 0; cursor: pointer; text-align: center; position: relative;
   width: 105px; height: 37px; box-sizing: border-box;
@@ -1686,7 +1692,6 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 
 /* 两键紧挨（实测间距 11px） */
 .fx-controls .fx-lamp-wrap { margin-right: 2px; }
-.fx-clear { margin-right: 11px; }
 
 /* 传送阶段：正文/邮箱/模式键/开关不可交互（disabled 属性由 JS 同步） */
 .fx[data-fx-phase="offhook"] .fx-input,
@@ -1753,7 +1758,6 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   .fx-controls { flex-wrap: wrap; gap: 9px; margin-top: 12px; padding: 9px 6px 8px 2px; }
   .fx-attach-copy b { font-size: 9.5px; }
   .fx-attach-copy span { font-size: 9px; line-height: 1.45; }
-  .fx-clear { width: auto; flex: 1 1 auto; min-height: 34px; padding: 4px 10px; border-radius: 11px; }
   .fx-ramp { height: 11px; }
 }
 
