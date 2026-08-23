@@ -1337,9 +1337,9 @@
         }, 160);
         setTimeout(function () {
           fxSetPhase('connecting');
-          /* 接通=回铃连响（所有者：连续 6 声；官版 5.51-6.5s 每隔 ~170ms 强音交替实测） */
+          /* 接通=回铃连响（所有者试听指认 B1 fax-ding 连续多次；送达为单声 ding，区分在次数） */
           for (var ri = 0; ri < 6; ri++) {
-            (function (ri) { setTimeout(function () { playFax('fax-dial-' + (1 + (ri % 6)), 0.9); }, ri * 170); })(ri);
+            (function (ri) { setTimeout(function () { playFax('fax-ding', 0.9); }, ri * 170); })(ri);
           }
           setTimeout(function () {
             fxSetPhase('sending');
