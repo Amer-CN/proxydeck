@@ -197,7 +197,8 @@
       g.gain.value = DECK_BASIS * (TRIM[name] != null ? TRIM[name] : 1.0) * (gain == null ? 1 : gain);
       src.connect(g).connect(waMaster);
       src.start();
-      if (typeof window.__sfxLog === 'function') window.__sfxLog(name);   /* 测试观测口 */
+      if (typeof window.__sfxLog === 'function') window.__sfxLog(name);   /* 测试观测口（函数版） */
+      (window.__sfxLogArr = window.__sfxLogArr || []).push(name);           /* 数组版：真实页面也能观测音效序列 */
     } else if (waCtx) {
       /* 解码未完成：下次触发即有声 */
     }
@@ -1329,19 +1330,30 @@
       playFax('fax-offhook');
       setTimeout(function () {
         fxSetPhase('dialing');
-        playFax('fax-dial-' + (1 + Math.floor(Math.random() * 6)));
+        /* 拨号段：循环拨号音直到离开 dialing（官版 DIALING 全程有音） */
+        var dialIv = setInterval(function () {
+          if (fxPhase !== 'dialing') { clearInterval(dialIv); return; }
+          playFax('fax-dial-' + (1 + Math.floor(Math.random() * 6)), 0.7);
+        }, 160);
         setTimeout(function () {
           fxSetPhase('connecting');
+          playFax('fax-dial-' + (1 + Math.floor(Math.random() * 6)), 0.85);   /* 接通提示音 */
           setTimeout(function () {
             fxSetPhase('sending');
             playFax('fax-send-key');
             setTimeout(function () { playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3))); }, 400);
             var p0 = performance.now();
+            /* 传送段持续走纸音：滚轮声循环（官版 SENDING 全程有音，间隔渐宽=纸加速） */
+            var feedIv = setInterval(function () {
+              if (fxPhase !== 'sending') { clearInterval(feedIv); return; }
+              var k = Math.min(1, (performance.now() - p0) / 2400);
+              playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.2);
+            }, 220);
             var iv = setInterval(function () {
               var k = Math.min(1, (performance.now() - p0) / 2400);
               fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
               if (fxStateEn && fxPhase === 'sending') fxStateEn.textContent = fxEnLine('sending');
-              if (k >= 1) clearInterval(iv);
+              if (k >= 1) { clearInterval(iv); clearInterval(feedIv); }
             }, REDUCED ? 800 : 150);
             setTimeout(function () {
               /* 余纸吞尽，出回执：已送达 → 回执已打印 */
@@ -1373,7 +1385,7 @@
         fxSetPhase('loading');
         setTimeout(function () {
           if (fxPaper) fxPaper.classList.remove('up');
-          playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)));
+          playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)));   /* 换纸装纸音 */
           setTimeout(function () {
             fxSetPhase('ready');
             if (fx.getAttribute('data-fx-attach') !== 'off') fxPrintMinfo();
