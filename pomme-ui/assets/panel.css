@@ -1442,7 +1442,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   pointer-events: none; background: linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0));
 }
 [data-theme="dark"] .fx-light-catch { background: linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, 0)); }
-.fx-sheet { margin: 0; padding: 21px 17px 14px; text-align: left; }  /* 官版：纸顶→表头 20.9、左右 17.1/17.4（单层边距） */
+.fx-sheet { margin: 0 26px; padding: 15px 16px 14px; text-align: left; }
 
 /* ————— 纸头字段（.pp-head + .pp-fields）————— */
 .fx-p-head { display: flex; align-items: baseline; gap: 10px; }
@@ -1460,11 +1460,11 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-email:disabled { opacity: .6; }
 
 /* ————— 类别印章（.pp-stamp + 逆向 0.5° 微旋转）————— */
-.fx-stamp-row { margin-top: 27px; display: flex; align-items: center; gap: 14px; }  /* 官版：四栏→章 29.2 */
+.fx-stamp-row { margin-top: 12px; display: flex; align-items: center; gap: 14px; }
 .fx-stamp {
   display: inline-block; transform: rotate(-0.5deg);
-  font-size: 13.5px; font-weight: 800; letter-spacing: 0.2em; white-space: nowrap;  /* 官版 99.3×28.3 */
-  color: var(--pt-accent); padding: 4px 10px;
+  font-size: 13.5px; font-weight: 800; letter-spacing: 0.28em; white-space: nowrap;
+  color: var(--pt-accent); padding: 5px 11px 5px 15px;
   border: 2.2px solid var(--pt-accent); border-radius: 7px;
   background: color-mix(in srgb, var(--pt-accent) 5%, transparent);
 }
@@ -1702,11 +1702,59 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 
 /* 减动效：走纸/撕纸动画跳过，状态直达 */
 @media (prefers-reduced-motion: reduce) {
+  .fx-paper, .fx-receipt, .fx-minfo-clip { transition: none; }
+  .fx[data-fx-phase="tearing"] .fx-receipt { animation: none; opacity: 0; }
+  .fx-caret { animation: none; }
 }
 
-/* ————— @720px：fax 官版复刻尺寸全部在主规则（断点旧缩放体系已整体移除——
-   它多次覆盖主规则造成渲染不变假象，2026-08-23 教训总结）————— */
+/* ————— @720px 缩档（官网 media 查询对应参数，传真机零件同步缩一档）————— */
 @media (max-width: 720px) {
+  .fx-block { border-radius: 12px; }               /* = pt-chassis（壳已统一，断点同步） */
+  .fx-lcd { height: 65.7px; }
+  .fx-st-zh { font-size: 18px; }
+  .fx-st-en { font-size: 9px; margin-top: 2px; }
+  .fx-count { font-size: 15.5px; }
+  .fx-count-cap { font-size: 9.5px; margin-top: 3px; }
+  .fx-feed { margin: 13px 0 7px; }
+  .fx-feed .fl-lb { font-size: 9px; }
+  .fx-feed-cap { height: 14px; }
+  .fx-cage { margin-top: -14px; padding: 0 8px 30px; }   /* 底 30 与主规则一致（底板加长量） */
+  .fx-holes { width: 15px; background-size: 15px 22px;
+    background-image: radial-gradient(circle at 50% 50%, var(--pp-hole) 0 2.1px, transparent 2.3px); }
+  .fx-light-catch { left: 15px; right: 15px; height: 6px; }
+  .fx-sheet { margin: 0 15px; padding: 11px 9px 10px; }
+  .fx-brand { font-size: 9.5px; letter-spacing: .05em; }
+  .fx-no { font-size: 8.5px; }
+  .fx-p-meta { grid-template-columns: 1fr 1fr; gap: 2px 10px; margin-top: 6px; }
+  .fx-p-meta p { font-size: 8.5px; }
+  .fx-p-meta p b { margin-left: 6px; }
+  .fx-email { height: 13px; font-size: 8.5px; line-height: 13px; }
+  .fx-stamp-row { margin: 10px 0 2px; gap: 11px; }
+  .fx-stamp { font-size: 9.5px; letter-spacing: .16em; padding: 3px 7px 3px 10px; border-width: 1.5px; }
+  .fx-stamp-note { font-size: 8px; }
+  .fx-body { margin-top: 8px; }
+  .fx-body::before { background: repeating-linear-gradient(180deg, transparent 0 19px, var(--pp-rule) 19px 20px); }
+  .fx-input { min-height: 75px; font-size: 9.5px; line-height: 20px; }
+  .fx-minfo-clip { margin-top: 9px; }
+  .fx-minfo { padding: 7px 9px 6px; }
+  .fx-minfo .bt { font-size: 8px; margin-bottom: 2px; letter-spacing: .06em; }
+  .fx-minfo p { font-size: 8.5px; padding: .5px 0; gap: 6px; }
+  .fx-minfo p em { width: 34px; }
+  .fx-privacy { margin-top: 7px; font-size: 8px; line-height: 1.55; }
+  .fx-receipt .body { margin: 0 15px; padding: 11px 9px 10px; }
+  .fx-receipt .ttl { font-size: 10.5px; letter-spacing: .2em; }
+  .fx-receipt .sub { font-size: 7px; }
+  .fx-receipt dl div { font-size: 8px; }
+  .fx-receipt .thanks { font-size: 8.5px; }
+  .fx-receipt .tear-hint { font-size: 7px; }
+  .fx-receipt .teeth { height: 8px;
+    background:
+      linear-gradient(135deg, var(--fx-rcp-1) 50%, transparent 50%) 0 0 / 9px 8px repeat-x,
+      linear-gradient(-135deg, var(--fx-rcp-1) 50%, transparent 50%) 4.5px 0 / 9px 8px repeat-x; }
+  .fx-controls { flex-wrap: wrap; gap: 9px; padding: 9px 0 8px 2px; }   /* margin-top 交给主规则（接 cage 底板） */
+  .fx-attach-copy b { font-size: 9.5px; }
+  .fx-attach-copy span { font-size: 9px; line-height: 1.45; }
+  .fx-ramp { height: 11px; }
 }
 
 /* 窄屏：页面壳与传真机区块收边 */
