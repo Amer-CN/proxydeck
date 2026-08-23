@@ -1347,14 +1347,16 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
    选中文字在带内（#E9E4DF 系）——不是红点（差异要点 1）；
    未选中 = #E3DDD6 无带、文字 #453F3B（差异要点 2）。 */
 .fx-modes { display: flex; gap: 8px; margin-top: 12.7px; }   /* 键缝加大（所有者反馈嫌挤） */
-.fx-mode {
-  position: relative; flex: 1 1 0; min-width: 0; height: 44px;  /* 官版38.3被嫌矮→44px，两行字有呼吸（所有者定） */
-  appearance: none; border: 0; font-family: inherit; cursor: pointer;
-  border-radius: 8px; padding: 0; text-decoration: none;           /* 官版圆角 23-30px(4K)→6.8-8.8px，键高 21% */
-  background: var(--fx-key-idle); color: var(--fx-key-ink-idle);
+.fx-mode {                         /* 配方照抄主面板 .pt-key（所有者指定参考） */
+  position: relative; flex: 1 1 0; min-width: 0; height: 44px;
+  appearance: none; font-family: inherit; cursor: pointer;
+  border: 1px solid var(--pt-hairline); border-radius: 9px; padding: 0;
+  background: var(--pt-surface); color: var(--fx-key-ink-idle);
+  background-image: linear-gradient(var(--pt-hi-75), var(--pt-hi-75));
+  background-repeat: no-repeat; background-size: 100% 1px; background-position: top;
   white-space: nowrap; overflow: hidden;
-  box-shadow: inset 0 0 0 1px var(--fx-key-seam), 0 2px 0 var(--fx-key-riser);
-  transition: transform 60ms ease, box-shadow 60ms ease, background-color 120ms ease;
+  box-shadow: 0 2px 0 var(--pt-hairline), 0 4px 6px var(--pt-sh-10);
+  transition: transform 100ms cubic-bezier(.3, .7, .4, 1), box-shadow 100ms cubic-bezier(.3, .7, .4, 1), background-color 120ms ease;
 }
 .fx-mode:hover { background: color-mix(in srgb, var(--fx-key-idle) 92%, #000); }
 .fx-mode:active { transform: translateY(2px); box-shadow: inset 0 0 0 1px var(--fx-key-seam), 0 0 0 var(--fx-key-riser); }
@@ -1368,15 +1370,11 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   font-weight: 600; letter-spacing: .12em; opacity: .7; line-height: 1; }
 .fx-mode .band .zh { font-size: 12px; font-weight: 800; line-height: 1; }  /* 官版对比图实测字面 11.5px */
 .fx-mode.cur { color: #453F3B; }   /* 键帽文字色（选中/未选中同族） */
-.fx-mode.cur {                        /* 选中=下压凹陷（所有者定）：顶内凹阴影+面渐变收暗+无投影下沉 */
-  background: linear-gradient(180deg,
-    #C4BEB4 0,                                    /* 凹槽上沿暗线（减淡） */
-    #DFD8CE 14%,                                  /* 凹入的背光面（提亮） */
-    #E6E0D6 100%);                                /* 凹槽底渐亮 */
-  box-shadow:
-    inset 0 3px 5px rgba(66, 58, 42, .32),        /* 顶部内凹阴影（凹陷关键） */
-    inset 0 -1px 0 rgba(255, 253, 248, .5),       /* 凹槽下沿反光 */
-    inset 0 0 0 1px var(--fx-key-seam);
+.fx-mode.cur {                        /* 选中态配方照抄 .pt-key[aria-checked]（所有者指定主面板参考） */
+  transform: translateY(2px);
+  background-color: var(--pt-well); background-image: none;
+  border: 1px solid var(--pt-well-border);
+  box-shadow: inset 0 3px 4px var(--pt-rc-20);
 }
 
 /* 选中/未选中文字色由 --fx-key-ink-idle 与下方选中规则控制 */
@@ -1677,19 +1675,18 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   transform: translateY(2px); background-image: none;
   box-shadow: 0 1px 2px var(--pt-sh-10), inset 0 2px 3px var(--pt-rc-20);
 }
-.fx-send {                        /* 官版：104×37px、与清除键间距 40px（所有者反馈） */
-  margin-left: 0;   /* 间距由下方 wrapper 控制（负 margin 会让两键重叠、发送键投影印上清除键） */
-  /* 官版特写实测：105×37px 胶囊、砖红 (210,108,100)、
-                                  白字两行（发送/TRANSMIT）、扁平无立体阴影 */
-  flex: none; appearance: none; border: 0; cursor: pointer; text-align: center; position: relative;
-  width: 103px; height: 43px; box-sizing: border-box;    /* 官版新图 85×35px×1.216 */
-  border-radius: 8px; padding: 4px 10px;
-  background: linear-gradient(180deg, #D26B5F 0%, #C05A4E 100%);
+.fx-send {                        /* 配方照抄主面板 .pt-key（所有者指定参考；红面版与清除键同构） */
+  flex: none; appearance: none; cursor: pointer; text-align: center; position: relative;
+  width: 103px; height: 43px; box-sizing: border-box;
+  border: 1px solid #8E2F28; border-radius: 9px; padding: 4px 10px;
+  background: #D6412F;
+  background-image: linear-gradient(rgba(255, 200, 190, .75), rgba(255, 200, 190, .75));
+  background-repeat: no-repeat; background-size: 100% 1px; background-position: top;
   color: #FFF;
   font-family: inherit; letter-spacing: .05em; line-height: 1.1;
   display: flex; flex-direction: column; justify-content: center; gap: 1px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18);
-  transition: transform 60ms ease, box-shadow 60ms ease, filter 120ms ease;
+  box-shadow: 0 2px 0 #8E2F28, 0 4px 6px var(--pt-sh-10);
+  transition: transform 100ms cubic-bezier(.3, .7, .4, 1), box-shadow 100ms cubic-bezier(.3, .7, .4, 1), filter 120ms ease;
 }
 .fx-send .zh { font-size: 13px; font-weight: 700; line-height: 1; }
 .fx-send .en { font-family: var(--mono-ui); font-size: 8.5px; font-weight: 600; letter-spacing: .1em; line-height: 1; opacity: .92; }
@@ -1697,7 +1694,6 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-send:active:not(:disabled) {      /* 按压配方照抄 .pt-key:active */
   transform: translateY(2px); background-image: none;
   box-shadow: 0 1px 2px var(--pt-sh-10), inset 0 2px 3px rgba(66, 20, 14, .28);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, calc(var(--fx-send-catch) * .6)),
               0 0 0 var(--fx-send-riser);
 }
 .fx-send:focus-visible { outline: 2px solid var(--pt-accent); outline-offset: 3px; }
@@ -2166,6 +2162,14 @@ body.pt-try { background: var(--pt-paper); }
 /* 横排 LED：与原版 pt-vu 同款 8×14 格子，从右向左点亮（值大→左侧亮） */
 .sc-vu-wrap .pt-vu { flex-direction: row-reverse; }
 .sc-vu-wrap .pt-vu i { flex: none; }
+
+/* 账号添加模态表单（机械风：pt-field 同款输入框） */
+.acc-form { display: flex; flex-direction: column; gap: 10px; }
+.acc-f-row { display: flex; align-items: center; gap: 8px; }
+.acc-f-row label { flex: none; width: 88px; font-size: 11px; font-weight: 650; color: var(--pt-ink); }
+.acc-f-row .pt-field { flex: 1 1 auto; }
+.acc-f-help { margin: 2px 0 0; font-size: 9.5px; line-height: 1.7; color: var(--pt-ink2); }
+.acc-f-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* 团结多账号矩阵（学群友 Codely Relay 账号池） */
 .acc-list { display: flex; flex-direction: column; gap: 5px; }
@@ -4143,21 +4147,43 @@ var PT_I18N = {
       }).join('');
     } catch (e) {}
   }
-  // 添加账号（prompt 引导取 user_id/token；群友经验——F12 取 Bearer + jwt.io 解 sub）
+  // 添加账号：机械风模态窗（pt-field 输入框，与链路配置的输入框同款）
   (function bindAccAdd() {
     var btn = $('tjAccAdd');
     if (!btn) return;
-    btn.onclick = async function () {
-      var uid = prompt("user_id（浏览器登录 codely.tuanjie.cn → F12 → 请求头 Bearer → jwt.io 解码 sub）:");
-      if (!uid) return;
-      var token = prompt("access_token（同上 Bearer 冒号后的整串）:");
-      if (!token) return;
-      var r = await (await fetch("http://127.0.0.1:8788/accounts", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "add", user_id: uid.trim(), token: token.trim() })
-      })).json();
-      toast(r.ok ? "ok" : "err", r.ok ? "账号已添加" : "添加失败", r.msg || "");
-      loadTuanjieAccounts();
+    var ACC_FORM = '<h3>添加账号 · ADD ACCOUNT</h3><div class="m-body acc-form">' +
+      '<div class="acc-f-row"><label>user_id</label>' +
+      '<input class="pt-field" id="accUid" placeholder="jwt.io 解码 sub 字段" spellcheck="false" autocomplete="off"></div>' +
+      '<div class="acc-f-row"><label>access_token</label>' +
+      '<input class="pt-field" id="accToken" type="password" placeholder="F12 请求头 Bearer 冒号后的整串" spellcheck="false" autocomplete="off">' +
+      '<button type="button" class="pt-key-eye" id="accEye" title="显示/隐藏">👁</button></div>' +
+      '<p class="acc-f-help">取法：浏览器登录 codely.tuanjie.cn → F12 → 网络面板任一 api 请求 → 请求头 Bearer 整串即 token；粘到 jwt.io 解码，sub 就是 user_id。</p>' +
+      '<div class="acc-f-actions"><button type="button" class="ibtn2 accent" id="accSubmit">添加</button></div></div>';
+    btn.onclick = function () {
+      openModal(ACC_FORM);
+      var eye = $('accEye');
+      if (eye) eye.onclick = function () {
+        var t = $('accToken');
+        t.type = t.type === 'password' ? 'text' : 'password';
+      };
+      var submit = $('accSubmit');
+      if (!submit) return;
+      submit.onclick = async function () {
+        var uid = ($('accUid').value || '').trim();
+        var token = ($('accToken').value || '').trim();
+        if (!uid || !token) { toast("err", "缺少字段", "user_id 和 access_token 都要填"); return; }
+        submit.disabled = true; submit.textContent = "添加中…";
+        try {
+          var r = await (await fetch("http://127.0.0.1:8788/accounts", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "add", user_id: uid, token: token })
+          })).json();
+          toast(r.ok ? "ok" : "err", r.ok ? "账号已添加" : "添加失败", r.msg || "");
+          if (r.ok) document.querySelector(".modal-close").click();
+        } catch (e) { toast("err", "添加失败", String(e)); }
+        submit.disabled = false; submit.textContent = "添加";
+        loadTuanjieAccounts();
+      };
     };
   })();
   // 注水体检（金丝雀探针，逐账号直连）
