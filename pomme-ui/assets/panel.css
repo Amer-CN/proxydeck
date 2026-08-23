@@ -1361,10 +1361,15 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   font-weight: 600; letter-spacing: .12em; opacity: .7; line-height: 1; }
 .fx-mode .band .zh { font-size: 12px; font-weight: 800; line-height: 1; }  /* 官版对比图实测字面 11.5px */
 .fx-mode.cur { color: #453F3B; }   /* 键帽文字色（选中/未选中同族） */
-.fx-mode.cur {                        /* 顶部 1px 亮边 = #C1BCB1→#D5CDC2 渐变，其下键帽 #DFD7CC */
+.fx-mode.cur {                        /* 选中=下压凹陷（所有者定）：顶内凹阴影+面渐变收暗+无投影下沉 */
   background: linear-gradient(180deg,
-    var(--fx-key-cur-hi-1) 0, var(--fx-key-cur-hi-2) 1px, var(--fx-key-cur) 1px);
-  box-shadow: inset 0 0 0 1px var(--fx-key-seam), 0 2px 0 var(--fx-key-riser);
+    #B7B1A6 0,                                    /* 凹槽上沿暗线 */
+    var(--fx-key-cur) 14%,                        /* 凹入的背光面 */
+    #D3CCC1 100%);                                /* 凹槽底渐亮 */
+  box-shadow:
+    inset 0 3px 5px rgba(66, 58, 42, .32),        /* 顶部内凹阴影（凹陷关键） */
+    inset 0 -1px 0 rgba(255, 253, 248, .5),       /* 凹槽下沿反光 */
+    inset 0 0 0 1px var(--fx-key-seam);
 }
 
 /* 选中/未选中文字色由 --fx-key-ink-idle 与下方选中规则控制 */
