@@ -1343,11 +1343,11 @@
       }
       fxT0 = performance.now();
       fx._pct = 10;
+      /* 官方线性时间轴（音画交叉验证）：摘机170→拨号170→载波320→传送1820→切换390→回执650 */
       fxSetPhase('offhook');
       playFax('fax-offhook');
       setTimeout(function () {
-        fxSetPhase('dialing');       /* 官方节奏（音画交叉验证 .work/spec/sfx-reverse.md）：摘机 170ms 后拨号 */
-        /* 拨号段：循环拨号音直到离开 dialing（官版 DIALING 全程有音） */
+        fxSetPhase('dialing');
         fxSfxIv(function () {
           if (fxPhase !== 'dialing') { fxSfxClear(); return; }
           playFax('fax-dial-' + (1 + Math.floor(Math.random() * 6)), 0.7);
@@ -1398,8 +1398,8 @@
               }, REDUCED ? 0 : 350);
             }, REDUCED ? 0 : 2210);
           }, REDUCED ? 0 : 320);
-        }, REDUCED ? 0 : 950);
-      }, REDUCED ? 0 : 650);
+        }, REDUCED ? 0 : 170);   /* 拨号 170ms（官方） */
+      }, REDUCED ? 0 : 170);     /* 摘机 170ms（官方） */
     }
 
     function fxTear() {
@@ -1431,9 +1431,9 @@
             fxSfxClear();
             fxSetPhase('ready');
             if (fx.getAttribute('data-fx-attach') !== 'off') fxPrintMinfo();
-          }, REDUCED ? 0 : 950);
-        }, REDUCED ? 0 : 800);
-      }, REDUCED ? 0 : 450);
+          }, REDUCED ? 0 : 2070);   /* 新纸打印（官方 2.07s） */
+        }, REDUCED ? 0 : 940);     /* 换纸吞纸（官方 0.94s） */
+      }, REDUCED ? 0 : 310);       /* 撕纸（官方 0.31s） */
     }
 
     /* CLEAR：点按清纸；长按 1.5 秒演示占线 */
