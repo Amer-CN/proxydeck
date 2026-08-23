@@ -1560,7 +1560,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-controls {                     /* 官版底部图：浅色平面背景 (233,228,223)、紧凑高度 */
   display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 0 14px 2px; text-align: left;
   --fx-key-gap: 8px;                /* 发送键右缘=上方 LCD/底板右缘（所有者定：右边界平齐） */
-  border-bottom: 3px solid rgba(66, 58, 42, .18);   /* 官版底部收边阴影线（y116-120 亮度145-161） */
+  /* 底部收边线已删（所有者：突兀的灰线——官版图的深色带实为截图边缘阴影误读） */
 }
 .fx-ramp {                             /* 台面斜坡：#A5A09E→#B8B5AF→#94948C */
   height: 15px; margin: 0 2px; border-radius: 0 0 4px 4px;
