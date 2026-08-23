@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 // handleAccounts GET=账号列表+被动注水事件；POST=增删/启停/GLM 标记（action 字段分发）。
@@ -55,9 +56,47 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": s.pool.Toggle(req.UserID, req.Enabled)})
 	case "setglm":
 		writeJSON(w, map[string]any{"ok": s.pool.SetGLM(req.UserID, req.HasGLM53)})
+	case "auto":
+		s.handleAccountAuto(w, r)
+		return
 	default:
 		writeJSON(w, map[string]any{"ok": false, "msg": "未知 action"})
 	}
+}
+
+// handleAccountAuto 自动探测：连浏览器调试口读团结 cookie → 解析入池。
+// 浏览器没开调试口时 spawn（带 --remote-debugging-port，同一用户 profile，
+// 登录态保留），等就绪后重试。探测/入池全程只针对 codely.tuanjie.cn 域。
+func (s *Server) handleAccountAuto(w http.ResponseWriter, r *http.Request) {
+	// 1. 直接探测（浏览器可能已带调试口在跑）
+	if creds := probeCDPBrowser(); creds != nil {
+		if s.pool.Add(creds.UserID, creds.AccessToken, creds.UserID, "") {
+			writeJSON(w, map[string]any{"ok": true, "msg": "已从浏览器读取并添加账号", "user_id": creds.UserID, "browser": creds.Browser})
+		} else {
+			writeJSON(w, map[string]any{"ok": false, "msg": "该账号已在池里（user_id " + creds.UserID + "）", "user_id": creds.UserID})
+		}
+		return
+	}
+	// 2. 探测不到 → spawn 浏览器带调试口（用户已在前端确认过）
+	path, err := launchBrowserWithCDP("9222")
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": false, "msg": "未探测到调试口，且启动浏览器失败: " + err.Error()})
+		return
+	}
+	// 3. 等浏览器起来（CDP 就绪通常 2~5 秒，最多等 12 秒）
+	deadline := time.Now().Add(12 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(1200 * time.Millisecond)
+		if creds := probeCDPBrowser(); creds != nil {
+			if s.pool.Add(creds.UserID, creds.AccessToken, creds.UserID, "") {
+				writeJSON(w, map[string]any{"ok": true, "msg": "已从浏览器读取并添加账号", "user_id": creds.UserID, "browser": path})
+			} else {
+				writeJSON(w, map[string]any{"ok": false, "msg": "该账号已在池里（user_id " + creds.UserID + "）", "user_id": creds.UserID})
+			}
+			return
+		}
+	}
+	writeJSON(w, map[string]any{"ok": false, "msg": "浏览器已启动但未读到团结登录态——请在打开的浏览器里确认已登录 codely.tuanjie.cn，再点一次探测"})
 }
 
 // handleActivity 实时动态（最近事件，GUI 轮询；学群友 /api/activity）。

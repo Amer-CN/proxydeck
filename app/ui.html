@@ -2542,7 +2542,8 @@ body.pt-try { background: var(--pt-paper); }
                 </div></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm">账号池 · Accounts</span>
-                  <button type="button" class="ibtn2" id="tjAccAdd">＋ 添加账号</button>
+                  <button type="button" class="ibtn2 accent" id="tjAccAuto" title="自动从浏览器读取团结登录态（需以调试模式启动浏览器，登录态不受影响）">⚡ 自动探测</button>
+                  <button type="button" class="ibtn2" id="tjAccAdd">＋ 手动添加</button>
                   <button type="button" class="ibtn2" id="tjWaterBtn" title="金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型">注水体检</button></div>
                 <div class="acc-list" id="tjAccList"><div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号启用多账号轮换</div></div>
 
@@ -4269,6 +4270,28 @@ var PT_I18N = {
       }).join('');
     } catch (e) {}
   }
+  // 自动探测：从浏览器读团结登录态（CDP；探测不到时带调试参数拉起浏览器）
+  (function bindAccAuto() {
+    var btn = $('tjAccAuto');
+    if (!btn) return;
+    btn.onclick = async function () {
+      if (!confirm("自动探测会从你的浏览器（Chrome/Edge）读取团结登录态。\n\n如果浏览器没开调试模式，会自动以调试模式重启浏览器（同一账号配置，登录态/书签/扩展都不变；调试口只监听本机）。\n\n继续吗？")) return;
+
+
+      btn.disabled = true; btn.textContent = "探测中…";
+      try {
+        var r = await (await fetch("http://127.0.0.1:8788/accounts", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "auto" })
+        })).json();
+        toast(r.ok ? "ok" : "err", r.ok ? "自动探测成功" : "探测未成功", r.msg || "");
+        if (r.ok) logInto($('logStream'), "ok", "账号池：已自动添加账号 " + (r.user_id || ""));
+      } catch (e) { toast("err", "探测失败", String(e)); }
+      btn.disabled = false; btn.textContent = "⚡ 自动探测";
+      loadTuanjieAccounts();
+    };
+  })();
+
   // 添加账号：机械风模态窗（pt-field 输入框，与链路配置的输入框同款）
   (function bindAccAdd() {
     var btn = $('tjAccAdd');
