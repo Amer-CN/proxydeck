@@ -1362,17 +1362,25 @@
               var k = Math.min(1, (performance.now() - p0) / 2400);
               fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
               if (fxStateEn && fxPhase === 'sending') fxStateEn.textContent = fxEnLine('sending');
-              if (k >= 1) { clearInterval(iv); clearInterval(feedIv); }
+              if (k >= 1) {
+                clearInterval(iv); clearInterval(feedIv);
+                playFax('fax-offhook', 1);   /* 走纸收尾闷响（官版 7.46s：纸吞完一声低频"咚"） */
+              }
             }, REDUCED ? 800 : 150);
             setTimeout(function () {
               /* 余纸吞尽，出回执：已送达 → 回执已打印 */
               if (fxPaper) fxPaper.classList.add('up');
               fxFillReceipt();
               fxSetPhase('sent');
-              playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)));
+              /* 回执打印段：print 连响（官版回执吐出全程有声，单声 10ms 根本听不见） */
+              var printIv = setInterval(function () {
+                if (fxPhase !== 'sent') { clearInterval(printIv); return; }
+                playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 1);
+              }, 120);
               setTimeout(function () {
+                clearInterval(printIv);
                 fxSetPhase('printed');
-                playFax('fax-ding');
+                playFax('fax-ding', 1);   /* 回执打完：叮（官方增益 0.0997 由 TRIM 承担） */
               }, REDUCED ? 0 : 1000);
             }, REDUCED ? 0 : 2450);
           }, REDUCED ? 0 : 750);
