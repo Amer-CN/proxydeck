@@ -1397,19 +1397,30 @@
     function fxTear() {
       if (fxPhase !== 'printed') return;
       fxSetPhase('tearing');
-      playFax('fax-tear');
+      /* 撕纸段（官版 22.56-23.21）：tear 主声 + 两次强收尾（22.66/22.76/22.82 三强峰） */
+      playFax('fax-tear', 1);
+      setTimeout(function () { playFax('fax-tear', 0.8); }, 100);
+      setTimeout(function () { playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1); }, 200);
       setTimeout(function () {
-        /* 换纸中：吞余纸 → 出 NO.+1 新纸（计数清零、正文带 placeholder） */
+        /* 换纸段（官版 23.52-24.46）：吞纸双强峰 + 装新纸 */
         fxSerial += 1;
         if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
         if (fxDateEl) fxDateEl.textContent = fxNow().date;
         if (fxText) fxText.value = '';
         fxCountUpdate();
         fxSetPhase('loading');
+        playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1);        /* 吞余纸 */
+        setTimeout(function () { playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1); }, 300);
         setTimeout(function () {
           if (fxPaper) fxPaper.classList.remove('up');
-          playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)));   /* 换纸装纸音 */
+          playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1);      /* 新纸落位（官版 24.85 峰） */
+          /* 新纸段（官版 24.9-26.9 持续密集）：机器信息打印全程有声——print 低音量连响 */
+          var freshIv = setInterval(function () {
+            if (fxPhase !== 'loading' && fxPhase !== 'ready') { clearInterval(freshIv); return; }
+            playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 0.5);
+          }, 150);
           setTimeout(function () {
+            clearInterval(freshIv);
             fxSetPhase('ready');
             if (fx.getAttribute('data-fx-attach') !== 'off') fxPrintMinfo();
           }, REDUCED ? 0 : 950);
