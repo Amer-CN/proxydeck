@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -233,17 +234,31 @@ func base64URLDecode(s string) ([]byte, error) {
 	return out, nil
 }
 
-// launchBrowserWithCDP 找到 Chrome/Edge 并带调试参数启动（同一用户 profile）。
-// 返回启动的浏览器路径；找不到返回错误。
+// launchBrowserWithCDP 让浏览器带调试口运行（同一用户 profile）。
+// 关键：同 profile 的浏览器已在跑时，新进程的调试参数会被忽略（Windows 实例合并）。
+// 做法：先结束现有浏览器进程（Edge 默认"启动继续上次会话"，重开后标签页和登录态都在），
+// 再带调试口拉起并打开团结 dashboard。
 func launchBrowserWithCDP(port string) (string, error) {
 	for _, p := range browserPaths {
 		if !fileExistsStr(p) {
 			continue
 		}
+		// 1. 该浏览器是否在跑？（Edge 和 chrome 分别查）
+		procName := "chrome.exe"
+		if strings.Contains(p, "msedge") {
+			procName = "msedge.exe"
+		}
+		if processRunning(procName) {
+			// 结束现有实例（--no-startup-window 的后台进程也算）
+			_ = hiddenCmd("taskkill", "/F", "/IM", procName).Run()
+			time.Sleep(1500 * time.Millisecond)
+		}
+		// 2. 带调试口拉起（打开 dashboard 触发 cookie 激活；会话恢复交给浏览器默认行为）
 		cmd := exec.Command(p,
 			"--remote-debugging-port="+port,
 			"--no-first-run",
 			"--no-default-browser-check",
+			"--restore-last-session",
 			"https://codely.tuanjie.cn/dashboard/usage",
 		)
 		if err := cmd.Start(); err != nil {
@@ -253,6 +268,22 @@ func launchBrowserWithCDP(port string) (string, error) {
 		return p, nil
 	}
 	return "", errors.New("未找到 Chrome/Edge（请安装其一或手动添加账号）")
+}
+
+// hiddenCmd 创建隐藏窗口的命令（不弹黑窗；netstat/taskkill 等 CLI 工具用）。
+func hiddenCmd(name string, args ...string) *exec.Cmd {
+	cmd := exec.Command(name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
+	return cmd
+}
+
+// processRunning 检查指定进程名是否有实例在跑。
+func processRunning(name string) bool {
+	out, err := hiddenCmd("tasklist", "/FI", "IMAGENAME eq "+name).Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(string(out)), strings.ToLower(name))
 }
 
 func fileExistsStr(p string) bool {
