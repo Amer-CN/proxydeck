@@ -1337,7 +1337,10 @@
         }, 160);
         setTimeout(function () {
           fxSetPhase('connecting');
-          playFax('fax-offhook', 0.9);   /* 接通音：低频线路闭合咔（官版 5.46s：120ms/500-1000Hz 低频响声——与送达 ding 区分） */
+          /* 接通=回铃连响（所有者：连续 6 声；官版 5.51-6.5s 每隔 ~170ms 强音交替实测） */
+          for (var ri = 0; ri < 6; ri++) {
+            (function (ri) { setTimeout(function () { playFax('fax-dial-' + (1 + (ri % 6)), 0.9); }, ri * 170); })(ri);
+          }
           setTimeout(function () {
             fxSetPhase('sending');
             playFax('fax-send-key');
