@@ -1387,30 +1387,14 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 
 /* ————— 进纸槽 FaxFeedSlot（11px 斜渐变黑条：上暗 #211C1A 下亮 #36312E，底 1px 亮边 #58534F）—————
    差异要点 3：替换原口沿板+窄缝结构。 */
-.fx-slot { position: relative; z-index: 1; height: 13px; margin: 0; border-radius: 3px 3px 0 0;  /* 4K 实测槽高 44px→13px */
-  /* 三层机械结构（4K 帧 y1186-1230 剖面）：
-     ①上 25% = 入口斜坡（快暗渐变=斜切的口沿）
-     ②中 55% = 深槽腔（近黑，底部微微反光=看得见槽底）
-     ③下 20% = 出口亮沿（纸穿出的缝口） */
-  background:
-    linear-gradient(180deg, rgba(0,0,0,.35) 0, rgba(0,0,0,0) 25%),          /* 入口斜坡阴影 */
-    linear-gradient(180deg, #191614 25%, #100E0C 55%, #26221F 80%, #0C0A09 82%);  /* 槽腔+腔底反光 */
-  box-shadow: inset 0 -2px 3px rgba(255, 253, 248, .10),   /* 腔底出口的亮沿（纸缝） */
-    inset 0 1px 2px rgba(0, 0, 0, .9),                      /* 口沿内凹 */
-    0 1px 0 #6A655F;                                        /* 槽外底部亮线 */ }
-.fx-slot i {                        /* 两条进纸导槽（用户框选图实测：宽 87→57px、高 11→7.2px
-                                     粗亮条——非细线；距槽缘 141→92.6px；距槽顶 4→2.6px） */
-  position: absolute; top: 2.6px; width: 57px; height: 7.2px; border-radius: 2px;
-  background: linear-gradient(180deg, #5C554E 0%, #4A443E 60%, #3A342E 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 253, 248, .10);   /* 顶缘微高光=金属条 */
-  z-index: 2;                             /* 盖过 ::after 中央窄缝 */
-}
-.fx-slot i.l { left: 92.6px; }
-.fx-slot i.r { right: 92.6px; }
-.fx-slot::after {                     /* 槽腔内一条更深的中央窄缝（纸通过的轨道） */
-  content: ''; position: absolute; left: 3%; right: 3%; top: 30%; height: 45%;
-  background: linear-gradient(180deg, #000 0%, #171310 100%);
-  border-radius: 1px; box-shadow: 0 1px 2px rgba(255, 253, 248, .08);
+.fx-slot { position: relative; z-index: 3; height: 13px; margin: 0; border-radius: 3px 3px 0 0;  /* 4K 实测槽高 44px→13px */
+  /* 2026-08-23 所有者定：纸要插进中央黑缝并盖掉槽的下边界（像收纸入缝）。
+     槽只保留【上壁+缝】实体，下半透明被纸覆盖；z-index 3 盖纸顶 */
+  background: linear-gradient(180deg,
+    #191614 0%, #0C0A09 46%,                  /* 上壁口沿 */
+    #000 50%, #000 88%,                       /* 中央黑缝延至底部（纸顶插在缝里、被缝前壁压住） */
+    #141110 100%);                            /* 底缘微亮收口 */
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .9);
 }
 
 [data-theme="dark"] .fx-slot { filter: brightness(.82); }
@@ -1422,13 +1406,23 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25); }
 
 /* ————— 纸笼（纸从灰过渡带里长出，顶裁在盖板斜坡下）————— */
-.fx-cage { position: relative; z-index: 2; margin: -20px 0 0; padding: 0 16px 6px; overflow: hidden; }
+.fx-cage { position: relative; z-index: 2; margin: -26px 0 0; padding: 0 16px 6px; overflow: hidden;  /* 纸顶贴槽底；slot 实体段下延压住纸顶 2px=插缝观感 */
+  /* 底板（2026-08-23 所有者修正：浅灰——底板要浅，纸回收时的深灰阴影才有对比空间）。
+     底部止于控制条上方并圆角收尾（不越过发送按钮） */
+  background: linear-gradient(180deg, #E3DED8 0%, #DDD7D0 100%);
+  border-radius: 0 0 10px 10px; }
 
 /* ————— 传真纸 FaxBayView（纸色 #ECE9E7：比台面略亮偏灰）————— */
-.fx-paper {
+.fx-paper {                        /* 悬浮纸（用户：'纸悬浮在底板上，有深灰阴影'）：
+                                  左右收窄露出底板、三层柔化阴影 */
   position: relative; border-radius: 0 0 3px 3px;
+  margin: 0 14px;
   background: linear-gradient(180deg, var(--pp-1) 0%, var(--pp-2) 100%);
-  box-shadow: 0 12px 22px -12px rgba(66, 58, 42, .45), inset 0 0 0 1px var(--pp-edge);
+  box-shadow:
+    0 2px 5px rgba(66, 58, 42, .26),
+    0 10px 22px -6px rgba(66, 58, 42, .34),
+    0 24px 38px -14px rgba(66, 58, 42, .24),
+    inset 0 0 0 1px var(--pp-edge);
   transition: transform 900ms cubic-bezier(.25, .9, .3, 1);
 }
 .fx-paper::before {                 /* 槽沿投在纸上的影：纸是从灰过渡带里长出来的 */
@@ -1567,14 +1561,8 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 
 /* ————— 底控台面 FaxDeckView（60px 奶油渐变）+ 台面斜坡（15px 灰渐变）————— */
-.fx-controls {                     /* 深色收边台（用户图实测亮度~200）：纸底以下的整个下半台面，
-                                   圆角包到块底（用户："深色背景最下面左右倒圆角"） */
-  display: flex; align-items: center; gap: 14px;
-  width: calc(100% + 2 * var(--pt-inset)); margin-left: calc(var(--pt-inset) * -1); margin-bottom: -16px;
-  padding: 12px 20px 16px 18px; text-align: left;
-  background: linear-gradient(180deg, #CFC9C2 0%, #D8D3CC 100%);
-  border-radius: 0 0 12px 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), inset 0 -2px 4px rgba(66, 58, 42, .10);
+.fx-controls {                     /* 官版特写：浅色平面背景 (233,228,223)、紧凑高度 */
+  display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 8px 10px 2px; text-align: left;
 }
 .fx-ramp {                             /* 台面斜坡：#A5A09E→#B8B5AF→#94948C */
   height: 15px; margin: 0 2px; border-radius: 0 0 4px 4px;
@@ -1658,19 +1646,20 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 
 /* 发送 TRANSMIT：红键帽（渐变极浅）+ 2px 深红侧壁（实测 86×35、圆角 8、#DB534D→#DB4D48）*/
-.fx-send {
+.fx-send {                        /* 官版特写实测：105×37px 胶囊、砖红 (210,108,100)、
+                                  白字两行（发送/TRANSMIT）、扁平无立体阴影 */
   flex: none; appearance: none; border: 0; cursor: pointer; text-align: center; position: relative;
-  width: 86px; min-height: 35px; box-sizing: border-box;
-  border-radius: 8px; padding: 3px 10px;
-  background: linear-gradient(180deg, var(--fx-send-top-1), var(--fx-send-top-2));
+  width: 105px; height: 37px; box-sizing: border-box;
+  border-radius: 18px; padding: 4px 10px;
+  background: linear-gradient(180deg, #D26B5F 0%, #C05A4E 100%);
   color: #FFF;
   font-family: inherit; letter-spacing: .05em; line-height: 1.1;
-  text-shadow: 0 1px 0 rgba(126, 36, 30, .4);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, var(--fx-send-catch)),
-    0 2px 0 var(--fx-send-riser);
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18);
   transition: transform 60ms ease, box-shadow 60ms ease, filter 120ms ease;
 }
+.fx-send .zh { font-size: 13px; font-weight: 700; line-height: 1; }
+.fx-send .en { font-family: var(--mono-ui); font-size: 8.5px; font-weight: 600; letter-spacing: .1em; line-height: 1; opacity: .92; }
 .fx-send:hover:not(:disabled) { filter: brightness(1.04); }
 .fx-send:active:not(:disabled) {
   transform: translateY(2px);
@@ -1753,11 +1742,9 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
       linear-gradient(135deg, var(--fx-rcp-1) 50%, transparent 50%) 0 0 / 9px 8px repeat-x,
       linear-gradient(-135deg, var(--fx-rcp-1) 50%, transparent 50%) 4.5px 0 / 9px 8px repeat-x; }
   .fx-controls { flex-wrap: wrap; gap: 9px; margin-top: 12px; padding: 9px 6px 8px 2px; }
-  .fx-attach { flex: 1 0 100%; order: 3; }
   .fx-attach-copy b { font-size: 9.5px; }
   .fx-attach-copy span { font-size: 9px; line-height: 1.45; }
   .fx-clear { width: auto; flex: 1 1 auto; min-height: 34px; padding: 4px 10px; border-radius: 11px; }
-  .fx-send { width: auto; flex: 1 1 auto; min-height: 35px; padding: 4px 12px; }
   .fx-ramp { height: 11px; }
 }
 
@@ -2670,7 +2657,7 @@ body.pt-try { background: var(--pt-paper); }
             </div>
           </div>
 
-          <p class="pt-word" aria-hidden="true">COMMANDCODE</p>
+          <p class="pt-word" aria-hidden="true">PROXYDECK</p>
         </div>
       </div>
     </div>
