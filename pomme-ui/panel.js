@@ -1144,7 +1144,15 @@
       if (fxStateZh) fxStateZh.textContent = t('fx.st.' + p);
       if (fxStateEn) fxStateEn.textContent = fxEnLine(p);
     }
+    var fxSfxTimers = [];                 /* 音效循环集中登记，相位切换统一清（防多轮抢播） */
+    function fxSfxClear() {
+      fxSfxTimers.forEach(function (t) { clearInterval(t); clearTimeout(t); });
+      fxSfxTimers = [];
+    }
+    function fxSfxIv(fn, ms) { var iv = setInterval(fn, ms); fxSfxTimers.push(iv); return iv; }
+    function fxSfxTo(fn, ms) { var to = setTimeout(fn, ms); fxSfxTimers.push(to); return to; }
     function fxSetPhase(p) {
+      if (p !== fxPhase) fxSfxClear();     /* 相位切换=上一段音效立即停（不拖尾、不重叠） */
       fxPhase = p;
       fx.setAttribute('data-fx-phase', p);
       fxShow(p);
@@ -1340,8 +1348,8 @@
       setTimeout(function () {
         fxSetPhase('dialing');
         /* 拨号段：循环拨号音直到离开 dialing（官版 DIALING 全程有音） */
-        var dialIv = setInterval(function () {
-          if (fxPhase !== 'dialing') { clearInterval(dialIv); return; }
+        fxSfxIv(function () {
+          if (fxPhase !== 'dialing') { fxSfxClear(); return; }
           playFax('fax-dial-' + (1 + Math.floor(Math.random() * 6)), 0.7);
         }, 160);
         setTimeout(function () {
@@ -1356,8 +1364,8 @@
             setTimeout(function () { playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3))); }, 400);
             var p0 = performance.now();
             /* 传送段持续走纸音：滚轮声循环（官版 SENDING 全程有音，间隔渐宽=纸加速） */
-            var feedIv = setInterval(function () {
-              if (fxPhase !== 'sending') { clearInterval(feedIv); return; }
+            fxSfxIv(function () {
+              if (fxPhase !== 'sending') { fxSfxClear(); return; }
               var k = Math.min(1, (performance.now() - p0) / 2400);
               playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.2);
             }, 220);
@@ -1375,19 +1383,20 @@
               if (fxPaper) fxPaper.classList.add('up');
               fxFillReceipt();
               fxSetPhase('sent');
-              /* 官版 8.55-11.05 回执打印 2.5s 密集声（间隔 60-120ms 强度递减）——print 连响贯穿 */
-              var printIv = setInterval(function () {
-                if (fxPhase !== 'sent') { clearInterval(printIv); return; }
-                playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 1);
-              }, 100);
-              setTimeout(function () {
-                clearInterval(printIv);
+              playFax('fax-ding', 1);   /* 已送达：叮一声（官版 8.55 送达为短促事件，非长段） */
+              fxSfxTo(function () {
                 fxSetPhase('printed');
-                /* 官版 11.50-11.99 收尾：强双峰+尾音（回执停+机器落定） */
-                playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 1);
-                setTimeout(function () { playFax('fax-ding', 1); }, 120);
-                setTimeout(function () { playFax('fax-offhook', 1); }, 500);
-              }, REDUCED ? 0 : 2000);
+                /* 回执打印段（官版 8.55-11.05 密集声属回执吐出=printed）：print 连响 1.2s */
+                fxSfxIv(function () {
+                  if (fxPhase !== 'printed') { fxSfxClear(); return; }
+                  playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 1);
+                }, 100);
+                fxSfxTo(function () {
+                  fxSfxClear();
+                  playFax('fax-ding', 1);   /* 官版 11.50-11.99 收尾双峰：叮+落定 */
+                  setTimeout(function () { playFax('fax-offhook', 1); }, 200);
+                }, REDUCED ? 0 : 1200);
+              }, REDUCED ? 0 : 350);
             }, REDUCED ? 0 : 2450);
           }, REDUCED ? 0 : 750);
         }, REDUCED ? 0 : 950);
@@ -1415,12 +1424,12 @@
           if (fxPaper) fxPaper.classList.remove('up');
           playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1);      /* 新纸落位（官版 24.85 峰） */
           /* 新纸段（官版 24.9-26.9 持续密集）：机器信息打印全程有声——print 低音量连响 */
-          var freshIv = setInterval(function () {
-            if (fxPhase !== 'loading' && fxPhase !== 'ready') { clearInterval(freshIv); return; }
+          fxSfxIv(function () {
+            if (fxPhase !== 'loading' && fxPhase !== 'ready') { fxSfxClear(); return; }
             playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 0.5);
           }, 150);
-          setTimeout(function () {
-            clearInterval(freshIv);
+          fxSfxTo(function () {
+            fxSfxClear();
             fxSetPhase('ready');
             if (fx.getAttribute('data-fx-attach') !== 'off') fxPrintMinfo();
           }, REDUCED ? 0 : 950);
