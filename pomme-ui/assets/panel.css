@@ -1649,13 +1649,14 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   width: 60px; height: 43px; box-sizing: border-box;
   border-radius: 8px; padding: 4px 8px;
   background:
-    linear-gradient(180deg, #B0AAA0 0, #E8E3DA 8%, #FDFBF7 32%, #F7F4EE 100%);  /* 纯白系（所有者定）：顶暗线+顶面渐亮+白主面 */
+    linear-gradient(180deg, #CFC9BF 0, #F5F1E9 10%, #FFFFFF 36%, #F9F6F0 100%);  /* 凸起修正：顶线减淡、顶面高光、白主面 */
   color: #453F3B;
   font-family: inherit; letter-spacing: .05em;
   display: flex; flex-direction: column; justify-content: center; gap: 1px;
   box-shadow:
-    0 2px 3px rgba(66, 58, 42, .30),                     /* 键下方投影（官版 y0-2 深带） */
-    inset 0 -2px 0 rgba(255, 253, 248, .85);             /* 底边亮沿（官版 y50-52） */
+    0 3px 4px rgba(66, 58, 42, .38),                     /* 键下方投影加重=浮出台面 */
+    inset 0 2px 2px rgba(255, 255, 255, .9),             /* 顶面内高光（凸起关键） */
+    inset 0 -2px 0 rgba(190, 184, 175, .5);              /* 底边收暗线 */
   transition: transform 60ms ease, box-shadow 60ms ease;
 }
 .fx-clear .zh { font-size: 12.5px; font-weight: 700; line-height: 1; }
