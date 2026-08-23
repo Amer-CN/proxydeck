@@ -1337,7 +1337,7 @@
         }, 160);
         setTimeout(function () {
           fxSetPhase('connecting');
-          playFax('fax-dial-' + (1 + Math.floor(Math.random() * 6)), 0.85);   /* 接通提示音 */
+          playFax('fax-ding', 1);   /* 接通音：响亮一声（官版 5.46s 实测能量峰 6700，比拨号嗒嗒强 3.7 倍） */
           setTimeout(function () {
             fxSetPhase('sending');
             playFax('fax-send-key');
