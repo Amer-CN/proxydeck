@@ -1649,7 +1649,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   width: 60px; height: 43px; box-sizing: border-box;
   border-radius: 8px; padding: 4px 8px;
   background:
-    linear-gradient(180deg, #B8B2A8 0, #DDD7CC 8%, #EFEAE2 32%, #E6E0D7 100%);  /* 顶面渐亮→主面 */
+    linear-gradient(180deg, #B0AAA0 0, #E8E3DA 8%, #FDFBF7 32%, #F7F4EE 100%);  /* 纯白系（所有者定）：顶暗线+顶面渐亮+白主面 */
   color: #453F3B;
   font-family: inherit; letter-spacing: .05em;
   display: flex; flex-direction: column; justify-content: center; gap: 1px;
