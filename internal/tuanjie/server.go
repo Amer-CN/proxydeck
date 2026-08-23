@@ -42,17 +42,6 @@ type modelStat struct {
 	InputTok  int64 `json:"inputTokens"`
 	OutputTok int64 `json:"outputTokens"`
 	TotalTok  int64 `json:"totalTokens"`
-	// Hours 为小时级趋势桶（学群友 token_stats 的 __history__ 设计：
-	// "YYYY-MM-DDTHH" -> 桶，保留 7 天；omitempty 兼容旧 JSON 文件）
-	Hours map[string]*hourBucket `json:"hours,omitempty"`
-}
-
-// hourBucket 一小时的用量。
-type hourBucket struct {
-	In    int64 `json:"in"`
-	Out   int64 `json:"out"`
-	Total int64 `json:"total"`
-	Calls int64 `json:"calls"`
 }
 
 // NewServer 创建服务。
@@ -93,7 +82,6 @@ func (s *Server) Start(host, port string) error {
 	mux.HandleFunc("/accounts", s.handleAccounts)      // 多账号池 CRUD + 状态
 	mux.HandleFunc("/inflight", s.handleInflight)      // 进行中请求面板
 	mux.HandleFunc("/activity", s.handleActivity)      // 实时动态（最近事件）
-	mux.HandleFunc("/trend", s.handleTrend)           // 小时级趋势（聚合）
 	mux.HandleFunc("/water-probe", s.handleWaterProbe) // 注水金丝雀探针
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
 
@@ -703,67 +691,9 @@ func (s *Server) addStat(model string, in, out, total int64) {
 	} else {
 		st.TotalTok += in + out
 	}
-	// 小时桶（保留 7 天，启动/写入时剪裁）
-	hourKey := time.Now().Format("2006-01-02T15")
-	bucket := st.Hours[hourKey]
-	if bucket == nil {
-		if st.Hours == nil {
-			st.Hours = map[string]*hourBucket{}
-		}
-		bucket = &hourBucket{}
-		st.Hours[hourKey] = bucket
-	}
-	bucket.In += in
-	bucket.Out += out
-	if total > 0 {
-		bucket.Total += total
-	} else {
-		bucket.Total += in + out
-	}
-	bucket.Calls++
-	s.pruneHoursLocked()
 	s.statsMu.Unlock()
 	s.saveStats()
 	log.Printf("[tuanjie] stat model=%s in=%d out=%d", model, in, out)
-}
-
-// pruneHoursLocked 剪掉 7 天前的小时桶（调用方需持 statsMu）。
-func (s *Server) pruneHoursLocked() {
-	cutoff := time.Now().AddDate(0, 0, -7).Format("2006-01-02T15")
-	for _, st := range s.stats {
-		if st.Hours == nil {
-			continue
-		}
-		for k := range st.Hours {
-			if k < cutoff {
-				delete(st.Hours, k)
-			}
-		}
-		if len(st.Hours) == 0 {
-			st.Hours = nil
-		}
-	}
-}
-
-// handleTrend 小时级趋势（聚合全部模型，给团结甲板趋势图；学群友小时桶）。
-func (s *Server) handleTrend(w http.ResponseWriter, r *http.Request) {
-	hours := map[string]*hourBucket{} // "YYYY-MM-DDTHH" -> 聚合桶
-	s.statsMu.Lock()
-	for _, st := range s.stats {
-		for k, b := range st.Hours {
-			agg := hours[k]
-			if agg == nil {
-				agg = &hourBucket{}
-				hours[k] = agg
-			}
-			agg.In += b.In
-			agg.Out += b.Out
-			agg.Total += b.Total
-			agg.Calls += b.Calls
-		}
-	}
-	s.statsMu.Unlock()
-	writeJSON(w, map[string]any{"ok": true, "hours": hours})
 }
 
 // handleStats 返回消耗统计（GUI 消耗 TOP）。
@@ -821,9 +751,6 @@ func (s *Server) loadStats() {
 	if json.Unmarshal(b, &m) == nil {
 		s.stats = m
 	}
-	s.statsMu.Lock()
-	s.pruneHoursLocked()
-	s.statsMu.Unlock()
 }
 
 // saveStats 原子落盘。
