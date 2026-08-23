@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+
+# 日志 / 临时文件
+*.log
+converter.log
+captured_headers.json
+captured_request.json
+mitm_capture.json
+proxy_certs/
+
+# 个人 / 敏感信息
+oauth_creds.json
+*.token
+*.key
+secrets.*
+
+# OS
+.DS_Store
+Thumbs.db

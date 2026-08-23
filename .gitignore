@@ -1,0 +1,14 @@
+bin/
+*.log
+.author-keys/
+headless-error.log
+api-key.txt
+stats.json
+*-stats.json
+notice_dismissed.flag
+close_hint_dismissed.flag
+app.exe
+*.exe
+*.exe~
+.work/
+tuanjie-pacing.json

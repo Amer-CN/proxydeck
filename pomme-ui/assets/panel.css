@@ -1,0 +1,1761 @@
+/* ============================================================
+   PommeToys 复刻 —— 样式表
+   第一部分：设置面板 = 官网真源 panel-styles.css 原文照搬（100% 同款）
+   第二部分：传真机 = 独立作用域 .fx-*（按 fax-full-spec.md，不碰面板样式）
+   ============================================================ */
+
+/* ———— 第一部分：设置面板（官网真源，勿手改）———— */
+/* 官网全局 reset（home.css L149）——提取时遗漏，导致所有 padding 盒子尺寸比官网大一圈：
+   .pt-screen 208→230 偏高、推子圆点越界、滑出动画文字出界的共同根源 */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+@font-face {
+  font-family: "InstrumentSansWeb";
+  src: url("fonts/InstrumentSans-latin-wght.woff2") format("woff2"), url("fonts/InstrumentSans.ttf") format("truetype");
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;    /* 生效主题唯一由 html[data-theme] 决定 (见下方 dark 块) */
+  --bg:        #F6F1E7;   /* warm gallery */
+  --bg-sink:   #F1EBDE;   /* one notch deeper cream (alt band) */
+  --panel:     #EBE6DA;   /* panel gray (secondary button) */
+  --panel-dn:  #E1DBCC;
+  --card:      #FBF8F1;   /* raised card face */
+  --seam:      #E4DED0;   /* hairline seam (never a shadow sink) */
+  --ink:       #2B2925;   /* ink — never pure black */
+  /* 工单B8 (WCAG 1.4.3 正文 ≥4.5:1): 两级次要墨色按"用得到的最暗底 = --panel"定值,
+     因为 .rname(--ink-2) 与 .ridx(--fine) 都长在仪器面板 --panel 上。
+     --ink-2 #6D6760→#6A645D (on panel 4.49→4.69)   --fine #8E8779→#6E6658 (on panel 2.86→4.55) */
+  --ink-2:     #6A645D;
+  --fine:      #6E6658;
+  --btn-ink:   #1A1917;
+  --btn-ink-h: #2D2B28;
+  --btn-sink:  #050505;   /* candy-button hard bottom edge */
+  --btn-label: #F6F3EC;   /* 主按钮/糖块键文字色 (暗色下按钮翻转为奶油底深字) */
+  /* brand accents — one per element, small areas only */
+  --red:    #FF5D55;
+  --blue:   #3D8BFF;
+  --yellow: #FFC531;
+  --green:  #34C77B;
+  --orange: #F26B22;
+  /* 工单B8: --red 太亮, 白字压上去只有 3.02:1 —— 只给"红底白字"的贴章一个深一档的红,
+     点缀用的 --red(LED 灯、图标底色)保持原样, 观感不动。白字 on --stamp-bg = 4.88:1 */
+  --stamp-bg: #CE3B34;
+  /* 工单B8 (WCAG 1.4.11 非文本 ≥3:1): 焦点圈不能用点缀蓝 --blue —— 它 on --bg 只有 2.94:1。
+     复用同一套"当前底色上读得清的蓝"= --gly-blue (亮 #2A6FE0 / 暗 #7CB0FF), 不新增颜色。
+     值随主题自动切换: --gly-blue 在 [data-theme=dark] 里被覆盖, 此处 var() 使用时才求值。 */
+  --focus:  var(--gly-blue);
+  /* glyph inks — feature 图标色 (亮底用深酽版, 暗底换亮版才可读) */
+  --gly-red:    #D8443C;
+  --gly-blue:   #2A6FE0;
+  --gly-green:  #1FA765;
+  --gly-yellow: #B7841A;
+  --gly-orange: #D2591A;
+  /* theater (dark band) */
+  --stage:      #221E19;   /* warm cocoa, never cold black */
+  --stage-2:    #2C2721;
+  --stage-ink:  #EFE9DC;
+  --stage-fine: #A79E8C;
+
+  /* ——— 授权签发台（购买区仪器）——— */
+  --mono-ui: ui-monospace, SFMono-Regular, "SF Mono", Menlo, "Roboto Mono", monospace;
+  --dk-body-1: #FAF6EC; --dk-body-2: #F3EEE0;   /* 机身：比 --bg 白一档，机器才"亮" */
+  --dk-face-1: #FBF8F0; --dk-face-2: #F5F0E2;   /* 面板 */
+  --dk-lip:  rgba(255, 255, 255, .9);           /* 受光的上唇/高光 */
+  --dk-sink: rgba(120, 108, 86, .12);           /* 机身下沿的收暗 */
+  --dk-edge: #E0D8C4;                           /* 外缘发丝线 */
+  --dk-bezel-1: #EDE6D5; --dk-bezel-2: #F5F0E1; /* 出纸口的口沿板 */
+  --pp-1: #FDFBF4; --pp-2: #FAF6EA;             /* 纸 */
+  --pp-edge: rgba(120, 108, 84, .08);
+  --pp-hole: #CFC5A8; --pp-hole-hi: rgba(255, 255, 255, .95);   /* 走纸孔 + 孔下缘高光 */
+  --pp-perf: #DDD5BE;                           /* 骑缝虚线 */
+  --pp-rule: #D4CBB3;                           /* 纸上点线/虚线 */
+  --pp-ink: #34322C; --pp-fine: #8B8474;        /* 纸上墨色 */
+  /* 倒计时滚筒（2026-08-06 所有者定：浅色模式浅筒深字，暗色模式深筒浅字）。
+     两套不是"把颜色反过来"那么简单 —— 筒面受光、边缘曲率阴影、数字的浮雕方向
+     三者都要跟着翻：浅筒上数字压深、高光在字下方；深筒上数字提亮、阴影在字下方。
+     所以整组做成变量，组件只吃 var()，与本文件"暗色只覆盖变量"的纪律一致。 */
+  --drum-face:   linear-gradient(#C4BAA5, #EFE9DB 22%, #FCFAF4 50%, #E9E2D3 78%, #BFB5A0);
+  /* 0–4% 与 96–100% 那两道深边 = 槽口的唇。它压在露头数字的**外侧**(数字落在 5–13%),
+     所以既做出"钻进去"的深度, 又不会把相邻位遮死。 */
+  --drum-curve:  linear-gradient(rgba(66, 59, 48, .90), rgba(80, 72, 59, .74) 4%,
+    rgba(88, 80, 66, .38) 15%, rgba(88, 80, 66, 0) 34%, rgba(88, 80, 66, 0) 66%,
+    rgba(88, 80, 66, .38) 85%, rgba(80, 72, 59, .74) 96%, rgba(66, 59, 48, .90));
+  --drum-ink:    #2B2925;
+  --drum-emboss: 0 1px 0 rgba(255, 255, 255, .8);
+  /* 上下各一道外投影 = 筒身从纸面钻出来的那点厚度（样板间 2026-08-06 所有者选「甲」:
+     只放大放柔、不改外形。下影比上影长一档, 因为光自上而下）。 */
+  --drum-shell:  0 -7px 13px -7px rgba(43, 41, 37, .60), 0 9px 17px -7px rgba(43, 41, 37, .66),
+    inset 0 0 0 1px rgba(0, 0, 0, .13), inset 0 1px 0 rgba(255, 255, 255, .85);
+  /* shape */
+  --r-pill: 999px;
+  --r-card: 22px;
+  --r-stage: 26px;
+  --r-sm: 12px;
+  /* elevation — soft & warm, never heavy */
+  --sh-soft: 0 1px 2px rgba(43,41,37,.05), 0 14px 34px -16px rgba(43,41,37,.20);
+  --sh-lift: 0 2px 4px rgba(43,41,37,.06), 0 22px 48px -20px rgba(43,41,37,.28);
+  --sh-stage: 0 2px 6px rgba(0,0,0,.14), 0 40px 90px -34px rgba(20,16,12,.55);
+  --ease: cubic-bezier(0.19, 1, 0.22, 1);
+  --maxw: 1120px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #211D18;  --bg-sink: #1A1613;
+  --panel: #2E2921; --panel-dn: #3A3329;
+  --card: #292420;  --seam: #3B342B;
+  /* 工单B8: 暗色 --fine 同样按 --panel 定值 (#7E766A on panel 仅 3.22:1 → #9A9182 = 4.64:1);
+     --ink-2 #A79E8F on panel 已有 5.45:1, 不动。 */
+  --ink: #EFEAE0;  --ink-2: #A79E8F;  --fine: #9A9182;
+  --btn-ink: #F2EEE6;  --btn-ink-h: #FFFFFF;  --btn-sink: #000000;
+  --btn-label: #1A1917;
+  --gly-red:    #FF837B;
+  --gly-blue:   #7CB0FF;
+  --gly-green:  #55D695;
+  --gly-yellow: #FFCE57;
+  --gly-orange: #FF9457;
+  /* 滚筒翻成深筒浅字：筒面受光反过来（中段提亮而非留白），数字改浅色、浮雕阴影朝下。
+     内环换成浅色描边 —— 暗色底也深，只靠外投影筒身会糊进背景。 */
+  --drum-face:   linear-gradient(#131110, #2B2620 20%, #3C352C 50%, #292420 80%, #131110);
+  --drum-curve:  linear-gradient(rgba(4, 4, 3, .97), rgba(8, 7, 6, .86) 4%,
+    rgba(11, 10, 9, .58) 15%, rgba(11, 10, 9, 0) 34%, rgba(11, 10, 9, 0) 66%,
+    rgba(11, 10, 9, .58) 85%, rgba(8, 7, 6, .86) 96%, rgba(4, 4, 3, .97));
+  --drum-ink:    #E8E2D4;
+  --drum-emboss: 0 1px 0 rgba(0, 0, 0, .6);
+  /* 授权签发台暗色：机身压暗、纸转暗米色（暗环境里纸本来就不亮）、孔与点线跟着走 */
+  --dk-body-1: #2A251F; --dk-body-2: #211D18;
+  --dk-face-1: #2E2921; --dk-face-2: #26221B;
+  --dk-lip:  rgba(255, 255, 255, .07);
+  --dk-sink: rgba(0, 0, 0, .3);
+  --dk-edge: #3B342B;
+  --dk-bezel-1: #211D18; --dk-bezel-2: #2A251F;
+  /* 纸在暗色下也得是暗的：亮纸在深底上是一块刺眼的光斑。
+     纸面只比面板浅一点点（够看出"纸搭在机器上"这层关系就行），墨字反过来走浅色。 */
+  --pp-1: #37322A; --pp-2: #322D26;
+  --pp-edge: rgba(255, 255, 255, .06);
+  --pp-hole: #17140F;                          /* 孔是洞，暗色下更该黑 */
+  --pp-hole-hi: rgba(255, 255, 255, .07);
+  --pp-perf: #4C443A;
+  --pp-rule: #4C443A;
+  --pp-ink: #E6DFD0; --pp-fine: #9C9486;
+  --drum-shell:  0 -7px 13px -7px rgba(0, 0, 0, .60), 0 9px 17px -7px rgba(0, 0, 0, .66),
+    inset 0 0 0 1px rgba(255, 255, 255, .11), inset 0 1px 0 rgba(255, 255, 255, .13);
+}
+
+html { scroll-behavior: smooth; background: var(--bg); }
+
+html[data-theme-pref="light"] .td-stem { transform: rotate(-55deg); }
+
+html[data-theme-pref="auto"]  .td-stem { transform: rotate(0deg); }
+
+html[data-theme-pref="dark"]  .td-stem { transform: rotate(55deg); }
+
+html[data-theme-pref="light"] .td-mark.light,
+html[data-theme-pref="auto"]  .td-mark.auto,
+html[data-theme-pref="dark"]  .td-mark.dark { color: var(--ink); }
+
+@keyframes ls-pop { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+html.cap .hero { min-height: 0; }
+
+html.cap .stage { min-height: 0; height: 720px; }
+
+html.cap { scroll-behavior: auto; }
+
+[data-theme="dark"] .foot-badge .badge-light { display: none; }   /* 中英双语在字典 badge.* 键里 */
+
+[data-theme="dark"] .foot-badge .badge-dark { display: block; }
+
+.pt-try {
+  /* ——— 机身实色 token（BrandTheme.swift 的 dynamic(light:dark:)，逐位照抄）——— */
+  --pt-paper:        #FBF7F0;   /* BrandTheme.paperNS —— 机身底 */
+  --pt-surface:      #F5F0E6;   /* BrandTheme.surface —— 甲板/键帽面 */
+  --pt-ink:          #2B2925;   /* BrandTheme.ink */
+  --pt-ink2:         #6E6A62;   /* BrandTheme.ink2 */
+  --pt-hairline:     #D9D2C4;   /* BrandTheme.hairline */
+  --pt-accent:       #E8483F;   /* BrandTheme.accent */
+  --pt-knob:         #FFFFFF;   /* BrandTheme.knob —— 白塑料钮帽 */
+  --pt-cap-face:     #FFFFFF;   /* BrandTheme.capFace —— 甲板功能键 */
+  --pt-graphite:     #3A352F;   /* BrandTheme.graphite —— 石墨键帽 */
+  --pt-graphite-ink: #F7F2E9;   /* BrandTheme.graphiteInk（两主题同值） */
+  --pt-track-off:    #D9D2C4;   /* BrandTheme.switchTrackOff */
+  --pt-well:         #EFE8D9;   /* BrandTheme.keyWellSurface —— 当前模式键的沉底面 */
+  --pt-well-border:  #CCC4B2;   /* BrandTheme.keyWellBorder */
+  --pt-hatch:        rgba(43, 41, 37, .045); /* BrandTheme.hatchPlate */
+
+  /* ——— 函数式 token。BrandTheme 里它们是 dynamicAlpha(light:…, dark:…)：
+     edgeHighlight(a) = 白 a / 白 a×0.13     dropShadow(a) = ink a / 黑 a×1.8
+     recess(a)        = ink a / 黑 a×2.4     knobRim(a)    = ink a / 黑 a×1.7
+     rule(a)          = hairline a / #6B6156 a×0.95
+     用到哪个 alpha 就在这里落一个变量，**不要在下面直接写 rgba()** —— 暗色那套
+     全靠这一块整体覆盖，散落的字面量会在暗色下失灵。 ——— */
+  --pt-hi-75:  rgba(255, 255, 255, .75);    /* edgeHighlight(0.75) 键帽顶棱 */
+  --pt-hi-55:  rgba(255, 255, 255, .55);    /* edgeHighlight(0.55) 甲板顶棱 / 上屏下缘 */
+  --pt-hi-50:  rgba(255, 255, 255, .50);    /* edgeHighlight(0.50) 导轨 / 拨杆槽 / 里程表下缘 */
+  --pt-hi-40:  rgba(255, 255, 255, .40);    /* edgeHighlight(0.40) SERVICE 铭牌顶缘 */
+  --pt-hi-16:  rgba(255, 255, 255, .16);    /* 拨杆手柄顶部成型光 */
+  --pt-sh-09:  rgba(43, 41, 37, .09);       /* dropShadow(0.09) 甲板 */
+  --pt-sh-10:  rgba(43, 41, 37, .10);       /* dropShadow(0.10) 键帽静置/按下 */
+  --pt-sh-18:  rgba(43, 41, 37, .18);       /* dropShadow(0.18) 键帽悬停 / 推子钮 / 石墨帽 */
+  --pt-sh-28:  rgba(43, 41, 37, .28);       /* dropShadow(0.28) 授权拨杆手柄 */
+  --pt-sh-30:  rgba(43, 41, 37, .30);       /* dropShadow(0.30) I/O 钮 / 音效旋钮 */
+  --pt-sh-35:  rgba(43, 41, 37, .35);       /* dropShadow(0.35) 电源拨杆手柄 */
+  --pt-rc-06:  rgba(43, 41, 37, .06);       /* recess(0.06) 挡位导轨 */
+  --pt-rc-045: rgba(43, 41, 37, .045);      /* recess(0.045) 铭牌悬停 */
+  --pt-rc-10:  rgba(43, 41, 37, .10);       /* recess(0.10) 铭牌按下 */
+  --pt-rc-07:  rgba(43, 41, 37, .07);       /* recess(0.07) 拨杆槽 */
+  --pt-rc-14:  rgba(43, 41, 37, .14);       /* recess(0.14) 导轨顶部渐变 */
+  --pt-rc-16:  rgba(43, 41, 37, .16);       /* recess(0.16) 拨杆槽顶部渐变 */
+  --pt-rc-18:  rgba(43, 41, 37, .18);       /* recess(0.18) 拨杆导向槽 */
+  --pt-rc-20:  rgba(43, 41, 37, .20);       /* recess(0.20) 键帽井内阴影 */
+  --pt-kr-06:  rgba(43, 41, 37, .06);       /* knobRim(0.06) 旋钮橙点圈 */
+  --pt-kr-08:  rgba(43, 41, 37, .08);       /* knobRim(0.08) 白钮帽圈 */
+  --pt-kr-13:  rgba(43, 41, 37, .13);       /* knobRim(0.13) 挡位滑块圈 */
+  --pt-kr-14:  rgba(43, 41, 37, .14);       /* knobRim(0.14) 授权拨杆手柄 */
+  --pt-ru-45:  rgba(217, 210, 196, .45);    /* rule(0.45) 行间细线 */
+  --pt-ru-65:  rgba(217, 210, 196, .65);    /* rule(0.65) 小标题细线 */
+  --pt-ru-100: rgb(217, 210, 196);          /* rule(1) 从属行走线 */
+
+  /* ——— 上屏 token（BrandTheme.Screen）。玻璃永远是深色 —— 屏幕就是这样 ——
+     所以除 paper / rim / innerEdge / drumWell / vuOff / odoCell 六个随外观变，
+     其余都是 fixed() 常量，暗色块里不覆盖。 ——— */
+  --pt-sc-paper:   #1C1916;   /* Screen.paper */
+  --pt-sc-rim:     #15120F;   /* Screen.rim */
+  --pt-sc-inner:   rgba(255, 255, 255, .04);   /* Screen.innerEdge */
+  --pt-sc-ink:     #F2EDE6;   /* Screen.ink（fixed） */
+  --pt-sc-ink2:    #A8A29A;   /* Screen.ink2（fixed） */
+  --pt-sc-hair:    #413A32;   /* Screen.hairline（fixed） */
+  --pt-sc-dotoff:  #8A8175;   /* Screen.dotOff（fixed） */
+  --pt-sc-accent:  #FF6B62;   /* Screen.accent（fixed） */
+  --pt-sc-green:   #4FD467;   /* Screen.green（fixed） */
+  --pt-sc-well:    #221D18;   /* Screen.drumWell */
+  --pt-sc-idle:    #676056;   /* Screen.drumIdle（fixed） */
+  --pt-sc-vuoff:   #332D26;   /* Screen.vuOff */
+  --pt-sc-odocell: #26211B;   /* Screen.odoCell */
+  --pt-sc-odorim:  #3A342C;   /* Screen.odoRim（fixed） */
+  --pt-sc-dimtext: #837B70;   /* Screen.dimText（fixed） */
+  --pt-sc-dimname: #8A837A;   /* Screen.dimName（fixed） */
+  --pt-sc-etch:    #6F675C;   /* Screen.etch（fixed） */
+  --pt-sc-matrix:  rgba(242, 237, 230, .028);  /* Screen.matrixDot（fixed） */
+
+  /* ——— 几何 ——— */
+  --pt-w: 540px;              /* HandheldWindowGeometry.width */
+  --pt-h: 760px;              /* HandheldWindowGeometry.preferredHeight */
+  --pt-inset: 16px;           /* DeckMetric.contentInset & 机身左右内衬 */
+  --pt-deck-w: 508px;         /* = 540 − 16×2，甲板传送带上每格的宽 */
+  --pt-deck-gap: 18px;        /* HandheldRootView.deckTransport 的 gap */
+  --pt-scale: 1;              /* 窄屏整体缩放，由 instrument.js 写入 */
+
+  /* 甲板正文用系统面（App 里正文与控件走 SF Pro），标题/刻字用 Instrument Sans */
+  --pt-font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "PingFang TC", "Hiragino Sans", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --pt-font-disp: "InstrumentSansWeb", -apple-system, BlinkMacSystemFont, "SF Pro Rounded",
+    "PingFang SC", "PingFang TC", "Hiragino Sans", "Microsoft YaHei", sans-serif;
+}
+
+[data-theme="dark"] .pt-try {
+  --pt-paper:        #1C1916;
+  --pt-surface:      #2A2622;
+  --pt-ink:          #F2EDE6;
+  --pt-ink2:         #A8A29A;
+  --pt-hairline:     #413A32;
+  --pt-accent:       #FF6B62;
+  --pt-knob:         #F3EEE6;
+  --pt-cap-face:     #39332C;
+  --pt-graphite:     #4A443C;
+  --pt-track-off:    #4E463C;
+  --pt-well:         #211D19;
+  --pt-well-border:  #4A4239;
+  --pt-hatch:        rgba(255, 255, 255, .05);
+  --pt-hi-75:  rgba(255, 255, 255, .0975);
+  --pt-hi-55:  rgba(255, 255, 255, .0715);
+  --pt-hi-50:  rgba(255, 255, 255, .065);
+  --pt-hi-40:  rgba(255, 255, 255, .052);
+  --pt-hi-16:  rgba(255, 255, 255, .0208);
+  --pt-sh-09:  rgba(0, 0, 0, .162);
+  --pt-sh-10:  rgba(0, 0, 0, .18);
+  --pt-sh-18:  rgba(0, 0, 0, .324);
+  --pt-sh-28:  rgba(0, 0, 0, .504);
+  --pt-sh-30:  rgba(0, 0, 0, .54);
+  --pt-sh-35:  rgba(0, 0, 0, .63);
+  --pt-rc-06:  rgba(0, 0, 0, .144);
+  --pt-rc-045: rgba(0, 0, 0, .108);
+  --pt-rc-10:  rgba(0, 0, 0, .24);
+  --pt-rc-07:  rgba(0, 0, 0, .168);
+  --pt-rc-14:  rgba(0, 0, 0, .336);
+  --pt-rc-16:  rgba(0, 0, 0, .384);
+  --pt-rc-18:  rgba(0, 0, 0, .432);
+  --pt-rc-20:  rgba(0, 0, 0, .48);
+  --pt-kr-06:  rgba(0, 0, 0, .102);
+  --pt-kr-08:  rgba(0, 0, 0, .136);
+  --pt-kr-13:  rgba(0, 0, 0, .221);
+  --pt-kr-14:  rgba(0, 0, 0, .238);
+  --pt-ru-45:  rgba(107, 97, 86, .4275);
+  --pt-ru-65:  rgba(107, 97, 86, .6175);
+  --pt-ru-100: rgba(107, 97, 86, .95);
+  --pt-sc-paper:   #131110;
+  --pt-sc-rim:     #4C443B;
+  --pt-sc-inner:   rgba(255, 255, 255, .09);
+  --pt-sc-well:    #191512;
+  --pt-sc-vuoff:   #2A241E;
+  --pt-sc-odocell: #1C1813;
+}
+
+/* transform 不改布局盒，多出来的 760×(1−s) 由 .pt-rig 的负下边距吃掉 —— 让 CSS 用
+   同一个 --pt-scale 自己算，比 JS 回写高度可靠（JS 写高度会把 ResizeObserver 自激一轮）。 */
+.pt-stage {
+  display: flex; justify-content: center;
+  padding: 40px 0;
+  overflow-x: clip; overflow-y: visible;
+  overflow-clip-margin: 60px;
+}
+
+.pt-rig {
+  flex: none; width: var(--pt-w); height: var(--pt-h);
+  transform: scale(var(--pt-scale)); transform-origin: top center;
+  margin-bottom: calc((var(--pt-scale) - 1) * var(--pt-h));
+}
+
+.pt-tip, .pt-narrow {
+  max-width: 620px; margin: 22px auto 0; text-align: center;
+  font-size: 13.5px; line-height: 1.55; color: var(--ink-2);
+}
+
+.pt-narrow { display: none; color: var(--fine); margin-top: 10px; }
+
+@media (max-width: 639px) { .pt-stage { margin-left: -32px; margin-right: -32px; } }
+@media (max-width: 620px) { .pt-stage { margin-left: -22px; margin-right: -22px; } }
+@media (max-width: 539px) { .pt-narrow { display: block; } }
+.pt-chassis {
+  width: var(--pt-w); height: var(--pt-h);
+  background: var(--pt-paper);
+  border-radius: 12px;
+  /* iOS Safari 会给宽 540px、再由 transform 缩小的机身自动放大文字，造成手机端
+     字号比 App 真机大一截。固定 100% 只关掉这台镜像机身的文本膨胀，不影响站内正文。 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* 发丝边用 box-shadow 的 0 模糊环, **不用 border** —— border 会吃掉盒子里 2px,
+     540×760 就不再是 540×760 了, 底下所有 1pt = 1px 的落位跟着差 2px。 */
+  box-shadow: 0 0 0 1px var(--pt-hairline), var(--sh-lift);
+  font-family: var(--pt-font-ui);
+  color: var(--pt-ink);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  text-align: left;
+}
+
+.pt-ledge { position: relative; height: 28px; flex: none; }
+
+.pt-lights { position: absolute; left: 20px; top: 12.5px; display: flex; gap: 8px;
+  pointer-events: none; }
+
+.pt-lights i { width: 12px; height: 12px; border-radius: 50%;
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .12); }
+
+.pt-lights i:nth-child(1) { background: #FF5F57; }
+
+.pt-lights i:nth-child(2) { background: #FEBC2E; }
+
+.pt-lights i:nth-child(3) { background: #28C840; }
+
+.pt-body {
+  flex: 1 1 auto; min-height: 0;
+  padding: 9px var(--pt-inset);
+  display: flex; flex-direction: column; gap: 9px;
+}
+
+.pt-word {
+  flex: none; height: 16px; line-height: 16px; text-align: center;
+  font-family: var(--pt-font-disp); font-size: 9.5px; font-weight: 600;
+  letter-spacing: 2.1px; color: var(--pt-ink2);
+}
+
+.pt-silk {
+  font-family: var(--pt-font-disp); font-weight: 600;
+  font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--pt-ink2); white-space: nowrap;
+}
+
+.pt-silk.sm { font-size: 8.5px; letter-spacing: 1.1px; }
+
+.pt-screen {
+  flex: none; height: 208px; padding: 11px 14px;
+  position: relative; border-radius: 10px;
+  background: var(--pt-sc-paper);
+  box-shadow: 0 1px 0 var(--pt-hi-55);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+.pt-screen::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(rgba(0, 0, 0, .45), rgba(0, 0, 0, 0)) top / 100% 10px no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .25)) bottom / 100% 6px no-repeat,
+    radial-gradient(circle at 1px 1px, var(--pt-sc-matrix) .5px, transparent .5px) 0 0 / 4px 4px;
+}
+
+.pt-screen::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--pt-sc-inner), 0 0 0 1px var(--pt-sc-rim);
+}
+
+.pt-sc-top { flex: none; display: flex; align-items: center; gap: 8px; }
+
+.pt-sc-top .pt-silk { color: var(--pt-sc-ink2); }
+
+.pt-sc-mode { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.pt-sc-bodies { flex: 1 1 auto; min-height: 0; position: relative; }
+
+.pt-sc-body {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 160ms ease-in-out;
+}
+
+.pt-sc-body.cur { opacity: 1; }
+
+.pt-drum {
+  position: relative; width: 116px; height: 36px; flex: none;
+  background: var(--pt-sc-well); border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--pt-sc-hair);
+  overflow: hidden;
+}
+
+.pt-drum i {
+  position: absolute; left: 0; width: 116px; height: 12px; top: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--pt-font-disp); font-size: 10px; font-weight: 600;
+  letter-spacing: 1.5px; font-style: normal; white-space: nowrap;
+  color: var(--pt-sc-idle);
+  /* ModeDrum.cell：SwiftUI 用 .offset(y:)，这里同一条式子搬成 translateY */
+  transform: translateY(calc((var(--y) - var(--i)) * 17px + 12px));
+  transition: transform 250ms cubic-bezier(.32, 1.4, .46, 1);
+}
+
+.pt-drum i.cur { color: var(--pt-sc-accent); }
+
+.pt-drum i.cur span { display: inline-block; transform: translateX(.75px) scale(1.05); }
+
+.pt-drum i span { transform: translateX(.75px); display: inline-block; }
+
+.pt-drum i.cjk { font-size: 10.5px; letter-spacing: 2.5px; }
+
+.pt-drum i.cjk span { transform: translateX(1.25px); }
+
+.pt-drum i.cjk.cur span { transform: translateX(1.25px) scale(1.05); }
+
+.pt-drum::before {          /* 窗口上下沿吞掉筒面 */
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background:
+    linear-gradient(rgba(0, 0, 0, .6), rgba(0, 0, 0, 0)) top / 100% 9px no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .5)) bottom / 100% 9px no-repeat;
+}
+
+.pt-drum::after {           /* 框住当前格的两道刻线 */
+  content: ''; position: absolute; left: 5px; right: 5px; top: 8px; bottom: 8px;
+  pointer-events: none; z-index: 1;
+  border-top: 1px solid rgba(255, 255, 255, .06);
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+
+.pt-dots { display: flex; flex-direction: column; gap: 7px; }
+
+.pt-dot {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 10.5px; line-height: 13px; color: var(--pt-sc-dimname); white-space: nowrap;
+}
+
+.pt-dot::before {
+  content: ''; flex: none; width: 5.5px; height: 5.5px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--pt-sc-dotoff);
+}
+
+.pt-dot.on { color: var(--pt-sc-ink); }
+
+.pt-dot.on::before {
+  background: var(--pt-sc-accent); box-shadow: 0 0 5px rgba(255, 107, 98, .6);
+}
+
+.pt-dot.on.grn::before { background: var(--pt-sc-green); box-shadow: 0 0 5px rgba(79, 212, 103, .6); }
+
+.pt-dot.dim { opacity: .45; }
+
+.pt-dot b {
+  font-weight: 400; font-size: 10px; margin-left: 9px;
+  font-variant-numeric: tabular-nums; color: var(--pt-sc-dimtext);
+}
+
+.pt-dot.on b { color: var(--pt-sc-ink2); }
+
+.pt-sc-sep { height: 1px; background: var(--pt-sc-hair); opacity: .6; }
+
+.pt-odo { display: flex; gap: 2px; align-items: flex-end; }
+
+.pt-odo .cell {
+  position: relative; overflow: hidden; flex: none;
+  border-radius: 4px;
+}
+
+.pt-odo .cell span {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--pt-font-disp); font-weight: 600; font-variant-numeric: tabular-nums;
+  opacity: .3;
+  transform: translateY(calc((var(--v) - var(--d)) * var(--pitch)));
+  transition: transform 180ms cubic-bezier(.32, 1.4, .46, 1);
+}
+
+.pt-odo .cell span.cur { opacity: 1; }
+
+.pt-odo .cell::after {      /* 数字沉进窗口里的入射阴影 */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(rgba(0, 0, 0, .55), rgba(0, 0, 0, 0)) top / 100% 16% no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .30)) bottom / 100% 8% no-repeat;
+}
+
+.pt-odo .sep { flex: none; display: flex; align-items: flex-end; justify-content: center; }
+
+.pt-odo.pt-sc .cell {
+  width: 27px; height: 42px; --pitch: 26.04px;
+  background: var(--pt-sc-odocell);
+  box-shadow: inset 0 0 0 1px var(--pt-sc-odorim), 0 1px 0 rgba(255, 255, 255, .05);
+}
+
+.pt-odo.pt-sc .cell span { font-size: 26px; color: var(--pt-sc-ink); }
+
+.pt-odo.pt-sc .sep {
+  width: 10px; height: 42px; padding-bottom: 3px;
+  font-family: var(--pt-font-disp); font-size: 22px; font-weight: 600; color: var(--pt-sc-ink2);
+}
+
+.pt-odo.pt-dk .cell {
+  width: 15px; height: 24px; --pitch: 14.88px; border-radius: 3px;
+  background: var(--pt-graphite);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07), 0 1px 0 var(--pt-hi-50);
+}
+
+.pt-odo.pt-dk .cell span { font-size: 13px; color: var(--pt-graphite-ink); }
+
+.pt-odo.pt-dk .sep {
+  width: 7px; height: 24px; padding-bottom: 2px;
+  font-family: var(--pt-font-disp); font-size: 12px; font-weight: 600; color: var(--pt-ink);
+}
+
+.pt-vu { display: flex; gap: 4px; }
+
+.pt-vu i {
+  width: 8px; height: 14px; border-radius: 1.5px; background: var(--pt-sc-vuoff);
+  background-image: linear-gradient(rgba(0, 0, 0, .4), rgba(0, 0, 0, 0) 45%);
+}
+
+.pt-vu i.on {
+  background: var(--pt-sc-accent);
+  background-image: linear-gradient(rgba(0, 0, 0, 0) 70%, rgba(0, 0, 0, .25));
+  box-shadow: 0 0 5px rgba(255, 107, 98, .45);
+}
+
+.pt-scroll-top { display: flex; align-items: center; gap: 14px; }
+
+.pt-scroll-top > div { display: flex; flex-direction: column; gap: 7px; }
+
+.pt-scroll-top .speed { flex: 1 1 auto; min-width: 0; }
+
+.pt-scroll-top .wheel { width: 168px; flex: none; }
+
+.pt-scroll-top .speed .row { display: flex; align-items: flex-end; gap: 7px; }
+
+.pt-scroll-top .speed .mul {
+  font-family: var(--pt-font-disp); font-size: 20px; font-weight: 600;
+  color: var(--pt-sc-ink2); line-height: 42px;
+}
+
+.pt-sc-body.scr { gap: 9px; }
+
+.pt-scroll-rows { display: flex; align-items: flex-start; gap: 24px; }
+
+.pt-scroll-rows .pt-dots:last-child { margin-left: auto; }
+
+.pt-sc-body.win { display: grid; grid-template-columns: max-content max-content;
+  justify-content: start; gap: 13px 72px; align-content: center; }
+
+.pt-sc-body.sys { gap: 9px; }
+
+.pt-system-readout { display: flex; flex-direction: column; gap: 7px; }
+
+.pt-system-rows { display: flex; align-items: flex-start; gap: 24px; }
+
+.pt-system-rows > .pt-dot { min-width: 126px; }
+
+.pt-system-rows .pt-dots { gap: 7px; }
+
+.pt-sc-body.gen { display: block; padding: 0 6px; }
+
+.pt-gen-cluster {
+  position: absolute; inset: 0 6px; display: flex; align-items: center; gap: 26px;
+  opacity: 1; transition: opacity 220ms ease-in-out;
+}
+
+.pt-sc-body.gen .pt-dots { gap: 9px; }
+
+.pt-etch { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; }
+
+.pt-etch .pt-silk { color: var(--pt-sc-ink2); }
+
+.pt-etch .v {
+  color: var(--pt-sc-etch); font-variant-numeric: tabular-nums; margin-top: 4px;
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, .65), 0 1px 0 rgba(255, 255, 255, .07);
+}
+
+.pt-etch .v.lang { font-size: 12px; }
+
+.pt-etch .v.ver { font-family: var(--pt-font-disp); font-size: 17px; font-weight: 600; letter-spacing: 1px; }
+
+.pt-etch .pt-silk + .pt-silk { margin-top: 0; }
+
+.pt-etch .gap { height: 11px; }
+
+.pt-license-self-test {
+  position: absolute; inset: 0 6px; display: flex; flex-direction: column;
+  justify-content: center; align-items: stretch; gap: 12px;
+  opacity: 0; transition: opacity 220ms ease-in-out;
+}
+
+.pt-license-self-test .pt-silk { color: var(--pt-sc-ink2); }
+
+.pt-sc-body.gen.testing .pt-gen-cluster { opacity: 0; }
+
+.pt-sc-body.gen.testing .pt-license-self-test { opacity: 1; }
+
+.pt-self-test-lamps { display: flex; gap: 7px; }
+
+.pt-self-test-lamps i {
+  flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: color-mix(in srgb, var(--pt-sc-accent) 12%, transparent);
+}
+
+.pt-self-test-needle { display: flex; gap: 3px; }
+
+.pt-self-test-needle i {
+  flex: 1 1 0; min-width: 0; height: 9px; border-radius: 1px;
+  background: var(--pt-sc-vuoff);
+}
+
+.pt-self-test-needle i.on { background: var(--pt-sc-accent); }
+
+.pt-self-test-copy { font: 400 10px/1.25 var(--pt-font-ui); color: var(--pt-sc-ink2); }
+
+.pt-keys { flex: none; display: flex; gap: 10px; height: 42px; }
+
+.pt-key {
+  flex: 1 1 0; min-width: 0; height: 42px; position: relative;
+  appearance: none; cursor: pointer; font-family: var(--pt-font-disp);
+  font-size: 11px; font-weight: 600; letter-spacing: 1.5px; white-space: nowrap;
+  color: var(--pt-ink2);
+  background: var(--pt-surface);
+  border: 1px solid var(--pt-hairline); border-radius: 9px;
+  /* 台座（硬边 hairline 带，是它撑出高度）+ 落在机身上的投影。
+     SwiftUI radius 3/y 4 → CSS blur 6/y 4（换算见本段抬头第 2 条）。 */
+  box-shadow: 0 2px 0 var(--pt-hairline), 0 4px 6px var(--pt-sh-10);
+  background-image: linear-gradient(var(--pt-hi-75), var(--pt-hi-75));
+  background-repeat: no-repeat; background-size: 100% 1px; background-position: top;
+  transition: transform 100ms cubic-bezier(.3, .7, .4, 1),
+              box-shadow 100ms cubic-bezier(.3, .7, .4, 1),
+              background-color 100ms cubic-bezier(.3, .7, .4, 1);
+}
+
+.pt-key span { display: inline-block; transform: translateX(.75px); }
+
+.pt-key.cjk { letter-spacing: 2.5px; }
+
+.pt-key.cjk span { transform: translateX(1.25px); }
+
+.pt-key::after {            /* 角上的状态灯，5pt */
+  content: ''; position: absolute; top: 7px; right: 8px; width: 5px; height: 5px;
+  border-radius: 50%; box-shadow: inset 0 0 0 1px var(--pt-hairline);
+}
+
+.pt-key:hover:not([aria-checked="true"]) {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 var(--pt-hairline), 0 6px 11px var(--pt-sh-18);
+}
+
+.pt-key:active:not([aria-checked="true"]) {
+  transform: translateY(2px); background-image: none;
+  box-shadow: 0 1px 2px var(--pt-sh-10), inset 0 2px 3px var(--pt-rc-20);
+}
+
+.pt-key[aria-checked="true"] {
+  transform: translateY(2px); cursor: default; color: var(--pt-ink);
+  background-color: var(--pt-well); background-image: none;
+  border-color: var(--pt-well-border);
+  box-shadow: inset 0 3px 4px var(--pt-rc-20);
+}
+
+.pt-key[aria-checked="true"]::after {
+  background: var(--pt-accent); box-shadow: 0 0 4px rgba(232, 72, 63, .55);
+}
+
+.pt-transport { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+.pt-track {
+  display: flex; gap: var(--pt-deck-gap); height: 100%; width: max-content;
+  transform: translateX(calc(var(--i) * (var(--pt-deck-w) + var(--pt-deck-gap)) * -1));
+  transition: transform 300ms cubic-bezier(.33, .9, .38, 1.03);
+}
+
+.pt-deck {
+  flex: none; width: var(--pt-deck-w); height: 100%;
+  background: var(--pt-surface);
+  background-image: linear-gradient(var(--pt-hi-55), rgba(255, 255, 255, 0) 6%);
+  border: 1px solid var(--pt-hairline); border-radius: 10px;
+  box-shadow: 0 1px 2px var(--pt-sh-09);
+  overflow: hidden;
+}
+
+.pt-deck-scroll { height: 100%; overflow-y: auto; padding: 7px 0 10px; scrollbar-width: none; }
+
+.pt-deck-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+.pt-deck-scroll > .inner { padding: 0 var(--pt-inset); }
+
+.pt-deck-scroll > .inner.fill { min-height: 100%; display: flex; flex-direction: column; }
+
+.pt-spacer { flex: 1 1 auto; min-height: 10px; }
+
+.pt-row { padding: 6.5px 0; }
+
+.pt-rowline { display: flex; align-items: center; gap: 12px; }
+
+.pt-rowline > .pt-label { flex: 1 1 auto; min-width: 0; }
+
+.pt-label .t { font-size: 12px; line-height: 1.35; color: var(--pt-ink); }
+
+.pt-label .s {
+  font-size: 9px; line-height: 13px; color: var(--pt-ink2); margin-top: 2px;
+}
+
+.pt-div { height: 1px; background: var(--pt-ru-45); }
+
+.pt-div.dep { margin-left: 14px; }     /* 从属子行下面的细线与子行文字齐头 */
+
+.pt-subhead {
+  display: flex; align-items: center; gap: 8px; padding: 8px 0 4px;
+}
+
+.pt-subhead::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--pt-ru-65); }
+
+.pt-dep { position: relative; padding-left: 14px; }
+
+.pt-dep::before {
+  content: ''; position: absolute; left: 3px; top: 0; bottom: 0; width: 1px;
+  background: var(--pt-ru-100);
+}
+
+.pt-dep.mid::before { top: -2px; }
+
+.pt-dep.last::before, .pt-dep.only::before { display: none; }
+
+.pt-dep.last::after, .pt-dep.only::after {
+  content: ''; position: absolute; left: 3px; width: 6.5px;
+  border-left: 1px solid var(--pt-ru-100); border-bottom: 1px solid var(--pt-ru-100);
+  border-bottom-left-radius: 4px;
+  top: 0; height: calc(50% - .5px);
+}
+
+.pt-dep.last::after { top: -2px; height: calc(50% + 1.5px); }
+
+.pt-off { opacity: .5; }               /* SwiftUI .disabled() 的 0.5 */
+
+.pt-sw {
+  position: relative; flex: none; width: 46px; height: 24px;
+  appearance: none; border: 0; padding: 0; cursor: pointer;
+  background: var(--pt-track-off); border-radius: 999px;
+  background-image: linear-gradient(rgba(0, 0, 0, .20), rgba(0, 0, 0, 0) 28%);
+  box-shadow: 0 1px 0 var(--pt-hi-55);
+  transition: background-color 180ms cubic-bezier(.3, 1.3, .4, 1);
+}
+
+.pt-sw[aria-checked="true"] {
+  background-color: var(--pt-accent);
+  background-image: linear-gradient(rgba(0, 0, 0, .30), rgba(0, 0, 0, 0) 28%);
+}
+
+.pt-sw .i {                 /* IEC 60417-5007「I」竖杠 2×9 */
+  position: absolute; left: 11px; top: 7.5px; width: 2px; height: 9px;
+  border-radius: 1px; background: #fff;
+}
+
+.pt-sw .o {                 /* IEC 60417-5008「O」圆环 φ9 */
+  position: absolute; right: 7px; top: 7.5px; width: 9px; height: 9px;
+  border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .8);
+}
+
+.pt-sw .k {                 /* 白钮帽：外探 1pt，落一道柔影 */
+  position: absolute; top: -1px; left: -1px; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--pt-knob);
+  box-shadow: inset 0 0 0 1px var(--pt-kr-08), 0 2px 3px var(--pt-sh-30);
+  transition: transform 180ms cubic-bezier(.3, 1.3, .4, 1);
+}
+
+.pt-sw[aria-checked="true"] .k { transform: translateX(22px); }
+
+.pt-fader { position: relative; height: 24px; cursor: pointer; touch-action: none; }
+
+.pt-fader .trk {
+  position: absolute; left: 0; right: 0; top: 10px; height: 4px; border-radius: 2px;
+  background: var(--pt-hairline);
+}
+
+.pt-fader .fill {
+  position: absolute; left: 0; top: 10px; height: 4px; border-radius: 2px;
+  background: var(--pt-accent);
+  width: calc(8px + (100% - 16px) * var(--f));
+}
+
+.pt-fader .ticks {
+  position: absolute; left: 8px; right: 8px; top: 10.75px; height: 2.5px;
+  display: flex; justify-content: space-between; pointer-events: none;
+}
+
+.pt-fader .ticks i {
+  width: 2.5px; height: 2.5px; border-radius: 50%; background: var(--pt-ink2); opacity: .35;
+}
+
+.pt-fader .th {
+  position: absolute; top: 4px; left: calc((100% - 16px) * var(--f));
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--pt-knob); border: 2px solid var(--pt-accent);
+  box-shadow: 0 1px 3px var(--pt-sh-18);
+}
+
+.pt-gear { cursor: pointer; touch-action: none; }
+
+.pt-gear .stops { display: flex; margin-bottom: 3px; }
+
+.pt-gear .stops span {
+  flex: 1 1 0; min-width: 0; text-align: center; font-size: 9px; font-weight: 500;
+  color: var(--pt-ink2); white-space: nowrap; overflow: hidden;
+}
+
+.pt-gear .stops span.cur { font-weight: 700; color: var(--pt-ink); }
+
+.pt-gear .pt-rail { position: relative; height: 16px; }
+
+.pt-gear .pt-rail::before {    /* 铣出来的槽，14 高，底缘一道光 */
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 14px;
+  border-radius: 7px; background: var(--pt-rc-06);
+  background-image: linear-gradient(var(--pt-rc-14), rgba(0, 0, 0, 0) 40%);
+  box-shadow: 0 1px 0 var(--pt-hi-50);
+}
+
+.pt-gear .pt-rail i {          /* 每一挡的定位刻线 */
+  position: absolute; top: 4.5px; width: 1px; height: 5px; background: var(--pt-hairline);
+  left: calc((var(--n) + .5) / var(--c) * 100% - .5px);
+}
+
+.pt-gear .pt-rail .k {         /* 白滑块 + 橙指示线，上探 2pt */
+  position: absolute; top: -2px; width: 14px; height: 18px; border-radius: 4px;
+  left: calc((var(--s) + .5) / var(--c) * 100% - 7px);
+  background: var(--pt-knob);
+  box-shadow: inset 0 0 0 1px var(--pt-kr-13), 0 1px 2px rgba(0, 0, 0, .26);
+  transition: transform 180ms cubic-bezier(.3, 1.3, .4, 1), left 180ms cubic-bezier(.3, 1.3, .4, 1);
+}
+
+.pt-gear .pt-rail .k::after {
+  content: ''; position: absolute; left: 6px; top: 3.5px; bottom: 3.5px; width: 2px;
+  border-radius: 1px; background: var(--pt-accent);
+}
+
+.pt-subhead.sys-dock { margin-top: 16px; }
+
+.pt-system-apply { display: flex; align-items: flex-start; gap: 22px; margin-top: 5px; }
+
+.pt-system-apply .pt-gear { width: 57%; flex: none; }
+
+.pt-stamp {
+  flex: 1 1 auto; min-width: 0; min-height: 46px; padding: 8px 12px;
+  appearance: none; background: transparent; border: 1.5px dashed var(--pt-hairline);
+  border-radius: 9px; cursor: default; color: color-mix(in srgb, var(--pt-ink2) 60%, transparent);
+  font-family: var(--pt-font-disp); font-size: 12px; font-weight: 700;
+  letter-spacing: 2.9px; text-transform: uppercase;
+  transition: border-color 200ms ease, color 200ms ease, transform 120ms ease;
+}
+
+.pt-stamp span { display: inline-block; padding: 5px 8px 4px 10px; border: 2.5px solid currentColor;
+  border-radius: 6px; transform: rotate(-2.5deg); white-space: nowrap; }
+
+.pt-stamp.armed { cursor: pointer; border-color: var(--pt-accent); color: color-mix(in srgb, var(--pt-accent) 80%, transparent); }
+
+.pt-stamp.armed span { border-color: transparent; font-family: var(--pt-font-ui); font-size: 10.5px;
+  font-weight: 600; letter-spacing: 1.3px; text-transform: none; transform: none; padding: 0; }
+
+.pt-stamp:active.armed { transform: translateY(1px); opacity: .75; }
+
+.pt-stamp.landing span { color: var(--pt-accent); animation: pt-stamp-land 280ms cubic-bezier(.2, 1.6, .4, 1); }
+
+@keyframes pt-stamp-land { from { transform: rotate(-2.5deg) scale(1.35); opacity: 0; } to { transform: rotate(-2.5deg) scale(1); opacity: 1; } }
+
+.pt-notice { margin: 4px 0 0; font-size: 9px; line-height: 13px; color: var(--pt-ink2); }
+
+.pt-section-gap { margin-top: 0; }
+
+.pt-nameplate {
+  padding: 7px 0; font-family: var(--pt-font-disp); font-size: 13px; font-weight: 650;
+  color: var(--pt-ink); font-variant-numeric: tabular-nums;
+}
+
+.pt-deck-btn {
+  flex: none; padding: 3px 10px; appearance: none;
+  border: 1px solid var(--pt-hairline); border-radius: 6px; cursor: pointer;
+  color: var(--pt-ink); background: var(--pt-cap-face); font: 400 10.5px/1.2 var(--pt-font-ui);
+  box-shadow: 0 1px 0 var(--pt-hairline);
+}
+
+.pt-deck-btn:active { transform: translateY(1px); }
+
+.pt-deck-btn:disabled { opacity: .5; cursor: default; }
+
+.pt-update-row { gap: 8px; }
+
+.pt-status-lamp { display: none; width: 5.5px; height: 5.5px; border-radius: 50%; background: var(--pt-accent); box-shadow: 0 0 5px color-mix(in srgb, var(--pt-accent) 55%, transparent); }
+
+.pt-status-lamp.on { display: block; }
+
+.pt-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.pt-license-reading { padding: 7px 0; }
+
+.pt-license-reading .h { font: 650 14px/1.25 var(--pt-font-disp); color: var(--pt-ink); }
+
+.pt-license-reading .d { margin-top: 3px; font: 9px/13px var(--pt-font-ui); color: var(--pt-ink2); }
+
+.pt-license-reading.landed { animation: pt-license-land 460ms cubic-bezier(.2, 1.25, .35, 1); }
+
+@keyframes pt-license-land { from { transform: translateY(6px); opacity: 0; } }
+
+.pt-license-face[data-license-face="active"] > .pt-subhead { margin-top: 7px; }
+
+.pt-license-form { padding-top: 7px; }
+
+.pt-license-input {
+  box-sizing: border-box; width: 100%; padding: 7px 10px; appearance: none;
+  border: 1px solid var(--pt-hairline); border-radius: 6px; outline: none;
+  color: var(--pt-ink); background: var(--pt-rc-06); font: 500 12.5px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace;
+  box-shadow: inset 0 1px 2px var(--pt-rc-14), 0 1px 0 var(--pt-hi-50);
+}
+
+.pt-license-input:not(:placeholder-shown), .pt-license-input:focus { border-color: var(--pt-hairline); }
+
+.pt-activation {
+  --pt-handle-x: 0px; --pt-fill: 57px; position: relative; display: block; width: 100%; height: 34px; margin-top: 9px;
+  padding: 0; appearance: none; border: 0; background: transparent; cursor: pointer; touch-action: none;
+  opacity: .6; transition: opacity 200ms ease-out;
+}
+
+.pt-activation .rack {
+  position: absolute; inset: 0; overflow: hidden; display: grid; grid-template-columns: repeat(12, 1fr);
+  border-radius: 8px; background: var(--pt-rc-07);
+  background-image: linear-gradient(var(--pt-rc-16), transparent 45%);
+  box-shadow: 0 1px 0 var(--pt-hi-50);
+}
+
+.pt-activation .rack::before {
+  content: ''; position: absolute; z-index: 0; inset: 0 auto 0 0;
+  width: var(--pt-fill); border-radius: 8px;
+  background: linear-gradient(color-mix(in srgb, var(--pt-accent) 30%, transparent), color-mix(in srgb, var(--pt-accent) 17%, transparent));
+}
+
+.pt-activation .rack i { z-index: 1; align-self: end; justify-self: center; width: 1px; height: 5px; margin-bottom: 8px; background: color-mix(in srgb, var(--pt-hairline) 35%, transparent); }
+
+.pt-activation.powered .rack i, .pt-activation.latched .rack i { background: color-mix(in srgb, var(--pt-hairline) 90%, transparent); }
+
+.pt-activation .handle {
+  position: absolute; z-index: 2; left: calc(3px + var(--pt-handle-x)); top: 3px;
+  width: 54px; height: 28px; border-radius: 5px; box-sizing: border-box;
+  background: linear-gradient(var(--pt-hi-16), transparent 50%, var(--pt-sh-10)), var(--pt-knob);
+  border: 1px solid var(--pt-kr-14); box-shadow: 0 1px 3px var(--pt-sh-28);
+  transition: left 200ms ease-out, box-shadow 120ms ease-out;
+}
+
+.pt-activation.dragging .handle { box-shadow: 0 2px 5px color-mix(in srgb, var(--pt-sh-28) 100%, transparent); transition: none; }
+
+.pt-activation .grip { position: absolute; inset: 0; display: flex; align-items: stretch; justify-content: center; gap: 1px; padding: 6px 0; box-sizing: border-box; }
+
+.pt-activation .grip i { width: 2px; border-left: 1px solid var(--pt-kr-14); border-right: 1px solid var(--pt-hi-50); box-sizing: border-box; }
+
+.pt-activation .grip b { width: 2px; margin: -2px 2px; border-radius: 1px; background: color-mix(in srgb, var(--pt-ink2) 40%, transparent); }
+
+.pt-activation.powered .grip b, .pt-activation.latched .grip b { background: var(--pt-accent); }
+
+.pt-activation.power-flash .grip b { animation: pt-license-power 500ms ease-out; }
+
+@keyframes pt-license-power {
+  from { box-shadow: 0 0 4px color-mix(in srgb, var(--pt-accent) 85%, transparent); }
+  to { box-shadow: 0 0 0 color-mix(in srgb, var(--pt-accent) 0%, transparent); }
+}
+
+.pt-activation .legend { position: absolute; z-index: 1; inset: 0; display: grid; place-items: center; pointer-events: none; color: color-mix(in srgb, var(--pt-ink2) 50%, transparent); font: 700 8.5px/1 var(--pt-font-disp); letter-spacing: 1.1px; text-transform: uppercase; }
+
+.pt-activation[data-lever-mode="release"] .legend { right: 60px; }
+
+.pt-activation.powered, .pt-activation.latched { opacity: 1; }
+
+.pt-activation.powered .legend, .pt-activation.latched .legend { color: var(--pt-ink); }
+
+.pt-activation.latched { --pt-handle-x: calc(100% - 60px); --pt-fill: 100%; }
+
+.pt-activation.throwing .handle { animation: pt-self-test 300ms ease-in-out infinite alternate; }
+
+@keyframes pt-self-test { to { filter: brightness(1.04); } }
+
+.pt-license-status, .pt-license-help { min-height: 13px; margin: 9px 0 0; color: var(--pt-ink2); font: 9px/13px var(--pt-font-ui); }
+
+.pt-license-help { margin-bottom: 7px; }
+
+.pt-license-status.ok { color: var(--pt-accent); }
+
+.pt-service-plate {
+  position: relative; display: flex; align-items: stretch; margin-top: 3px;
+  padding: 0; overflow: hidden; border: 1px solid var(--pt-hairline); border-radius: 6px;
+  background: linear-gradient(var(--pt-hi-40), transparent 35%), var(--pt-hatch);
+}
+
+.pt-service-plate::after {
+  content: ''; position: absolute; z-index: 2; top: 5px; bottom: 5px; left: 50%;
+  width: 1px; background: var(--pt-hairline); pointer-events: none;
+}
+
+.pt-service-plate a {
+  position: relative; z-index: 1; flex: 1 1 50%; min-width: 0; padding: 8px 4px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  color: var(--pt-ink); text-decoration: none; white-space: nowrap;
+  font: 400 10.5px/1.2 var(--pt-font-ui); transition: background-color 100ms ease-out;
+}
+
+.pt-service-plate a:hover { background: var(--pt-rc-045); }
+
+.pt-service-plate a:active { background: var(--pt-rc-10); transition-duration: 60ms; }
+
+.pt-service-plate .arrow { font-size: 8.5px; font-weight: 500; opacity: .55; }
+
+.pt-device-row { padding-top: 6.5px; padding-bottom: 6.5px; }
+
+@media (prefers-reduced-motion: reduce) {
+
+  .pt-gen-cluster, .pt-license-self-test { transition: none; }
+
+  .pt-license-reading.landed { animation: none; }
+
+  .pt-activation.power-flash .grip b { animation: none; }
+
+  .pt-activation, .pt-activation .handle { transition: none; }
+
+  .pt-activation.throwing .handle { animation: none; }
+}
+.pt-keycap {
+  flex: none; height: 26px; min-width: 74px; padding: 0 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  appearance: none; cursor: pointer; border-radius: 6px;
+  font-family: var(--pt-font-ui); font-size: 12.5px; font-weight: 500;
+  color: var(--pt-graphite-ink); background: var(--pt-graphite);
+  border: 1px solid var(--pt-hairline);
+  box-shadow: 0 .5px 1px var(--pt-sh-18);
+}
+
+.pt-keycap:active { transform: translateY(1px); }
+
+.pt-knob { position: relative; width: 74px; height: 72px; flex: none; }
+
+.pt-knob .cap {
+  position: absolute; left: 6px; top: 19px; width: 46px; height: 46px; border-radius: 50%;
+  appearance: none; border: 0; padding: 0; cursor: pointer; background: var(--pt-knob);
+  box-shadow: inset 0 0 0 1px var(--pt-kr-08), 0 2px 7px var(--pt-sh-30);
+}
+
+.pt-knob .cap .dot {        /* 橙点骑在钮面 0.58R 处，落位时整支转过去 */
+  position: absolute; left: 50%; top: 50%; width: 0; height: 0;
+  transform: rotate(calc(var(--az) * 1deg));
+  transition: transform 200ms cubic-bezier(.3, 1.5, .4, 1);
+}
+
+.pt-knob .cap .dot::after {
+  content: ''; position: absolute; left: -3.5px; top: -16.84px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--pt-accent);
+  box-shadow: inset 0 0 0 .5px var(--pt-kr-06);
+}
+
+.pt-knob .d {               /* 外圈数字，各自是一个按钮 */
+  position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+  appearance: none; border: 0; padding: 0; background: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--pt-font-ui); font-size: 10px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--pt-ink2); border-radius: 5px;
+}
+
+.pt-knob .d.cur { color: var(--pt-ink); }
+
+.pt-lever { display: flex; align-items: center; gap: 14px; padding: 8px 0 2px;
+  appearance: none; background: none; border: 0; cursor: pointer; width: 100%;
+  font-family: inherit; color: inherit; text-align: left; border-radius: 8px; }
+
+.pt-lever .slot {           /* 26×50 的铣槽 + 中央导向沟 */
+  position: relative; flex: none; width: 26px; height: 50px; border-radius: 6px;
+  background: var(--pt-rc-07);
+  background-image: linear-gradient(var(--pt-rc-16), rgba(0, 0, 0, 0) 35%);
+  box-shadow: 0 1px 0 var(--pt-hi-50);
+}
+
+.pt-lever .slot::before {
+  content: ''; position: absolute; left: 12px; top: 7px; bottom: 7px; width: 2px;
+  border-radius: 1px; background: var(--pt-rc-18);
+}
+
+.pt-lever .slot .h {        /* 22×17 的红手柄：顶部受光、下缘压重 */
+  position: absolute; left: 2px; top: 3px; width: 22px; height: 17px; border-radius: 4px;
+  background: var(--pt-accent);
+  background-image: linear-gradient(rgba(255, 255, 255, .3), rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, .22));
+  box-shadow: 0 2px 3px var(--pt-sh-35);
+  transition: transform 180ms cubic-bezier(.3, 1.3, .4, 1);
+}
+
+.pt-lever:active .slot .h, .pt-lever.thrown .slot .h { transform: translateY(27px); }
+
+.pt-lever .ticks {
+  flex: none; height: 46px; display: flex; flex-direction: column; justify-content: space-between;
+  font-size: 9px;
+}
+
+.pt-lever .ticks .run { font-weight: 600; color: var(--pt-ink); }
+
+.pt-lever .ticks .quit { color: var(--pt-ink2); }
+
+.pt-chassis :focus-visible { outline: 2px solid var(--pt-accent); outline-offset: 3px; }
+
+.pt-chassis .pt-license-input:focus-visible,
+.pt-chassis .pt-activation:focus-visible { outline: none; }
+
+.pt-knob .d:focus-visible { outline-offset: 1px; }
+
+.pt-key:focus-visible { outline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+
+  .pt-try .pt-track, .pt-try .pt-drum i, .pt-try .pt-knob .cap .dot,
+  .pt-try .pt-odo .cell span, .pt-try .pt-sw, .pt-try .pt-sw .k,
+  .pt-try .pt-gear .pt-rail .k, .pt-try .pt-key, .pt-try .pt-lever .slot .h,
+  .pt-try .pt-sc-body, .pt-try .pt-stamp { transition: none; }
+
+  .pt-try .pt-stamp.landing span { animation: none; }
+}
+.pt-row .pt-fader, .pt-row .pt-gear { margin-top: 5px; }
+
+.pt-rowline.g8 { gap: 8px; }
+
+.pt-label .t, .pt-label .s { display: block; }
+
+.pt-unit { font-size: 11.5px; color: var(--pt-ink2); flex: none; }
+
+.pt-val { font-size: 11.5px; color: var(--pt-ink2); font-variant-numeric: tabular-nums;
+  white-space: nowrap; flex: none; }
+
+.pt-screen .pt-silk { color: var(--pt-sc-ink2); }
+
+.pt-deck[aria-hidden="true"] { pointer-events: none; }
+
+.pt-knob .d[data-set="2"] { left: 29px;    top: 8px; }
+
+.pt-knob .d[data-set="1"] { left: 58.44px; top: 25px; }
+
+.pt-knob .d[data-set="0"] { left: 58.44px; top: 59px; }
+
+.pt-drum i:nth-child(1) { --y: 0; } .pt-drum i:nth-child(2) { --y: 1; }
+
+.pt-drum i:nth-child(3) { --y: 2; } .pt-drum i:nth-child(4) { --y: 3; }
+
+.pt-drum i:nth-child(5) { --y: 4; } .pt-drum i:nth-child(6) { --y: 5; }
+
+.pt-gear .pt-rail i:nth-child(1) { --n: 0; } .pt-gear .pt-rail i:nth-child(2) { --n: 1; }
+
+.pt-gear .pt-rail i:nth-child(3) { --n: 2; } .pt-gear .pt-rail i:nth-child(4) { --n: 3; }
+
+.pt-gear .pt-rail i:nth-child(5) { --n: 4; } .pt-gear .pt-rail i:nth-child(6) { --n: 5; }
+
+.pt-gear .pt-rail i:nth-child(7) { --n: 6; } .pt-gear .pt-rail i:nth-child(8) { --n: 7; }
+
+.pt-odo.pt-sc { font-family: var(--pt-font-disp); font-size: 26px; font-weight: 600;
+  line-height: 42px; color: var(--pt-sc-ink); }
+
+.pt-odo.pt-dk { font-family: var(--pt-font-disp); font-size: 13px; font-weight: 600;
+  line-height: 24px; color: var(--pt-ink); }
+
+.pt-odo .cell span, .pt-odo .sep { line-height: normal; }
+
+/* 页面上凡是提到价格的版位都有两句：特价说法(.pt-when-launch)与常价说法(.pt-when-reg)。
+/* 显示哪一句由 <html data-pt-discount> 决定，而这个属性由 site/paddle/paddle.js 在
+   **实拉过 Paddle 折扣之后**写上去：折扣确实还活着才是 "on"，过期/停用/用光都是 "off"。
+
+/* 默认（属性还没写上 = 还在问 Paddle，或 JS 关掉、Paddle 被拦）显示特价那套 —— 与
+/* 模板里的静态文案一致，页面不会先空一下再跳。
+/* ⚠ 这条规则替掉了原来"到期当天人手工换键"的流程：忘了换就会出现「$14.99 的卡上挂着
+     节省 33%」，那是虚假宣传，也是拒付投诉的头号来源。 */
+html:not([data-pt-discount="off"]) .pt-when-reg { display: none !important; }
+
+html[data-pt-discount="off"] .pt-when-launch { display: none !important; }
+
+html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
+
+
+
+/* ———— 传真机样式（独立作用域）———— */
+/* 传真机颜色 token（fax-full-spec.md 三源定值；亮色为 12.png 像素实测，暗色取二进制 night 系列） */
+.fx-block {
+  --fx-lcd-1: #272522; --fx-lcd-2: #282623;            /* LCD 微噪黑 */
+  --fx-key-idle: #E3DDD6; --fx-key-ink-idle: #453F3B;   /* 模式键未选中 */
+  --fx-key-cur: #DFD7CC;                                 /* 选中键帽 */
+  --fx-key-cur-hi-1: #D5CDC2; --fx-key-cur-hi-2: #C1BCB1; /* 选中键帽顶部亮边渐变 */
+  --fx-band: #716964; --fx-band-ink: #E9E4DF;            /* 选中内嵌带 */
+  --fx-key-seam: rgba(66, 58, 42, .10); --fx-key-riser: #CBC5BE;
+  --fx-cap-1: #BCBAB7; --fx-cap-2: #ECE9E7;              /* feedCap 灰过渡 */
+  --fx-rcp-1: #E1DCD6; --fx-rcp-2: #DAD5CF;              /* 回执纸 */
+  --fx-rcp-ok: #1FA765;                                   /* 回执结果行强调 */
+  --fx-deck-1: #D3CEC8; --fx-deck-2: #E9E4DF;            /* 底控台面 */
+  --fx-ramp-1: #A5A09E; --fx-ramp-2: #B8B5AF; --fx-ramp-3: #94948C; /* 台面斜坡 */
+  --fx-notch-bg: #E1DCD6;                                 /* 撕纸豁口 */
+  --fx-bezel-line: #D9D2C4;                               /* 台肩底细线 */
+}
+[data-theme="dark"] .fx-block {
+  --fx-lcd-1: #221F1B; --fx-lcd-2: #26221D;
+  --fx-key-idle: #37322A; --fx-key-ink-idle: #B5AC9C;
+  --fx-key-cur: #3D3830;
+  --fx-key-cur-hi-1: #4A443A; --fx-key-cur-hi-2: #322D26;
+  --fx-band: #1E1A15; --fx-band-ink: #E6DFD0;
+  --fx-key-seam: rgba(255, 255, 255, .06); --fx-key-riser: #211D18;
+  --fx-cap-1: #262119; --fx-cap-2: #3A342B;
+  --fx-rcp-1: #37322A; --fx-rcp-2: #2E2A23;
+  --fx-rcp-ok: #55D695;
+  --fx-deck-1: #2E2921; --fx-deck-2: #3A342B;
+  --fx-ramp-1: #211D18; --fx-ramp-2: #2E2921; --fx-ramp-3: #1A1712;
+  --fx-notch-bg: #37322A;
+  --fx-bezel-line: #3B342B;
+}
+/* ————— 机身（.fx-block：奶油机壳，亮 #E9E4E0-#DCD7D1 系）————— */
+.fx-block {                        /* = .pt-chassis 同款壳（2026-08-23 所有者定：
+                                        传真机外壳照抄主界面，不再做独立机壳） */
+  position: relative; width: min(580px, 100%); margin: 0 auto;
+  border-radius: 12px;
+  background: var(--pt-paper);
+  box-shadow: 0 0 0 1px var(--pt-hairline), var(--sh-lift);
+  font-family: var(--pt-font-ui);
+  color: var(--pt-ink);
+  display: flex; flex-direction: column;
+  overflow: hidden; text-align: left;
+}
+.fx { position: relative; display: flex; flex-direction: column;
+  padding: 9px var(--pt-inset) 16px; margin: -9px 0 0;
+  }
+.fx-lcd { margin-top: 9px; }           /* = pt-body 顶间隙（ledge→内容 9px），标题栏与 LCD 不再贴死 */
+.fx-shoulder { position: relative; height: 28px; flex: none;
+  margin: 0 calc(var(--pt-inset) * -1); }   /* 灯行贴顶贴边（=pt-ledge 在 chassis 顶层的观感） */
+
+/* ————— 台肩 bezelRow（42px：奶油底 + 左红绿灯 + 标题，底部 2px 暗线 #7D7875）————— */
+/* 与主面板 pt-ledge 同款窗饰（同一个软件的同一层壳） */
+.fx-lights { position: absolute; left: 20px; top: 12.5px; display: flex; gap: 8px;   /* = .pt-lights */
+  pointer-events: none; }
+.fx-lights i { width: 12px; height: 12px; border-radius: 50%;        /* = .pt-lights i */
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .12); }
+.fx-lights i:nth-child(1) { background: #FF5F57; }   /* = .pt-lights 红 */
+.fx-lights i:nth-child(2) { background: #FEBC2E; }   /* = .pt-lights 黄 */
+.fx-lights i:nth-child(3) { background: #28C840; }   /* = .pt-lights 绿 */
+.fx-linetag {                        /* 标题：与三灯中轴线严格同高（top 同为 12.5px、行盒同 12px——盒中心=灯中心） */
+  position: absolute; right: 16px; top: 13.5px; height: 12px; line-height: 12px;   /* 13.5=灯盒12.5+字面视觉下沉1px */
+  font-family: var(--pt-font-disp); font-size: 9.5px; font-weight: 600;
+  letter-spacing: 1.6px; color: var(--pt-ink2); white-space: nowrap;
+}
+
+/* ————— LCD 状态条 FaxScreenView（54px：圆角 10、#272522→#282623 微噪黑、上边 1px 亮线）————— */
+.fx-lcd {
+  /* 尺寸全部 4K 帧 20s 实测（.work/spec/step2-lcd.md，比例尺 ×0.2947）：
+     黑条宽 1791→528（左右内缩 10px）、高 223→65.7、
+     内边距 上17.1 左19.5 右23.3 下15.9 */
+  position: relative; border-radius: 10px; overflow: hidden;
+  height: 65.7px; margin: 9px 0 0;                /* 宽度统一（所有者定）：LCD/模式键/进纸口/控制条同宽=内容区 548px */
+  padding: 0 23.3px 0 19.5px;
+  align-items: stretch;
+  display: flex; align-items: stretch; justify-content: space-between; gap: 16px;
+  background: linear-gradient(180deg, var(--fx-lcd-1) 0%, var(--fx-lcd-2) 100%);
+  box-shadow: inset 0 3px 9px rgba(0, 0, 0, .62), inset 0 0 0 1px rgba(255, 255, 255, .05),
+    0 1px 0 var(--dk-lip);
+}
+.fx-lcd::before {                  /* 微噪底纹（材质非点阵） */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 1px 1px, rgba(239, 233, 220, .07) .6px, transparent .7px) 0 0 / 4px 4px;
+}
+.fx-lcd::after {                   /* 上边 1px 亮线 #292626→#211E1E */
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, #292626 0%, #211E1E 100%);
+}
+/* LCD 内部四行全部绝对定位到官版字面坐标（4K 实测，step2-lcd.md）：
+   主行字面中心距顶 25.8px、小字行字面中心距顶 45.2px。不再用流式排版——
+   流式的盒对齐永远差字面偏移（中文字/等宽数字/基线各不相同） */
+.fx-lcd-left { position: absolute; left: 19.5px; right: 23.3px; top: 0; bottom: 0; }
+.fx-lcd-right { position: absolute; right: 23.3px; top: 0; bottom: 0; text-align: right; }
+.fx-st-line {                     /* 主行：字面中心对齐距顶 25.8px（18px 字盒高 20 → top 15.8） */
+  position: absolute; left: 0; top: 16px; margin: 0;
+  display: flex; align-items: baseline; gap: 8px; white-space: nowrap;
+}
+.fx-st-zh {                        /* 4K 实测字面高 17.7 → 18px（step2-lcd.md） */
+  font-size: 18px; font-weight: 700; letter-spacing: 0.03em; line-height: 1.1;
+  color: var(--stage-ink);
+}
+.fx-caret { flex: none; width: 2.5px; height: 14px; background: var(--pt-sc-accent); animation: fx-caret 1.1s steps(1) infinite; }
+@keyframes fx-caret { 50% { opacity: 0; } }
+.fx:not([data-fx-phase="ready"]) .fx-caret { display: none; }
+.fx-st-sub {                       /* 小字行：字面中心距顶 45.2px（10px 字盒高 12 → top 39.2） */
+  position: absolute; left: 0; top: 39.5px; margin: 0;
+}
+.fx-st-en {                        /* mono 小字 */
+  margin: 0; font-family: var(--mono-ui); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.12em; color: var(--stage-fine);
+  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fx-lcd-right { flex: none; text-align: right; }
+.fx-count {                        /* 主行右：字面中心距顶 25.8px（15.5px 盒 → top 18） */
+  position: absolute; right: 0; top: 17px; margin: 0;
+  font-family: var(--mono-ui); font-size: 15.5px; font-weight: 700; line-height: 1.0;
+  color: var(--stage-ink); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.fx-count-cap {                    /* 小字行右：字面中心距顶 45.2px（同左栏 READY 行） */
+  position: absolute; right: 0; top: 45.5px; margin: 0; font-family: var(--mono-ui); font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.1em; color: var(--stage-fine); text-transform: uppercase; white-space: nowrap;
+}
+
+/* ————— 模式键 categoryKeys ×2（大胶囊：两键等宽、间距 6、高 40、圆角 19）—————
+   选中态 = 键帽 #DFD7CC + 键帽内一条深色内嵌带（高约 6px、几乎全键宽），
+   选中文字在带内（#E9E4DF 系）——不是红点（差异要点 1）；
+   未选中 = #E3DDD6 无带、文字 #453F3B（差异要点 2）。 */
+.fx-modes { display: flex; gap: 8px; margin-top: 12.7px; }   /* 键缝加大（所有者反馈嫌挤） */
+.fx-mode {
+  position: relative; flex: 1 1 0; min-width: 0; height: 44px;  /* 官版38.3被嫌矮→44px，两行字有呼吸（所有者定） */
+  appearance: none; border: 0; font-family: inherit; cursor: pointer;
+  border-radius: 8px; padding: 0; text-decoration: none;           /* 官版圆角 23-30px(4K)→6.8-8.8px，键高 21% */
+  background: var(--fx-key-idle); color: var(--fx-key-ink-idle);
+  white-space: nowrap; overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--fx-key-seam), 0 2px 0 var(--fx-key-riser);
+  transition: transform 60ms ease, box-shadow 60ms ease, background-color 120ms ease;
+}
+.fx-mode:hover { background: color-mix(in srgb, var(--fx-key-idle) 92%, #000); }
+.fx-mode:active { transform: translateY(2px); box-shadow: inset 0 0 0 1px var(--fx-key-seam), 0 0 0 var(--fx-key-riser); }
+.fx-mode:focus-visible { outline: 2px solid var(--pt-accent); outline-offset: 3px; }
+/* 键帽内嵌带：常驻结构，选中时着色显形（带内放选中文字） */
+/* 官网实测（12.png x110-174）：键帽上无任何色带——深色像素全是文字笔画。
+   文字两行（英文小字 + 中文粗体）直接印在键帽上。 */
+.fx-mode .band { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; gap: 3px; }                    /* 两行：上英文下中文；行距 3px 呼吸（所有者反馈字行挤） */
+.fx-mode .band .en { font-family: var(--mono-ui); font-size: 11px;   /* 官版对比图实测字面 7.7px（mono 字面率~0.7） */
+  font-weight: 600; letter-spacing: .12em; opacity: .7; line-height: 1; }
+.fx-mode .band .zh { font-size: 12px; font-weight: 800; line-height: 1; }  /* 官版对比图实测字面 11.5px */
+.fx-mode.cur { color: #453F3B; }   /* 键帽文字色（选中/未选中同族） */
+.fx-mode.cur {                        /* 顶部 1px 亮边 = #C1BCB1→#D5CDC2 渐变，其下键帽 #DFD7CC */
+  background: linear-gradient(180deg,
+    var(--fx-key-cur-hi-1) 0, var(--fx-key-cur-hi-2) 1px, var(--fx-key-cur) 1px);
+  box-shadow: inset 0 0 0 1px var(--fx-key-seam), 0 2px 0 var(--fx-key-riser);
+}
+
+/* 选中/未选中文字色由 --fx-key-ink-idle 与下方选中规则控制 */
+.fx-mode:disabled { opacity: .4; cursor: default; }
+
+/* ————— 进纸口标注行（23px：左侧小字 + 右延细线）————— */
+.fx-feed { display: flex; align-items: center; gap: 12px; margin: 17px 0 8px; }
+.fx-feed .fl-lb {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--ink-2); white-space: nowrap;
+}
+.fx-feed .fl-rule { flex: 1; height: 1px; background: var(--seam); }
+
+/* ————— 进纸槽 FaxFeedSlot（11px 斜渐变黑条：上暗 #211C1A 下亮 #36312E，底 1px 亮边 #58534F）—————
+   差异要点 3：替换原口沿板+窄缝结构。 */
+.fx-slot { position: relative; z-index: 1; height: 13px; margin: 0; border-radius: 3px 3px 0 0;  /* 4K 实测槽高 44px→13px */
+  /* 三层机械结构（4K 帧 y1186-1230 剖面）：
+     ①上 25% = 入口斜坡（快暗渐变=斜切的口沿）
+     ②中 55% = 深槽腔（近黑，底部微微反光=看得见槽底）
+     ③下 20% = 出口亮沿（纸穿出的缝口） */
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.35) 0, rgba(0,0,0,0) 25%),          /* 入口斜坡阴影 */
+    linear-gradient(180deg, #191614 25%, #100E0C 55%, #26221F 80%, #0C0A09 82%);  /* 槽腔+腔底反光 */
+  box-shadow: inset 0 -2px 3px rgba(255, 253, 248, .10),   /* 腔底出口的亮沿（纸缝） */
+    inset 0 1px 2px rgba(0, 0, 0, .9),                      /* 口沿内凹 */
+    0 1px 0 #6A655F;                                        /* 槽外底部亮线 */ }
+.fx-slot::after {                     /* 槽腔内一条更深的中央窄缝（纸通过的轨道） */
+  content: ''; position: absolute; left: 3%; right: 3%; top: 30%; height: 45%;
+  background: linear-gradient(180deg, #000 0%, #171310 100%);
+  border-radius: 1px; box-shadow: 0 1px 2px rgba(255, 253, 248, .08);
+}
+
+[data-theme="dark"] .fx-slot { filter: brightness(.82); }
+
+/* ————— 灰过渡 feedCap（20px：#BCBAB7→#ECE9E7 从暗到亮竖直渐变，出纸口盖板斜坡）—————
+   差异要点 4：纸从这里长出来。 */
+.fx-feed-cap { position: relative; z-index: 1; height: 20px; margin: 0;
+  background: linear-gradient(180deg, var(--fx-cap-1) 0%, var(--fx-cap-2) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25); }
+
+/* ————— 纸笼（纸从灰过渡带里长出，顶裁在盖板斜坡下）————— */
+.fx-cage { position: relative; z-index: 2; margin: -20px 0 0; padding: 0 16px 6px; overflow: hidden;
+  /* 底板（2026-08-23 所有者修正：浅灰——底板要浅，纸回收时的深灰阴影才有对比空间）。
+     底部止于控制条上方并圆角收尾（不越过发送按钮） */
+  background: linear-gradient(180deg, #E3DED8 0%, #DDD7D0 100%);
+  border-radius: 0 0 10px 10px; }
+
+/* ————— 传真纸 FaxBayView（纸色 #ECE9E7：比台面略亮偏灰）————— */
+.fx-paper {                        /* 悬浮纸（用户：'纸悬浮在底板上，有深灰阴影'）：
+                                  左右收窄露出底板、三层柔化阴影 */
+  position: relative; border-radius: 0 0 3px 3px;
+  margin: 0 14px;
+  background: linear-gradient(180deg, var(--pp-1) 0%, var(--pp-2) 100%);
+  box-shadow:
+    0 2px 5px rgba(66, 58, 42, .26),
+    0 10px 22px -6px rgba(66, 58, 42, .34),
+    0 24px 38px -14px rgba(66, 58, 42, .24),
+    inset 0 0 0 1px var(--pp-edge);
+  transition: transform 900ms cubic-bezier(.25, .9, .3, 1);
+}
+.fx-paper::before {                 /* 槽沿投在纸上的影：纸是从灰过渡带里长出来的 */
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 11px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(40, 33, 24, .28), rgba(40, 33, 24, .08) 60%, rgba(40, 33, 24, 0));
+}
+.fx-paper.up { transform: translateY(-104%); }
+.fx[data-fx-phase="sending"] .fx-paper { transform: translateY(-56%); transition: transform 2400ms linear; }
+.fx-holes {                          /* 走纸孔列：孔径 5px、纵向步进 22px，孔区渐变 #DAD5CF→#C9C4BF */
+  position: absolute; top: 0; bottom: 0; width: 26px; pointer-events: none;
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--pp-hole) 0 2.5px, transparent 2.7px),
+    radial-gradient(circle at 50% calc(50% + 1.2px), var(--pp-hole-hi) 0 2.8px, transparent 3px);
+  background-size: 26px 22px; background-repeat: repeat-y;
+}
+.fx-holes.l { left: 0; border-right: 1px dashed var(--pp-perf); }
+.fx-holes.r { right: 0; border-left: 1px dashed var(--pp-perf); }
+.fx-light-catch {                    /* 纸受光面：顶部白色高光条（lightCatch） */
+  position: absolute; left: 26px; right: 26px; top: 0; height: 8px;
+  pointer-events: none; background: linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0));
+}
+[data-theme="dark"] .fx-light-catch { background: linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, 0)); }
+.fx-sheet { margin: 0 26px; padding: 15px 16px 14px; text-align: left; }
+
+/* ————— 纸头字段（.pp-head + .pp-fields）————— */
+.fx-p-head { display: flex; align-items: baseline; gap: 10px; }
+.fx-brand { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: var(--pp-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-no { margin-left: auto; font-family: var(--mono-ui); font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: var(--pp-fine); font-variant-numeric: tabular-nums; }
+.fx-p-meta { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 22px; }
+.fx-p-meta p { margin: 0; font-size: 11.5px; color: var(--pp-fine); letter-spacing: 0.03em; display: flex; align-items: baseline; gap: 4px; padding: 0; min-width: 0; }
+.fx-p-meta p em { font-style: normal; flex: none; color: var(--pp-fine); }
+.fx-p-meta p b { margin-left: 5px; font-family: var(--mono-ui); font-weight: 600; color: var(--pp-ink); font-variant-numeric: tabular-nums; min-width: 0; }
+.fx-email { flex: 1 1 auto; min-width: 0; box-sizing: border-box; height: 17px; padding: 0;
+  appearance: none; border: 0; border-bottom: 1px dotted var(--pp-rule); outline: none; background: transparent;
+  font: 400 11.5px/17px var(--pt-font-ui); color: var(--pp-ink); border-radius: 0; }
+.fx-email::placeholder { color: var(--pp-fine); }
+.fx-email:focus { border-bottom-color: var(--pt-accent); }
+.fx-email:disabled { opacity: .6; }
+
+/* ————— 类别印章（.pp-stamp + 逆向 0.5° 微旋转）————— */
+.fx-stamp-row { margin-top: 12px; display: flex; align-items: center; gap: 14px; }
+.fx-stamp {
+  display: inline-block; transform: rotate(-0.5deg);
+  font-size: 13.5px; font-weight: 800; letter-spacing: 0.28em; white-space: nowrap;
+  color: var(--pt-accent); padding: 5px 11px 5px 15px;
+  border: 2.2px solid var(--pt-accent); border-radius: 7px;
+  background: color-mix(in srgb, var(--pt-accent) 5%, transparent);
+}
+.fx-stamp.sug { color: #5557D2; border-color: #5557D2; background: color-mix(in srgb, #5557D2 5%, transparent); }
+[data-theme="dark"] .fx-stamp.sug { color: #9492F5; border-color: #9492F5; background: color-mix(in srgb, #9492F5 5%, transparent); }
+.fx-stamp-note { font-size: 11px; line-height: 1.5; color: var(--pp-fine); }
+
+/* ————— 正文横线信纸输入区（纸上墨色体系）————— */
+/* 开关两态重新分配纸内空间（官版 1.png vs 6.png）：
+   关=大书写区（10 行格线）无虚线框；开=书写区收 2 行 + 机器信息框。
+   两态纸内总占用相同（100+13+81 = 244），纸与整页高度恒定。 */
+.fx-body { position: relative; margin-top: 10px; }
+.fx-body::before {                  /* 横线信纸 RuledTextView：行距 25px（1.png 实测 y342/367/392 等差数列） */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(180deg, transparent 0 24px, var(--pp-rule) 24px 25px);
+}
+.fx-input {
+  position: relative; display: block; width: 100%; box-sizing: border-box;
+  height: 100px; min-height: 0;                      /* 高度锁死，不许内容撑高 */
+  padding: 0 2px; resize: none; outline: none; border: 0; background: transparent;
+  font: 400 12.5px/20px var(--pt-font-ui); color: var(--pp-ink);
+  overflow-y: auto; scrollbar-width: none;           /* 多行正文框内滚动（官版纸固定大小） */
+}
+.fx-input::-webkit-scrollbar { display: none; }
+/* 关态书写区放大高度由 panel.js fxResizeInput 实测设定（各宽度布局尺寸不同，固定值会错位） */
+.fx-input::placeholder { color: var(--pp-fine); }
+.fx-input:disabled { opacity: .75; }
+
+/* ————— 随附机器信息虚线框（.pp-box + .pp-row 虚线引导）————— */
+/* 显隐只切换可见性（开关不塌页）；关态书写区放大吃掉这块（见 .fx-input 规则） */
+.fx-minfo-clip { margin-top: 13px; transition: opacity 280ms ease, visibility 0s; }
+/* 关态脱流让位书写区（配平见 panel.js）。脱流后 absolute 无 top 约束会漂到
+   文档末尾且塌宽（492→151px），280ms 淡出期间可见 = 底部残影——故关态立即
+   隐藏不做淡出；开态回流的瞬间位置正确，保留淡入 */
+.fx[data-fx-attach="off"] .fx-minfo-clip { opacity: 0; visibility: hidden; transition: none; position: absolute; }
+.fx-minfo { overflow: hidden; min-height: 0; border: 1px dashed var(--pp-rule); border-radius: 8px; padding: 10px 13px 9px; }
+.fx-minfo .bt { margin: 0 0 5px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-fine); }
+.fx-minfo p { margin: 0; display: flex; align-items: baseline; gap: 11px; font-size: 12px; color: var(--pp-ink); padding: 2px 0; }
+.fx-minfo p em { font-style: normal; flex: none; width: 52px; color: var(--pp-fine); }
+.fx-minfo p b { font-family: var(--mono-ui); font-weight: 600; color: var(--pp-ink); font-variant-numeric: tabular-nums; }
+.fx-privacy { margin: 11px 0 0; font-size: 10.5px; line-height: 1.7; color: var(--pp-fine); }
+
+/* ————— 回执 FaxReceiptView（纸色 #E1DCD6 暗于传真纸，层叠在传真纸前方；宽≈纸宽 80%）—————
+   差异要点 6：回执用独立纸色变量（--fx-rcp-*），与传真纸 --pp-* 区分。 */
+.fx-receipt {
+  position: absolute; top: 0; left: 50%; width: 80%; z-index: 3;
+  transform: translate(-50%, -103%); opacity: 0; pointer-events: none;
+}
+.fx[data-fx-phase="sent"] .fx-receipt {
+  transform: translate(-50%, -46%); opacity: 1;
+  transition: transform 1000ms ease-out, opacity 220ms ease;
+}
+.fx[data-fx-phase="printed"] .fx-receipt {
+  transform: translate(-50%, 0); opacity: 1; cursor: pointer; pointer-events: auto;
+  transition: transform 700ms ease-out;
+}
+.fx[data-fx-phase="tearing"] .fx-receipt {
+  transform: translate(-50%, 0); opacity: 1; pointer-events: none;
+  animation: fx-tear 430ms cubic-bezier(.3, .8, .4, 1) forwards;
+}
+@keyframes fx-tear { to { transform: translate(-50%, 46px); opacity: 0; } }
+.fx-receipt .body {
+  position: relative; overflow: hidden; text-align: center;
+  margin: 0 26px; padding: 15px 16px 14px;
+  background: linear-gradient(180deg, var(--fx-rcp-1) 0%, var(--fx-rcp-2) 100%);
+  color: var(--pp-ink);
+  box-shadow: 0 12px 22px -12px rgba(66, 58, 42, .45), inset 0 0 0 1px var(--pp-edge);
+}
+.fx-receipt .body::before {          /* 槽沿投在纸上的影（与 .fx-paper::before 同族） */
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 11px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(40, 33, 24, .28), rgba(40, 33, 24, .08) 60%, rgba(40, 33, 24, 0));
+}
+.fx-receipt .ttl { margin: 0; font-size: 13.5px; font-weight: 800; letter-spacing: 0.28em; line-height: 1.2; color: var(--pp-ink); }
+.fx-receipt .sub { margin: 3px 0 0; font-family: var(--mono-ui); font-size: 9px; font-weight: 600; letter-spacing: 0.14em; color: var(--pp-fine); text-transform: uppercase; }
+.fx-receipt .rule { margin: 10px auto; width: 86%; border-top: 1px dashed var(--pp-rule); }
+.fx-receipt dl { margin: 0; display: inline-block; text-align: left; }
+.fx-receipt dl div { display: flex; align-items: baseline; gap: 11px; font-size: 10.5px; line-height: 1.24; color: var(--pp-ink); padding: 1.5px 0; }
+.fx-receipt dt { flex: none; width: 3.2em; color: var(--pp-fine); }
+.fx-receipt dd { margin: 0; flex: 1; font-family: var(--mono-ui); font-weight: 600; font-variant-numeric: tabular-nums; }
+.fx-receipt [data-fx-r-result] { color: var(--fx-rcp-ok); }   /* 结果行「OK · 已送达」绿色强调 */
+.fx-receipt .thanks { margin: 2px 0 0; font-size: 11px; font-weight: 600; line-height: 1.5; color: var(--pp-ink); }
+.fx-receipt .tear-hint { margin: 2px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--pp-fine); }
+.fx-receipt .teeth {               /* 底边锯齿（撕纸边）— FaxReceiptTeeth.path 精确算法：
+                                      齿宽 4.5 / 周期 9 等腰三角，齿高=齿带全高。
+                                      实现：两个反向 linear-gradient 各画半边三角形拼合。 */
+  height: 9px;
+  background:
+    linear-gradient(135deg, var(--fx-rcp-1) 50%, transparent 50%) 0 0 / 9px 9px repeat-x,
+    linear-gradient(-135deg, var(--fx-rcp-1) 50%, transparent 50%) 4.5px 0 / 9px 9px repeat-x;
+  filter: drop-shadow(0 1px 0 rgba(120, 108, 84, .3));
+}
+
+/* ————— 底控台面 FaxDeckView（60px 奶油渐变）+ 台面斜坡（15px 灰渐变）————— */
+.fx-controls {                     /* 官版特写：浅色平面背景 (233,228,223)、紧凑高度 */
+  display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 8px 10px 2px; text-align: left;
+}
+.fx-ramp {                             /* 台面斜坡：#A5A09E→#B8B5AF→#94948C */
+  height: 15px; margin: 0 2px; border-radius: 0 0 4px 4px;
+  background: linear-gradient(180deg, var(--fx-ramp-1) 0%, var(--fx-ramp-2) 55%, var(--fx-ramp-3) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+.fx-attach { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.fx-trigger {
+  position: relative; flex: none; width: 34px; height: 18px; appearance: none; border: 0; padding: 0; cursor: pointer;
+  border-radius: 999px; background-color: var(--pt-track-off);
+  background-image: linear-gradient(rgba(0, 0, 0, .2), rgba(0, 0, 0, 0) 30%);
+  box-shadow: 0 1px 0 var(--pt-hi-55);
+  transition: background-color 180ms cubic-bezier(.3, 1.3, .4, 1);
+}
+.fx-trigger[aria-checked="true"] { background-color: var(--pt-accent); }
+.fx-trigger .k {
+  position: absolute; top: -1px; left: -1px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--pt-knob);
+  box-shadow: inset 0 0 0 1px var(--pt-kr-08), 0 2px 3px var(--pt-sh-30);
+  transition: transform 180ms cubic-bezier(.3, 1.3, .4, 1);
+}
+.fx-trigger[aria-checked="true"] .k { transform: translateX(16px); }
+.fx-trigger:disabled { opacity: .45; cursor: default; }
+.fx-attach-copy b { display: block; font-size: 11.5px; font-weight: 500; line-height: 1.5; color: var(--fine); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-attach-copy span { display: block; margin-top: 2px; font-size: 10.5px; line-height: 1.5; color: var(--fine); opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* LINE 指示灯：待命灰 / 拨号·传送·占线红（占线红闪）/ 已送达·回执绿 */
+.fx-lamp-wrap { display: flex; align-items: center; gap: 5px; flex: none; }
+.fx-line-silk { font-family: var(--mono-ui); font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--ink-2); }
+.fx-lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-2); opacity: .4; }
+.fx[data-fx-phase="dialing"] .fx-lamp,
+.fx[data-fx-phase="connecting"] .fx-lamp,
+.fx[data-fx-phase="sending"] .fx-lamp {
+  background: var(--pt-accent); opacity: 1;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--pt-accent) 60%, transparent);
+}
+.fx[data-fx-phase="sent"] .fx-lamp,
+.fx[data-fx-phase="printed"] .fx-lamp {
+  background: var(--pt-sc-green); opacity: 1;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--pt-sc-green) 60%, transparent);
+}
+.fx[data-fx-phase="busy"] .fx-lamp { background: var(--pt-accent); opacity: 1; animation: fx-blink .5s steps(1) infinite; }
+@keyframes fx-blink { 50% { opacity: .2; } }
+
+/* ————— 底控台面按键 FaxKeyStyle —————
+   三源交叉定值（fax-full-spec.md）：
+   · 12.png 像素实测（亮色）：CLEAR 57×34 键帽 #ECEAED 冷白、无渐变、底边 1px #D0CCC3；
+     TRANSMIT 86×35 键帽 #DB534D→#DB4D48（渐变极浅）、侧壁 2px #A23B38、顶部 1px 白高光
+     alpha 0.35；两键间距 11px；LINE 灯在 CLEAR 左。 */
+.fx-controls {
+  --fx-send-top-1: #DB534D; --fx-send-top-2: #DB4D48; --fx-send-riser: #A23B38;
+  --fx-send-catch: .35;
+}
+[data-theme="dark"] .fx-controls {
+  --fx-send-top-1: #D2453C; --fx-send-top-2: #BC3A32; --fx-send-riser: #7E241E;
+  --fx-send-catch: .08;
+}
+
+/* 按键文字：中文粗体在上 + 英文小字在下（两行） */
+.fx-clear .zh, .fx-send .zh { display: block; font-weight: 800; font-size: 12.5px; line-height: 1.25; }
+.fx-clear .en, .fx-send .en { display: block; font-family: var(--mono-ui); font-weight: 600; font-size: 8.5px; letter-spacing: .12em; line-height: 1.35; opacity: .8; }
+
+/* 清除 CLEAR：冷白键帽、无渐变、扁平（实测 57×34、圆角 8、#ECEAED、底边 1px #D0CCC3）*/
+.fx-clear {
+  flex: none; appearance: none; border: 0; cursor: pointer; text-align: center; position: relative;
+  width: 57px; min-height: 34px; box-sizing: border-box;
+  border-radius: 8px; padding: 3px 6px;
+  background: #ECEAED;
+  color: #3B3933;
+  font-family: inherit; letter-spacing: .04em; line-height: 1.1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), 0 1px 0 #D0CCC3;
+  transition: transform 60ms ease, box-shadow 60ms ease, filter 120ms ease;
+}
+.fx-clear:hover:not(:disabled) { filter: brightness(.98); }
+.fx-clear:active:not(:disabled) { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 0 0 #D0CCC3; }
+.fx-clear:focus-visible { outline: 2px solid var(--pt-accent); outline-offset: 3px; }
+.fx-clear:disabled { opacity: .5; cursor: default; }
+[data-theme="dark"] .fx-clear {
+  background: var(--panel); color: var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 1px 0 var(--panel-dn);
+}
+
+/* 发送 TRANSMIT：红键帽（渐变极浅）+ 2px 深红侧壁（实测 86×35、圆角 8、#DB534D→#DB4D48）*/
+.fx-send {                        /* 官版特写实测：105×37px 胶囊、砖红 (210,108,100)、
+                                  白字两行（发送/TRANSMIT）、扁平无立体阴影 */
+  flex: none; appearance: none; border: 0; cursor: pointer; text-align: center; position: relative;
+  width: 105px; height: 37px; box-sizing: border-box;
+  border-radius: 18px; padding: 4px 10px;
+  background: linear-gradient(180deg, #D26B5F 0%, #C05A4E 100%);
+  color: #FFF;
+  font-family: inherit; letter-spacing: .05em; line-height: 1.1;
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18);
+  transition: transform 60ms ease, box-shadow 60ms ease, filter 120ms ease;
+}
+.fx-send .zh { font-size: 13px; font-weight: 700; line-height: 1; }
+.fx-send .en { font-family: var(--mono-ui); font-size: 8.5px; font-weight: 600; letter-spacing: .1em; line-height: 1; opacity: .92; }
+.fx-send:hover:not(:disabled) { filter: brightness(1.04); }
+.fx-send:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, calc(var(--fx-send-catch) * .6)),
+              0 0 0 var(--fx-send-riser);
+}
+.fx-send:focus-visible { outline: 2px solid var(--pt-accent); outline-offset: 3px; }
+.fx-send:disabled {
+  filter: saturate(.35) brightness(.85);
+  color: rgba(255, 255, 255, .72);
+  cursor: default; box-shadow: 0 1px 0 var(--fx-send-riser);
+}
+.fx[data-fx-phase="printed"] .fx-send,
+.fx[data-fx-phase="tearing"] .fx-send { filter: none; }
+
+/* 两键紧挨（实测间距 11px） */
+.fx-controls .fx-lamp-wrap { margin-right: 2px; }
+.fx-clear { margin-right: 11px; }
+
+/* 传送阶段：正文/邮箱/模式键/开关不可交互（disabled 属性由 JS 同步） */
+.fx[data-fx-phase="offhook"] .fx-input,
+.fx[data-fx-phase="dialing"] .fx-input,
+.fx[data-fx-phase="connecting"] .fx-input,
+.fx[data-fx-phase="sending"] .fx-input,
+.fx[data-fx-phase="sent"] .fx-input,
+.fx[data-fx-phase="printed"] .fx-input,
+.fx[data-fx-phase="tearing"] .fx-input,
+.fx[data-fx-phase="loading"] .fx-input,
+.fx[data-fx-phase="busy"] .fx-input { pointer-events: none; }
+
+/* 减动效：走纸/撕纸动画跳过，状态直达 */
+@media (prefers-reduced-motion: reduce) {
+  .fx-paper, .fx-receipt, .fx-minfo-clip { transition: none; }
+  .fx[data-fx-phase="tearing"] .fx-receipt { animation: none; opacity: 0; }
+  .fx-caret { animation: none; }
+}
+
+/* ————— @720px 缩档（官网 media 查询对应参数，传真机零件同步缩一档）————— */
+@media (max-width: 720px) {
+  .fx-block { border-radius: 12px; }               /* = pt-chassis（壳已统一，断点同步） */
+  .fx-lcd { height: 65.7px; }
+  .fx-st-zh { font-size: 18px; }
+  .fx-st-en { font-size: 9px; margin-top: 2px; }
+  .fx-count { font-size: 15.5px; }
+  .fx-count-cap { font-size: 9.5px; margin-top: 3px; }
+  .fx-feed { margin: 13px 0 7px; }
+  .fx-feed .fl-lb { font-size: 9px; }
+  .fx-feed-cap { height: 14px; }
+  .fx-cage { margin-top: -14px; padding: 0 8px 5px; }
+  .fx-holes { width: 15px; background-size: 15px 22px;
+    background-image: radial-gradient(circle at 50% 50%, var(--pp-hole) 0 2.1px, transparent 2.3px); }
+  .fx-light-catch { left: 15px; right: 15px; height: 6px; }
+  .fx-sheet { margin: 0 15px; padding: 11px 9px 10px; }
+  .fx-brand { font-size: 9.5px; letter-spacing: .05em; }
+  .fx-no { font-size: 8.5px; }
+  .fx-p-meta { grid-template-columns: 1fr 1fr; gap: 2px 10px; margin-top: 6px; }
+  .fx-p-meta p { font-size: 8.5px; }
+  .fx-p-meta p b { margin-left: 6px; }
+  .fx-email { height: 13px; font-size: 8.5px; line-height: 13px; }
+  .fx-stamp-row { margin: 10px 0 2px; gap: 11px; }
+  .fx-stamp { font-size: 9.5px; letter-spacing: .16em; padding: 3px 7px 3px 10px; border-width: 1.5px; }
+  .fx-stamp-note { font-size: 8px; }
+  .fx-body { margin-top: 8px; }
+  .fx-body::before { background: repeating-linear-gradient(180deg, transparent 0 19px, var(--pp-rule) 19px 20px); }
+  .fx-input { min-height: 75px; font-size: 9.5px; line-height: 20px; }
+  .fx-minfo-clip { margin-top: 9px; }
+  .fx-minfo { padding: 7px 9px 6px; }
+  .fx-minfo .bt { font-size: 8px; margin-bottom: 2px; letter-spacing: .06em; }
+  .fx-minfo p { font-size: 8.5px; padding: .5px 0; gap: 6px; }
+  .fx-minfo p em { width: 34px; }
+  .fx-privacy { margin-top: 7px; font-size: 8px; line-height: 1.55; }
+  .fx-receipt .body { margin: 0 15px; padding: 11px 9px 10px; }
+  .fx-receipt .ttl { font-size: 10.5px; letter-spacing: .2em; }
+  .fx-receipt .sub { font-size: 7px; }
+  .fx-receipt dl div { font-size: 8px; }
+  .fx-receipt .thanks { font-size: 8.5px; }
+  .fx-receipt .tear-hint { font-size: 7px; }
+  .fx-receipt .teeth { height: 8px;
+    background:
+      linear-gradient(135deg, var(--fx-rcp-1) 50%, transparent 50%) 0 0 / 9px 8px repeat-x,
+      linear-gradient(-135deg, var(--fx-rcp-1) 50%, transparent 50%) 4.5px 0 / 9px 8px repeat-x; }
+  .fx-controls { flex-wrap: wrap; gap: 9px; margin-top: 12px; padding: 9px 6px 8px 2px; }
+  .fx-attach-copy b { font-size: 9.5px; }
+  .fx-attach-copy span { font-size: 9px; line-height: 1.45; }
+  .fx-clear { width: auto; flex: 1 1 auto; min-height: 34px; padding: 4px 10px; border-radius: 11px; }
+  .fx-ramp { height: 11px; }
+}
+
+/* 窄屏：页面壳与传真机区块收边 */
+@media (max-width: 639px) {
+  .pt-page-head { padding: 20px 16px 0; }
+}
+
+
+.fx-mode { position: relative; }
+.fx-mode.cur::after {                /* 官方选中键右上角红点 */
+  content: ''; position: absolute; top: 8px; right: 10px; width: 4.4px; height: 4.4px;  /* 4K 帧与新对比图折中：距顶 7-8、距右 10-17 */
+  border-radius: 50%; background: var(--pt-sc-accent);
+}
