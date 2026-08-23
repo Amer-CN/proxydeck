@@ -1557,9 +1557,12 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 
 /* ————— 底控台面 FaxDeckView（60px 奶油渐变）+ 台面斜坡（15px 灰渐变）————— */
-.fx-controls {                     /* 灰线删除后（所有者三指示）：键行下移+底板拉长+纸不动 */
+.fx-controls {                     /* 所有者最终定案：键行下移贴底 + 底板跟随拉长包住键行（与键行保持原间距）+ 纸不动 */
   display: flex; align-items: center; gap: 14px; margin-top: 0;
-  padding: 10px 0 14px 2px;          /* 键行适度下移（不全铺底板：所有者嫌整段变灰太重） */
+  background: linear-gradient(180deg, #E3DED8 0%, #DDD7D0 100%);  /* 底板色铺满键行区 */
+  border-radius: 0 0 12px 12px;                                   /* 底板圆角收尾在块底 */
+  margin-bottom: -16px;             /* 吃掉 fx padding-bottom，底板贴块底 */
+  padding: 18px 0 14px 2px;          /* 键行下移（灰线删除后占位还原）：开关/清除/发送整体贴向底部 */
   text-align: left;
   --fx-key-gap: 8px;                /* 发送键右缘=上方 LCD/底板右缘（所有者定：右边界平齐） */
 }
