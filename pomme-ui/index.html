@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PommeToys · 设置面板</title>
-<link rel="stylesheet" href="assets/panel.css?v=step4z">
+<link rel="stylesheet" href="assets/panel.css?v=step4A">
 </head>
 <body class="pt-try">
 
@@ -633,8 +633,9 @@
         <!-- 底控台面 FaxDeckView：扳机开关 + 文案 | LINE 灯 + CLEAR + TRANSMIT -->
         <div class="fx-controls">
           <div class="fx-attach">
-            <button type="button" class="fx-trigger" role="switch" aria-checked="true" data-fx-attach-sw
-                    aria-label="随附机器信息" data-i18n-attr="aria-label:fx.attachT"><span class="k" aria-hidden="true"></span></button>
+            <!-- 开关整只复制主面板 .pt-sw（含 I/O 符号层），仅挂 fx 逻辑钩子 -->
+            <button type="button" class="pt-sw fx-trigger" role="switch" aria-checked="true" data-fx-attach-sw
+                    aria-label="随附机器信息" data-i18n-attr="aria-label:fx.attachT"><span class="i"></span><span class="o"></span><span class="k"></span></button>
             <div class="fx-attach-copy">
               <b data-i18n="fx.attachT">随附机器信息</b>
               <span data-i18n="fx.attachS">版本、系统、机型、语言——按所示原样发送</span>
