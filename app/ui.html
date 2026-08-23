@@ -4275,7 +4275,9 @@ var PT_I18N = {
     var btn = $('tjAccAuto');
     if (!btn) return;
     btn.onclick = async function () {
-      if (!confirm("自动探测会从你的浏览器（Chrome/Edge）读取团结登录态。\n\n如果浏览器没开调试模式，会自动以调试模式重启浏览器（同一账号配置，登录态/书签/扩展都不变；调试口只监听本机）。\n\n继续吗？")) return;
+      confirmModal("自动探测 · AUTO DETECT",
+        "自动从你的浏览器（Chrome/Edge）读取团结登录态。<br>如果浏览器没开调试模式，会自动以调试模式重启浏览器——同一账号配置，登录态 / 书签 / 扩展都不变；调试口只监听本机。",
+        async function () {
 
 
       btn.disabled = true; btn.textContent = "探测中…";
@@ -4289,6 +4291,7 @@ var PT_I18N = {
       } catch (e) { toast("err", "探测失败", String(e)); }
       btn.disabled = false; btn.textContent = "⚡ 自动探测";
       loadTuanjieAccounts();
+        });
     };
   })();
 
@@ -5128,6 +5131,24 @@ var PT_I18N = {
     PTApp.gear('lang', idx >= 0 ? idx : 0);
     setUiLang(saved);
   })();
+  /* ================= 机械风确认弹窗（替代原生 confirm） ================= */
+  function confirmModal(title, message, onConfirm, confirmText) {
+    var html = '<h3>' + escHtml(title) + '</h3><div class="m-body">' +
+      '<p class="acc-f-help" style="font-size:11.5px;margin:0 0 4px;line-height:1.8">' + message + '</p>' +
+      '<div class="acc-f-actions" style="margin-top:12px">' +
+      '<button type="button" class="ibtn2" id="cfmCancel">取消</button>' +
+      '<button type="button" class="ibtn2 accent" id="cfmOk">' + escHtml(confirmText || "确定") + '</button>' +
+      '</div></div>';
+    openModal(html);
+    document.getElementById("cfmCancel").onclick = function () {
+      document.querySelector(".modal-close").click();
+    };
+    document.getElementById("cfmOk").onclick = function () {
+      document.querySelector(".modal-close").click();
+      onConfirm();
+    };
+  }
+
   /* ================= 更新日志（与仓库 CHANGELOG.md 同源） ================= */
   /* 更新日志数据（结构化，与 CHANGELOG.md / GitHub Releases 同源）
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
