@@ -77,26 +77,31 @@ func (s *Server) handleAccountAuto(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// 2. 探测不到 → spawn 浏览器带调试口（用户已在前端确认过）
+	// 2. 探测不到 → 拉起【专用 profile】浏览器带调试口（136+ 版本安全限制：
+	//    默认 profile 忽略调试参数，必须独立 user-data-dir），打开团结 dashboard。
 	path, err := launchBrowserWithCDP("9222")
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": false, "msg": "未探测到调试口，且启动浏览器失败: " + err.Error()})
 		return
 	}
-	// 3. 等浏览器起来（CDP 就绪通常 2~5 秒，最多等 12 秒）
-	deadline := time.Now().Add(12 * time.Second)
+	// 3. 长轮询等登录：专用 profile 是全新环境，需要在弹出的窗口里登录一次；
+	//    登录后 cookie 写入该 profile，读取入池。最长 150 秒，每 2 秒查一次。
+	deadline := time.Now().Add(150 * time.Second)
 	for time.Now().Before(deadline) {
-		time.Sleep(1200 * time.Millisecond)
+		time.Sleep(2 * time.Second)
 		if creds := probeCDPBrowser(); creds != nil {
 			if s.pool.Add(creds.UserID, creds.AccessToken, creds.UserID, "") {
-				writeJSON(w, map[string]any{"ok": true, "msg": "已从浏览器读取并添加账号", "user_id": creds.UserID, "browser": path})
+				writeJSON(w, map[string]any{"ok": true, "msg": "已读取登录态并入池（弹出的浏览器窗口可以关了）", "user_id": creds.UserID, "browser": path})
 			} else {
 				writeJSON(w, map[string]any{"ok": false, "msg": "该账号已在池里（user_id " + creds.UserID + "）", "user_id": creds.UserID})
 			}
 			return
 		}
+		if r.Context().Err() != nil {
+			return // 客户端断开，不再等
+		}
 	}
-	writeJSON(w, map[string]any{"ok": false, "msg": "浏览器已启动但未读到团结登录态——请在打开的浏览器里确认已登录 codely.tuanjie.cn，再点一次探测"})
+	writeJSON(w, map[string]any{"ok": false, "msg": "等待登录超时（150 秒）——请在弹出的浏览器窗口里登录团结账号后再点一次探测"})
 }
 
 // handleActivity 实时动态（最近事件，GUI 轮询；学群友 /api/activity）。

@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -234,31 +235,23 @@ func base64URLDecode(s string) ([]byte, error) {
 	return out, nil
 }
 
-// launchBrowserWithCDP 让浏览器带调试口运行（同一用户 profile）。
-// 关键：同 profile 的浏览器已在跑时，新进程的调试参数会被忽略（Windows 实例合并）。
-// 做法：先结束现有浏览器进程（Edge 默认"启动继续上次会话"，重开后标签页和登录态都在），
-// 再带调试口拉起并打开团结 dashboard。
+// launchBrowserWithCDP 用【独立专用 profile】拉起 Edge/Chrome 带调试口。
+// 关键（实测）：Edge/Chrome 136+ 对默认 profile 忽略 --remote-debugging-port
+// （安全变更），必须指定独立的 --user-data-dir 调试口才会开。
+// 专用 profile 与用户日常浏览器互不干扰；用户在弹出的窗口里登录团结账号
+// （一次性），登录态存入专用 profile，之后探测全自动。
 func launchBrowserWithCDP(port string) (string, error) {
+	profileDir := probeProfileDir()
 	for _, p := range browserPaths {
 		if !fileExistsStr(p) {
 			continue
 		}
-		// 1. 该浏览器是否在跑？（Edge 和 chrome 分别查）
-		procName := "chrome.exe"
-		if strings.Contains(p, "msedge") {
-			procName = "msedge.exe"
-		}
-		if processRunning(procName) {
-			// 结束现有实例（--no-startup-window 的后台进程也算）
-			_ = hiddenCmd("taskkill", "/F", "/IM", procName).Run()
-			time.Sleep(1500 * time.Millisecond)
-		}
-		// 2. 带调试口拉起（打开 dashboard 触发 cookie 激活；会话恢复交给浏览器默认行为）
 		cmd := exec.Command(p,
 			"--remote-debugging-port="+port,
+			"--user-data-dir="+profileDir,
 			"--no-first-run",
 			"--no-default-browser-check",
-			"--restore-last-session",
+			"--no-experiments",
 			"https://codely.tuanjie.cn/dashboard/usage",
 		)
 		if err := cmd.Start(); err != nil {
@@ -270,7 +263,12 @@ func launchBrowserWithCDP(port string) (string, error) {
 	return "", errors.New("未找到 Chrome/Edge（请安装其一或手动添加账号）")
 }
 
-// hiddenCmd 创建隐藏窗口的命令（不弹黑窗；netstat/taskkill 等 CLI 工具用）。
+// probeProfileDir 是自动探测专用浏览器 profile 目录（独立于用户日常配置）。
+func probeProfileDir() string {
+	return filepath.Join(os.TempDir(), "proxydeck-codely-probe")
+}
+
+// hiddenCmd 创建隐藏窗口的命令（不弹黑窗；tasklist/taskkill 等 CLI 工具用）。
 func hiddenCmd(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
