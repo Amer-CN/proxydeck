@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 )
 
 // handleAccounts GET=账号列表+被动注水事件；POST=增删/启停/GLM 标记（action 字段分发）。
@@ -25,13 +26,13 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Action    string `json:"action"` // add | remove | toggle | setglm
-		UserID    string `json:"user_id"`
-		Token     string `json:"token"`
-		Username  string `json:"username"`
-		OrgID     string `json:"org_id"`
-		Enabled   bool   `json:"enabled"`
-		HasGLM53  bool   `json:"has_glm53"`
+		Action   string `json:"action"` // add | remove | toggle | setglm
+		UserID   string `json:"user_id"`
+		Token    string `json:"token"`
+		Username string `json:"username"`
+		OrgID    string `json:"org_id"`
+		Enabled  bool   `json:"enabled"`
+		HasGLM53 bool   `json:"has_glm53"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "msg": "请求体解析失败"})
@@ -57,6 +58,17 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, map[string]any{"ok": false, "msg": "未知 action"})
 	}
+}
+
+// handleActivity 实时动态（最近事件，GUI 轮询；学群友 /api/activity）。
+func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
+	limit := 60
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "events": s.activity.List(limit)})
 }
 
 // handleInflight 进行中请求快照（GUI 面板轮询）。

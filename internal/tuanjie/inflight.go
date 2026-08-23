@@ -139,3 +139,56 @@ func newRID() string {
 	}
 	return string(buf)
 }
+
+
+// ActivityEvent 实时动态的一条事件（学群友 ActivityLog）。
+type ActivityEvent struct {
+	Seq       int    `json:"seq"`
+	Time      string `json:"time"`       // HH:MM:SS
+	Kind      string `json:"kind"`       // ok | error | info
+	Message   string `json:"message"`
+	Model     string `json:"model,omitempty"`
+	UserID    string `json:"user_id,omitempty"`
+	LatencyMs int64  `json:"latency_ms,omitempty"`
+	Tokens    int64  `json:"tokens,omitempty"`
+	Status    int    `json:"status,omitempty"`
+}
+
+// ActivityLog 内存环形缓冲（最近 200 条，重启即清，不落盘）。
+type ActivityLog struct {
+	mu     sync.Mutex
+	events []ActivityEvent // 新的在前
+	seq    int
+}
+
+// NewActivityLog 创建动态日志。
+func NewActivityLog() *ActivityLog {
+	return &ActivityLog{events: make([]ActivityEvent, 0, 64)}
+}
+
+// Add 记一条事件（新的插最前，超 200 丢最老）。
+func (al *ActivityLog) Add(kind, message, model, userID string, latencyMs, tokens int64, status int) {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	al.seq++
+	ev := ActivityEvent{
+		Seq: al.seq, Time: time.Now().Format("15:04:05"), Kind: kind, Message: message,
+		Model: model, UserID: userID, LatencyMs: latencyMs, Tokens: tokens, Status: status,
+	}
+	al.events = append([]ActivityEvent{ev}, al.events...)
+	if len(al.events) > 200 {
+		al.events = al.events[:200]
+	}
+}
+
+// List 返回最近 limit 条（默认 100）。
+func (al *ActivityLog) List(limit int) []ActivityEvent {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	if limit <= 0 || limit > len(al.events) {
+		limit = len(al.events)
+	}
+	out := make([]ActivityEvent, limit)
+	copy(out, al.events[:limit])
+	return out
+}

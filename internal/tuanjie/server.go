@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,20 +33,21 @@ type Server struct {
 	pool     *AccountPool
 	registry *RequestRegistry // 进行中请求注册表（GUI 面板 + 负载感知）
 	water    *WaterCheck      // 注水检测（被动观测 + 金丝雀探针）
+	activity *ActivityLog     // 实时动态（环形缓冲，请求完成/402/中断事件）
 }
 
 // modelStat 单模型用量累计。
 type modelStat struct {
-	Calls      int64 `json:"calls"`
-	InputTok   int64 `json:"inputTokens"`
-	OutputTok  int64 `json:"outputTokens"`
-	TotalTok   int64 `json:"totalTokens"`
+	Calls     int64 `json:"calls"`
+	InputTok  int64 `json:"inputTokens"`
+	OutputTok int64 `json:"outputTokens"`
+	TotalTok  int64 `json:"totalTokens"`
 }
 
 // NewServer 创建服务。
 func NewServer() *Server {
 	s := &Server{client: NewClient(), stats: map[string]*modelStat{}, startedAt: time.Now(), pacer: NewPacer(),
-		pool: NewAccountPool(), registry: NewRegistry(), water: LoadWater()}
+		pool: NewAccountPool(), registry: NewRegistry(), water: LoadWater(), activity: NewActivityLog()}
 	if exe, err := os.Executable(); err == nil {
 		s.statsPath = filepath.Join(filepath.Dir(exe), "tuanjie-stats.json")
 		s.loadStats()
@@ -77,9 +79,10 @@ func (s *Server) Start(host, port string) error {
 	mux.HandleFunc("/v1/stats", s.handleStats)
 	mux.HandleFunc("/quota", s.handleQuota)
 	mux.HandleFunc("/kimi-pacing", s.handleKimiPacing)
-	mux.HandleFunc("/accounts", s.handleAccounts)       // 多账号池 CRUD + 状态
-	mux.HandleFunc("/inflight", s.handleInflight)       // 进行中请求面板
-	mux.HandleFunc("/water-probe", s.handleWaterProbe)  // 注水金丝雀探针
+	mux.HandleFunc("/accounts", s.handleAccounts)      // 多账号池 CRUD + 状态
+	mux.HandleFunc("/inflight", s.handleInflight)      // 进行中请求面板
+	mux.HandleFunc("/activity", s.handleActivity)      // 实时动态（最近事件）
+	mux.HandleFunc("/water-probe", s.handleWaterProbe) // 注水金丝雀探针
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
@@ -419,6 +422,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 		s.pool.IncLoad(poolUID)
 		defer s.pool.DecLoad(poolUID)
+		start := time.Now()
 		rid := s.registry.Register(model, poolUID, wantsStream)
 		defer s.registry.Finish(rid)
 		resp, err := s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, acc.AccessToken)
@@ -430,6 +434,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		// 402 配额耗尽：禁用该账号并换下一个重试（学群友）
 		if resp.StatusCode == http.StatusPaymentRequired {
 			s.pool.MarkBudgetExceeded(poolUID)
+			s.activity.Add("error", "账号 "+poolUID+" 配额用尽，自动禁用", model, poolUID, 0, 0, 402)
 			log.Printf("[tuanjie] account=%s 402 budget_exceeded 已禁用，切换下一账号", poolUID)
 			if next := s.pool.Pick(model); next != nil && next.UserID != poolUID {
 				resp.Body.Close()
@@ -444,6 +449,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		// 非 200 透传错误体（含 402 换号后仍失败的情况）
 		if resp.StatusCode != http.StatusOK {
 			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			s.activity.Add("error", model+" · 账号 "+poolUID+" 上游返回 "+strconv.Itoa(resp.StatusCode),
+				model, poolUID, time.Since(start).Milliseconds(), 0, resp.StatusCode)
 			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d", model, poolUID, resp.StatusCode)
 			writeErr(w, resp.StatusCode, string(errBody))
 			return
@@ -488,12 +495,13 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			s.addStat(model, done.Usage.PromptTokens, done.Usage.CompletionTokens, done.Usage.TotalTokens)
 			// 被动注水观测：非流式能直接读响应 model
 			s.water.RecordPassive(model, done.Model, poolUID)
+			s.activity.Add("ok", model+" · 账号 "+poolUID, model, poolUID,
+				time.Since(start).Milliseconds(), done.Usage.TotalTokens, 200)
 		}
 		return
 	}
 
 	start := time.Now()
-	_ = start
 	rid := s.registry.Register(model, "", wantsStream)
 	defer s.registry.Finish(rid)
 	send := func() (*http.Response, error) {
@@ -581,6 +589,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	defer resp.Body.Close()
 	log.Printf("[tuanjie] chat model=%s status=200 dur=%s", model, time.Since(start).Round(time.Millisecond))
+	defer func() {
+		s.activity.Add("ok", model+" · 单账号", model, "", time.Since(start).Milliseconds(), 0, 200)
+	}()
 
 	copyHeader(w, resp)
 	w.Header().Set("X-Accel-Buffering", "no")
