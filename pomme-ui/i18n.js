@@ -1,4 +1,3 @@
-
 // pomme-ui i18n 字典：data-i18n 键 + JS 动态字符串，中/英双语（file:// 内联，无 fetch）
 // 机身丝印（STATUS/MODE/POWER/POMMETOYS 等）不在此表，永不翻译。
 var PT_I18N = {
@@ -186,4 +185,3 @@ var PT_I18N = {
   "fx.thanks": { zh: "谢谢。我们会读每一页。", en: "Thank you. We read every page." },
   "fx.tearHint": { zh: "点回执撕下 · 机器回到待命", en: "Click to tear off · back to standby" }
 };
-
