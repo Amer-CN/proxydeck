@@ -1346,7 +1346,7 @@
       fxSetPhase('offhook');
       playFax('fax-offhook');
       setTimeout(function () {
-        fxSetPhase('dialing');
+        fxSetPhase('dialing');       /* 官方节奏（音画交叉验证 .work/spec/sfx-reverse.md）：摘机 170ms 后拨号 */
         /* 拨号段：循环拨号音直到离开 dialing（官版 DIALING 全程有音） */
         fxSfxIv(function () {
           if (fxPhase !== 'dialing') { fxSfxClear(); return; }
@@ -1364,12 +1364,12 @@
             /* 走纸音随进度加速：前段 240ms（匀速）→ 末段 120ms（吞纸加速收尾），与 2400ms 位移动画同步 */
             fxSfxTo(function tick() {
               if (fxPhase !== 'sending') { fxSfxClear(); return; }
-              var k = Math.min(1, (performance.now() - p0) / 2400);
+              var k = Math.min(1, (performance.now() - p0) / 1820);
               playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.2);
               fxSfxTo(tick, 240 - k * 120);
             }, 240);
             var iv = setInterval(function () {
-              var k = Math.min(1, (performance.now() - p0) / 2400);
+              var k = Math.min(1, (performance.now() - p0) / 1820);
               fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
               if (fxStateEn && fxPhase === 'sending') fxStateEn.textContent = fxEnLine('sending');
               if (k >= 1) {
@@ -1384,7 +1384,7 @@
               fxSetPhase('sent');
               playFax('fax-ding', 1);   /* 已送达：叮一声（官版 8.55 送达为短促事件，非长段） */
               fxSfxTo(function () {
-                fxSetPhase('printed');
+                fxSetPhase('printed');   /* 回执吐出（官方 0.65s） */
                 /* 回执打印段（官版 8.55-11.05 密集声属回执吐出=printed）：print 连响 1.2s */
                 fxSfxIv(function () {
                   if (fxPhase !== 'printed') { fxSfxClear(); return; }
@@ -1394,10 +1394,10 @@
                   fxSfxClear();
                   playFax('fax-ding', 1);   /* 官版 11.50-11.99 收尾双峰：叮+落定 */
                   setTimeout(function () { playFax('fax-offhook', 1); }, 200);
-                }, REDUCED ? 0 : 1200);
+                }, REDUCED ? 0 : 650);
               }, REDUCED ? 0 : 350);
-            }, REDUCED ? 0 : 2450);
-          }, REDUCED ? 0 : 750);
+            }, REDUCED ? 0 : 2210);
+          }, REDUCED ? 0 : 320);
         }, REDUCED ? 0 : 950);
       }, REDUCED ? 0 : 650);
     }
