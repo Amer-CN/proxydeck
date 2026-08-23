@@ -617,6 +617,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 				n, rerr := resp.Body.Read(buf)
 				if n > 0 {
 					lineScan.feed(buf[:n])
+					s.registry.Touch(rid, int64(n))
 					if _, werr := w.Write(buf[:n]); werr != nil {
 						return
 					}
