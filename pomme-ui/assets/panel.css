@@ -1380,21 +1380,14 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 
 /* ————— 进纸槽 FaxFeedSlot（11px 斜渐变黑条：上暗 #211C1A 下亮 #36312E，底 1px 亮边 #58534F）—————
    差异要点 3：替换原口沿板+窄缝结构。 */
-.fx-slot { position: relative; z-index: 1; height: 13px; margin: 0; border-radius: 3px 3px 0 0;  /* 4K 实测槽高 44px→13px */
-  /* 三层机械结构（4K 帧 y1186-1230 剖面）：
-     ①上 25% = 入口斜坡（快暗渐变=斜切的口沿）
-     ②中 55% = 深槽腔（近黑，底部微微反光=看得见槽底）
-     ③下 20% = 出口亮沿（纸穿出的缝口） */
-  background:
-    linear-gradient(180deg, rgba(0,0,0,.35) 0, rgba(0,0,0,0) 25%),          /* 入口斜坡阴影 */
-    linear-gradient(180deg, #191614 25%, #100E0C 55%, #26221F 80%, #0C0A09 82%);  /* 槽腔+腔底反光 */
-  box-shadow: inset 0 -2px 3px rgba(255, 253, 248, .10),   /* 腔底出口的亮沿（纸缝） */
-    inset 0 1px 2px rgba(0, 0, 0, .9),                      /* 口沿内凹 */
-    0 1px 0 #6A655F;                                        /* 槽外底部亮线 */ }
-.fx-slot::after {                     /* 槽腔内一条更深的中央窄缝（纸通过的轨道） */
-  content: ''; position: absolute; left: 3%; right: 3%; top: 30%; height: 45%;
-  background: linear-gradient(180deg, #000 0%, #171310 100%);
-  border-radius: 1px; box-shadow: 0 1px 2px rgba(255, 253, 248, .08);
+.fx-slot { position: relative; z-index: 3; height: 13px; margin: 0; border-radius: 3px 3px 0 0;  /* 4K 实测槽高 44px→13px */
+  /* 2026-08-23 所有者定：纸要插进中央黑缝并盖掉槽的下边界（像收纸入缝）。
+     槽只保留【上壁+缝】实体，下半透明被纸覆盖；z-index 3 盖纸顶 */
+  background: linear-gradient(180deg,
+    #191614 0%, #0C0A09 46%,                  /* 上壁口沿 */
+    #000 50%, #000 88%,                       /* 中央黑缝延至底部（纸顶插在缝里、被缝前壁压住） */
+    #141110 100%);                            /* 底缘微亮收口 */
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .9);
 }
 
 [data-theme="dark"] .fx-slot { filter: brightness(.82); }
@@ -1406,7 +1399,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25); }
 
 /* ————— 纸笼（纸从灰过渡带里长出，顶裁在盖板斜坡下）————— */
-.fx-cage { position: relative; z-index: 2; margin: -20px 0 0; padding: 0 16px 6px; overflow: hidden;
+.fx-cage { position: relative; z-index: 2; margin: -26px 0 0; padding: 0 16px 6px; overflow: hidden;  /* 纸顶贴槽底；slot 实体段下延压住纸顶 2px=插缝观感 */
   /* 底板（2026-08-23 所有者修正：浅灰——底板要浅，纸回收时的深灰阴影才有对比空间）。
      底部止于控制条上方并圆角收尾（不越过发送按钮） */
   background: linear-gradient(180deg, #E3DED8 0%, #DDD7D0 100%);
