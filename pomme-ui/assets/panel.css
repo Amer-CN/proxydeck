@@ -1340,14 +1340,16 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
    选中文字在带内（#E9E4DF 系）——不是红点（差异要点 1）；
    未选中 = #E3DDD6 无带、文字 #453F3B（差异要点 2）。 */
 .fx-modes { display: flex; gap: 8px; margin-top: 12.7px; }   /* 键缝加大（所有者反馈嫌挤） */
-.fx-mode {
-  position: relative; flex: 1 1 0; min-width: 0; height: 44px;  /* 官版38.3被嫌矮→44px，两行字有呼吸（所有者定） */
-  appearance: none; border: 0; font-family: inherit; cursor: pointer;
-  border-radius: 8px; padding: 0; text-decoration: none;           /* 官版圆角 23-30px(4K)→6.8-8.8px，键高 21% */
-  background: var(--fx-key-idle); color: var(--fx-key-ink-idle);
+.fx-mode {                         /* 配方照抄主面板 .pt-key（所有者指定参考） */
+  position: relative; flex: 1 1 0; min-width: 0; height: 44px;
+  appearance: none; font-family: inherit; cursor: pointer;
+  border: 1px solid var(--pt-hairline); border-radius: 9px; padding: 0;
+  background: var(--pt-surface); color: var(--fx-key-ink-idle);
+  background-image: linear-gradient(var(--pt-hi-75), var(--pt-hi-75));
+  background-repeat: no-repeat; background-size: 100% 1px; background-position: top;
   white-space: nowrap; overflow: hidden;
-  box-shadow: inset 0 0 0 1px var(--fx-key-seam), 0 2px 0 var(--fx-key-riser);
-  transition: transform 60ms ease, box-shadow 60ms ease, background-color 120ms ease;
+  box-shadow: 0 2px 0 var(--pt-hairline), 0 4px 6px var(--pt-sh-10);
+  transition: transform 100ms cubic-bezier(.3, .7, .4, 1), box-shadow 100ms cubic-bezier(.3, .7, .4, 1), background-color 120ms ease;
 }
 .fx-mode:hover { background: color-mix(in srgb, var(--fx-key-idle) 92%, #000); }
 .fx-mode:active { transform: translateY(2px); box-shadow: inset 0 0 0 1px var(--fx-key-seam), 0 0 0 var(--fx-key-riser); }
@@ -1361,15 +1363,11 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   font-weight: 600; letter-spacing: .12em; opacity: .7; line-height: 1; }
 .fx-mode .band .zh { font-size: 12px; font-weight: 800; line-height: 1; }  /* 官版对比图实测字面 11.5px */
 .fx-mode.cur { color: #453F3B; }   /* 键帽文字色（选中/未选中同族） */
-.fx-mode.cur {                        /* 选中=下压凹陷（所有者定）：顶内凹阴影+面渐变收暗+无投影下沉 */
-  background: linear-gradient(180deg,
-    #C4BEB4 0,                                    /* 凹槽上沿暗线（减淡） */
-    #DFD8CE 14%,                                  /* 凹入的背光面（提亮） */
-    #E6E0D6 100%);                                /* 凹槽底渐亮 */
-  box-shadow:
-    inset 0 3px 5px rgba(66, 58, 42, .32),        /* 顶部内凹阴影（凹陷关键） */
-    inset 0 -1px 0 rgba(255, 253, 248, .5),       /* 凹槽下沿反光 */
-    inset 0 0 0 1px var(--fx-key-seam);
+.fx-mode.cur {                        /* 选中态配方照抄 .pt-key[aria-checked]（所有者指定主面板参考） */
+  transform: translateY(2px);
+  background-color: var(--pt-well); background-image: none;
+  border: 1px solid var(--pt-well-border);
+  box-shadow: inset 0 3px 4px var(--pt-rc-20);
 }
 
 /* 选中/未选中文字色由 --fx-key-ink-idle 与下方选中规则控制 */
@@ -1649,47 +1647,46 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 
 /* 发送 TRANSMIT：红键帽（渐变极浅）+ 2px 深红侧壁（实测 86×35、圆角 8、#DB534D→#DB4D48）*/
-.fx-clear {                       /* 官版 3D 剖面实测：上暗线+顶面渐亮+主面+底亮沿（凸起键四层） */
-  flex: none; appearance: none; border: 0; cursor: pointer; text-align: center;
+.fx-clear {                       /* 配方照抄主面板 .pt-key（有源码，所有者指定参考）：
+                                  surface 底+hairline 台座硬影+软影+顶 1px 亮线 */
+  flex: none; appearance: none; cursor: pointer; text-align: center;
   width: 60px; height: 43px; box-sizing: border-box;
-  border-radius: 8px; padding: 4px 8px;
-  background:
-    linear-gradient(180deg, #DCD6CC 0, #F6F2EA 10%, #FFFFFF 36%, #F9F6F0 100%);  /* 顶线再减淡 */
-  color: #453F3B;
+  border: 1px solid var(--pt-hairline); border-radius: 9px; padding: 4px 8px;
+  background: var(--pt-cap-face);
+  background-image: linear-gradient(var(--pt-hi-75), var(--pt-hi-75));
+  background-repeat: no-repeat; background-size: 100% 1px; background-position: top;
+  color: var(--pt-ink);
   font-family: inherit; letter-spacing: .05em;
   display: flex; flex-direction: column; justify-content: center; gap: 1px;
-  box-shadow:
-    0 1.5px 2.5px rgba(66, 58, 42, .22),               /* 投影减淡（所有者：立体感稍有一点就好） */
-    inset 0 1px 1.5px rgba(255, 255, 255, .75),         /* 顶面内高光减淡 */
-    inset 0 -1px 0 rgba(190, 184, 175, .38);            /* 底边收暗线减淡 */
-  transition: transform 60ms ease, box-shadow 60ms ease;
+  box-shadow: 0 2px 0 var(--pt-hairline), 0 4px 6px var(--pt-sh-10);
+  transition: transform 100ms cubic-bezier(.3, .7, .4, 1), box-shadow 100ms cubic-bezier(.3, .7, .4, 1);
 }
 .fx-clear .zh { font-size: 12.5px; font-weight: 700; line-height: 1; }
 .fx-clear .en { font-family: var(--mono-ui); font-size: 8.5px; font-weight: 600; letter-spacing: .1em; line-height: 1; opacity: .8; }
 .fx-clear:hover { filter: brightness(1.02); }
-.fx-clear:active { transform: translateY(2px);
-  box-shadow: 0 0 1px rgba(66, 58, 42, .2), inset 0 2px 4px rgba(66, 58, 42, .22); }  /* 按下=凹陷 */
-.fx-send {                        /* 官版：104×37px、与清除键间距 40px（所有者反馈） */
-  margin-left: 0;   /* 间距由下方 wrapper 控制（负 margin 会让两键重叠、发送键投影印上清除键） */
-  /* 官版特写实测：105×37px 胶囊、砖红 (210,108,100)、
-                                  白字两行（发送/TRANSMIT）、扁平无立体阴影 */
-  flex: none; appearance: none; border: 0; cursor: pointer; text-align: center; position: relative;
-  width: 103px; height: 43px; box-sizing: border-box;    /* 官版新图 85×35px×1.216 */
-  border-radius: 8px; padding: 4px 10px;
-  background: linear-gradient(180deg, #D26B5F 0%, #C05A4E 100%);
+.fx-clear:active {                       /* 按压配方照抄 .pt-key:active */
+  transform: translateY(2px); background-image: none;
+  box-shadow: 0 1px 2px var(--pt-sh-10), inset 0 2px 3px var(--pt-rc-20);
+}
+.fx-send {                        /* 配方照抄主面板 .pt-key（所有者指定参考；红面版与清除键同构） */
+  flex: none; appearance: none; cursor: pointer; text-align: center; position: relative;
+  width: 103px; height: 43px; box-sizing: border-box;
+  border: 1px solid #8E2F28; border-radius: 9px; padding: 4px 10px;
+  background: #D6412F;
+  background-image: linear-gradient(rgba(255, 200, 190, .75), rgba(255, 200, 190, .75));
+  background-repeat: no-repeat; background-size: 100% 1px; background-position: top;
   color: #FFF;
   font-family: inherit; letter-spacing: .05em; line-height: 1.1;
   display: flex; flex-direction: column; justify-content: center; gap: 1px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18);
-  transition: transform 60ms ease, box-shadow 60ms ease, filter 120ms ease;
+  box-shadow: 0 2px 0 #8E2F28, 0 4px 6px var(--pt-sh-10);
+  transition: transform 100ms cubic-bezier(.3, .7, .4, 1), box-shadow 100ms cubic-bezier(.3, .7, .4, 1), filter 120ms ease;
 }
 .fx-send .zh { font-size: 13px; font-weight: 700; line-height: 1; }
 .fx-send .en { font-family: var(--mono-ui); font-size: 8.5px; font-weight: 600; letter-spacing: .1em; line-height: 1; opacity: .92; }
 .fx-send:hover:not(:disabled) { filter: brightness(1.04); }
-.fx-send:active:not(:disabled) {
-  transform: translateY(2px);
-  box-shadow: 0 0 1px rgba(66, 58, 42, .2), inset 0 2px 4px rgba(66, 58, 42, .30);  /* 按下=凹陷 */
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, calc(var(--fx-send-catch) * .6)),
+.fx-send:active:not(:disabled) {      /* 按压配方照抄 .pt-key:active */
+  transform: translateY(2px); background-image: none;
+  box-shadow: 0 1px 2px var(--pt-sh-10), inset 0 2px 3px rgba(66, 20, 14, .28);
               0 0 0 var(--fx-send-riser);
 }
 .fx-send:focus-visible { outline: 2px solid var(--pt-accent); outline-offset: 3px; }

@@ -27,6 +27,11 @@ type Server struct {
 	stats     map[string]*modelStat // 按模型累计（GUI 消耗 TOP 展示）
 	statsPath string
 	pacer     *Pacer // KIMI-K3 节奏器（可开关，GUI 经 /kimi-pacing 控制）
+
+	// 多账号池（学群友 Codely Relay）：空池 = 单账号模式（读 ~/.codely-cli）
+	pool     *AccountPool
+	registry *RequestRegistry // 进行中请求注册表（GUI 面板 + 负载感知）
+	water    *WaterCheck      // 注水检测（被动观测 + 金丝雀探针）
 }
 
 // modelStat 单模型用量累计。
@@ -39,7 +44,8 @@ type modelStat struct {
 
 // NewServer 创建服务。
 func NewServer() *Server {
-	s := &Server{client: NewClient(), stats: map[string]*modelStat{}, startedAt: time.Now(), pacer: NewPacer()}
+	s := &Server{client: NewClient(), stats: map[string]*modelStat{}, startedAt: time.Now(), pacer: NewPacer(),
+		pool: NewAccountPool(), registry: NewRegistry(), water: LoadWater()}
 	if exe, err := os.Executable(); err == nil {
 		s.statsPath = filepath.Join(filepath.Dir(exe), "tuanjie-stats.json")
 		s.loadStats()
@@ -71,6 +77,9 @@ func (s *Server) Start(host, port string) error {
 	mux.HandleFunc("/v1/stats", s.handleStats)
 	mux.HandleFunc("/quota", s.handleQuota)
 	mux.HandleFunc("/kimi-pacing", s.handleKimiPacing)
+	mux.HandleFunc("/accounts", s.handleAccounts)       // 多账号池 CRUD + 状态
+	mux.HandleFunc("/inflight", s.handleInflight)       // 进行中请求面板
+	mux.HandleFunc("/water-probe", s.handleWaterProbe)  // 注水金丝雀探针
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
@@ -393,7 +402,100 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// 媒体改路由：含图片/音频且目标模型不识图 → 改写为 codely-vl（防上游 400）
+	if nb, n := RerouteIfMedia(body); n != "" {
+		body = nb
+		model = visionModelName
+		log.Printf("[tuanjie] media-reroute %s", n)
+	}
+
+	// 多账号池：有池时按账号选号转发（402 自动禁用/负载感知/GLM 路由）
+	_, poolUID, usePool := s.accountTokenFor(model)
+	if usePool {
+		acc := s.pool.Get(poolUID)
+		if acc == nil {
+			writeJSON(w, map[string]any{"error": map[string]any{"message": "账号池无可用账号", "type": "server_error"}})
+			return
+		}
+		s.pool.IncLoad(poolUID)
+		defer s.pool.DecLoad(poolUID)
+		rid := s.registry.Register(model, poolUID, wantsStream)
+		defer s.registry.Finish(rid)
+		resp, err := s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, acc.AccessToken)
+		if err != nil {
+			writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
+			return
+		}
+		defer resp.Body.Close()
+		// 402 配额耗尽：禁用该账号并换下一个重试（学群友）
+		if resp.StatusCode == http.StatusPaymentRequired {
+			s.pool.MarkBudgetExceeded(poolUID)
+			log.Printf("[tuanjie] account=%s 402 budget_exceeded 已禁用，切换下一账号", poolUID)
+			if next := s.pool.Pick(model); next != nil && next.UserID != poolUID {
+				resp.Body.Close()
+				resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, next.AccessToken)
+				if err != nil {
+					writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
+					return
+				}
+				defer resp.Body.Close()
+			}
+		}
+		// 非 200 透传错误体（含 402 换号后仍失败的情况）
+		if resp.StatusCode != http.StatusOK {
+			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d", model, poolUID, resp.StatusCode)
+			writeErr(w, resp.StatusCode, string(errBody))
+			return
+		}
+		// 200 透传（流式逐块冲刷 + 注册表 touch + usage 入账）
+		copyHeader(w, resp)
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.Header().Set("Cache-Control", "no-cache")
+		log.Printf("[tuanjie] pool chat model=%s account=%s status=200", model, poolUID)
+		if wantsStream {
+			if f, ok := w.(http.Flusher); ok {
+				lineScan := newUsageScanner(model, s)
+				buf := make([]byte, 32*1024)
+				for {
+					n, rerr := resp.Body.Read(buf)
+					if n > 0 {
+						lineScan.feed(buf[:n])
+						s.registry.Touch(rid, int64(n))
+						if _, werr := w.Write(buf[:n]); werr != nil {
+							return
+						}
+						f.Flush()
+					}
+					if rerr != nil {
+						lineScan.finish()
+						return
+					}
+				}
+			}
+		}
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+		_, _ = w.Write(respBody)
+		var done struct {
+			Model string `json:"model"`
+			Usage *struct {
+				PromptTokens     int64 `json:"prompt_tokens"`
+				CompletionTokens int64 `json:"completion_tokens"`
+				TotalTokens      int64 `json:"total_tokens"`
+			} `json:"usage"`
+		}
+		if json.Unmarshal(respBody, &done) == nil && done.Usage != nil {
+			s.addStat(model, done.Usage.PromptTokens, done.Usage.CompletionTokens, done.Usage.TotalTokens)
+			// 被动注水观测：非流式能直接读响应 model
+			s.water.RecordPassive(model, done.Model, poolUID)
+		}
+		return
+	}
+
 	start := time.Now()
+	_ = start
+	rid := s.registry.Register(model, "", wantsStream)
+	defer s.registry.Finish(rid)
 	send := func() (*http.Response, error) {
 		return s.client.Forward(r.Context(), http.MethodPost, "/v1/chat/completions", bytes.NewReader(body), r.Header.Get("Content-Type"))
 	}

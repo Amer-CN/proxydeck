@@ -1223,7 +1223,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 /* 传真机颜色 token（fax-full-spec.md 三源定值；亮色为 12.png 像素实测，暗色取二进制 night 系列） */
 .fx-block {
   --fx-lcd-1: #272522; --fx-lcd-2: #282623;            /* LCD 微噪黑 */
-  --fx-key-idle: #E3DDD6; --fx-key-ink-idle: #453F3B;   /* 模式键未选中 */
+  --fx-key-idle: #EFEAE2; --fx-key-ink-idle: #453F3B;   /* 模式键未选中（提亮：比底板亮一档如官版） */
   --fx-key-cur: #DFD7CC;                                 /* 选中键帽 */
   --fx-key-cur-hi-1: #D5CDC2; --fx-key-cur-hi-2: #C1BCB1; /* 选中键帽顶部亮边渐变 */
   --fx-band: #716964; --fx-band-ink: #E9E4DF;            /* 选中内嵌带 */
@@ -1368,10 +1368,15 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   font-weight: 600; letter-spacing: .12em; opacity: .7; line-height: 1; }
 .fx-mode .band .zh { font-size: 12px; font-weight: 800; line-height: 1; }  /* 官版对比图实测字面 11.5px */
 .fx-mode.cur { color: #453F3B; }   /* 键帽文字色（选中/未选中同族） */
-.fx-mode.cur {                        /* 顶部 1px 亮边 = #C1BCB1→#D5CDC2 渐变，其下键帽 #DFD7CC */
+.fx-mode.cur {                        /* 选中=下压凹陷（所有者定）：顶内凹阴影+面渐变收暗+无投影下沉 */
   background: linear-gradient(180deg,
-    var(--fx-key-cur-hi-1) 0, var(--fx-key-cur-hi-2) 1px, var(--fx-key-cur) 1px);
-  box-shadow: inset 0 0 0 1px var(--fx-key-seam), 0 2px 0 var(--fx-key-riser);
+    #C4BEB4 0,                                    /* 凹槽上沿暗线（减淡） */
+    #DFD8CE 14%,                                  /* 凹入的背光面（提亮） */
+    #E6E0D6 100%);                                /* 凹槽底渐亮 */
+  box-shadow:
+    inset 0 3px 5px rgba(66, 58, 42, .32),        /* 顶部内凹阴影（凹陷关键） */
+    inset 0 -1px 0 rgba(255, 253, 248, .5),       /* 凹槽下沿反光 */
+    inset 0 0 0 1px var(--fx-key-seam);
 }
 
 /* 选中/未选中文字色由 --fx-key-ink-idle 与下方选中规则控制 */
@@ -1561,8 +1566,10 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 
 /* ————— 底控台面 FaxDeckView（60px 奶油渐变）+ 台面斜坡（15px 灰渐变）————— */
-.fx-controls {                     /* 官版特写：浅色平面背景 (233,228,223)、紧凑高度 */
-  display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 8px 10px 2px; text-align: left;
+.fx-controls {                     /* 官版底部图：浅色平面背景 (233,228,223)、紧凑高度 */
+  display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 0 14px 2px; text-align: left;
+  --fx-key-gap: 8px;                /* 发送键右缘=上方 LCD/底板右缘（所有者定：右边界平齐） */
+  border-bottom: 3px solid rgba(66, 58, 42, .18);   /* 官版底部收边阴影线（y116-120 亮度145-161） */
 }
 .fx-ramp {                             /* 台面斜坡：#A5A09E→#B8B5AF→#94948C */
   height: 15px; margin: 0 2px; border-radius: 0 0 4px 4px;
@@ -1590,9 +1597,12 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-attach-copy span { display: block; margin-top: 2px; font-size: 10.5px; line-height: 1.5; color: var(--fine); opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* LINE 指示灯：待命灰 / 拨号·传送·占线红（占线红闪）/ 已送达·回执绿 */
-.fx-lamp-wrap { display: flex; align-items: center; gap: 5px; flex: none; }
+.fx-lamp-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: none; }
+                                       /* 官版：LINE 文字在灯正下方（灯=横长条） */
 .fx-line-silk { font-family: var(--mono-ui); font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--ink-2); }
-.fx-lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-2); opacity: .4; }
+.fx-lamp { width: 12px; height: 12px; border-radius: 50%;      /* 官版：圆形灯（所有者指正） */
+  background: linear-gradient(180deg, #8A8580 0%, #6E6963 100%);
+  opacity: .55; box-shadow: inset 0 1px 2px rgba(0,0,0,.25); }
 .fx[data-fx-phase="dialing"] .fx-lamp,
 .fx[data-fx-phase="connecting"] .fx-lamp,
 .fx[data-fx-phase="sending"] .fx-lamp {
@@ -1646,11 +1656,34 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 
 /* 发送 TRANSMIT：红键帽（渐变极浅）+ 2px 深红侧壁（实测 86×35、圆角 8、#DB534D→#DB4D48）*/
-.fx-send {                        /* 官版特写实测：105×37px 胶囊、砖红 (210,108,100)、
+.fx-clear {                       /* 配方照抄主面板 .pt-key（有源码，所有者指定参考）：
+                                  surface 底+hairline 台座硬影+软影+顶 1px 亮线 */
+  flex: none; appearance: none; cursor: pointer; text-align: center;
+  width: 60px; height: 43px; box-sizing: border-box;
+  border: 1px solid var(--pt-hairline); border-radius: 9px; padding: 4px 8px;
+  background: var(--pt-cap-face);
+  background-image: linear-gradient(var(--pt-hi-75), var(--pt-hi-75));
+  background-repeat: no-repeat; background-size: 100% 1px; background-position: top;
+  color: var(--pt-ink);
+  font-family: inherit; letter-spacing: .05em;
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  box-shadow: 0 2px 0 var(--pt-hairline), 0 4px 6px var(--pt-sh-10);
+  transition: transform 100ms cubic-bezier(.3, .7, .4, 1), box-shadow 100ms cubic-bezier(.3, .7, .4, 1);
+}
+.fx-clear .zh { font-size: 12.5px; font-weight: 700; line-height: 1; }
+.fx-clear .en { font-family: var(--mono-ui); font-size: 8.5px; font-weight: 600; letter-spacing: .1em; line-height: 1; opacity: .8; }
+.fx-clear:hover { filter: brightness(1.02); }
+.fx-clear:active {                       /* 按压配方照抄 .pt-key:active */
+  transform: translateY(2px); background-image: none;
+  box-shadow: 0 1px 2px var(--pt-sh-10), inset 0 2px 3px var(--pt-rc-20);
+}
+.fx-send {                        /* 官版：104×37px、与清除键间距 40px（所有者反馈） */
+  margin-left: 0;   /* 间距由下方 wrapper 控制（负 margin 会让两键重叠、发送键投影印上清除键） */
+  /* 官版特写实测：105×37px 胶囊、砖红 (210,108,100)、
                                   白字两行（发送/TRANSMIT）、扁平无立体阴影 */
   flex: none; appearance: none; border: 0; cursor: pointer; text-align: center; position: relative;
-  width: 105px; height: 37px; box-sizing: border-box;
-  border-radius: 18px; padding: 4px 10px;
+  width: 103px; height: 43px; box-sizing: border-box;    /* 官版新图 85×35px×1.216 */
+  border-radius: 8px; padding: 4px 10px;
   background: linear-gradient(180deg, #D26B5F 0%, #C05A4E 100%);
   color: #FFF;
   font-family: inherit; letter-spacing: .05em; line-height: 1.1;
@@ -1661,8 +1694,9 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-send .zh { font-size: 13px; font-weight: 700; line-height: 1; }
 .fx-send .en { font-family: var(--mono-ui); font-size: 8.5px; font-weight: 600; letter-spacing: .1em; line-height: 1; opacity: .92; }
 .fx-send:hover:not(:disabled) { filter: brightness(1.04); }
-.fx-send:active:not(:disabled) {
-  transform: translateY(2px);
+.fx-send:active:not(:disabled) {      /* 按压配方照抄 .pt-key:active */
+  transform: translateY(2px); background-image: none;
+  box-shadow: 0 1px 2px var(--pt-sh-10), inset 0 2px 3px rgba(66, 20, 14, .28);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, calc(var(--fx-send-catch) * .6)),
               0 0 0 var(--fx-send-riser);
 }
@@ -1677,7 +1711,6 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 
 /* 两键紧挨（实测间距 11px） */
 .fx-controls .fx-lamp-wrap { margin-right: 2px; }
-.fx-clear { margin-right: 11px; }
 
 /* 传送阶段：正文/邮箱/模式键/开关不可交互（disabled 属性由 JS 同步） */
 .fx[data-fx-phase="offhook"] .fx-input,
@@ -1741,10 +1774,9 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
     background:
       linear-gradient(135deg, var(--fx-rcp-1) 50%, transparent 50%) 0 0 / 9px 8px repeat-x,
       linear-gradient(-135deg, var(--fx-rcp-1) 50%, transparent 50%) 4.5px 0 / 9px 8px repeat-x; }
-  .fx-controls { flex-wrap: wrap; gap: 9px; margin-top: 12px; padding: 9px 6px 8px 2px; }
+  .fx-controls { flex-wrap: wrap; gap: 9px; margin-top: 12px; padding: 9px 0 8px 2px; }   /* 右 0：发送键右缘=LCD 右缘（所有者定） */
   .fx-attach-copy b { font-size: 9.5px; }
   .fx-attach-copy span { font-size: 9px; line-height: 1.45; }
-  .fx-clear { width: auto; flex: 1 1 auto; min-height: 34px; padding: 4px 10px; border-radius: 11px; }
   .fx-ramp { height: 11px; }
 }
 
@@ -2135,6 +2167,42 @@ body.pt-try { background: var(--pt-paper); }
 .sc-vu-wrap .pt-vu { flex-direction: row-reverse; }
 .sc-vu-wrap .pt-vu i { flex: none; }
 
+/* 团结多账号矩阵（学群友 Codely Relay 账号池） */
+.acc-list { display: flex; flex-direction: column; gap: 5px; }
+.acc-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center;
+  padding: 7px 10px; border: 1px solid var(--pt-hairline); border-radius: 8px;
+  background: linear-gradient(var(--pt-hi-40), transparent 35%), var(--pt-hatch);
+}
+.acc-row.off { opacity: .5; }
+.acc-row .a-name { font-size: 12px; font-weight: 650; color: var(--pt-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acc-row .a-meta { font-size: 9.5px; color: var(--pt-ink2); margin-top: 2px; }
+.acc-row .a-meta .warn { color: var(--pt-accent); font-weight: 600; }
+.acc-tag {
+  font-family: var(--pt-font-disp); font-size: 8.5px; font-weight: 600; letter-spacing: .5px;
+  border-radius: 3px; padding: 1.5px 5px; color: var(--pt-paper);
+}
+.acc-tag.glm { background: #ff6b9d; }
+.acc-tag.budget { background: var(--pt-accent); }
+.acc-tag.expired { background: var(--pt-ink2); }
+.acc-act { display: flex; gap: 5px; }
+.acc-act .ibtn2 { padding: 3px 8px; font-size: 9.5px; }
+/* 进行中请求面板 */
+.if-list { display: flex; flex-direction: column; gap: 3px; max-height: 130px; overflow-y: auto; scrollbar-width: none; }
+.if-list::-webkit-scrollbar { width: 0; }
+.if-row {
+  display: flex; gap: 8px; align-items: baseline; padding: 3px 8px;
+  border: 1px solid var(--pt-ru-45); border-radius: 5px;
+  font-family: var(--pt-font-disp); font-size: 10px; color: var(--pt-ink2);
+  font-variant-numeric: tabular-nums;
+}
+.if-row .m { color: var(--pt-ink); font-weight: 600; min-width: 70px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.if-row .t { margin-left: auto; }
+.if-row .idle { color: var(--pt-accent); font-weight: 600; }
+.if-empty { color: var(--pt-ink2); font-size: 10.5px; line-height: 1.7; padding: 2px; }
+
 /* 更新日志折叠列表（学 engineering-manager-website ChangelogModal） */
 .cl-list { display: flex; flex-direction: column; gap: 6px; }
 .cl-ver { border: 1px solid var(--pt-hairline); border-radius: 8px; overflow: hidden; }
@@ -2438,6 +2506,14 @@ body.pt-try { background: var(--pt-paper); }
                   <div class="pt-label"><div class="t" data-i18n="app.oauth">登录态</div></div>
                   <span class="pt-val">~/.codely-cli/oauth_creds.json 自动读取</span>
                 </div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm">账号池 · Accounts</span>
+                  <button type="button" class="ibtn2" id="tjAccAdd">＋ 添加账号</button>
+                  <button type="button" class="ibtn2" id="tjWaterBtn" title="金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型">注水体检</button></div>
+                <div class="acc-list" id="tjAccList"><div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号启用多账号轮换</div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm">进行中请求 · Inflight</span></div>
+                <div class="if-list" id="tjInflight"><div class="if-empty">// 流式请求进行时实时显示</div></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.k3">K3 节奏 · Pacing</span></div>
                 <div class="pt-row">
@@ -4002,6 +4078,114 @@ var PT_I18N = {
     return PLUGIN_VENDOR_COLORS[v] || PLUGIN_VENDOR_COLORS[VENDOR_ALIAS[v]] ||
       VENDOR_COLORS[v] || VENDOR_COLORS[v + '/' + id.split('/').pop()] || '#8a7f70';
   }
+
+  /* ================= 团结多账号池 + 进行中请求（学群友 Codely Relay） ================= */
+  function escHtml(s) { return String(s).replace(/[<>&"]/g, function (c) { return {"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;"}[c]; }); }
+  async function loadTuanjieAccounts() {
+    var box = $('tjAccList');
+    if (!box) return;
+    try {
+      var d = await (await fetch("http://127.0.0.1:8788/accounts")).json();
+      if (!d.ok || !d.accounts || !d.accounts.length) {
+        box.innerHTML = '<div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号启用多账号轮换</div>';
+        return;
+      }
+      var h = '';
+      d.accounts.forEach(function (a) {
+        var tags = '';
+        if (a.has_glm53) tags += '<span class="acc-tag glm">GLM</span> ';
+        if (a.budget_exceeded) tags += '<span class="acc-tag budget">402</span> ';
+        if (a.token_remaining_hours !== undefined && a.token_remaining_hours < 24) tags += '<span class="acc-tag expired">剩' + a.token_remaining_hours + 'h</span> ';
+        var meta = (a.username ? escHtml(a.username) + ' · ' : '') + '用 ' + (a.use_count || 0) + ' 次' +
+          (a.inflight ? ' · <b class="warn">进行中 ' + a.inflight + '</b>' : '') +
+          (a.token_expires && a.token_expires !== '未知' ? ' · token 至 ' + a.token_expires : '');
+        h += '<div class="acc-row' + (a.enabled ? '' : ' off') + '">' +
+          '<div><div class="a-name">' + escHtml(a.user_id) + '</div><div class="a-meta">' + meta + '</div></div>' +
+          '<div>' + tags + '</div>' +
+          '<div class="acc-act">' +
+          '<button type="button" class="ibtn2" data-acc-toggle="' + escHtml(a.user_id) + '" data-on="' + a.enabled + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
+          '<button type="button" class="ibtn2" data-acc-del="' + escHtml(a.user_id) + '">删</button>' +
+          '</div></div>';
+      });
+      box.innerHTML = h;
+      box.querySelectorAll('[data-acc-toggle]').forEach(function (b) {
+        b.onclick = async function () {
+          await fetch("http://127.0.0.1:8788/accounts", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "toggle", user_id: b.dataset.accToggle, enabled: b.dataset.on !== "true" })
+          });
+          loadTuanjieAccounts();
+        };
+      });
+      box.querySelectorAll('[data-acc-del]').forEach(function (b) {
+        b.onclick = async function () {
+          await fetch("http://127.0.0.1:8788/accounts", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "remove", user_id: b.dataset.accDel })
+          });
+          loadTuanjieAccounts();
+        };
+      });
+    } catch (e) { /* 插件未启动：保持上次显示 */ }
+  }
+  async function loadTuanjieInflight() {
+    var box = $('tjInflight');
+    if (!box) return;
+    try {
+      var d = await (await fetch("http://127.0.0.1:8788/inflight")).json();
+      var reqs = d.requests || [];
+      if (!reqs.length) { box.innerHTML = '<div class="if-empty">// 无进行中请求</div>'; return; }
+      box.innerHTML = reqs.slice(0, 8).map(function (r) {
+        var idle = r.idle > 5 ? ' <span class="idle">静 ' + r.idle.toFixed(0) + 's</span>' : '';
+        return '<div class="if-row"><span class="m">' + escHtml(r.model) + '</span>' +
+          '<span>' + (r.bytes / 1024).toFixed(1) + 'K</span>' +
+          '<span class="t">' + r.elapsed.toFixed(0) + 's' + idle + '</span></div>';
+      }).join('');
+    } catch (e) {}
+  }
+  // 添加账号（prompt 引导取 user_id/token；群友经验——F12 取 Bearer + jwt.io 解 sub）
+  (function bindAccAdd() {
+    var btn = $('tjAccAdd');
+    if (!btn) return;
+    btn.onclick = async function () {
+      var uid = prompt("user_id（浏览器登录 codely.tuanjie.cn → F12 → 请求头 Bearer → jwt.io 解码 sub）:");
+      if (!uid) return;
+      var token = prompt("access_token（同上 Bearer 冒号后的整串）:");
+      if (!token) return;
+      var r = await (await fetch("http://127.0.0.1:8788/accounts", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "add", user_id: uid.trim(), token: token.trim() })
+      })).json();
+      toast(r.ok ? "ok" : "err", r.ok ? "账号已添加" : "添加失败", r.msg || "");
+      loadTuanjieAccounts();
+    };
+  })();
+  // 注水体检（金丝雀探针，逐账号直连）
+  (function bindWater() {
+    var btn = $('tjWaterBtn');
+    if (!btn) return;
+    btn.onclick = async function () {
+      btn.disabled = true; btn.textContent = "探测中…";
+      try {
+        var r = await (await fetch("http://127.0.0.1:8788/water-probe", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: "all" })
+        })).json();
+        if (r.ok && r.results && r.results.length) {
+          var bad = r.results.filter(function (x) { return !x.pass; });
+          var msg = r.results.map(function (x) {
+            return (x.pass ? "OK " : "!! ") + x.user_id + (x.detail ? "：" + x.detail : "");
+          }).join(" | ");
+          toast(bad.length ? "err" : "ok", bad.length ? "发现 " + bad.length + " 个可疑账号" : "全部账号正常", msg.slice(0, 120));
+        } else {
+          toast("err", "探针失败", (r && r.msg) || "未知错误");
+        }
+      } catch (e) { toast("err", "探针失败", String(e)); }
+      btn.disabled = false; btn.textContent = "注水体检";
+    };
+  })();
+  // 3 秒轮询（进行中面板要跟手）
+  setInterval(function () { loadTuanjieInflight(); }, 3000);
 
   var PLUGIN_VENDOR_COLORS = { glm: '#ff6b9d', kimi: '#b06bff', deepseek: '#4d8dff', minimax: '#ffb300',
     hy3: '#00ffa3', codely: '#00d4ff', auto: '#7c9dff', claude: '#ff9d6b', openai: '#6bff9d',
