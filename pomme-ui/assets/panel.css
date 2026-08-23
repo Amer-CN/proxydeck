@@ -1555,8 +1555,8 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 
 /* ————— 底控台面 FaxDeckView（60px 奶油渐变）+ 台面斜坡（15px 灰渐变）————— */
 .fx-controls {                     /* 官版底部图：浅色平面背景 (233,228,223)、紧凑高度 */
-  display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 10px 14px 2px; text-align: left;
-  --fx-key-gap: 8px;                /* 官版：两键微小间距；右距 10px=上距（所有者定） */
+  display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 0 14px 2px; text-align: left;
+  --fx-key-gap: 8px;                /* 发送键右缘=上方 LCD/底板右缘（所有者定：右边界平齐） */
   border-bottom: 3px solid rgba(66, 58, 42, .18);   /* 官版底部收边阴影线（y116-120 亮度145-161） */
 }
 .fx-ramp {                             /* 台面斜坡：#A5A09E→#B8B5AF→#94948C */
@@ -1755,7 +1755,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
     background:
       linear-gradient(135deg, var(--fx-rcp-1) 50%, transparent 50%) 0 0 / 9px 8px repeat-x,
       linear-gradient(-135deg, var(--fx-rcp-1) 50%, transparent 50%) 4.5px 0 / 9px 8px repeat-x; }
-  .fx-controls { flex-wrap: wrap; gap: 9px; margin-top: 12px; padding: 9px 6px 8px 2px; }
+  .fx-controls { flex-wrap: wrap; gap: 9px; margin-top: 12px; padding: 9px 0 8px 2px; }   /* 右 0：发送键右缘=LCD 右缘（所有者定） */
   .fx-attach-copy b { font-size: 9.5px; }
   .fx-attach-copy span { font-size: 9px; line-height: 1.45; }
   .fx-ramp { height: 11px; }
