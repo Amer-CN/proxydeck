@@ -1409,7 +1409,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25); }
 
 /* ————— 纸笼（纸从灰过渡带里长出，顶裁在盖板斜坡下）————— */
-.fx-cage { position: relative; z-index: 2; margin: -26px 0 0; padding: 0 16px 6px; overflow: hidden;  /* 纸顶贴槽底；slot 实体段下延压住纸顶 2px=插缝观感 */
+.fx-cage { position: relative; z-index: 2; margin: -26px 0 0; padding: 0 16px 12px; overflow: hidden;  /* 底 padding 12=底板下延补缝（纸高不受影响） */  /* 纸顶贴槽底；slot 实体段下延压住纸顶 2px=插缝观感 */
   /* 底板（2026-08-23 所有者修正：浅灰——底板要浅，纸回收时的深灰阴影才有对比空间）。
      底部止于控制条上方并圆角收尾（不越过发送按钮） */
   background: linear-gradient(180deg, #E3DED8 0%, #DDD7D0 100%);
@@ -1564,10 +1564,14 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 
 /* ————— 底控台面 FaxDeckView（60px 奶油渐变）+ 台面斜坡（15px 灰渐变）————— */
-.fx-controls {                     /* 官版底部图：浅色平面背景 (233,228,223)、紧凑高度 */
-  display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 0 14px 2px; text-align: left;
+.fx-controls {                     /* 灰线删除后（所有者三指示）：键行下移+底板拉长+纸不动 */
+  display: flex; align-items: center; gap: 14px; margin-top: 0;
+  padding: 22px 0 24px 2px;          /* 上 padding 22=键行下移；底板连续性由 cage padding-bottom 12 保证 */
+  text-align: left;
   --fx-key-gap: 8px;                /* 发送键右缘=上方 LCD/底板右缘（所有者定：右边界平齐） */
-  /* 底部收边线已删（所有者：突兀的灰线——官版图的深色带实为截图边缘阴影误读） */
+  background: linear-gradient(180deg, #E3DED8 0%, #DDD7D0 100%);  /* 底板色延续至此（拉长） */
+  border-radius: 0 0 12px 12px;     /* 底板圆角收尾在此 */
+  margin-bottom: -16px;             /* 吃掉 fx 的 padding-bottom，底板贴到块底 */
 }
 .fx-ramp {                             /* 台面斜坡：#A5A09E→#B8B5AF→#94948C */
   height: 15px; margin: 0 2px; border-radius: 0 0 4px 4px;
@@ -1755,7 +1759,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
     background:
       linear-gradient(135deg, var(--fx-rcp-1) 50%, transparent 50%) 0 0 / 9px 8px repeat-x,
       linear-gradient(-135deg, var(--fx-rcp-1) 50%, transparent 50%) 4.5px 0 / 9px 8px repeat-x; }
-  .fx-controls { flex-wrap: wrap; gap: 9px; margin-top: 12px; padding: 9px 0 8px 2px; }   /* 右 0：发送键右缘=LCD 右缘（所有者定） */
+  .fx-controls { flex-wrap: wrap; gap: 9px; padding: 9px 0 8px 2px; }   /* margin-top 交给主规则（接 cage 底板） */
   .fx-attach-copy b { font-size: 9.5px; }
   .fx-attach-copy span { font-size: 9px; line-height: 1.45; }
   .fx-ramp { height: 11px; }
@@ -2147,6 +2151,21 @@ body.pt-try { background: var(--pt-paper); }
 /* 横排 LED：与原版 pt-vu 同款 8×14 格子，从右向左点亮（值大→左侧亮） */
 .sc-vu-wrap .pt-vu { flex-direction: row-reverse; }
 .sc-vu-wrap .pt-vu i { flex: none; }
+
+/* 小时级趋势条形图（团结甲板；24 格滚动窗口，学群友小时桶） */
+.trend-wrap { padding: 4px 2px 2px; }
+.trend-bars { display: flex; align-items: flex-end; gap: 2px; height: 52px; }
+.trend-bars .tb { flex: 1 1 0; min-width: 0; position: relative; background: var(--pt-hatch);
+  border-radius: 2px 2px 0 0; transition: height .3s ease; }
+.trend-bars .tb.has { background: linear-gradient(180deg, var(--pt-accent), color-mix(in srgb, var(--pt-accent) 55%, transparent)); }
+.trend-bars .tb:hover::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 6px);
+  left: 50%; transform: translateX(-50%); white-space: nowrap; z-index: 5;
+  background: var(--pt-paper); border: 1px solid var(--pt-hairline); border-radius: 5px;
+  padding: 3px 8px; font-size: 9.5px; color: var(--pt-ink); box-shadow: 0 4px 12px var(--pt-sh-18);
+  font-family: var(--pt-font-disp); pointer-events: none; }
+.trend-axis { display: flex; justify-content: space-between; margin-top: 3px;
+  font-size: 8.5px; color: var(--pt-ink2); font-variant-numeric: tabular-nums; }
+.trend-sum { font-size: 10px; color: var(--pt-ink2); }
 
 /* 进行中请求完整版（LED 三档 + 账号列 + 负载摘要）与实时动态 */
 .if-row { grid-template-columns: none; display: flex; }
@@ -2547,6 +2566,13 @@ body.pt-try { background: var(--pt-paper); }
                     <div class="pt-rail"><i></i><i></i><span class="k"></span></div>
                   </div>
                   <p class="pt-notice">开启后 8788 自动等待窗口，避免 429 重试。窗口用量 <b data-val="tjK3Used">—</b><span data-val="tjK3Pend"></span></p>
+                </div>
+
+                <div class="pt-subhead"><span class="pt-silk sm">小时趋势 · Trend</span>
+                  <span class="pt-val" id="tjTrendSum">—</span></div>
+                <div class="trend-wrap">
+                  <div class="trend-bars" id="tjTrendBars"></div>
+                  <div class="trend-axis" id="tjTrendAxis"><span>—</span><span>—</span><span>—</span></div>
                 </div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">积分统计 · Credits</span>
@@ -4192,6 +4218,40 @@ var PT_I18N = {
       }
     } catch (e) {}
   }
+  // 小时级趋势（学群友小时桶）：24 格滚动窗口条形图
+  async function loadTuanjieTrend() {
+    var bars = $('tjTrendBars'), axis = $('tjTrendAxis'), sum = $('tjTrendSum');
+    if (!bars) return;
+    try {
+      var d = await (await fetch("http://127.0.0.1:8788/trend")).json();
+      var hours = d.hours || {};
+      var keys = Object.keys(hours).sort();
+      if (!keys.length) { bars.innerHTML = ''; axis.innerHTML = '<span>—</span><span>暂无趋势数据</span><span>—</span>'; if (sum) sum.textContent = '—'; return; }
+      // 取最近 24 个小时（含空档补齐）
+      var last = keys[keys.length - 1];
+      var lastT = new Date(last + ':00:00');
+      var slots = [];
+      for (var i = 23; i >= 0; i--) {
+        var t = new Date(lastT.getTime() - i * 3600000);
+        slots.push({ key: t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0') + 'T' + String(t.getHours()).padStart(2,'0'), label: String(t.getHours()).padStart(2,'0') + '时' });
+      }
+      var max = 1, total24 = 0;
+      slots.forEach(function (s2) {
+        var b = hours[s2.key];
+        if (b) { if (b.total > max) max = b.total; total24 += b.total; }
+      });
+      bars.innerHTML = slots.map(function (s2) {
+        var b = hours[s2.key];
+        var h = b ? Math.max(6, Math.round(b.total / max * 100)) : 2;
+        var tok = b ? (b.total > 10000 ? (b.total/1000).toFixed(1) + 'K' : b.total) : '';
+        var tip = s2.label + (b ? ' · ' + tok + ' tok · ' + b.calls + ' 次' : ' · 无');
+        return '<div class="tb' + (b ? ' has' : '') + '" style="height:' + h + '%" data-tip="' + escHtml(tip) + '"></div>';
+      }).join('');
+      axis.innerHTML = '<span>' + slots[0].label + '</span><span>' + slots[12].label + '</span><span>' + slots[23].label + '</span>';
+      if (sum) sum.textContent = total24 > 10000 ? '24h ' + (total24/1000).toFixed(1) + 'K tok' : '24h ' + total24 + ' tok';
+    } catch (e) {}
+  }
+
   // 实时动态（学群友 ActivityLog：请求完成/402/中断的结构化事件流）
   async function loadTuanjieActivity() {
     var box = $('tjActivity');
@@ -4275,6 +4335,7 @@ var PT_I18N = {
   })();
   // 3 秒轮询（进行中面板要跟手）
   setInterval(function () { loadTuanjieInflight(); loadTuanjieActivity(); }, 3000);
+  setInterval(function () { loadTuanjieTrend(); }, 30000);
 
   var PLUGIN_VENDOR_COLORS = { glm: '#ff6b9d', kimi: '#b06bff', deepseek: '#4d8dff', minimax: '#ffb300',
     hy3: '#00ffa3', codely: '#00d4ff', auto: '#7c9dff', claude: '#ff9d6b', openai: '#6bff9d',
