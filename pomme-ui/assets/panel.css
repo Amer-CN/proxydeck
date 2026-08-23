@@ -1670,7 +1670,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-clear:active { transform: translateY(2px);
   box-shadow: 0 0 1px rgba(66, 58, 42, .2), inset 0 2px 4px rgba(66, 58, 42, .22); }  /* 按下=凹陷 */
 .fx-send {                        /* 官版：104×37px、与清除键间距 40px（所有者反馈） */
-  margin-left: calc(var(--fx-key-gap, 8px) - 14px);   /* 对冲 flex gap 14 */
+  margin-left: 0;   /* 间距由下方 wrapper 控制（负 margin 会让两键重叠、发送键投影印上清除键） */
   /* 官版特写实测：105×37px 胶囊、砖红 (210,108,100)、
                                   白字两行（发送/TRANSMIT）、扁平无立体阴影 */
   flex: none; appearance: none; border: 0; cursor: pointer; text-align: center; position: relative;
