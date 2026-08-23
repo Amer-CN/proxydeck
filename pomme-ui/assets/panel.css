@@ -1402,7 +1402,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25); }
 
 /* ————— 纸笼（纸从灰过渡带里长出，顶裁在盖板斜坡下）————— */
-.fx-cage { position: relative; z-index: 2; margin: -26px 0 0; padding: 0 16px 6px; overflow: hidden;  /* 纸顶贴槽底；slot 实体段下延压住纸顶 2px=插缝观感 */
+.fx-cage { position: relative; z-index: 2; margin: -26px 0 0; padding: 0 16px 12px; overflow: hidden;  /* 底 padding 12=底板下延补缝（纸高不受影响） */  /* 纸顶贴槽底；slot 实体段下延压住纸顶 2px=插缝观感 */
   /* 底板（2026-08-23 所有者修正：浅灰——底板要浅，纸回收时的深灰阴影才有对比空间）。
      底部止于控制条上方并圆角收尾（不越过发送按钮） */
   background: linear-gradient(180deg, #E3DED8 0%, #DDD7D0 100%);
@@ -1557,10 +1557,14 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 
 /* ————— 底控台面 FaxDeckView（60px 奶油渐变）+ 台面斜坡（15px 灰渐变）————— */
-.fx-controls {                     /* 官版底部图：浅色平面背景 (233,228,223)、紧凑高度 */
-  display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 0 14px 2px; text-align: left;
+.fx-controls {                     /* 灰线删除后（所有者三指示）：键行下移+底板拉长+纸不动 */
+  display: flex; align-items: center; gap: 14px; margin-top: 0;
+  padding: 22px 0 24px 2px;          /* 上 padding 22=键行下移；底板连续性由 cage padding-bottom 12 保证 */
+  text-align: left;
   --fx-key-gap: 8px;                /* 发送键右缘=上方 LCD/底板右缘（所有者定：右边界平齐） */
-  /* 底部收边线已删（所有者：突兀的灰线——官版图的深色带实为截图边缘阴影误读） */
+  background: linear-gradient(180deg, #E3DED8 0%, #DDD7D0 100%);  /* 底板色延续至此（拉长） */
+  border-radius: 0 0 12px 12px;     /* 底板圆角收尾在此 */
+  margin-bottom: -16px;             /* 吃掉 fx 的 padding-bottom，底板贴到块底 */
 }
 .fx-ramp {                             /* 台面斜坡：#A5A09E→#B8B5AF→#94948C */
   height: 15px; margin: 0 2px; border-radius: 0 0 4px 4px;
@@ -1748,7 +1752,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
     background:
       linear-gradient(135deg, var(--fx-rcp-1) 50%, transparent 50%) 0 0 / 9px 8px repeat-x,
       linear-gradient(-135deg, var(--fx-rcp-1) 50%, transparent 50%) 4.5px 0 / 9px 8px repeat-x; }
-  .fx-controls { flex-wrap: wrap; gap: 9px; margin-top: 12px; padding: 9px 0 8px 2px; }   /* 右 0：发送键右缘=LCD 右缘（所有者定） */
+  .fx-controls { flex-wrap: wrap; gap: 9px; padding: 9px 0 8px 2px; }   /* margin-top 交给主规则（接 cage 底板） */
   .fx-attach-copy b { font-size: 9.5px; }
   .fx-attach-copy span { font-size: 9px; line-height: 1.45; }
   .fx-ramp { height: 11px; }
