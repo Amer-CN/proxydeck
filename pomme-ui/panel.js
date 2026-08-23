@@ -1337,7 +1337,7 @@
         }, 160);
         setTimeout(function () {
           fxSetPhase('connecting');
-          playFax('fax-ding', 1);   /* 接通音：响亮一声（官版 5.46s 实测能量峰 6700，比拨号嗒嗒强 3.7 倍） */
+          playFax('fax-offhook', 0.9);   /* 接通音：低频线路闭合咔（官版 5.46s：120ms/500-1000Hz 低频响声——与送达 ding 区分） */
           setTimeout(function () {
             fxSetPhase('sending');
             playFax('fax-send-key');
