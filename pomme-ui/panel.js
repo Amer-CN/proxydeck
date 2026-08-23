@@ -1346,7 +1346,10 @@
         }, 160);
         setTimeout(function () {
           fxSetPhase('connecting');
-          playFax('fax-carrier', 1);   /* 接通=传真载波握手音（官方 bundle 逆向提取 fax-carrier.wav 0.70s——之前资产里缺失，试听台自然没有） */
+          /* 官版 5.52-7.40 强声区 1.9s（载波握手）：carrier 0.70s 连播 3 次覆盖 */
+          playFax('fax-carrier', 1);
+          setTimeout(function () { if (fxPhase === 'connecting') playFax('fax-carrier', 1); }, 700);
+          setTimeout(function () { if (fxPhase === 'connecting' || fxPhase === 'sending') playFax('fax-carrier', 1); }, 1400);
           setTimeout(function () {
             fxSetPhase('sending');
             playFax('fax-send-key');
@@ -1372,16 +1375,19 @@
               if (fxPaper) fxPaper.classList.add('up');
               fxFillReceipt();
               fxSetPhase('sent');
-              /* 回执打印段：print 连响（官版回执吐出全程有声，单声 10ms 根本听不见） */
+              /* 官版 8.55-11.05 回执打印 2.5s 密集声（间隔 60-120ms 强度递减）——print 连响贯穿 */
               var printIv = setInterval(function () {
                 if (fxPhase !== 'sent') { clearInterval(printIv); return; }
                 playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 1);
-              }, 120);
+              }, 100);
               setTimeout(function () {
                 clearInterval(printIv);
                 fxSetPhase('printed');
-                playFax('fax-ding', 1);   /* 回执打完：叮（官方增益 0.0997 由 TRIM 承担） */
-              }, REDUCED ? 0 : 1000);
+                /* 官版 11.50-11.99 收尾：强双峰+尾音（回执停+机器落定） */
+                playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 1);
+                setTimeout(function () { playFax('fax-ding', 1); }, 120);
+                setTimeout(function () { playFax('fax-offhook', 1); }, 500);
+              }, REDUCED ? 0 : 2000);
             }, REDUCED ? 0 : 2450);
           }, REDUCED ? 0 : 750);
         }, REDUCED ? 0 : 950);
