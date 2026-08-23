@@ -1555,8 +1555,8 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 
 /* ————— 底控台面 FaxDeckView（60px 奶油渐变）+ 台面斜坡（15px 灰渐变）————— */
 .fx-controls {                     /* 官版底部图：浅色平面背景 (233,228,223)、紧凑高度 */
-  display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 8px 14px 2px; text-align: left;
-  --fx-key-gap: 8px;                /* 官版：两键微小间距 */
+  display: flex; align-items: center; gap: 14px; margin-top: 0; padding: 10px 10px 14px 2px; text-align: left;
+  --fx-key-gap: 8px;                /* 官版：两键微小间距；右距 10px=上距（所有者定） */
   border-bottom: 3px solid rgba(66, 58, 42, .18);   /* 官版底部收边阴影线（y116-120 亮度145-161） */
 }
 .fx-ramp {                             /* 台面斜坡：#A5A09E→#B8B5AF→#94948C */
@@ -1588,7 +1588,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-lamp-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: none; }
                                        /* 官版：LINE 文字在灯正下方（灯=横长条） */
 .fx-line-silk { font-family: var(--mono-ui); font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--ink-2); }
-.fx-lamp { width: 34px; height: 12px; border-radius: 6px;     /* 官版：短椭圆灯（像素50×7 视觉短椭圆，折中 34×12） */
+.fx-lamp { width: 12px; height: 12px; border-radius: 50%;      /* 官版：圆形灯（所有者指正） */
   background: linear-gradient(180deg, #8A8580 0%, #6E6963 100%);
   opacity: .55; box-shadow: inset 0 1px 2px rgba(0,0,0,.25); }
 .fx[data-fx-phase="dialing"] .fx-lamp,
@@ -1647,7 +1647,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-clear {                       /* 官版底部图实测：白底清除键（LINE 右、发送左） */
   flex: none; appearance: none; border: 0; cursor: pointer; text-align: center;
   width: 60px; height: 43px; box-sizing: border-box;    /* 官版新图 49×35px×1.216 */
-  border-radius: 18px; padding: 4px 8px;
+  border-radius: 4px; padding: 4px 8px;
   background: linear-gradient(180deg, #FCFAF6 0%, #F1EDE6 100%);
   color: #453F3B;
   font-family: inherit; letter-spacing: .05em;
@@ -1665,7 +1665,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
                                   白字两行（发送/TRANSMIT）、扁平无立体阴影 */
   flex: none; appearance: none; border: 0; cursor: pointer; text-align: center; position: relative;
   width: 103px; height: 43px; box-sizing: border-box;    /* 官版新图 85×35px×1.216 */
-  border-radius: 18px; padding: 4px 10px;
+  border-radius: 4px; padding: 4px 10px;
   background: linear-gradient(180deg, #D26B5F 0%, #C05A4E 100%);
   color: #FFF;
   font-family: inherit; letter-spacing: .05em; line-height: 1.1;
