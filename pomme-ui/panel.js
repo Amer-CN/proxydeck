@@ -1435,15 +1435,16 @@
       playFax('fax-tear', 1);                                  /* 第 1 峰：立即 */
       fxSfxTo(function () { if (fxPhase === 'tearing') playFax('fax-tear', 1); }, 170);   /* 第 2 峰 */
       fxSfxTo(function () { if (fxPhase === 'tearing') playFax('fax-tear', .9); }, 270);  /* 第 3 峰 */
-      /* 掉落段（官方 12.17-13.50 ~1.3s 密集中强声 120ms 间隔）：齿条摩擦近似用
-         print 低音量循环（官方回执结构音里 print 是持续摩擦系音色） */
+      /* 掉落段（官方 12.17-13.50 ~1.3s 密集中强声 120ms 间隔）：音轨频谱实测
+         掉落峰 zcr=1.0-1.7kHz ≈ load(1.8-1.9kHz) 远离 print(3.3-3.8kHz)——
+         load 资产在 Session 层零调用，掉落正是其归宿；mod-3 轮换 */
       fxSfxTo(function () {
         if (fxPhase !== 'tearing') return;
-        playFax('fax-print-1', 0.45);
-        var dropStep = 1;
+        var dropStep = 0;
+        playFax('fax-load-' + (1 + dropStep++ % 3), 1);
         fxSfxIv(function () {
           if (fxPhase !== 'tearing') { fxSfxClear(); return; }
-          playFax('fax-print-' + (1 + dropStep++ % 3), 0.45);
+          playFax('fax-load-' + (1 + dropStep++ % 3), 1);
         }, 120);                 /* 官方掉落摩擦间隔 */
       }, 420);                   /* 撕断动画 420ms 后掉落开始（=静默 150ms 后） */
       setTimeout(function () {
