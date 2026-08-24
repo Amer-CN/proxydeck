@@ -1541,7 +1541,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 .fx-receipt .body {
   position: relative; overflow: hidden; text-align: center;
-  margin: 0 26px; padding: 14px 40px 16px;   /* 官方截图：内容左右边距≈纸宽 9%（40px/439px） */
+  margin: 0 26px; padding: 14px 54px 16px;   /* 官方截图：内容左右边距≈纸宽 12-13%（54px/439px） */
   background: var(--fx-rcp-1);                  /* 官方截图：热敏纸纯色（无渐变，暗色走变量） */
   color: var(--pp-ink);
   box-shadow: 0 12px 22px -12px rgba(66, 58, 42, .45),
@@ -1555,9 +1555,9 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 .fx-receipt .sub { margin: 4px 0 0; font-family: var(--mono-ui); font-size: 8.5px; font-weight: 500; letter-spacing: 0.22em; text-indent: 0.22em; color: var(--pp-fine); text-transform: uppercase; }  /* 官方：细字重、大字距 */
 .fx-receipt .rule { margin: 11px auto; width: 86%; border-top: 1px dashed #CFCFC5; }  /* 官方：浅灰虚线 #CCC 系 */
 .fx-receipt dl { margin: 0; display: inline-block; text-align: left; min-width: 78%; }
-.fx-receipt dl div { display: flex; align-items: baseline; font-size: 10.5px; line-height: 1.8; color: #454545; padding: 0; }  /* 官方：行距宽松（1.8）、墨色 #444-#555 */
-.fx-receipt dt { flex: none; width: 3.2em; color: var(--pp-fine); }
-.fx-receipt dd { margin: 0; flex: 1; text-align: right; font-family: var(--mono-ui); font-weight: 500; font-variant-numeric: tabular-nums; color: #454545; }  /* 官方：值右对齐到统一右缘 */
+.fx-receipt dl div { display: flex; align-items: baseline; font-size: 11px; line-height: 1.75; color: var(--pp-ink); padding: 0; }   /* 官方：中等字号+统一深墨 */  /* 官方：行距宽松（1.8）、墨色 #444-#555 */
+.fx-receipt dt { flex: none; width: 3.2em; color: var(--pp-ink); }   /* 官方：标签与值同深墨（低清下仍清晰的关键） */
+.fx-receipt dd { margin: 0; flex: 1; text-align: right; font-family: var(--mono-ui); font-weight: 400; font-variant-numeric: tabular-nums; color: var(--pp-ink); }   /* 官方：常规字重、统一深墨 */  /* 官方：值右对齐到统一右缘 */
 .fx-receipt [data-fx-r-result] { color: var(--fx-rcp-ok); }   /* 结果行「OK · 已送达」绿色强调 */
 .fx-receipt .thanks { margin: 4px 0 0; font-size: 10px; font-weight: 400; line-height: 1.5; color: #777776; }  /* 官方：感谢语中灰、常规字重 */
 .fx-receipt .tear-hint { margin: 3px 0 0; font-size: 8.5px; font-weight: 400; line-height: 1.5; color: #AAA9A0; }  /* 官方：提示行更小更淡 */
