@@ -1374,7 +1374,9 @@
               fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
               if (fxStateEn) fxStateEn.textContent = fxEnLine('sending');
               playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.25);
-              fxSfxTo(tick, 107);   /* 官方 const 池 107ms 步进（二进制逆向） */
+              /* 步进（画面）107ms 恒定；音效末段间隔渐宽（k>0.7 后 107→260ms）：
+                 官版纸尾入缝时滚轮声渐稀，恒定间隔在纸进完瞬间被掐=听感'声在纸后' */
+              fxSfxTo(tick, k > 0.7 ? 107 + (k - 0.7) * 500 : 107);
             }, 107);
             /* 进度并入步进时钟（一并推进，同源无漂移） */
             setTimeout(function () {
