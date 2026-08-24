@@ -1523,9 +1523,22 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 .fx[data-fx-phase="tearing"] .fx-receipt {
   transform: translate(-50%, 0); opacity: 1; pointer-events: none;
-  animation: fx-tear 430ms cubic-bezier(.3, .8, .4, 1) forwards;
+  /* 官方两段式（视频第一轮 11.57-13.50 实测）：撕断 270ms（3 顿挫）→ 150ms 静默 →
+     掉落 ~1.3s（重力加速）。合计 ~1.7s 与官方 ~1.9s 同量级 */
+  animation: fx-tear-snap 420ms steps(3, end), fx-tear-drop 900ms cubic-bezier(.5, 0, .85, .5) 420ms forwards;
 }
-@keyframes fx-tear { to { transform: translate(-50%, 46px); opacity: 0; } }
+/* 撕断：3 顿挫（steps 分格=急促撕断感），每格下拽 4px 并微旋转（纸被撕歪） */
+@keyframes fx-tear-snap {
+  0%   { transform: translate(-50%, 0) rotate(0deg); }
+  33%  { transform: translate(-49.5%, 4px) rotate(-.6deg); }
+  66%  { transform: translate(-50.5%, 2px) rotate(.5deg); }
+  100% { transform: translate(-50%, 4px) rotate(-.3deg); }
+}
+/* 掉落：从撕断末位加速坠出画面（官方 1.3s 中段最强加速） */
+@keyframes fx-tear-drop {
+  0%   { transform: translate(-50%, 4px) rotate(-.3deg); opacity: 1; }
+  100% { transform: translate(-50%, 140px) rotate(2deg); opacity: 0; }
+}
 .fx-receipt .body {
   position: relative; overflow: hidden; text-align: center;
   margin: 0 26px; padding: 15px 16px 14px;

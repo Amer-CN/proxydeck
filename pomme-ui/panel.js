@@ -1409,16 +1409,18 @@
               fxSfxIv(function () {
                 if (fxPhase !== 'sent' && fxPhase !== 'printed') { fxSfxClear(); return; }
                 playFax('fax-print-' + (1 + printStep++ % 3), 1);
-              }, 100);                    /* 官方 const 池 100ms（打印步进） */
+              }, 120);                    /* 官方视频实测 110-130ms（打印步进） */
               fxSfxTo(function () {
                 fxSetPhase('printed');
+                /* 官方慢版（视频第一轮 8.63-11.17）：打印声全程持续 ~2.5s 才停——
+                   printed 后继续响到链尾，落定时叮+offhook 收 */
                 fxSfxTo(function () {
                   fxSfxClear();
                   fxSfxHold = false;        /* 编排链结束：恢复正常相位清音（hold 悬空=下轮相位切换不清音） */
                   playFax('fax-ding', 1);   /* 收尾：叮+落定 */
                   setTimeout(function () { playFax('fax-offhook', 1); }, 200);
-                }, REDUCED ? 0 : 1050);
-              }, REDUCED ? 0 : 300);
+                }, REDUCED ? 0 : 1150);
+              }, REDUCED ? 0 : 1300);   /* 滑入 1300ms（官方 Duration，sent→printed 连续一条） */
             };
           }, REDUCED ? 0 : 750);   /* 接通 750ms（官版常规节奏：视频为快剪） */
         }, REDUCED ? 0 : 950);   /* 拨号 950ms */
@@ -1428,16 +1430,26 @@
     function fxTear() {
       if (fxPhase !== 'printed') return;
       fxSetPhase('tearing');
-      /* 撕纸段官方真相（FaxReceiptTeeth 0x10005fd60 animatableData setter，IMM case43）：
-         fax-tear 随回执齿条动画【每步 1 声】——非单响、非双响，随动画密度 */
-      playFax('fax-tear', 1);   /* 首声立即 */
-      fxSfxIv(function () {
-        if (fxPhase !== 'tearing') { fxSfxClear(); return; }
-        playFax('fax-tear', 1);
-      }, 107);                 /* 与官方动画步进同钟（步进制 107ms） */
+      /* 撕断段官方真相（视频第一轮 11.57-11.84 实测）：3 强峰 270ms 内（间隔 170/100）；
+         FaxReceiptTeeth 0x10005fd60 animatableData setter IMM case43 = tear 随齿条动画逐步 */
+      playFax('fax-tear', 1);                                  /* 第 1 峰：立即 */
+      fxSfxTo(function () { if (fxPhase === 'tearing') playFax('fax-tear', 1); }, 170);   /* 第 2 峰 */
+      fxSfxTo(function () { if (fxPhase === 'tearing') playFax('fax-tear', .9); }, 270);  /* 第 3 峰 */
+      /* 掉落段（官方 12.17-13.50 ~1.3s 密集中强声 120ms 间隔）：齿条摩擦近似用
+         print 低音量循环（官方回执结构音里 print 是持续摩擦系音色） */
+      fxSfxTo(function () {
+        if (fxPhase !== 'tearing') return;
+        playFax('fax-print-1', 0.45);
+        var dropStep = 1;
+        fxSfxIv(function () {
+          if (fxPhase !== 'tearing') { fxSfxClear(); return; }
+          playFax('fax-print-' + (1 + dropStep++ % 3), 0.45);
+        }, 120);                 /* 官方掉落摩擦间隔 */
+      }, 420);                   /* 撕断动画 420ms 后掉落开始（=静默 150ms 后） */
       setTimeout(function () {
         /* 换纸段官方真相：无 load 调用（全二进制零引用），吞纸声=feedSheet 复用
-           （feed-1/2/3 mod-3 循环 @0x10023a6d0） */
+           （feed-1/2/3 mod-3 循环 @0x10023a6d0）。时序：官方点击→撕断 270ms→掉落
+           ~1.3s→换纸开始——此处 1350ms ≈ 撕断 420+掉落 900 后 receipt 完全消失 */
         fxSerial += 1;
         if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
         if (fxDateEl) fxDateEl.textContent = fxNow().date;
@@ -1478,7 +1490,7 @@
             if (fx.getAttribute('data-fx-attach') !== 'off') fxPrintMinfo();
           }, REDUCED ? 0 : 2000);   /* 新纸打印段 */
         }, REDUCED ? 0 : 1100);   /* 换纸吞纸 */
-      }, REDUCED ? 0 : 310);       /* 撕纸（官方 0.31s） */
+      }, REDUCED ? 0 : 1350);       /* 撕断 420 + 掉落 900 ≈ 官方点击→换纸间隔（实测 ~1.3s） */
     }
 
     /* CLEAR：点按清纸；长按 1.5 秒演示占线 */
