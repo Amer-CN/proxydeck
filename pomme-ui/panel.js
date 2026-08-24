@@ -1391,19 +1391,20 @@
             var finishSend = function () {
               fxFillReceipt();
               fxSetPhase('sent');
-              playFax('fax-ding', 1);   /* 已送达：叮一声（官版 8.55 送达为短促事件，非长段） */
+              playFax('fax-ding', 1);   /* 已送达：叮一声 */
+              /* print 连响与回执滑入同刻起、落位同刻停（所有者：对齐回执与音效） */
+              playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 1);   /* 首声立即 */
+              fxSfxIv(function () {
+                if (fxPhase !== 'sent' && fxPhase !== 'printed') { fxSfxClear(); return; }
+                playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 1);
+              }, 100);
               fxSfxTo(function () {
-                fxSetPhase('printed');   /* 回执吐出（官方 0.65s） */
-                /* 回执打印段（官版 8.55-11.05 密集声属回执吐出=printed）：print 连响 1.2s */
-                fxSfxIv(function () {
-                  if (fxPhase !== 'printed') { fxSfxClear(); return; }
-                  playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 1);
-                }, 100);
+                fxSetPhase('printed');
                 fxSfxTo(function () {
                   fxSfxClear();
-                  playFax('fax-ding', 1);   /* 官版 11.50-11.99 收尾双峰：叮+落定 */
+                  playFax('fax-ding', 1);   /* 收尾：叮+落定 */
                   setTimeout(function () { playFax('fax-offhook', 1); }, 200);
-                }, REDUCED ? 0 : 1300);
+                }, REDUCED ? 0 : 1050);
               }, REDUCED ? 0 : 300);
             };
           }, REDUCED ? 0 : 750);   /* 接通 750ms（官版常规节奏：视频为快剪） */
