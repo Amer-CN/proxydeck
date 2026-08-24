@@ -1466,6 +1466,10 @@
             if (fxPhase !== 'loading') { fxSfxClear(); return; }
             var kk = Math.min(1, (performance.now() - fresh0) / 2000);
             if (fxPaper) fxPaper.style.transform = 'translateY(' + (-118 * (1 - kk)).toFixed(2) + '%)';
+            if (kk >= 1) {                       /* 落位：强制归 0（步进末帧残余会让标题停在缝里） */
+              if (fxPaper) fxPaper.style.transform = 'translateY(0)';
+              return;
+            }
             fxSfxTo(down, 107);
           }, 107);
           fxSfxTo(function () {
