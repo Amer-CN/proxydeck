@@ -1451,10 +1451,17 @@
           playFax('fax-feed-' + (1 + swallowStep++ % 3), 1);
         }, 107);               /* 吞纸段与官方步进同钟（吞纸 1100ms，约 10 声） */
         setTimeout(function () {
-          fxSfxClear();          /* 吞纸结束：停 feed 循环，新纸降下保持静默 */
+          fxSfxClear();          /* 吞纸结束：停 feed 循环 */
           /* 新纸步进降下（官方慢慢出纸）：从 -118% 每 107ms 一步匀速回 0；
-             官方视频指纹=新纸落位仅 2 峰（非 feed 循环），降下保持静默 */
+             官方结构：降下窗=新纸打印窗（视频指纹 24.9-26.9 打印声 2s ≈ 降下时长），
+             FaxPrintPass 的 print mod-3 循环伴纸同响——纸是被打印声"顶"出来的 */
           var fresh0 = performance.now();
+          var freshStep = 0;
+          playFax('fax-print-' + (1 + freshStep++ % 3), 0.5);   /* 打印首声与纸出同刻 */
+          fxSfxIv(function () {
+            if (fxPhase !== 'loading') { fxSfxClear(); return; }
+            playFax('fax-print-' + (1 + freshStep++ % 3), 0.5);
+          }, 100);               /* 官方 const 池 100ms（打印步进），低音量（官版新纸打印弱于回执） */
           fxSfxTo(function down() {
             if (fxPhase !== 'loading') { fxSfxClear(); return; }
             var kk = Math.min(1, (performance.now() - fresh0) / 2000);
@@ -1462,7 +1469,7 @@
             fxSfxTo(down, 107);
           }, 107);
           fxSfxTo(function () {
-            fxSfxClear();
+            fxSfxClear();          /* 纸落位即停打印声（音画同刻收） */
             fxSetPhase('ready');
             if (fx.getAttribute('data-fx-attach') !== 'off') fxPrintMinfo();
           }, REDUCED ? 0 : 2000);   /* 新纸打印段 */
