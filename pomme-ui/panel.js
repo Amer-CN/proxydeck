@@ -1377,6 +1377,13 @@
         setTimeout(function () { if (fxPhase === 'ready') fxShow('ready'); }, 1500);
         return;
       }
+      /* 邮箱格式校验（官方文案「邮箱格式不对」@0x211760 多语言族直读；非法时不发送） */
+      if (fxEmail && fxEmail.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fxEmail.value.trim())) {
+        playFax('fax-error');
+        if (fxStateZh) fxStateZh.textContent = t('fx.st.emailBad');
+        setTimeout(function () { if (fxPhase === 'ready') fxShow('ready'); }, 1500);
+        return;
+      }
       fxT0 = performance.now();
       fx._pct = 10;
       /* 官方线性时间轴（音画交叉验证）：摘机170→拨号170→载波320→传送1820→切换390→回执650 */

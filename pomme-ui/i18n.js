@@ -147,7 +147,7 @@ var PT_I18N = {
   "fx.stampBug": { zh: "错 误 报 告", en: "BUG REPORT" },
   "fx.stampSug": { zh: "功 能 建 议", en: "SUGGESTION" },
   "fx.stampNote": { zh: "类别由上方模式键决定", en: "Type is set by the mode keys above" },
-  "fx.placeholder": { zh: "说清发生了什么、你本来期待什么。", en: "Say what happened, and what you expected instead." },
+  "fx.placeholder": { zh: "说明发生了什么，以及你原本预期的样子。", en: "Say what happened, and what you expected instead." },   /* 官方原文（二进制 0x211fe0 直读） */
   "fx.aria": { zh: "反馈内容", en: "Feedback text" },
   "fx.minfo": { zh: "随附机器信息", en: "Machine info" },
   "fx.mApp": { zh: "应用版本", en: "App version" },
@@ -169,6 +169,7 @@ var PT_I18N = {
   "fx.st.loading": { zh: "换纸中", en: "Loading paper" },
   "fx.st.busy": { zh: "占线——稍后再试", en: "Line busy — try later" },
   "fx.st.empty": { zh: "纸上什么都没有", en: "Nothing on the paper" },
+  "fx.st.emailBad": { zh: "邮箱格式不对", en: "That address won't fax" },   /* 官方原文（二进制 0x211760 多语言族直读） */
   "fx.rcpTitle": { zh: "传 送 回 执", en: "TRANSMISSION REPORT" },
   "fx.rDate": { zh: "日期", en: "Date" },
   "fx.rTo": { zh: "收件", en: "To" },
