@@ -1368,8 +1368,8 @@
               if (fxPhase !== 'sending') { fxSfxClear(); return; }
               var k = Math.min(1, (performance.now() - p0) / 1800);
               playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.2);
-              fxSfxTo(tick, 240 - k * 120);
-            }, 240);
+              fxSfxTo(tick, 107);   /* 官方 const 池 107ms（走纸滚轮音间隔，二进制逆向） */
+            }, 107);
             var iv = setInterval(function () {
               var k = Math.min(1, (performance.now() - p0) / 1800);
               fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
