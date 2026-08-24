@@ -1221,6 +1221,9 @@
           void fxStampEl.offsetWidth;              /* 重排触发：连续切换也重放动画 */
           fxStampEl.classList.add('stamping');
         }
+        /* 盖章音：官方 select 正常路径无 play 调用（动画无声）——按「叩击落章」时刻
+           （动画 55% ≈ 210ms）播一声模式切换音 tick-fs626659（官方 UI 音色族）作反馈 */
+        if (!REDUCED) setTimeout(function () { playFile('tick-fs626659', 1); }, 210);
       });
     });
 

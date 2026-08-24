@@ -255,6 +255,9 @@ html.cap { scroll-behavior: auto; }
     "PingFang TC", "Hiragino Sans", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
   --pt-font-disp: "InstrumentSansWeb", -apple-system, BlinkMacSystemFont, "SF Pro Rounded",
     "PingFang SC", "PingFang TC", "Hiragino Sans", "Microsoft YaHei", sans-serif;
+  --pt-font-paper: "STKaitiSC-Regular", "Kaiti SC", "STKaiti", KaiTi, "KaiTi SC",
+    "楷体", var(--pt-font-ui);   /* 纸面楷体（官方二进制实锤 STKaitiSC-Regular@FaxSheetView；
+                                    Win fallback: KaiTi/楷体，无楷体则回 UI 无衬线） */
 }
 
 [data-theme="dark"] .pt-try {
@@ -1444,7 +1447,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   pointer-events: none; background: linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0));
 }
 [data-theme="dark"] .fx-light-catch { background: linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, 0)); }
-.fx-sheet { margin: 0 26px; padding: 15px 16px 14px; text-align: left; }
+.fx-sheet { margin: 0 26px; padding: 15px 16px 14px; text-align: left; font-family: var(--pt-font-paper); }   /* 官方纸面=楷体 STKaitiSC（FaxSheetView.swift 关联实锤） */
 
 /* ————— 纸头字段（.pp-head + .pp-fields）————— */
 .fx-p-head { display: flex; align-items: baseline; gap: 10px; }
