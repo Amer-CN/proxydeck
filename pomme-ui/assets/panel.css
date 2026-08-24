@@ -1498,7 +1498,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   position: relative; display: block; width: 100%; box-sizing: border-box;
   height: 100px; min-height: 0;                      /* 高度锁死，不许内容撑高 */
   padding: 0 2px; resize: none; outline: none; border: 0; background: transparent;
-  font: 400 12.5px/20px var(--pt-font-ui); color: var(--pp-ink);
+  font: 400 12.5px/25px var(--pt-font-ui); color: var(--pp-ink);   /* 行高=横线周期 25px（1.png 实测）：文字底边坐线上，不再漂移穿字 */
   overflow-y: auto; scrollbar-width: none;           /* 多行正文框内滚动（官版纸固定大小） */
 }
 .fx-input::-webkit-scrollbar { display: none; }
@@ -1763,7 +1763,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   .fx-stamp-note { font-size: 8px; }
   .fx-body { margin-top: 8px; }
   .fx-body::before { background: repeating-linear-gradient(180deg, transparent 0 19px, var(--pp-rule) 19px 20px); }
-  .fx-input { min-height: 75px; font-size: 9.5px; line-height: 20px; }
+  .fx-input { min-height: 75px; font-size: 9.5px; line-height: 25px; }   /* 行高=横线周期 25px（窄屏同主规则，防穿字） */
   .fx-minfo-clip { margin-top: 9px; }
   .fx-minfo { padding: 7px 9px 6px; }
   .fx-minfo .bt { font-size: 8px; margin-bottom: 2px; letter-spacing: .06em; }
