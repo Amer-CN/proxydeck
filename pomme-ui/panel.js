@@ -1365,12 +1365,12 @@
             /* 传送段持续走纸音：滚轮声循环（官版 SENDING 全程有音，间隔渐宽=纸加速） */
             /* 官方 rollSheet 同构步进：一个时钟（107ms/步）同时驱动【纸位移+滚轮声】
                ——音画物理同源，杜绝 CSS 合成器与 JS 定时器双时钟漂移 */
-            if (fxPaper) fxPaper.classList.remove('up');
+            if (fxPaper) { fxPaper.classList.remove('up'); fxPaper.style.transform = ''; }
             fxSfxTo(function tick() {
               if (fxPhase !== 'sending') { fxSfxClear(); return; }
               var k = Math.min(1, (performance.now() - p0) / 1800);
               var paper = $('.fx-paper', fx);
-              if (paper) paper.style.transform = 'translateY(' + (-84 * k).toFixed(2) + '%)';
+              if (paper) paper.style.transform = 'translateY(' + (-118 * k).toFixed(2) + '%)';   /* 全程 -118% 匀速（官方均速：每步等距到底，无收尾加速段） */
               fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
               if (fxStateEn) fxStateEn.textContent = fxEnLine('sending');
               playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.2);
@@ -1378,9 +1378,7 @@
             }, 107);
             /* 进度并入步进时钟（一并推进，同源无漂移） */
             setTimeout(function () {
-              /* 余纸吞尽，出回执：已送达 → 回执已打印。
-                 先清步进内联 transform（否则优先级压过 .up 类，纸卡在 -84% 吞不完） */
-              if (fxPaper) { fxPaper.style.transform = ''; fxPaper.classList.add('up'); }
+              /* 余纸吞尽（步进已匀速走到 -118% 完全藏入），出回执 */
               fxFillReceipt();
               fxSetPhase('sent');
               playFax('fax-ding', 1);   /* 已送达：叮一声（官版 8.55 送达为短促事件，非长段） */
@@ -1421,7 +1419,14 @@
         playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1);        /* 吞余纸 */
         setTimeout(function () { playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1); }, 300);
         setTimeout(function () {
-          if (fxPaper) fxPaper.classList.remove('up');
+          /* 新纸步进降下（官方慢慢出纸）：从 -118% 每 107ms 一步匀速回 0，与装纸声同钟 */
+          var fresh0 = performance.now();
+          fxSfxTo(function down() {
+            if (fxPhase !== 'loading') { fxSfxClear(); return; }
+            var kk = Math.min(1, (performance.now() - fresh0) / 940);
+            if (fxPaper) fxPaper.style.transform = 'translateY(' + (-118 * (1 - kk)).toFixed(2) + '%)';
+            fxSfxTo(down, 107);
+          }, 107);
           playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1);      /* 新纸落位（官版 24.85 峰） */
           /* 新纸段（官版 24.9-26.9 持续密集）：机器信息打印全程有声——print 低音量连响 */
           fxSfxIv(function () {
