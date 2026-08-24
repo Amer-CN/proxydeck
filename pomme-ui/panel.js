@@ -1365,6 +1365,7 @@
             /* 传送段持续走纸音：滚轮声循环（官版 SENDING 全程有音，间隔渐宽=纸加速） */
             /* 官方 rollSheet 同构步进：一个时钟（107ms/步）同时驱动【纸位移+滚轮声】
                ——音画物理同源，杜绝 CSS 合成器与 JS 定时器双时钟漂移 */
+            if (fxPaper) fxPaper.classList.remove('up');
             fxSfxTo(function tick() {
               if (fxPhase !== 'sending') { fxSfxClear(); return; }
               var k = Math.min(1, (performance.now() - p0) / 1800);
@@ -1377,8 +1378,9 @@
             }, 107);
             /* 进度并入步进时钟（一并推进，同源无漂移） */
             setTimeout(function () {
-              /* 余纸吞尽，出回执：已送达 → 回执已打印 */
-              if (fxPaper) fxPaper.classList.add('up');
+              /* 余纸吞尽，出回执：已送达 → 回执已打印。
+                 先清步进内联 transform（否则优先级压过 .up 类，纸卡在 -84% 吞不完） */
+              if (fxPaper) { fxPaper.style.transform = ''; fxPaper.classList.add('up'); }
               fxFillReceipt();
               fxSetPhase('sent');
               playFax('fax-ding', 1);   /* 已送达：叮一声（官版 8.55 送达为短促事件，非长段） */

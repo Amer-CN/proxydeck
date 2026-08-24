@@ -1426,8 +1426,8 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   content: ''; position: absolute; left: 0; right: 0; top: 0; height: 11px; pointer-events: none;
   background: linear-gradient(180deg, rgba(40, 33, 24, .28), rgba(40, 33, 24, .08) 60%, rgba(40, 33, 24, 0));
 }
-.fx-paper.up { transform: translateY(-104%); transition: transform 390ms linear; }  /* 吞纸收尾 390ms（官方传送后切换段） */
-.fx-paper { transition: transform 390ms linear; }   /* 走纸主体=JS 步进（官方同构一步一响）；仅吞纸收尾 up 用 CSS 390ms */
+.fx-paper { transition: transform 940ms cubic-bezier(.25, .9, .3, 1); }  /* 新纸降下（loading 态回位，官方换纸 940ms） */
+.fx-paper.up { transition: transform 390ms linear; }    /* 吞纸收尾专属 390ms（覆盖上一条） */
 .fx-holes {                          /* 走纸孔列：孔径 5px、纵向步进 22px，孔区渐变 #DAD5CF→#C9C4BF */
   position: absolute; top: 0; bottom: 0; width: 26px; pointer-events: none;
   background-image:
