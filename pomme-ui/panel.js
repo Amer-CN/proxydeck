@@ -708,7 +708,7 @@
      合成音 = 4300Hz 带通噪声瞬态 + 1050Hz 三角波敲击（非 wav）。 */
   var WHEEL_GAIN = 0.010, WHEEL_MAX = 2.4, DAMP = 0.95;
   var TICK_STEP = Math.PI * 2 / 24, MIN_GAP = 0.018, IDLE_MUTE = 4;
-  var TRIM_TICK = 2.4697;             /* 官网 hero-scene TRIM['synth:tick'] 同值 */
+  var TRIM_TICK = 1.60;             /* 滚动棘轮音量：官网原值 2.4697 太抢耳，按用户反馈降至约 65% */
   var sfxVel = 0, sfxAccum = 0, sfxSimT = 0;
   var sfxLastInteract = -Infinity, sfxLastTick = -1, sfxLastY = null, sfxRaf = 0, sfxLastFrame = 0;
   function sfxNoiseBuf(c) {
@@ -721,9 +721,28 @@
     }
     return c.__pommeNoise;
   }
-  function sfxTick(level) {
+  /* ctx 挂起（浏览器闲置自动 suspend）期间待发声入队，resume 后 flush；
+     逐齿错开 20ms，避免多齿同刻 start 叠波爆音（与 pomme.js 甲板棘轮同款）。
+     挂起时直接 return（旧版行为）会「首滚无声」，且 resume 后积压齿
+     经 sfxAccum 一次性释放造成爆音——入队只补最近 2 齿，根治。 */
+  var sfxPend = [], sfxPendTk = 0;
+  function sfxPendFlush() {
     if (!waCtx || waCtx.state !== 'running') return;
-    var c = waCtx, when = c.currentTime;
+    var q = sfxPend; sfxPend = [];
+    q.slice(-2).forEach(function (lv, i) { sfxTickNow(lv, i * 0.02); });
+  }
+  function sfxTick(level) {
+    if (!waCtx) return;
+    if (waCtx.state !== 'running') {
+      if (sfxPend.length < 24) sfxPend.push(level);
+      clearTimeout(sfxPendTk);
+      sfxPendTk = setTimeout(sfxPendFlush, 60);
+      return;
+    }
+    sfxTickNow(level);
+  }
+  function sfxTickNow(level, delay) {
+    var c = waCtx, when = c.currentTime + (delay || 0);
     var g = c.createGain(); g.gain.value = level * TRIM_TICK; g.connect(waMaster);
     var rate = 1 + (Math.random() * 2 - 1) * 0.05;
     var src = c.createBufferSource();
@@ -773,7 +792,9 @@
     if (sfxLastY == null) { sfxLastY = y; return; }
     var dy = y - sfxLastY; sfxLastY = y;
     if (dy === 0) return;
-    if (waCtx && waCtx.state === 'suspended') waCtx.resume().catch(function () {});
+    if (waCtx && waCtx.state === 'suspended') {
+      waCtx.resume().then(function () { sfxPendFlush(); }).catch(function () {});
+    }
     sfxVel = Math.max(-WHEEL_MAX, Math.min(WHEEL_MAX, sfxVel + dy * WHEEL_GAIN));
     sfxLastInteract = sfxSimT;
     sfxSchedule();
@@ -1486,7 +1507,8 @@
             fxSfxClear();          /* 纸落位即停打印声（音画同刻收） */
             if (fxPaper) fxPaper.style.transform = 'translateY(0)';   /* 强制归零：步进末帧残余 -0.97%≈3px 会压标题 */
             fxSetPhase('ready');
-            if (fx.getAttribute('data-fx-attach') !== 'off') fxPrintMinfo();
+            /* 新纸不重打机器信息：吞纸时 fxPrintRestore 已恢复完整文字（真传真机吐出
+               的就是成品单）；打字机效果只在首载与开关从 off 打开时演示（所有者逻辑指正） */
           }, REDUCED ? 0 : 2000);   /* 新纸打印段 */
         }, REDUCED ? 0 : 1100);   /* 换纸吞纸 */
       }, REDUCED ? 0 : 1350);       /* 撕断 420 + 掉落 900 ≈ 官方点击→换纸间隔（实测 ~1.3s） */
