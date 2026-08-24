@@ -1368,12 +1368,12 @@
             if (fxPaper) { fxPaper.classList.remove('up'); fxPaper.style.transform = ''; }
             fxSfxTo(function tick() {
               if (fxPhase !== 'sending') { fxSfxClear(); return; }
-              var k = Math.min(1, (performance.now() - p0) / 1800);
+              var k = Math.min(1, (performance.now() - p0) / 3200);
               var paper = $('.fx-paper', fx);
               if (paper) paper.style.transform = 'translateY(' + (-118 * k).toFixed(2) + '%)';   /* 全程 -118% 匀速（官方均速：每步等距到底，无收尾加速段） */
               fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
               if (fxStateEn) fxStateEn.textContent = fxEnLine('sending');
-              playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.2);
+              playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.25);
               fxSfxTo(tick, 107);   /* 官方 const 池 107ms 步进（二进制逆向） */
             }, 107);
             /* 进度并入步进时钟（一并推进，同源无漂移） */
@@ -1395,7 +1395,7 @@
                   setTimeout(function () { playFax('fax-offhook', 1); }, 200);
                 }, REDUCED ? 0 : 1300);
               }, REDUCED ? 0 : 300);
-            }, REDUCED ? 0 : 2210);
+            }, REDUCED ? 0 : 3590);
           }, REDUCED ? 0 : 750);   /* 接通 750ms（官版常规节奏：视频为快剪） */
         }, REDUCED ? 0 : 950);   /* 拨号 950ms */
       }, REDUCED ? 0 : 650);     /* 摘机 650ms */
@@ -1423,7 +1423,7 @@
           var fresh0 = performance.now();
           fxSfxTo(function down() {
             if (fxPhase !== 'loading') { fxSfxClear(); return; }
-            var kk = Math.min(1, (performance.now() - fresh0) / 940);
+            var kk = Math.min(1, (performance.now() - fresh0) / 2000);
             if (fxPaper) fxPaper.style.transform = 'translateY(' + (-118 * (1 - kk)).toFixed(2) + '%)';
             fxSfxTo(down, 107);
           }, 107);
@@ -1437,8 +1437,8 @@
             fxSfxClear();
             fxSetPhase('ready');
             if (fx.getAttribute('data-fx-attach') !== 'off') fxPrintMinfo();
-          }, REDUCED ? 0 : 2070);   /* 新纸打印（官方 2.07s） */
-        }, REDUCED ? 0 : 940);     /* 换纸吞纸（官方 0.94s） */
+          }, REDUCED ? 0 : 2000);   /* 新纸打印段 */
+        }, REDUCED ? 0 : 1100);   /* 换纸吞纸 */
       }, REDUCED ? 0 : 310);       /* 撕纸（官方 0.31s） */
     }
 
