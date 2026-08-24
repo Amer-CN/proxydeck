@@ -1204,6 +1204,7 @@
     fxModeBtns.forEach(function (k) {
       k.addEventListener('click', function () {
         if (fxPhase !== 'ready') return;
+        if (fxMode === k.dataset.fxMode) return;   /* 同键重复点击不重盖 */
         fxMode = k.dataset.fxMode;
         fxModeBtns.forEach(function (b) {
           var on = b === k;
@@ -1212,6 +1213,14 @@
           b.tabIndex = on ? 0 : -1;
         });
         fxPaintStamp();
+        /* 盖章动画（官方 PressStamp.land + select 闭包 withAnimation 同构；所有者描述：
+           切类别时印章像盖章一样「盖上去」）——scale 1.6→1 + opacity 0→1 spring 下落叩击。
+           REDUCED 模式跳过（.fx-stamp.stamping 动画在 reduce 断点为 none） */
+        if (fxStampEl && !REDUCED) {
+          fxStampEl.classList.remove('stamping');
+          void fxStampEl.offsetWidth;              /* 重排触发：连续切换也重放动画 */
+          fxStampEl.classList.add('stamping');
+        }
       });
     });
 

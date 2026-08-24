@@ -1146,6 +1146,8 @@ html.cap { scroll-behavior: auto; }
 
 @media (prefers-reduced-motion: reduce) {
 
+  .fx-stamp.stamping { animation: none; }   /* 盖章动画豁免：reduce 直接呈现 */
+
   .pt-try .pt-track, .pt-try .pt-drum i, .pt-try .pt-knob .cap .dot,
   .pt-try .pt-odo .cell span, .pt-try .pt-sw, .pt-try .pt-sw .k,
   .pt-try .pt-gear .pt-rail .k, .pt-try .pt-key, .pt-try .pt-lever .slot .h,
@@ -1467,6 +1469,17 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   color: var(--pt-accent); padding: 5px 11px 5px 15px;
   border: 2.2px solid var(--pt-accent); border-radius: 7px;
   background: color-mix(in srgb, var(--pt-accent) 5%, transparent);
+}
+/* 盖章动画（官方 select 闭包 withAnimation + PressStamp.land 同构；所有者描述「像盖章一样盖上去」）：
+   scale 1.6→1 spring 回弹叩击 + opacity 0→1。transform-origin 左上=印章从斜上方落下 */
+.fx-stamp.stamping {
+  animation: fx-stamp-land 380ms cubic-bezier(.2, 1.4, .4, 1);
+  transform-origin: 20% 30%;
+}
+@keyframes fx-stamp-land {
+  0%   { transform: scale(1.6) rotate(-3deg); opacity: 0; }
+  55%  { transform: scale(.94) rotate(-.2deg); opacity: 1; }   /* 叩击过冲：先压过头 */
+  100% { transform: scale(1) rotate(-.5deg); opacity: 1; }
 }
 .fx-stamp.sug { color: #5557D2; border-color: #5557D2; background: color-mix(in srgb, #5557D2 5%, transparent); }
 [data-theme="dark"] .fx-stamp.sug { color: #9492F5; border-color: #9492F5; background: color-mix(in srgb, #9492F5 5%, transparent); }
