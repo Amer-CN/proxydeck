@@ -1349,18 +1349,13 @@
       playFax('fax-offhook');
       setTimeout(function () {
         fxSetPhase('dialing');
-        playFax('fax-dial-' + (1 + Math.floor(Math.random() * 6)), 0.7);   /* 进入即响第一声（循环首拍有延迟） */
-        fxSfxIv(function () {
-          if (fxPhase !== 'dialing') { fxSfxClear(); return; }
-          playFax('fax-dial-' + (1 + Math.floor(Math.random() * 6)), 0.7);
-        }, 160);
+        playFax('fax-dial-1', 1);   /* 官方 Session 仅播 1 声 dial-1（case26 单次直读），无循环 */
         setTimeout(function () {
           fxSetPhase('connecting');
           playFax('fax-carrier', 1);   /* 载波握手音 0.70s 播一次（官版第二轮 19.9-20.35 实测仅 0.5s 强声区——连播 3 次是误读第一轮混音） */
           setTimeout(function () {
             fxSetPhase('sending');
             playFax('fax-send-key');
-            setTimeout(function () { playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3))); }, 400);
             var p0 = performance.now();
             /* 传送段持续走纸音：滚轮声循环（官版 SENDING 全程有音，间隔渐宽=纸加速） */
             /* 官方 rollSheet 同构步进：一个时钟（107ms/步）同时驱动【纸位移+滚轮声】
@@ -1382,9 +1377,8 @@
               if (paper) paper.style.transform = 'translateY(' + (-118 * k).toFixed(2) + '%)';
               fx._pct = Math.round(10 + k * 90);            /* 10% → 100% */
               if (fxStateEn) fxStateEn.textContent = fxEnLine('sending');
-              if (k >= 1) { sendDone(); return; }           /* 100%=纸全进=音效终点=切送达 */
-              playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.25);
-              fxSfxTo(tick, k > 0.7 ? 107 + (k - 0.7) * 500 : 107);   /* 末段渐稀（官版尾音余韵） */
+              if (k >= 1) { sendDone(); return; }           /* 100%=纸全进=切送达 */
+              /* 官方走纸段无 feed 循环声（Session case 表无 33-35 调用）——静默传送 */
             }, 107);
             /* 收尾链由 sendDone（=百分比 100%）触发，不再用独立 3590ms 定时器
                （双时钟漂移=纸与声/进度错位的根源） */
@@ -1397,7 +1391,7 @@
               fxSfxIv(function () {
                 if (fxPhase !== 'sent' && fxPhase !== 'printed') { fxSfxClear(); return; }
                 playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 1);
-              }, 100);
+              }, 60);   /* 官版回执声 59ms 间隔 */
               fxSfxTo(function () {
                 fxSetPhase('printed');
                 fxSfxTo(function () {
@@ -1416,9 +1410,7 @@
       if (fxPhase !== 'printed') return;
       fxSetPhase('tearing');
       /* 撕纸段（官版 22.56-23.21）：tear 主声 + 两次强收尾（22.66/22.76/22.82 三强峰） */
-      playFax('fax-tear', 1);
-      setTimeout(function () { playFax('fax-tear', 0.8); }, 100);
-      setTimeout(function () { playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1); }, 200);
+      playFax('fax-tear', 1);   /* 官版撕纸=单声（0.31s 内 1 峰） */
       setTimeout(function () {
         /* 换纸段（官版 23.52-24.46）：吞纸双强峰 + 装新纸 */
         fxSerial += 1;
@@ -1427,8 +1419,12 @@
         if (fxText) fxText.value = '';
         fxCountUpdate();
         fxSetPhase('loading');
-        playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1);        /* 吞余纸 */
-        setTimeout(function () { playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1); }, 300);
+        var eat0 = performance.now();
+        fxSfxIv(function () {                    /* 官版换纸吞纸=密集 load 循环（14 峰/67ms），
+                                               时长封顶 940ms——落位/打印段同属 loading 相位需时间轴分隔 */
+          if (fxPhase !== 'loading' || performance.now() - eat0 > 940) { clearInterval(this); return; }
+          playFax('fax-load-' + (1 + Math.floor(Math.random() * 3)), 1);
+        }, 67);
         setTimeout(function () {
           /* 新纸步进降下（官方慢慢出纸）：从 -118% 每 107ms 一步匀速回 0，与装纸声同钟 */
           var fresh0 = performance.now();
@@ -1443,7 +1439,7 @@
           fxSfxIv(function () {
             if (fxPhase !== 'loading') { fxSfxClear(); return; }   /* 只在 loading 响；ready 一到就停（修越界） */
             playFax('fax-print-' + (1 + Math.floor(Math.random() * 3)), 0.5);
-          }, 150);
+          }, 60);   /* 官版新纸打印 56ms 间隔 */
           fxSfxTo(function () {
             fxSfxClear();
             fxSetPhase('ready');
