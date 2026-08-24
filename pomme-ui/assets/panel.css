@@ -1427,7 +1427,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   background: linear-gradient(180deg, rgba(40, 33, 24, .28), rgba(40, 33, 24, .08) 60%, rgba(40, 33, 24, 0));
 }
 .fx-paper.up { transform: translateY(-104%); transition: transform 390ms linear; }  /* 吞纸收尾 390ms（官方传送后切换段） */
-.fx[data-fx-phase="sending"] .fx-paper { transform: translateY(-84%); transition: transform 1800ms linear; }  /* 官方 rollSheet 1800ms（二进制 Duration 逆向）+ 吞纸收尾 390ms */
+.fx-paper { transition: transform 390ms linear; }   /* 走纸主体=JS 步进（官方同构一步一响）；仅吞纸收尾 up 用 CSS 390ms */
 .fx-holes {                          /* 走纸孔列：孔径 5px、纵向步进 22px，孔区渐变 #DAD5CF→#C9C4BF */
   position: absolute; top: 0; bottom: 0; width: 26px; pointer-events: none;
   background-image:

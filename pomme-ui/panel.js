@@ -1363,22 +1363,19 @@
             setTimeout(function () { playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3))); }, 400);
             var p0 = performance.now();
             /* 传送段持续走纸音：滚轮声循环（官版 SENDING 全程有音，间隔渐宽=纸加速） */
-            /* 走纸音随进度加速：前段 240ms（匀速）→ 末段 120ms（吞纸加速收尾），与 2400ms 位移动画同步 */
+            /* 官方 rollSheet 同构步进：一个时钟（107ms/步）同时驱动【纸位移+滚轮声】
+               ——音画物理同源，杜绝 CSS 合成器与 JS 定时器双时钟漂移 */
             fxSfxTo(function tick() {
               if (fxPhase !== 'sending') { fxSfxClear(); return; }
               var k = Math.min(1, (performance.now() - p0) / 1800);
-              playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.2);
-              fxSfxTo(tick, 107);   /* 官方 const 池 107ms（走纸滚轮音间隔，二进制逆向） */
-            }, 107);
-            var iv = setInterval(function () {
-              var k = Math.min(1, (performance.now() - p0) / 1800);
+              var paper = $('.fx-paper', fx);
+              if (paper) paper.style.transform = 'translateY(' + (-84 * k).toFixed(2) + '%)';
               fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
-              if (fxStateEn && fxPhase === 'sending') fxStateEn.textContent = fxEnLine('sending');
-              if (k >= 1) {
-                clearInterval(iv); clearInterval(feedIv);
-                playFax('fax-offhook', 1);   /* 走纸收尾闷响（官版 7.46s：纸吞完一声低频"咚"） */
-              }
-            }, REDUCED ? 800 : 150);
+              if (fxStateEn) fxStateEn.textContent = fxEnLine('sending');
+              playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.2);
+              fxSfxTo(tick, 107);   /* 官方 const 池 107ms 步进（二进制逆向） */
+            }, 107);
+            /* 进度并入步进时钟（一并推进，同源无漂移） */
             setTimeout(function () {
               /* 余纸吞尽，出回执：已送达 → 回执已打印 */
               if (fxPaper) fxPaper.classList.add('up');
