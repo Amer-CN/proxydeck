@@ -1366,21 +1366,29 @@
             /* 官方 rollSheet 同构步进：一个时钟（107ms/步）同时驱动【纸位移+滚轮声】
                ——音画物理同源，杜绝 CSS 合成器与 JS 定时器双时钟漂移 */
             if (fxPaper) { fxPaper.classList.remove('up'); fxPaper.style.transform = ''; }
+            /* 主时钟=进度百分比（所有者定）：%=10→100，纸位移/滚轮声/LCD 全部由 k 驱动；
+               k=1（100%）时由循环自己收尾——纸全进/声渐停/切送达同刻发生 */
+            var sendDone = function () {
+              if (fxPhase !== 'sending') return;
+              fx._pct = 100;
+              if (fxStateEn) fxStateEn.textContent = fxEnLine('sending');
+              fxSfxClear();                     /* 最后一步声已响，收尾即静 */
+              finishSend();                     /* → 已送达 → 回执 */
+            };
             fxSfxTo(function tick() {
               if (fxPhase !== 'sending') { fxSfxClear(); return; }
               var k = Math.min(1, (performance.now() - p0) / 3200);
               var paper = $('.fx-paper', fx);
-              if (paper) paper.style.transform = 'translateY(' + (-118 * k).toFixed(2) + '%)';   /* 全程 -118% 匀速（官方均速：每步等距到底，无收尾加速段） */
-              fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
+              if (paper) paper.style.transform = 'translateY(' + (-118 * k).toFixed(2) + '%)';
+              fx._pct = Math.round(10 + k * 90);            /* 10% → 100% */
               if (fxStateEn) fxStateEn.textContent = fxEnLine('sending');
+              if (k >= 1) { sendDone(); return; }           /* 100%=纸全进=音效终点=切送达 */
               playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.25);
-              /* 步进（画面）107ms 恒定；音效末段间隔渐宽（k>0.7 后 107→260ms）：
-                 官版纸尾入缝时滚轮声渐稀，恒定间隔在纸进完瞬间被掐=听感'声在纸后' */
-              fxSfxTo(tick, k > 0.7 ? 107 + (k - 0.7) * 500 : 107);
+              fxSfxTo(tick, k > 0.7 ? 107 + (k - 0.7) * 500 : 107);   /* 末段渐稀（官版尾音余韵） */
             }, 107);
-            /* 进度并入步进时钟（一并推进，同源无漂移） */
-            setTimeout(function () {
-              /* 余纸吞尽（步进已匀速走到 -118% 完全藏入），出回执 */
+            /* 收尾链由 sendDone（=百分比 100%）触发，不再用独立 3590ms 定时器
+               （双时钟漂移=纸与声/进度错位的根源） */
+            var finishSend = function () {
               fxFillReceipt();
               fxSetPhase('sent');
               playFax('fax-ding', 1);   /* 已送达：叮一声（官版 8.55 送达为短促事件，非长段） */
@@ -1397,7 +1405,7 @@
                   setTimeout(function () { playFax('fax-offhook', 1); }, 200);
                 }, REDUCED ? 0 : 1300);
               }, REDUCED ? 0 : 300);
-            }, REDUCED ? 0 : 3590);
+            };
           }, REDUCED ? 0 : 750);   /* 接通 750ms（官版常规节奏：视频为快剪） */
         }, REDUCED ? 0 : 950);   /* 拨号 950ms */
       }, REDUCED ? 0 : 650);     /* 摘机 650ms */
