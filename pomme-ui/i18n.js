@@ -182,6 +182,6 @@ var PT_I18N = {
   "fx.catBug": { zh: "错误报告", en: "Bug report" },
   "fx.catSug": { zh: "功能建议", en: "Suggestion" },
   "fx.okDelivered": { zh: "OK · 已送达", en: "OK · delivered" },
-  "fx.thanks": { zh: "谢谢。我们会读每一页。", en: "Thank you. We read every page." },
+  "fx.thanks": { zh: "谢谢。每一张我们都会读。", en: "Thank you. We read every page." },
   "fx.tearHint": { zh: "点回执撕下 · 机器回到待命", en: "Click to tear off · back to standby" }
 };
