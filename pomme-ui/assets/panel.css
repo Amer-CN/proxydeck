@@ -255,9 +255,9 @@ html.cap { scroll-behavior: auto; }
     "PingFang TC", "Hiragino Sans", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
   --pt-font-disp: "InstrumentSansWeb", -apple-system, BlinkMacSystemFont, "SF Pro Rounded",
     "PingFang SC", "PingFang TC", "Hiragino Sans", "Microsoft YaHei", sans-serif;
-  --pt-font-paper: "STKaitiSC-Regular", "Kaiti SC", "STKaiti", KaiTi, "KaiTi SC",
-    "楷体", var(--pt-font-ui);   /* 纸面楷体（官方二进制实锤 STKaitiSC-Regular@FaxSheetView；
-                                    Win fallback: KaiTi/楷体，无楷体则回 UI 无衬线） */
+  --pt-font-paper: "Kaiti SC", "STKaitiSC-Regular", STKaiti, KaiTi, "KaiTi SC",
+    "楷体", var(--pt-font-ui);   /* 正文输入区楷体（官方 RuledPaperTextView 回退链顺序：
+                                    Kaiti SC→STKaitiSC-Regular→STKaiti；仅输入框用，其余纸面=系统字） */
 }
 
 [data-theme="dark"] .pt-try {
@@ -1447,7 +1447,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   pointer-events: none; background: linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0));
 }
 [data-theme="dark"] .fx-light-catch { background: linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, 0)); }
-.fx-sheet { margin: 0 26px; padding: 15px 16px 14px; text-align: left; font-family: var(--pt-font-paper); }   /* 官方纸面=楷体 STKaitiSC（FaxSheetView.swift 关联实锤） */
+.fx-sheet { margin: 0 26px; padding: 15px 16px 14px; text-align: left; }
 
 /* ————— 纸头字段（.pp-head + .pp-fields）————— */
 .fx-p-head { display: flex; align-items: baseline; gap: 10px; }
@@ -1501,7 +1501,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   position: relative; display: block; width: 100%; box-sizing: border-box;
   height: 100px; min-height: 0;                      /* 高度锁死，不许内容撑高 */
   padding: 0 2px; resize: none; outline: none; border: 0; background: transparent;
-  font: 400 12.5px/25px var(--pt-font-ui); color: var(--pp-ink);   /* 行高=横线周期 25px（1.png 实测）：文字底边坐线上，不再漂移穿字 */
+  font: 400 12.5px/25px var(--pt-font-paper); color: var(--pp-ink);   /* 楷体=官方正文输入字体（RuledPaperTextView.caret 三级回退链实锤：Kaiti SC→STKaitiSC→STKaiti 16pt）；行高=横线周期 25px */
   overflow-y: auto; scrollbar-width: none;           /* 多行正文框内滚动（官版纸固定大小） */
 }
 .fx-input::-webkit-scrollbar { display: none; }
