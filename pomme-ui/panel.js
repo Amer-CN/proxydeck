@@ -1221,9 +1221,9 @@
           void fxStampEl.offsetWidth;              /* 重排触发：连续切换也重放动画 */
           fxStampEl.classList.add('stamping');
         }
-        /* 盖章音：官方 select 正常路径无 play 调用（动画无声）——按「叩击落章」时刻
-           （动画 55% ≈ 210ms）播一声模式切换音 tick-fs626659（官方 UI 音色族）作反馈 */
-        if (!REDUCED) setTimeout(function () { playFile('tick-fs626659', 1); }, 210);
+        /* 按钮音（反汇编实锤：select 闭包 play case44 @0x1000ae700/0x1000ae760——
+           官方切换类别播键音；所有者视频确认「盖章没音效但按钮有」）：点击即响 */
+        playFile('tick-fs626659', 1);
       });
     });
 
@@ -1369,6 +1369,7 @@
 
     function fxSend() {
       if (fxPhase !== 'ready') return;
+      playFile('tick-fs626659', 1);   /* 键行音（FooterKey 实锤：TRANSMIT 点击有键音） */
       if (!fxChars()) {
         /* 空内容：报错 + fax-error，停留待命 */
         playFax('fax-error');
@@ -1545,6 +1546,9 @@
       fxClearBtn.addEventListener('click', function () {
         if (fxClearLong) { fxClearLong = false; return; }
         if (fxPhase !== 'ready') return;
+        /* 键行音（反汇编实锤：FooterKey play case 2/10=两套 UI 键音 @0x1000d1d14——
+           CLEAR/TRANSMIT 键行点击有键音；长按占线路径已有 fax-error） */
+        playFile('tick-fs626659', 1);
         if (fxText) fxText.value = '';
         if (fxEmail) fxEmail.value = '';
         fxCountUpdate();
