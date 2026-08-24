@@ -1426,8 +1426,8 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
   content: ''; position: absolute; left: 0; right: 0; top: 0; height: 11px; pointer-events: none;
   background: linear-gradient(180deg, rgba(40, 33, 24, .28), rgba(40, 33, 24, .08) 60%, rgba(40, 33, 24, 0));
 }
-.fx-paper.up { transform: translateY(-104%); transition: transform 700ms linear; }  /* 吞纸收尾：线性匀速（避免走纸 2400ms 匀速后突然 ease 弹走=官版'突然结束'观感） */
-.fx[data-fx-phase="sending"] .fx-paper { transform: translateY(-88%); transition: transform 1820ms linear; }  /* 官方传送 1.82s（音画交叉验证），末态 -88% 近全吞 */
+.fx-paper.up { transform: translateY(-104%); transition: transform 200ms linear; }  /* 保险位：sending 已直接移到 -104%（连续单动画），up 仅作后备 */
+.fx[data-fx-phase="sending"] .fx-paper { transform: translateY(-104%); transition: transform 2210ms linear; }  /* 官方：纸连续匀速吞入 2.21s（20.35-22.56 帧+音交叉），一条动画到底不拼接 */
 .fx-holes {                          /* 走纸孔列：孔径 5px、纵向步进 22px，孔区渐变 #DAD5CF→#C9C4BF */
   position: absolute; top: 0; bottom: 0; width: 26px; pointer-events: none;
   background-image:
@@ -1515,7 +1515,7 @@ html[data-pt-sales="closed"] .desk .dk-btn.pay { display: none; }
 }
 .fx[data-fx-phase="sent"] .fx-receipt {
   transform: translate(-50%, -46%); opacity: 1;
-  transition: transform 1000ms ease-out, opacity 220ms ease;
+  transition: transform 650ms ease-out, opacity 220ms ease;   /* 官方回执吐出 0.65s */
 }
 .fx[data-fx-phase="printed"] .fx-receipt {
   transform: translate(-50%, 0); opacity: 1; cursor: pointer; pointer-events: auto;

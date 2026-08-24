@@ -1366,12 +1366,12 @@
             /* 走纸音随进度加速：前段 240ms（匀速）→ 末段 120ms（吞纸加速收尾），与 2400ms 位移动画同步 */
             fxSfxTo(function tick() {
               if (fxPhase !== 'sending') { fxSfxClear(); return; }
-              var k = Math.min(1, (performance.now() - p0) / 1820);
+              var k = Math.min(1, (performance.now() - p0) / 2210);
               playFax('fax-feed-' + (1 + Math.floor(Math.random() * 3)), 0.55 - k * 0.2);
               fxSfxTo(tick, 240 - k * 120);
             }, 240);
             var iv = setInterval(function () {
-              var k = Math.min(1, (performance.now() - p0) / 1820);
+              var k = Math.min(1, (performance.now() - p0) / 2210);
               fx._pct = Math.round(10 + k * 73);            /* 10% → 83% */
               if (fxStateEn && fxPhase === 'sending') fxStateEn.textContent = fxEnLine('sending');
               if (k >= 1) {
@@ -1399,9 +1399,9 @@
                 }, REDUCED ? 0 : 650);
               }, REDUCED ? 0 : 350);
             }, REDUCED ? 0 : 2210);
-          }, REDUCED ? 0 : 320);
-        }, REDUCED ? 0 : 170);   /* 拨号 170ms（官方） */
-      }, REDUCED ? 0 : 170);     /* 摘机 170ms（官方） */
+          }, REDUCED ? 0 : 750);   /* 接通 750ms（官版常规节奏：视频为快剪） */
+        }, REDUCED ? 0 : 950);   /* 拨号 950ms */
+      }, REDUCED ? 0 : 650);     /* 摘机 650ms */
     }
 
     function fxTear() {
