@@ -67,7 +67,7 @@ API Key:   你的 CommandCode Key（commandcode.ai/studio → API keys）
 
 ## 🛡️ 关于免费与边界
 
-- **开源免费**，禁止盗卖/转卖
+- **开源免费**，仅供个人学习研究使用
 - 界面视觉致敬 PommeToys 机械面板风格（非官方）
 - 仅支持 Windows（依赖系统自带的 WebView2 运行时）
 - 需要你自己拥有对应平台的有效订阅
@@ -78,6 +78,6 @@ API Key:   你的 CommandCode Key（commandcode.ai/studio → API keys）
 
 <div align="center">
 
-Made by [@Amer-CN](https://github.com/Amer-CN) · 欢迎自用，禁止转卖
+Made by [@Amer-CN](https://github.com/Amer-CN) · 仅供个人学习研究
 
 </div>
