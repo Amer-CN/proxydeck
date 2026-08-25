@@ -9,7 +9,7 @@
 ### ✨ 体验优化
 
 - **团结请求头对齐官方 CLI**：User-Agent 换为官方真值 `Codely-CLI - OSS/1.0.0-rc.54 (Codely-Cli/1.0.0-rc.54)`，补齐 `X-DashScope-CacheControl` / `X-DashScope-UserAgent` 标记头，降低反代识别特征
-- **模型目录同步官方 61 个**（Go 套餐 36 个），旧前缀名保留为兼容别名
+- **CommandCode 模型目录同步官方 61 个**（Go 套餐 36 个），旧前缀名保留为兼容别名
 
 ### 🗑️ 移除
 
