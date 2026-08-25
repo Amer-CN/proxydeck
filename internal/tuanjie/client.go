@@ -40,6 +40,12 @@ const (
 	codelySigningSeedHex = "406f00f74768ba0cb0cd30f097ec6c2bdacb89c61a38b7dd140838bbd0e98018"
 )
 
+// noProxyTransport 绕过系统代理（开源工具用户可能配了 Clash/v2ray 等
+// 本地代理但未运行，默认 Transport 会读系统代理设置导致连接失败）。
+var noProxyTransport = &http.Transport{
+	Proxy: nil,
+}
+
 // Client 是团结 LiteLLM 的转发客户端（线程安全）。
 type Client struct {
 	httpClient *http.Client
@@ -52,7 +58,7 @@ type Client struct {
 
 // NewClient 创建客户端。
 func NewClient() *Client {
-	return &Client{httpClient: &http.Client{Timeout: defaultTimeout}}
+	return &Client{httpClient: &http.Client{Timeout: defaultTimeout, Transport: noProxyTransport}}
 }
 
 // oauthCredsPath 返回 oauth 凭据文件路径。
@@ -172,6 +178,8 @@ func SignLitellm(path, cliAPIKey string, now time.Time) string {
 }
 
 // litellmHeaders 构造伪装 codely CLI 的请求头。path 参与签名，是上游路径。
+// 2026-08-25 对照官方 CLI 源码（@unity-china/codely-cli rc.54）补齐：
+// DashScope 分支标记头（GLM/Kimi 走阿里后端时官方会带，缺了易被识别为反代）。
 func (c *Client) litellmHeaders(path, key string) http.Header {
 	h := http.Header{}
 	h.Set("Authorization", "Bearer "+key)
@@ -182,6 +190,9 @@ func (c *Client) litellmHeaders(path, key string) http.Header {
 	// 粘死在映射失步的实例上持续 400 model=None（实测 2026-08-21）。
 	h.Set("x-litellm-session-id", uuid.New().String())
 	h.Set("X-Codely-Signature", SignLitellm(path, key, time.Now()))
+	// 官方 DashScope provider 标记头（源码实证；GLM/Kimi 大概率走此分支）
+	h.Set("X-DashScope-CacheControl", "enable")
+	h.Set("X-DashScope-UserAgent", cliUserAgent)
 	return h
 }
 
