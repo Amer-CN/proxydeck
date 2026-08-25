@@ -136,13 +136,9 @@ func (w *WaterCheck) PassiveEvents() []passiveEvent {
 
 // ProbeAccount 对单账号跑金丝雀探针（直连上游，不经轮询）。
 // model 通常探测 GLM-5.3（最贵的、最可能被注水的）。
-func (w *WaterCheck) ProbeAccount(ctx context.Context, pool *AccountPool, userID, model string) (*WaterProbeResult, error) {
-	acc := pool.Get(userID)
-	if acc == nil {
-		return nil, fmt.Errorf("账号不存在: %s", userID)
-	}
+func (w *WaterCheck) ProbeAccount(ctx context.Context, accessToken, userID, model string) (*WaterProbeResult, error) {
 	// 直连换取该账号的 cli_api_key（独立请求，不动 Client 缓存）
-	key, err := fetchKeyWithToken(ctx, acc.AccessToken)
+	key, err := fetchKeyWithToken(ctx, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("换取 key 失败: %w", err)
 	}
@@ -238,7 +234,7 @@ func probeOnce(ctx context.Context, cliKey, model, prompt string, stream bool) (
 	req.Header.Set("x-litellm-session-id", uuid.NewString())
 	req.Header.Set("X-Codely-Signature", SignLitellm("/v1/chat/completions", cliKey, time.Now()))
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: 120 * time.Second, Transport: smartProxyTransport}
 	resp, err := client.Do(req)
 	if err != nil {
 		return out, err
@@ -269,7 +265,7 @@ func probeOnce(ctx context.Context, cliKey, model, prompt string, stream bool) (
 }
 
 // fetchKeyWithToken 用指定 access_token 直连换取 cli_api_key（探针专用，
-// 不经 Client 缓存——多账号下每个账号独立换取）。
+// 不经 Client 缓存。
 func fetchKeyWithToken(ctx context.Context, accessToken string) (string, error) {
 	ctx2, cancel := context.WithTimeout(ctx, keyFetchTimeout)
 	defer cancel()
@@ -280,7 +276,7 @@ func fetchKeyWithToken(ctx context.Context, accessToken string) (string, error) 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", cliUserAgent)
-	client := &http.Client{Timeout: keyFetchTimeout}
+	client := &http.Client{Timeout: keyFetchTimeout, Transport: smartProxyTransport}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err

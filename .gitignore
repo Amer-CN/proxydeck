@@ -12,3 +12,14 @@ app.exe
 *.exe~
 .work/
 tuanjie-pacing.json
+tuanjie-accounts.json
+tuanjie-providers.json
+tuanjie-media.json
+tuanjie-vision.json
+tuanjie-water.json
+tuanjie-baselines.json
+
+# 官方 Codely CLI 残留（不属于本项目）
+.codely-cli/
+.codely/
+CODELY.md

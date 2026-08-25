@@ -1,25 +1,29 @@
-// handlers_extra.go —— 多账号池 / 进行中请求 / 注水探针的 HTTP 端点。
-// 均带 CORS（GUI 跨域拉取），路径与群友 Codely Relay 的管理语义对齐。
+// handlers_extra.go —— 进行中请求 / 注水探针 / 媒体配置的 HTTP 端点。
+// 均带 CORS（GUI 跨域拉取）。
 package tuanjie
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
-	"time"
 )
 
-// handleAccounts GET=账号列表+被动注水事件；POST=增删/启停/GLM 标记（action 字段分发）。
+// handleAccounts GET=单账号状态+被动注水事件+改路由计数。
 func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"ok":             true,
+		"mode":           "single",
+		"passive":        s.water.PassiveEvents(),
+		"media_reroutes": s.mediaReroutes.Load(),
+	})
+}
+
+// handleProviders 外部账号：GET=信息列表（计费缓存 120s）；POST=增删。
+// 响应绝不包含 api_key。
+func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		writeJSON(w, map[string]any{
-			"ok":       true,
-			"accounts": s.pool.Status(),
-			"mode":     map[bool]string{true: "pool", false: "single"}[s.pool.Size() > 0],
-			"passive":  s.water.PassiveEvents(),
-		})
+		writeJSON(w, map[string]any{"ok": true, "providers": s.providers.Infos()})
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -27,13 +31,12 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Action   string `json:"action"` // add | remove | toggle | setglm
-		UserID   string `json:"user_id"`
-		Token    string `json:"token"`
-		Username string `json:"username"`
-		OrgID    string `json:"org_id"`
-		Enabled  bool   `json:"enabled"`
-		HasGLM53 bool   `json:"has_glm53"`
+		Action  string   `json:"action"` // add | remove | addmodel | removemodel
+		Name    string   `json:"name"`
+		BaseURL string   `json:"base_url"`
+		APIKey  string   `json:"api_key"`
+		Models  []string `json:"models"` // 参与转发的模型（可空=仅展示）
+		Model   string   `json:"model"`  // addmodel/removemodel 的单个模型
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "msg": "请求体解析失败"})
@@ -41,67 +44,118 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	}
 	switch req.Action {
 	case "add":
-		if req.UserID == "" || req.Token == "" {
-			writeJSON(w, map[string]any{"ok": false, "msg": "缺少 user_id 或 token"})
-			return
-		}
-		if s.pool.Add(req.UserID, req.Token, req.Username, req.OrgID) {
-			writeJSON(w, map[string]any{"ok": true, "msg": "账号已添加"})
+		if s.providers.Add(ExternalProvider{Name: req.Name, BaseURL: req.BaseURL, APIKey: req.APIKey, Models: req.Models}) {
+			s.providers.Invalidate()
+			writeJSON(w, map[string]any{"ok": true, "msg": "外部账号已添加"})
 		} else {
-			writeJSON(w, map[string]any{"ok": false, "msg": "账号已存在"})
+			writeJSON(w, map[string]any{"ok": false, "msg": "添加失败（名称/base_url/key 不能为空，或名称已存在）"})
 		}
 	case "remove":
-		writeJSON(w, map[string]any{"ok": s.pool.Remove(req.UserID)})
-	case "toggle":
-		writeJSON(w, map[string]any{"ok": s.pool.Toggle(req.UserID, req.Enabled)})
-	case "setglm":
-		writeJSON(w, map[string]any{"ok": s.pool.SetGLM(req.UserID, req.HasGLM53)})
-	case "auto":
-		s.handleAccountAuto(w, r)
-		return
+		if s.providers.Remove(req.Name) {
+			s.providers.Invalidate()
+			writeJSON(w, map[string]any{"ok": true, "msg": "外部账号已删除"})
+		} else {
+			writeJSON(w, map[string]any{"ok": false, "msg": "未找到该外部账号"})
+		}
+	case "addmodel":
+		if s.providers.AddModel(req.Name, req.Model) {
+			s.providers.Invalidate()
+			writeJSON(w, map[string]any{"ok": true, "msg": "模型已添加"})
+		} else {
+			writeJSON(w, map[string]any{"ok": false, "msg": "添加失败（账号不存在或模型已存在/为空）"})
+		}
+	case "removemodel":
+		if s.providers.RemoveModel(req.Name, req.Model) {
+			s.providers.Invalidate()
+			writeJSON(w, map[string]any{"ok": true, "msg": "模型已删除"})
+		} else {
+			writeJSON(w, map[string]any{"ok": false, "msg": "删除失败（账号或模型不存在）"})
+		}
 	default:
 		writeJSON(w, map[string]any{"ok": false, "msg": "未知 action"})
 	}
 }
 
-// handleAccountAuto 自动探测：连浏览器调试口读团结 cookie → 解析入池。
-// 浏览器没开调试口时 spawn（带 --remote-debugging-port，同一用户 profile，
-// 登录态保留），等就绪后重试。探测/入池全程只针对 codely.tuanjie.cn 域。
-func (s *Server) handleAccountAuto(w http.ResponseWriter, r *http.Request) {
-	// 1. 直接探测（浏览器可能已带调试口在跑）
-	if creds := probeCDPBrowser(); creds != nil {
-		if s.pool.Add(creds.UserID, creds.AccessToken, creds.UserID, "") {
-			writeJSON(w, map[string]any{"ok": true, "msg": "已从浏览器读取并添加账号", "user_id": creds.UserID, "browser": creds.Browser})
-		} else {
-			writeJSON(w, map[string]any{"ok": false, "msg": "该账号已在池里（user_id " + creds.UserID + "）", "user_id": creds.UserID})
+// handleVisionConfig 视觉模型配置（媒体改路由目标）：GET 返回 {"model"}；
+// POST {"model":"..."} 更新并持久化。兼容层：内部转到新 media 机制
+// （vision 值与 /media-config 双向同步，一个机制两个视图），行为不变。
+func (s *Server) handleVisionConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var req struct {
+			Model string `json:"model"`
 		}
-		return
-	}
-	// 2. 探测不到 → 拉起【专用 profile】浏览器带调试口（136+ 版本安全限制：
-	//    默认 profile 忽略调试参数，必须独立 user-data-dir），打开团结 dashboard。
-	path, err := launchBrowserWithCDP("9222")
-	if err != nil {
-		writeJSON(w, map[string]any{"ok": false, "msg": "未探测到调试口，且启动浏览器失败: " + err.Error()})
-		return
-	}
-	// 3. 长轮询等登录：专用 profile 是全新环境，需要在弹出的窗口里登录一次；
-	//    登录后 cookie 写入该 profile，读取入池。最长 150 秒，每 2 秒查一次。
-	deadline := time.Now().Add(150 * time.Second)
-	for time.Now().Before(deadline) {
-		time.Sleep(2 * time.Second)
-		if creds := probeCDPBrowser(); creds != nil {
-			if s.pool.Add(creds.UserID, creds.AccessToken, creds.UserID, "") {
-				writeJSON(w, map[string]any{"ok": true, "msg": "已读取登录态并入池（弹出的浏览器窗口可以关了）", "user_id": creds.UserID, "browser": path})
-			} else {
-				writeJSON(w, map[string]any{"ok": false, "msg": "该账号已在池里（user_id " + creds.UserID + "）", "user_id": creds.UserID})
-			}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Model == "" {
+			writeErr(w, 400, "body 需为 {\"model\":\"...\"}")
 			return
 		}
-		if r.Context().Err() != nil {
-			return // 客户端断开，不再等
+		// 校验：识图模型必须是理解类（chat）——image/video 类模型走错端点，直接拒。
+		// 前端下拉已过滤，这里拦手工 curl 的错配。
+		if k := ModelKind(req.Model); k != "chat" {
+			writeErr(w, 400, "识图模型需为理解类（chat）模型，"+req.Model+" 是 "+k+" 类，请走对应的选择器")
+			return
 		}
+		SetVisionModel(req.Model)
+		if err := SaveVisionConfig(); err != nil {
+			writeErr(w, 500, "持久化失败: "+err.Error())
+			return
+		}
+		log.Printf("[tuanjie] vision model 配置更新 model=%s", req.Model)
 	}
-	writeJSON(w, map[string]any{"ok": false, "msg": "等待登录超时（150 秒）——请在弹出的浏览器窗口里登录团结账号后再点一次探测"})
+	writeJSON(w, map[string]any{"model": VisionModel()})
+}
+
+// handleMediaConfig 三类媒体模型统一配置（识图/生图/生视频）：
+// GET 返回 {"vision":"...","image":"","video":""}；
+// POST 部分更新——传了的字段才更新（指针区分"没传"与"空串"），
+// 空串 = 清空该选择器回到默认（vision 回 codely-vl，image/video 回不改写）。
+func (s *Server) handleMediaConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var req struct {
+			Vision *string `json:"vision"`
+			Image  *string `json:"image"`
+			Video  *string `json:"video"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil ||
+			(req.Vision == nil && req.Image == nil && req.Video == nil) {
+			writeErr(w, 400, "body 需为 {\"vision\"|\"image\"|\"video\"}（可只传变化项）")
+			return
+		}
+		// 类型校验：三个选择器各只收对应类模型（空串=清空回默认，跳过校验）。
+		// 前端下拉已过滤，这里拦手工 curl 的错配（错类模型会转发到错误端点）。
+		if req.Vision != nil && *req.Vision != "" && ModelKind(*req.Vision) != "chat" {
+			writeErr(w, 400, "识图选择器需为理解类（chat）模型，"+*req.Vision+" 是 "+ModelKind(*req.Vision)+" 类")
+			return
+		}
+		if req.Image != nil && *req.Image != "" && ModelKind(*req.Image) != "image" {
+			writeErr(w, 400, "生图选择器需为生图类（image）模型，"+*req.Image+" 是 "+ModelKind(*req.Image)+" 类")
+			return
+		}
+		if req.Video != nil && *req.Video != "" && ModelKind(*req.Video) != "video" {
+			writeErr(w, 400, "生视频选择器需为视频类（video）模型，"+*req.Video+" 是 "+ModelKind(*req.Video)+" 类")
+			return
+		}
+		if req.Vision != nil {
+			SetVisionModel(*req.Vision) // 空串回默认 codely-vl
+		}
+		if req.Image != nil {
+			SetImageModel(*req.Image)
+		}
+		if req.Video != nil {
+			SetVideoModel(*req.Video)
+		}
+		if err := SaveMediaConfig(); err != nil {
+			writeErr(w, 500, "持久化失败: "+err.Error())
+			return
+		}
+		log.Printf("[tuanjie] media config 配置更新 vision=%s image=%s video=%s",
+			VisionModel(), ImageModel(), VideoModel())
+	}
+	writeJSON(w, map[string]any{
+		"vision":          VisionModel(),
+		"image":           ImageModel(),
+		"video":           VideoModel(),
+		"vision_fallback": VisionFallbackChain()[1:], // 回落链去掉首个（=vision 本身）
+	})
 }
 
 // handleActivity 实时动态（最近事件，GUI 轮询；学群友 /api/activity）。
@@ -120,15 +174,20 @@ func (s *Server) handleInflight(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "requests": s.registry.Inflight()})
 }
 
-// handleWaterProbe 金丝雀探针：POST {user_id, model} → 直连该账号探测。
+// handleWaterProbe 注水检测三 action（action 字段分发）：
+//   - quick（默认，兼容旧调用）：现有金丝雀探针（漂移+答题）+ 第一层管道探针入结果
+//   - deep：第一层 + 第二层分布采样 + 与基准库比对（综合灯色）
+//   - baseline：跑第一层全部探针 + 第二层分布采样（N=60），落盘为该模型官方基准
 func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	var req struct {
-		UserID string `json:"user_id"`
-		Model  string `json:"model"`
+		Action  string `json:"action"` // quick | deep | baseline（缺省=quick，旧调用兼容）
+		UserID  string `json:"user_id"`
+		Model   string `json:"model"`
+		Samples int    `json:"samples"` // baseline/deep 的分布采样数（默认 60，上限 200）
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "msg": "请求体解析失败"})
@@ -137,64 +196,72 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 	if req.Model == "" {
 		req.Model = "GLM-5.3" // 默认探测最贵的
 	}
-	if req.UserID == "" || req.UserID == "all" {
-		// 全部账号逐个探（上限防失控）
-		ids := s.pool.SortedUserIDs()
-		if len(ids) == 0 {
-			writeJSON(w, map[string]any{"ok": false, "msg": "账号池为空（单账号模式请指定 user_id）"})
-			return
-		}
-		if len(ids) > 10 {
-			ids = ids[:10]
-		}
-		results := []*WaterProbeResult{}
-		for _, uid := range ids {
-			res, err := s.water.ProbeAccount(r.Context(), s.pool, uid, req.Model)
-			if err != nil {
-				results = append(results, &WaterProbeResult{UserID: uid, Model: req.Model, Pass: false, Detail: err.Error()})
-				continue
-			}
-			results = append(results, res)
-		}
-		writeJSON(w, map[string]any{"ok": true, "results": results})
+	if req.Samples <= 0 {
+		req.Samples = 60
+	}
+	// deep/baseline：在单账号模式下直接跑
+	if req.Action == "deep" || req.Action == "baseline" {
+		s.handleWaterDeepOrBaseline(w, r, req.Action, "", req.Model, req.Samples)
 		return
 	}
-	res, err := s.water.ProbeAccount(r.Context(), s.pool, req.UserID, req.Model)
+	// action=quick：单账号金丝雀探针 + 管道探针
+	accessToken, atErr := loadAccessToken()
+	if atErr != nil {
+		writeJSON(w, map[string]any{"ok": false, "msg": "未找到团结登录态（请先登录团结 Cowork 桌面端）"})
+		return
+	}
+	res, err := s.water.ProbeAccount(r.Context(), accessToken, "local", req.Model)
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": false, "msg": err.Error()})
 		return
 	}
-	writeJSON(w, map[string]any{"ok": true, "results": []*WaterProbeResult{res}})
+	// 管道探针（tokenizer×4/错误×2/finish×2，10 个小调用）
+	key, kerr := fetchKeyWithToken(r.Context(), accessToken)
+	var probes []probeResult
+	if kerr == nil {
+		probes = RunPipelineProbes(r.Context(), key, req.Model)
+	}
+	writeJSON(w, map[string]any{"ok": true, "action": "quick", "results": []*WaterProbeResult{res}, "probes": probes})
 }
 
-// accountTokenFor 返回当前请求应使用的 access_token（多账号池选号或单账号回退）。
-// 多账号模式返回 (token, userID, true)；单账号返回 ("", "", false) 表示走 Client 原路径。
-func (s *Server) accountTokenFor(model string) (string, string, bool) {
-	if s.pool.Size() == 0 {
-		return "", "", false
+// handleWaterDeepOrBaseline deep/baseline 的公共骨架：换 key → 跑第一层
+// （+ deep 时第二层采样+比对 / baseline 时采样落盘）。
+func (s *Server) handleWaterDeepOrBaseline(w http.ResponseWriter, r *http.Request, action, userID, model string, samples int) {
+	accessToken, atErr := loadAccessToken()
+	if atErr != nil {
+		writeJSON(w, map[string]any{"ok": false, "msg": "未找到团结登录态: " + atErr.Error()})
+		return
 	}
-	acc := s.pool.Pick(model)
-	if acc == nil {
-		return "", "", false
+	key, err := fetchKeyWithToken(r.Context(), accessToken)
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": false, "msg": "换取 key 失败: " + err.Error()})
+		return
 	}
-	return acc.AccessToken, acc.UserID, true
-}
 
-// ForwardDirect 用指定 access_token 直连转发（多账号池的 chat 转发用：
-// key 换取按账号独立，不经 Client 单账号缓存）。
-func (s *Server) ForwardDirect(ctx context.Context, method, path string, body []byte, accessToken string) (*http.Response, error) {
-	key, err := fetchKeyWithToken(ctx, accessToken)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, method, litellmAPIBase+path, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	for k, vs := range s.client.litellmHeaders(path, key) {
-		for _, v := range vs {
-			req.Header.Add(k, v)
+	if action == "baseline" {
+		bl, err := s.baselines.CollectBaseline(r.Context(), key, model, userID, samples)
+		if err != nil {
+			writeJSON(w, map[string]any{"ok": false, "msg": err.Error()})
+			return
 		}
+		writeJSON(w, map[string]any{
+			"ok": true, "action": "baseline", "model": model,
+			"baseline": bl,
+			"msg": "基准已采集落盘（tuanjie-baselines.json）",
+		})
+		return
 	}
-	return s.client.httpClient.Do(req)
+
+	// action=deep：第一层 + 第二层 + 基准比对
+	probes := RunPipelineProbes(r.Context(), key, model)
+	dist := collectDistSamples(r.Context(), key, model, samples)
+	base := s.baselines.Get(model)
+	cmps, sim, verdict := CompareToBaseline(base, probes, dist)
+	writeJSON(w, map[string]any{
+		"ok": true, "action": "deep", "model": model, "user_id": userID,
+		"probes": probes, "probe_compare": cmps,
+		"dist": dist, "dist_similarity": sim,
+		"verdict": verdict,
+		"has_baseline": base != nil,
+	})
 }

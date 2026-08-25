@@ -7,3 +7,5 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/webview/webview_go v0.0.0-20240831120633-6173450d4dd6
 )
+
+require golang.org/x/sys v0.47.0 // indirect

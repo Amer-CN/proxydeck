@@ -31,8 +31,6 @@ type Server struct {
 	statsPath string
 	pacer     *Pacer // KIMI-K3 节奏器（可开关，GUI 经 /kimi-pacing 控制）
 
-	// 多账号池（学群友 Codely Relay）：空池 = 单账号模式（读 ~/.codely-cli）
-	pool     *AccountPool
 	registry *RequestRegistry // 进行中请求注册表（GUI 面板 + 负载感知）
 	water    *WaterCheck      // 注水检测（被动观测 + 金丝雀探针）
 	activity *ActivityLog     // 实时动态（环形缓冲，请求完成/402/中断事件）
@@ -53,7 +51,7 @@ type modelStat struct {
 // NewServer 创建服务。
 func NewServer() *Server {
 	s := &Server{client: NewClient(), stats: map[string]*modelStat{}, startedAt: time.Now(), pacer: NewPacer(),
-		pool: NewAccountPool(), registry: NewRegistry(), water: LoadWater(), activity: NewActivityLog(),
+		registry: NewRegistry(), water: LoadWater(), activity: NewActivityLog(),
 		providers: NewProviderStore(), baselines: LoadBaselines()}
 	LoadMediaConfig()
 	if exe, err := os.Executable(); err == nil {
@@ -61,6 +59,20 @@ func NewServer() *Server {
 		s.loadStats()
 	}
 	return s
+}
+
+// exeDirForAccounts 取 exe 所在目录（回退到工作目录）。
+func exeDirForAccounts() string {
+	if exeDirOverride != nil {
+		return exeDirOverride()
+	}
+	if p, err := os.Executable(); err == nil {
+		return filepath.Dir(p)
+	}
+	if wd, err := os.Getwd(); err == nil {
+		return wd
+	}
+	return "."
 }
 
 // corsWith 给所有响应加 CORS 头：GUI 页面跑在 localhost:随机端口，
@@ -87,7 +99,7 @@ func (s *Server) Start(host, port string) error {
 	mux.HandleFunc("/v1/stats", s.handleStats)
 	mux.HandleFunc("/quota", s.handleQuota)
 	mux.HandleFunc("/kimi-pacing", s.handleKimiPacing)
-	mux.HandleFunc("/accounts", s.handleAccounts)          // 多账号池 CRUD + 状态
+	mux.HandleFunc("/accounts", s.handleAccounts)          // 单账号状态 + 注水事件
 	mux.HandleFunc("/inflight", s.handleInflight)          // 进行中请求面板
 	mux.HandleFunc("/activity", s.handleActivity)          // 实时动态（最近事件）
 	mux.HandleFunc("/water-probe", s.handleWaterProbe)     // 注水金丝雀探针
@@ -482,6 +494,11 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// 远程 URL 图片预下载转 base64（Agnes / 团结上游下载远程图片经常超时挂死）
+	if nb, n := FetchRemoteImages(body); n > 0 {
+		body = nb
+		log.Printf("[tuanjie] fetched %d remote image(s) to base64", n)
+	}
 	// 媒体改路由：含图片/音频且目标模型不识图 → 改写为视觉模型（防上游 400）
 	mediaRerouted := false
 	if nb, n := RerouteIfMedia(body); n != "" {
@@ -544,120 +561,6 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 				model = last
 			}
 		}
-	}
-
-	// 多账号池：有池时按账号选号转发（402 自动禁用/负载感知/GLM 路由）
-	_, poolUID, usePool := s.accountTokenFor(model)
-	if usePool {
-		acc := s.pool.Get(poolUID)
-		if acc == nil {
-			writeJSON(w, map[string]any{"error": map[string]any{"message": "账号池无可用账号", "type": "server_error"}})
-			return
-		}
-		s.pool.IncLoad(poolUID)
-		defer s.pool.DecLoad(poolUID)
-		start := time.Now()
-		rid := s.registry.Register(model, poolUID, wantsStream)
-		defer s.registry.Finish(rid)
-		resp, err := s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, acc.AccessToken)
-		if err != nil {
-			writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
-			return
-		}
-		defer resp.Body.Close()
-		// 402 配额耗尽：禁用该账号并换下一个重试（学群友）
-		if resp.StatusCode == http.StatusPaymentRequired {
-			s.pool.MarkBudgetExceeded(poolUID)
-			s.activity.Add("error", "账号 "+poolUID+" 配额用尽，自动禁用", model, poolUID, 0, 0, 402)
-			log.Printf("[tuanjie] account=%s 402 budget_exceeded 已禁用，切换下一账号", poolUID)
-			if next := s.pool.Pick(model); next != nil && next.UserID != poolUID {
-				resp.Body.Close()
-				resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, next.AccessToken)
-				if err != nil {
-					writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
-					return
-				}
-				defer resp.Body.Close()
-			}
-		}
-		// 上游瞬时错误（模型未映射/网关抖动）重试，与单账号路径对齐
-		var poolErrBody []byte
-		for attempt := 0; resp != nil && resp.StatusCode != http.StatusOK &&
-			resp.StatusCode != http.StatusPaymentRequired &&
-			resp.StatusCode != http.StatusTooManyRequests && attempt < 3; attempt++ {
-			eb, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-			resp.Body.Close()
-			if !retriableUpstream(string(eb)) {
-				poolErrBody = eb
-				break
-			}
-			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d 重试 %d/3 err=%s",
-				model, poolUID, resp.StatusCode, attempt+1, truncate(string(eb), 200))
-			time.Sleep(800 * time.Millisecond)
-			resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, acc.AccessToken)
-			if err != nil {
-				writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
-				return
-			}
-			defer resp.Body.Close()
-			poolErrBody = nil
-		}
-		// 非 200 透传错误体（含重试后仍失败的情况）
-		if resp.StatusCode != http.StatusOK {
-			if poolErrBody == nil {
-				poolErrBody, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-			}
-			s.activity.Add("error", model+" · 账号 "+poolUID+" 上游返回 "+strconv.Itoa(resp.StatusCode),
-				model, poolUID, time.Since(start).Milliseconds(), 0, resp.StatusCode)
-			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d err=%s",
-				model, poolUID, resp.StatusCode, truncate(string(poolErrBody), 300))
-			writeErr(w, resp.StatusCode, string(poolErrBody))
-			return
-		}
-		// 200 透传（流式逐块冲刷 + 注册表 touch + usage 入账）
-		copyHeader(w, resp)
-		w.Header().Set("X-Accel-Buffering", "no")
-		w.Header().Set("Cache-Control", "no-cache")
-		log.Printf("[tuanjie] pool chat model=%s account=%s status=200", model, poolUID)
-		if wantsStream {
-			if f, ok := w.(http.Flusher); ok {
-				lineScan := newUsageScanner(model, s)
-				buf := make([]byte, 32*1024)
-				for {
-					n, rerr := resp.Body.Read(buf)
-					if n > 0 {
-						lineScan.feed(buf[:n])
-						s.registry.Touch(rid, int64(n))
-						if _, werr := w.Write(buf[:n]); werr != nil {
-							return
-						}
-						f.Flush()
-					}
-					if rerr != nil {
-						lineScan.finish()
-						return
-					}
-				}
-			}
-		}
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-		_, _ = w.Write(respBody)
-		var done struct {
-			Model string `json:"model"`
-			Usage *struct {
-				PromptTokens     int64 `json:"prompt_tokens"`
-				CompletionTokens int64 `json:"completion_tokens"`
-				TotalTokens      int64 `json:"total_tokens"`
-			} `json:"usage"`
-		}
-		if json.Unmarshal(respBody, &done) == nil && done.Usage != nil {
-			s.addStat(model, done.Usage.PromptTokens, done.Usage.CompletionTokens, done.Usage.TotalTokens)
-			// 被动注水观测：非流式能直接读响应 model
-			s.water.RecordPassive(model, done.Model, poolUID)
-			s.activity.Add("ok", model+" · 账号 "+poolUID, model, poolUID,
-				time.Since(start).Milliseconds(), done.Usage.TotalTokens, 200)
-		}
-		return
 	}
 
 	start := time.Now()
@@ -828,7 +731,7 @@ func (s *Server) forwardExternal(w http.ResponseWriter, r *http.Request, body []
 	req.Header.Set("Authorization", "Bearer "+prov.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	cl := &http.Client{Timeout: 300 * time.Second}
+	cl := &http.Client{Timeout: 120 * time.Second, Transport: smartProxyTransport}
 	resp, err := cl.Do(req)
 	if err != nil {
 		latency := time.Since(started).Milliseconds()
@@ -1072,7 +975,7 @@ func (s *Server) handleVideoQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("Authorization", "Bearer "+prov.APIKey)
 	req.Header.Set("Accept", "application/json")
-	cl := &http.Client{Timeout: 60 * time.Second}
+	cl := &http.Client{Timeout: 60 * time.Second, Transport: smartProxyTransport}
 	resp, err := cl.Do(req)
 	if err != nil {
 		writeErr(w, 502, prov.Name+" 请求失败: "+err.Error())
