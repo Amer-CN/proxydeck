@@ -132,3 +132,20 @@ node --check <js>                    # ui.html 抽取 script 后语法校验
 curl http://127.0.0.1:8788/health    # 健康检查
 git push myrepo HEAD:main            # 推送（remote 名是 myrepo 不是 origin）
 ```
+
+## 网关路径调研结论（2026-08-26，feat/gateway-path 分支）
+
+对官方 CLI bundle（@unity-china/codely-cli rc.54）逆向比对，**协议层已逐位对齐，无路径差异可改造**：
+
+| 环节 | 官方实现（gemini.js 逆向实证） | 我们 |
+|---|---|---|
+| chat base | `https://codely-litellm.tuanjie.cn/v1` 直连（GSe/`$Lf/C1f` 常量） | 相同 |
+| x-litellm-session-id | `randomUUID()`（ILf = import randomUUID）每请求新值 | uuid.New() 相同 |
+| 签名密钥 | `vLf`: HMAC(seed,"codely-signing-v1")→HMAC(k1,cli_api_key)，seed=406f00f7...8018 | 相同 |
+| 签名消息 | `["v1", path, ts].join("
+")`，输出 `v1.<ts>.<base64url>` | 相同 |
+| DashScope 头 | `X-DashScope-CacheControl: enable` + `X-DashScope-UserAgent: <UA>`（isDashScopeProvider 分支） | 相同 |
+
+抓包看到的 `codely.tuanjie.cn` TLS 连接全部是周边流量（oauth 刷新 /api/metrics/events /
+marketplace / plugin 版本检查 / skills 下载），chat 本体官方也直连 litellm 域名——
+"路径差异导致封号"假说排除。该分支无代码改动，仅记录本结论。
