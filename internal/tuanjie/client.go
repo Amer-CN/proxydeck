@@ -17,9 +17,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,7 +32,10 @@ const (
 	codelyAPIBase   = "https://codely.tuanjie.cn"
 	litellmAPIBase  = "https://codely-litellm.tuanjie.cn"
 	cliAPIKeyURL    = codelyAPIBase + "/api/api-token/cli-api-key"
-	cliUserAgent    = "codely-cli/1.0.0-release.52 (win32; x64)"
+	// 官方 UA 真值（2026-08-25 从 @unity-china/codely-cli rc.54 源码 getRealUserAgent 提取）：
+	// `Codely-CLI - OSS/${版本} (Codely-Cli/${版本})`。旧值 codely-cli/1.0.0-release.52
+	// 外壳与版本格式都不对（官方是 rc.54 且无平台后缀），已对齐官方格式。
+	cliUserAgent    = "Codely-CLI - OSS/1.0.0-rc.54 (Codely-Cli/1.0.0-rc.54)"
 	keyCacheTTL     = time.Hour
 	defaultTimeout  = 300 * time.Second
 	keyFetchTimeout = 15 * time.Second
@@ -40,10 +45,42 @@ const (
 	codelySigningSeedHex = "406f00f74768ba0cb0cd30f097ec6c2bdacb89c61a38b7dd140838bbd0e98018"
 )
 
-// noProxyTransport 绕过系统代理（开源工具用户可能配了 Clash/v2ray 等
-// 本地代理但未运行，默认 Transport 会读系统代理设置导致连接失败）。
+// smartProxyTransport 读系统代理设置（环境变量 + Windows 注册表），
+// 代理不可达时自动回退直连——Clash/v2ray 没开时不崩。
+var smartProxyTransport = func() *http.Transport {
+	return &http.Transport{
+		Proxy: smartProxy,
+	}
+}()
+
+// noProxyTransport 强制直连，用于连本地 CDP（127.0.0.1 永远不该走代理）。
 var noProxyTransport = &http.Transport{
 	Proxy: nil,
+}
+
+// smartProxy 解析代理地址：优先环境变量 HTTP_PROXY/HTTPS_PROXY，
+// 其次 Windows 注册表 Internet Settings（Clash/v2ray 写入处）。
+// localhost / 127.0.0.1 / 内网地址自动跳过代理。
+func smartProxy(req *http.Request) (*url.URL, error) {
+	host := req.URL.Hostname()
+	// 本地地址永远不走代理
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" ||
+		strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.") ||
+		strings.HasPrefix(host, "172.16.") || strings.HasPrefix(host, "172.17.") ||
+		strings.HasPrefix(host, "172.18.") || strings.HasPrefix(host, "172.19.") ||
+		strings.HasPrefix(host, "172.2") || strings.HasPrefix(host, "172.3") {
+		return nil, nil
+	}
+	// 1. 环境变量
+	if u, err := http.ProxyFromEnvironment(req); err != nil || u != nil {
+		return u, err
+	}
+	// 2. Windows 注册表（Clash/v2ray 系统代理设置）
+	proxyURL := readWindowsProxy()
+	if proxyURL == "" {
+		return nil, nil
+	}
+	return url.Parse(proxyURL)
 }
 
 // Client 是团结 LiteLLM 的转发客户端（线程安全）。
@@ -58,7 +95,7 @@ type Client struct {
 
 // NewClient 创建客户端。
 func NewClient() *Client {
-	return &Client{httpClient: &http.Client{Timeout: defaultTimeout, Transport: noProxyTransport}}
+	return &Client{httpClient: &http.Client{Timeout: defaultTimeout, Transport: smartProxyTransport}}
 }
 
 // oauthCredsPath 返回 oauth 凭据文件路径。
@@ -243,4 +280,16 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// readWindowsProxy 读注册表 HKCU\...\Internet Settings 的代理配置。
+// ProxyEnable=1 时返回 "http://<ProxyServer>"（Clash/v2ray 写入处）；
+// 否则返回空串。非 Windows 平台始终返回空串。
+func readWindowsProxy() string {
+	// runtime.GOOS != "windows" 时 golang.org/x/sys/windows 不可用，
+	// 用反射式读取：注册表仅在 Windows 上有意义
+	if regReadProxy == nil {
+		return ""
+	}
+	return regReadProxy()
 }
