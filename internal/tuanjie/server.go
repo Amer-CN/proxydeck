@@ -477,23 +477,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		model = req.Model
 		wantsStream = req.Stream
 	}
-	// 诊断：记录入站请求结构摘要（客户端形态对比：官方 CLI vs ZCode）
+	// 诊断：记录入站请求结构摘要（重排前的原始形态，客户端形态对比用）
 	logRequestShape(model, body)
-	// 流式时确保上游回 usage chunk（统计需要；对客户端是标准 OpenAI 行为）
-	if wantsStream {
-		var m map[string]any
-		if json.Unmarshal(body, &m) == nil {
-			so, _ := m["stream_options"].(map[string]any)
-			if so == nil {
-				so = map[string]any{}
-			}
-			so["include_usage"] = true
-			m["stream_options"] = so
-			if nb, err := json.Marshal(m); err == nil {
-				body = nb
-			}
-		}
-	}
 	// 远程 URL 图片预下载转 base64（Agnes / 团结上游下载远程图片经常超时挂死）
 	if nb, n := FetchRemoteImages(body); n > 0 {
 		body = nb
@@ -509,6 +494,17 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		s.mediaReroutes.Add(1)
 		s.activity.Add("info", "媒体改路由 "+n, model, "", 0, 0, 0)
 	}
+
+	// 请求体重排：字段顺序/默认值对齐官方 CLI buildCreateParams（model 在前、
+	// stream/stream_options 在尾，补 parallel_tool_calls/metadata.user_id/
+	// litellm_session_id/prompt_cache_key；非流式删 stream/stream_options）。
+	// 放在 media 改路由后、provider 分流前——provider 路径的 body 也会被重排，
+	// 但 reshape 只动字段序+补官方默认，不改语义，对外部 provider 同样无害。
+	// sessionID 与转发头 x-litellm-session-id 同值（litellm_session_id 官方
+	// 就取该头）；此处先生成，Forward 时头取同值。
+	sessionID := newLitellmSessionID()
+	body = reshapeChatBody(body, sessionID)
+	logRequestShape(model, body) // 重排后 shape（验证字段序效果）
 
 	// 外部 provider 模型：直接转发（静态 Bearer key，不占账号池、不做团结签名，
 	// 学群友 _forward_external）。媒体改路由后目标命中 provider 也走这里（识图转 Agnes）。
@@ -567,7 +563,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	rid := s.registry.Register(model, "", wantsStream)
 	defer s.registry.Finish(rid)
 	send := func() (*http.Response, error) {
-		return s.client.Forward(r.Context(), http.MethodPost, "/v1/chat/completions", bytes.NewReader(body), r.Header.Get("Content-Type"))
+		return s.client.ForwardWithSession(r.Context(), http.MethodPost, "/v1/chat/completions", bytes.NewReader(body), r.Header.Get("Content-Type"), sessionID)
 	}
 
 	// KIMI-K3 节奏器（可开关）：开启且 model 含 "KIMI" 时放行前按滑窗预算排队

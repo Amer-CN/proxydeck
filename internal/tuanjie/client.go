@@ -47,11 +47,20 @@ const (
 
 // smartProxyTransport 读系统代理设置（环境变量 + Windows 注册表），
 // 代理不可达时自动回退直连——Clash/v2ray 没开时不崩。
-var smartProxyTransport = func() *http.Transport {
-	return &http.Transport{
-		Proxy: smartProxy,
+// TLS 握手层换成 utls 指纹（HelloChrome_Auto，对齐官方 CLI 的 BoringSSL 系
+// ClientHello）；代理场景（Clash）维持 CONNECT 隧道内嵌 utls。
+// socks5 系代理（标准库 Transport 与 utls 自管路径都不支持）回落老的标准
+// Transport 行为，保证不比基线差。
+var smartProxyTransport = pickTransport()
+
+// pickTransport 按系统代理类型选 transport：socks5 → 标准 Transport；
+// 其余（http/https 代理或无代理）→ utls 指纹 Transport。
+func pickTransport() *http.Transport {
+	if u := proxyURLForAddr(smartProxy, "codely-litellm.tuanjie.cn:443"); u != nil && isSocksProxy(u) {
+		return newUtlsTransportKeepStdlib(smartProxy)
 	}
-}()
+	return newUtlsTransport(smartProxy)
+}
 
 // noProxyTransport 强制直连，用于连本地 CDP（127.0.0.1 永远不该走代理）。
 var noProxyTransport = &http.Transport{
@@ -214,18 +223,26 @@ func SignLitellm(path, cliAPIKey string, now time.Time) string {
 	return "v1." + ts + "." + base64.RawURLEncoding.EncodeToString(sig)
 }
 
+// newLitellmSessionID 生成每请求随机的 x-litellm-session-id。
+// session 每请求随机：上游按 session 做实例亲和路由，固定 session 会
+// 粘死在映射失步的实例上持续 400 model=None（实测 2026-08-21）。
+func newLitellmSessionID() string { return uuid.New().String() }
+
 // litellmHeaders 构造伪装 codely CLI 的请求头。path 参与签名，是上游路径。
+// sessionID 为本请求的会话 id（x-litellm-session-id 头与请求体
+// litellm_session_id 字段同值，与官方 CLI 一致）。
 // 2026-08-25 对照官方 CLI 源码（@unity-china/codely-cli rc.54）补齐：
 // DashScope 分支标记头（GLM/Kimi 走阿里后端时官方会带，缺了易被识别为反代）。
-func (c *Client) litellmHeaders(path, key string) http.Header {
+func (c *Client) litellmHeaders(path, key, sessionID string) http.Header {
 	h := http.Header{}
 	h.Set("Authorization", "Bearer "+key)
 	h.Set("Content-Type", "application/json")
 	h.Set("Accept", "application/json")
 	h.Set("User-Agent", cliUserAgent)
-	// session 每请求随机：上游按 session 做实例亲和路由，固定 session 会
-	// 粘死在映射失步的实例上持续 400 model=None（实测 2026-08-21）。
-	h.Set("x-litellm-session-id", uuid.New().String())
+	if sessionID == "" {
+		sessionID = newLitellmSessionID()
+	}
+	h.Set("x-litellm-session-id", sessionID)
 	h.Set("X-Codely-Signature", SignLitellm(path, key, time.Now()))
 	// 官方 DashScope provider 标记头（源码实证；GLM/Kimi 大概率走此分支）
 	h.Set("X-DashScope-CacheControl", "enable")
@@ -237,6 +254,12 @@ func (c *Client) litellmHeaders(path, key string) http.Header {
 // 返回上游响应（调用方负责关闭 Body）。上游 401 时自动换 key 重试一次。
 // body 会先整体读入内存，保证重试时能完整重放。
 func (c *Client) Forward(ctx context.Context, method, path string, bodyIn io.Reader, contentType string) (*http.Response, error) {
+	return c.ForwardWithSession(ctx, method, path, bodyIn, contentType, "")
+}
+
+// ForwardWithSession 同 Forward，但显式指定 x-litellm-session-id（请求体
+// litellm_session_id 与头同值时用，handleChat 重排后走这里）。
+func (c *Client) ForwardWithSession(ctx context.Context, method, path string, bodyIn io.Reader, contentType, sessionID string) (*http.Response, error) {
 	var body []byte
 	if bodyIn != nil {
 		b, err := io.ReadAll(bodyIn)
@@ -254,7 +277,7 @@ func (c *Client) Forward(ctx context.Context, method, path string, bodyIn io.Rea
 		if err != nil {
 			return nil, err
 		}
-		for k, vs := range c.litellmHeaders(path, key) {
+		for k, vs := range c.litellmHeaders(path, key, sessionID) {
 			for _, v := range vs {
 				req.Header.Add(k, v)
 			}
