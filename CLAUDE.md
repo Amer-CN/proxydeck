@@ -59,6 +59,24 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - 已知上游故障：间歇 400 "Invalid model name passed in model=None"（多实例映射失步，
   插件已内置 3 次重试；高发期可能连撞，等待即可）
 
+#### ⚠ 团结风控识别特征（2026-08-25 实测定论，血泪教训）
+- **状态**：2026-08 官方被封过号（Unity 登录锁死、access token 失效、网页无法登录）。
+- **已证实的差异**（本地抓取官方 CLI vs ZCode 请求体对比）：
+  - 官方 CLI：极简请求体，仅 `model/max_tokens/messages`，2 条消息、单条 ≤1KB、
+    **无 stream / 无 stream_options / 无 tools / 无 tool_choice**。
+  - ZCode/agent：带 `stream_options / tools / tool_choice / stream`，4~6 条消息、
+    单条上万字符、system 6K+——服务端看请求体即可零成本区分。
+- **结论**：反代流量在**应用层请求形态**上和官方 CLI 完全不同，一行规则就能筛出；
+  TLS 指纹假说已被排除（两边都走 Clash 7897，指纹一致）。
+- **修复边界**：服务端判定黑盒、规则随时变，**无 100% 保证**；可做的是降低暴露
+  （见下"可选缓解"），不保证长期有效。
+
+#### 可选缓解（不保证，风险自担）
+- 转发层裁剪请求：去掉 `stream_options`（官方 CLI 不带）、隐藏 `tools/tool_choice`
+  字段、消息合并压缩——能降低请求形态差异，但会损失 ZCode 的 Agent 能力
+  （工具调用）或引发别的协议问题，需权衡。
+- 真·规避（换号、伪装更多）不在本项目职责内，也不建议投入。
+
 ### WorkBuddy（8787）——子智能体可用
 - 支持 tool_calls（实测返回过标准工具调用），可当 Agent/子智能体模型
 - glm-5.2 / kimi-k3 等可用

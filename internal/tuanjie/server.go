@@ -8,11 +8,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -34,6 +36,10 @@ type Server struct {
 	registry *RequestRegistry // 进行中请求注册表（GUI 面板 + 负载感知）
 	water    *WaterCheck      // 注水检测（被动观测 + 金丝雀探针）
 	activity *ActivityLog     // 实时动态（环形缓冲，请求完成/402/中断事件）
+
+	providers     *ProviderStore // 外部账号（管理 + 信息展示，不接入转发）
+	baselines     *BaselineStore // 绝对基准库（注水检测三层：探针+分布比对锚点）
+	mediaReroutes atomic.Int64   // 媒体改路由累计次数（GUI 展示）
 }
 
 // modelStat 单模型用量累计。
@@ -47,7 +53,9 @@ type modelStat struct {
 // NewServer 创建服务。
 func NewServer() *Server {
 	s := &Server{client: NewClient(), stats: map[string]*modelStat{}, startedAt: time.Now(), pacer: NewPacer(),
-		pool: NewAccountPool(), registry: NewRegistry(), water: LoadWater(), activity: NewActivityLog()}
+		pool: NewAccountPool(), registry: NewRegistry(), water: LoadWater(), activity: NewActivityLog(),
+		providers: NewProviderStore(), baselines: LoadBaselines()}
+	LoadMediaConfig()
 	if exe, err := os.Executable(); err == nil {
 		s.statsPath = filepath.Join(filepath.Dir(exe), "tuanjie-stats.json")
 		s.loadStats()
@@ -79,11 +87,18 @@ func (s *Server) Start(host, port string) error {
 	mux.HandleFunc("/v1/stats", s.handleStats)
 	mux.HandleFunc("/quota", s.handleQuota)
 	mux.HandleFunc("/kimi-pacing", s.handleKimiPacing)
-	mux.HandleFunc("/accounts", s.handleAccounts)      // 多账号池 CRUD + 状态
-	mux.HandleFunc("/inflight", s.handleInflight)      // 进行中请求面板
-	mux.HandleFunc("/activity", s.handleActivity)      // 实时动态（最近事件）
-	mux.HandleFunc("/water-probe", s.handleWaterProbe) // 注水金丝雀探针
+	mux.HandleFunc("/accounts", s.handleAccounts)          // 多账号池 CRUD + 状态
+	mux.HandleFunc("/inflight", s.handleInflight)          // 进行中请求面板
+	mux.HandleFunc("/activity", s.handleActivity)          // 实时动态（最近事件）
+	mux.HandleFunc("/water-probe", s.handleWaterProbe)     // 注水金丝雀探针
+	mux.HandleFunc("/providers", s.handleProviders)        // 外部账号（管理 + 信息展示）
+	mux.HandleFunc("/vision-config", s.handleVisionConfig) // 视觉模型配置（兼容层：内部转到 media-config 机制）
+	mux.HandleFunc("/media-config", s.handleMediaConfig)   // 媒体模型三选择器（识图/生图/生视频）
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
+	mux.HandleFunc("/v1/images/generations", s.handleImagesGenerations) // 生图（外部 provider 转发 + 统一改写）
+	mux.HandleFunc("/v1/videos", s.handleVideoCreate)                   // 生视频（外部 provider 转发，异步任务制）
+	mux.HandleFunc("/v1/videos/", s.handleVideoQuery)                   // 生视频任务轮询（GET /v1/videos/{id}）
+	mux.HandleFunc("/agnesapi", s.handleVideoQuery)                     // Agnes 推荐的 GET /agnesapi?video_id=
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
 	if err != nil {
@@ -125,7 +140,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// handleModels 转发 /v1/models（透传 LiteLLM 实时列表，自动含新模型）。
+// handleModels 转发 /v1/models（透传 LiteLLM 实时列表，自动含新模型），
+// 末尾合并外部 provider 的模型条目（owned_by=provider 名）。
 // modelsCache 上游模型列表缓存（成功时存，失败/超限时回退，防空矩阵）。
 var (
 	modelsCacheMu sync.Mutex
@@ -133,11 +149,70 @@ var (
 	modelsCacheAt time.Time
 )
 
+// mergeProviderModels 把 provider 模型条目合并进 /v1/models 响应体
+// （owned_by=provider 名，学群友口径；与已有 id 去重）。解析失败原样返回。
+func (s *Server) mergeProviderModels(body []byte) []byte {
+	extra := s.providers.AllModels()
+	if len(extra) == 0 {
+		return body
+	}
+	var m struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(body, &m) != nil {
+		return body
+	}
+	// 重建：上游条目保持原样（RawMessage 不丢字段），末尾追加 provider 条目
+	var orig map[string]json.RawMessage
+	if json.Unmarshal(body, &orig) != nil {
+		return body
+	}
+	seen := map[string]bool{}
+	for _, d := range m.Data {
+		seen[d.ID] = true
+	}
+	type modelEntry struct {
+		ID      string `json:"id"`
+		Object  string `json:"object"`
+		OwnedBy string `json:"owned_by"`
+	}
+	provEntries := []modelEntry{}
+	for _, e := range extra {
+		if seen[e.ID] {
+			continue
+		}
+		seen[e.ID] = true
+		provEntries = append(provEntries, modelEntry{ID: e.ID, Object: "model", OwnedBy: e.OwnedBy})
+	}
+	if len(provEntries) == 0 {
+		return body
+	}
+	var dataArr []json.RawMessage
+	if raw, ok := orig["data"]; ok {
+		_ = json.Unmarshal(raw, &dataArr)
+	}
+	for _, e := range provEntries {
+		if b, err := json.Marshal(e); err == nil {
+			dataArr = append(dataArr, b)
+		}
+	}
+	if nb, err := json.Marshal(dataArr); err == nil {
+		orig["data"] = nb
+		if out2, err := json.Marshal(orig); err == nil {
+			return out2
+		}
+	}
+	return body
+}
+
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.client.Forward(r.Context(), http.MethodGet, "/v1/models", nil, "")
 	if err == nil && resp.StatusCode == http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		resp.Body.Close()
+		body = s.mergeProviderModels(body)
 		modelsCacheMu.Lock()
 		if len(body) > 0 {
 			modelsCache = body
@@ -390,6 +465,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		model = req.Model
 		wantsStream = req.Stream
 	}
+	// 诊断：记录入站请求结构摘要（客户端形态对比：官方 CLI vs ZCode）
+	logRequestShape(model, body)
 	// 流式时确保上游回 usage chunk（统计需要；对客户端是标准 OpenAI 行为）
 	if wantsStream {
 		var m map[string]any
@@ -405,11 +482,68 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	// 媒体改路由：含图片/音频且目标模型不识图 → 改写为 codely-vl（防上游 400）
+	// 媒体改路由：含图片/音频且目标模型不识图 → 改写为视觉模型（防上游 400）
+	mediaRerouted := false
 	if nb, n := RerouteIfMedia(body); n != "" {
 		body = nb
-		model = visionModelName
+		model = VisionModel()
+		mediaRerouted = true
 		log.Printf("[tuanjie] media-reroute %s", n)
+		s.mediaReroutes.Add(1)
+		s.activity.Add("info", "媒体改路由 "+n, model, "", 0, 0, 0)
+	}
+
+	// 外部 provider 模型：直接转发（静态 Bearer key，不占账号池、不做团结签名，
+	// 学群友 _forward_external）。媒体改路由后目标命中 provider 也走这里（识图转 Agnes）。
+	// 识图改路由场景失败时沿回落链重试（vision → vision_fallback… → codely-vl
+	// 兜尾）；链尽或非改路由的普通 provider 请求失败如实透传（4xx 配置错不回落）。
+	if prov := s.providers.Match(model); prov != nil {
+		if !mediaRerouted {
+			st := s.forwardExternal(w, r, body, model, wantsStream, prov, "/chat/completions")
+			if st == -1 {
+				// 网络错（forwardExternal 未写响应，回落场景之外由这里写终态）
+				writeJSON(w, map[string]any{"error": map[string]any{"message": prov.Name + " 请求失败（网络错误，详见实时动态）", "type": "server_error"}})
+			}
+			return
+		}
+		chain := VisionFallbackChain()
+		for i, target := range chain {
+			tp := s.providers.Match(target)
+			if tp == nil {
+				continue // 链中非 provider 模型（codely-vl 等）：跳出循环走团结路径
+			}
+			st := s.forwardExternal(w, r, body, target, wantsStream, tp, "/chat/completions")
+			if st == 0 {
+				return // 成功或已写客户端（流式中途断/4xx 透传），不重试
+			}
+			if !shouldFallback(st) {
+				return // 4xx 配置错：forwardExternal 已写透传
+			}
+			// 网络错(-1)或 5xx/429：试链上下一个节点。链尾也可能是 provider 模型
+			// （用户回落链末项配了外部视觉模型时，兜尾 codely-vl 被去重剔除），
+			// 此时 i+1 越界必须防——链尽改走下方团结路径并改写为链尾模型。
+			if i+1 < len(chain) {
+				s.activity.Add("info", "识图回落 "+target+" → "+chain[i+1]+"（上游 "+
+					strconv.Itoa(st)+"）", target, "", 0, 0, st)
+				log.Printf("[tuanjie] vision fallback %s -> %s (upstream %d)", target, chain[i+1], st)
+			} else {
+				s.activity.Add("info", "识图回落 "+target+" → 团结路径（上游 "+
+					strconv.Itoa(st)+"）", target, "", 0, 0, st)
+				log.Printf("[tuanjie] vision fallback %s -> tuanjie (upstream %d)", target, st)
+			}
+		}
+		// 链尾模型（通常 codely-vl 兜尾；链尾为 provider 模型且失败时同样改写
+		// 它走团结路径——上游按模型名路由，非池内模型会如实报错，可接受）：
+		// 改写 model 走下方账号池/单账号路径
+		last := chain[len(chain)-1]
+		var m map[string]any
+		if json.Unmarshal(body, &m) == nil {
+			m["model"] = last
+			if nb, err := json.Marshal(m); err == nil {
+				body = nb
+				model = last
+			}
+		}
 	}
 
 	// 多账号池：有池时按账号选号转发（402 自动禁用/负载感知/GLM 路由）
@@ -446,13 +580,38 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 				defer resp.Body.Close()
 			}
 		}
-		// 非 200 透传错误体（含 402 换号后仍失败的情况）
+		// 上游瞬时错误（模型未映射/网关抖动）重试，与单账号路径对齐
+		var poolErrBody []byte
+		for attempt := 0; resp != nil && resp.StatusCode != http.StatusOK &&
+			resp.StatusCode != http.StatusPaymentRequired &&
+			resp.StatusCode != http.StatusTooManyRequests && attempt < 3; attempt++ {
+			eb, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			resp.Body.Close()
+			if !retriableUpstream(string(eb)) {
+				poolErrBody = eb
+				break
+			}
+			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d 重试 %d/3 err=%s",
+				model, poolUID, resp.StatusCode, attempt+1, truncate(string(eb), 200))
+			time.Sleep(800 * time.Millisecond)
+			resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, acc.AccessToken)
+			if err != nil {
+				writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
+				return
+			}
+			defer resp.Body.Close()
+			poolErrBody = nil
+		}
+		// 非 200 透传错误体（含重试后仍失败的情况）
 		if resp.StatusCode != http.StatusOK {
-			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			if poolErrBody == nil {
+				poolErrBody, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			}
 			s.activity.Add("error", model+" · 账号 "+poolUID+" 上游返回 "+strconv.Itoa(resp.StatusCode),
 				model, poolUID, time.Since(start).Milliseconds(), 0, resp.StatusCode)
-			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d", model, poolUID, resp.StatusCode)
-			writeErr(w, resp.StatusCode, string(errBody))
+			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d err=%s",
+				model, poolUID, resp.StatusCode, truncate(string(poolErrBody), 300))
+			writeErr(w, resp.StatusCode, string(poolErrBody))
 			return
 		}
 		// 200 透传（流式逐块冲刷 + 注册表 touch + usage 入账）
@@ -632,6 +791,298 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if json.Unmarshal(respBody, &done) == nil && done.Usage != nil {
 		s.addStat(model, done.Usage.PromptTokens, done.Usage.CompletionTokens, done.Usage.TotalTokens)
 	}
+}
+
+// externalBaseURL 规范化 provider base_url（去尾斜杠）；不含 /v1 时补上
+// （Agnes 等开源风格 base_url 形如 https://host/v1，也有用户只填 host 的情况）。
+func externalBaseURL(base string) string {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	if !strings.HasSuffix(base, "/v1") {
+		base += "/v1"
+	}
+	return base
+}
+
+// forwardExternal 转发到外部 OpenAI 兼容 provider（静态 Bearer key，不占团结
+// 账号池，学群友 _forward_external）。path 相对 base（如 /chat/completions），
+// base_url 已含 /v1；流式逐块透传 + usage 抽取，非流式整体读回写；
+// registry.Register 计入 inflight（user_id=provider 名），activity 记
+// "外部源 {name} · {model}"。转发前做 sanitizeForExternal schema 修复。
+// forwardExternal 转发到外部 provider。返回 failStatus：0 = 干净完成或已向
+// 客户端写出（不可重试）；>0 = 失败且尚未写任何响应字节（上游状态码，或 -1
+// 表示网络级错误）——调用方可据此回落重试（识图回落链）。
+func (s *Server) forwardExternal(w http.ResponseWriter, r *http.Request, body []byte, model string, wantsStream bool, prov *ExternalProvider, path string) (failStatus int) {
+	started := time.Now()
+	if path == "/chat/completions" {
+		body = sanitizeForExternal(body)
+	}
+	pname := prov.Name
+	rid := s.registry.Register(model, pname, wantsStream)
+	defer s.registry.Finish(rid)
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, externalBaseURL(prov.BaseURL)+path, bytes.NewReader(body))
+	if err != nil {
+		// 构造错与网络错同语义：不写客户端，报 -1 给调用方终态/回落
+		return -1
+	}
+	req.Header.Set("Authorization", "Bearer "+prov.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	cl := &http.Client{Timeout: 300 * time.Second}
+	resp, err := cl.Do(req)
+	if err != nil {
+		latency := time.Since(started).Milliseconds()
+		s.activity.Add("error", model+" · "+pname+" 异常: "+err.Error(), model, pname, latency, 0, 0)
+		log.Printf("[tuanjie] external chat model=%s provider=%s err=%v", model, pname, err)
+		// 网络级失败也是瞬时故障：不写客户端，报给调用方回落重试；
+		// 调用方不回落时（链尽/非回落场景）负责写终态错误
+		return -1
+	}
+	defer resp.Body.Close()
+	latency := time.Since(started).Milliseconds()
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		s.activity.Add("error", model+" · 外部源 "+pname+" 上游返回 "+strconv.Itoa(resp.StatusCode),
+			model, pname, latency, 0, resp.StatusCode)
+		log.Printf("[tuanjie] external chat model=%s provider=%s status=%d", model, pname, resp.StatusCode)
+		if shouldFallback(resp.StatusCode) {
+			// 瞬时故障（5xx/429）：不写客户端，把状态报给调用方回落重试
+			return resp.StatusCode
+		}
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(errBody)
+		return 0
+	}
+	log.Printf("[tuanjie] external chat model=%s provider=%s status=200", model, pname)
+	defer func() {
+		s.activity.Add("ok", "外部源 "+pname+" · "+model+(map[bool]string{true: "（流式）", false: ""})[wantsStream],
+			model, pname, time.Since(started).Milliseconds(), 0, 200)
+	}()
+	copyHeader(w, resp)
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("Cache-Control", "no-cache")
+	if wantsStream && path == "/chat/completions" {
+		if f, ok := w.(http.Flusher); ok {
+			lineScan := newUsageScanner(model, s)
+			buf := make([]byte, 32*1024)
+			for {
+				n, rerr := resp.Body.Read(buf)
+				if n > 0 {
+					lineScan.feed(buf[:n])
+					s.registry.Touch(rid, int64(n))
+					if _, werr := w.Write(buf[:n]); werr != nil {
+						return 0
+					}
+					f.Flush()
+				}
+				if rerr != nil {
+					lineScan.finish()
+					return 0
+				}
+			}
+		}
+	}
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	_, _ = w.Write(respBody)
+	if path == "/chat/completions" {
+		var done struct {
+			Model string `json:"model"`
+			Usage *struct {
+				PromptTokens     int64 `json:"prompt_tokens"`
+				CompletionTokens int64 `json:"completion_tokens"`
+				TotalTokens      int64 `json:"total_tokens"`
+			} `json:"usage"`
+		}
+		if json.Unmarshal(respBody, &done) == nil && done.Usage != nil {
+			s.addStat(model, done.Usage.PromptTokens, done.Usage.CompletionTokens, done.Usage.TotalTokens)
+		}
+	}
+	return 0
+}
+
+// handleImagesGenerations 生图端点：model 命中外部 provider → 转发
+// {base}/v1/images/generations（Agnes 生图路径，与聊天不同端点；生图本就
+// 非流式）。三类分流：请求模型为 video 类直接 400（Agnes 会拒绝且错误信息
+// 指明走 /v1/videos，代理端先拦给引导文案）；imageModel 已配置且请求模型为
+// image 类 → 统一改写后再转发；不命中 provider 返回 OpenAI 风格 404 错误体。
+func (s *Server) handleImagesGenerations(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+	var req struct {
+		Model string `json:"model"`
+	}
+	model := ""
+	if json.Unmarshal(body, &req) == nil {
+		model = req.Model
+	}
+	if ModelKind(model) == "video" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"message": "video 模型不支持生图端点，请走 POST /v1/videos（异步任务制，返回 task_id/video_id 后用 GET /v1/videos/{id} 取结果）",
+				"type":    "invalid_request_error",
+			},
+		})
+		return
+	}
+	if nb, note := RewriteImageModel(body, ImageModel()); nb != nil && note != "" {
+		body = nb
+		model = ImageModel()
+		log.Printf("[tuanjie] images model 改写 %s", note)
+	}
+	prov := s.providers.Match(model)
+	if prov == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"message": "unknown model for images endpoint: " + model + "（需先在外部账号里配置该模型的 provider）",
+				"type":    "invalid_request_error",
+				"code":    "model_not_found",
+			},
+		})
+		return
+	}
+	if st := s.forwardExternal(w, r, body, model, false, prov, "/images/generations"); st == -1 {
+		writeJSON(w, map[string]any{"error": map[string]any{"message": prov.Name + " 生图请求失败（网络错误，详见实时动态）", "type": "server_error"}})
+	}
+}
+
+// handleVideoCreate 生视频端点（异步任务制）：model 命中 provider（video 类）
+// → 转发 {base}/videos；videoModel 已配置且请求模型为 video 类 → 同样改写。
+// 非 video 类模型 → 400（Agnes 家 video 模型只认 /v1/videos，别处也去不得，
+// 反向同理）。响应原样透传（含 task_id/video_id）。
+func (s *Server) handleVideoCreate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+	var req struct {
+		Model string `json:"model"`
+	}
+	model := ""
+	if json.Unmarshal(body, &req) == nil {
+		model = req.Model
+	}
+	if ModelKind(model) != "video" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"message": "videos 端点仅接受 video 类模型（名字含 video），当前: " + model + "；生图请走 POST /v1/images/generations",
+				"type":    "invalid_request_error",
+			},
+		})
+		return
+	}
+	if vm := VideoModel(); vm != "" && model != vm {
+		var m map[string]any
+		if json.Unmarshal(body, &m) == nil {
+			m["model"] = vm
+			if nb, err := json.Marshal(m); err == nil {
+				body = nb
+				log.Printf("[tuanjie] videos model 改写 %s→%s", model, vm)
+				model = vm
+			}
+		}
+	}
+	prov := s.providers.Match(model)
+	if prov == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"message": "unknown model for videos endpoint: " + model + "（需先在外部账号里配置该模型的 provider）",
+				"type":    "invalid_request_error",
+				"code":    "model_not_found",
+			},
+		})
+		return
+	}
+	if st := s.forwardExternal(w, r, body, model, false, prov, "/videos"); st == -1 {
+		writeJSON(w, map[string]any{"error": map[string]any{"message": prov.Name + " 视频请求失败（网络错误，详见实时动态）", "type": "server_error"}})
+	}
+}
+
+// handleVideoQuery 视频任务结果查询（两种形式都支持）：
+// GET /v1/videos/{id} → 转发 {base}/videos/{id}；
+// GET /agnesapi?video_id=xxx → 转发 {base}/agnesapi?video_id=xxx（Agnes 推荐）。
+// Agnes 文档：agnes-video-2.5-flash 查询必须带 model_name（不带只适用 text 模式）
+// ——客户端传了就透传；没传但代理的生视频模型已配置时自动带上（兜底 Flash 查询）。
+// 取结果场景 model 信息已不在请求里，无法按模型命中 provider：只要任一
+// provider 配置了就转发到第一个（多 provider 时可能转错源——按"有 provider
+// 就转发第一个可达的"简单实现，够用；真正要精确路由得查 task 归属，本轮不做）。
+func (s *Server) handleVideoQuery(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	videoID := ""
+	modelName := r.URL.Query().Get("model_name") // 客户端显式指定优先
+	if modelName == "" {
+		modelName = VideoModel() // 未指定时用代理配置的生视频模型兜底
+	}
+	target := "" // 相对 provider base 的查询路径
+	if strings.HasPrefix(r.URL.Path, "/v1/videos/") {
+		videoID = strings.TrimPrefix(r.URL.Path, "/v1/videos/")
+		if videoID == "" || strings.Contains(videoID, "/") {
+			writeErr(w, 400, "路径需为 /v1/videos/{id}")
+			return
+		}
+		target = "/videos/" + videoID
+		if modelName != "" {
+			target += "?model_name=" + url.QueryEscape(modelName)
+		}
+	} else if vid := r.URL.Query().Get("video_id"); vid != "" {
+		videoID = vid
+		target = "/agnesapi?video_id=" + url.QueryEscape(vid)
+		if modelName != "" {
+			target += "&model_name=" + url.QueryEscape(modelName)
+		}
+	} else {
+		writeErr(w, 400, "需带 video_id（/v1/videos/{id} 或 ?video_id=）")
+		return
+	}
+	provs := s.providers.List()
+	if len(provs) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"message": "未配置外部 provider，无法查询视频任务 " + videoID,
+				"type":    "invalid_request_error",
+				"code":    "provider_not_found",
+			},
+		})
+		return
+	}
+	// 第一个 provider（顺序即配置顺序）
+	prov := provs[0]
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet,
+		externalBaseURL(prov.BaseURL)+target, nil)
+	if err != nil {
+		writeErr(w, 502, prov.Name+" 请求失败: "+err.Error())
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+prov.APIKey)
+	req.Header.Set("Accept", "application/json")
+	cl := &http.Client{Timeout: 60 * time.Second}
+	resp, err := cl.Do(req)
+	if err != nil {
+		writeErr(w, 502, prov.Name+" 请求失败: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.WriteHeader(resp.StatusCode)
+	_, _ = w.Write(respBody)
 }
 
 // usageScanner 流式 SSE 行扫描：拼行、解析 data: 行里的 usage，命中即入账。
@@ -924,6 +1375,54 @@ func copyHeader(w http.ResponseWriter, resp *http.Response) {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// logRequestShape 打印入站请求的结构指纹，用于对比不同客户端（官方 CLI / ZCode）的请求形态。
+// 只记录结构摘要，不记录完整消息内容（避免敏感信息刷日志）。
+func logRequestShape(model string, body []byte) {
+	var m map[string]any
+	if json.Unmarshal(body, &m) != nil {
+		log.Printf("[tuanjie] shape model=%s 非JSON请求", model)
+		return
+	}
+	fields := make([]string, 0, len(m))
+	for k := range m {
+		fields = append(fields, k)
+	}
+	// 消息结构
+	msgDetail := ""
+	if msgs, ok := m["messages"].([]any); ok {
+		msgDetail = fmt.Sprintf("messages=%d", len(msgs))
+		for i, raw := range msgs {
+			if i >= 3 {
+				break
+			}
+			if msg, ok := raw.(map[string]any); ok {
+				keys := make([]string, 0, len(msg))
+				for k := range msg {
+					keys = append(keys, k)
+				}
+				role, _ := msg["role"].(string)
+				contentLen := 0
+				if c, ok := msg["content"].(string); ok {
+					contentLen = len(c)
+				}
+				msgDetail += fmt.Sprintf(" [%d]role=%s keys=%v clen=%d", i, role, keys, contentLen)
+			}
+		}
+	}
+	sysLen := 0
+	if sys, ok := m["system"].(string); ok {
+		sysLen = len(sys)
+	}
+	// 顶层特殊字段
+	var special []string
+	for _, k := range []string{"reasoning_effort", "user", "metadata", "stream_options", "tools", "tool_choice", "temperature", "max_tokens", "extra_body", "store", "model_info"} {
+		if _, ok := m[k]; ok {
+			special = append(special, k)
+		}
+	}
+	log.Printf("[tuanjie] shape model=%s fields=%v %s system=%dB special=%v", model, fields, msgDetail, sysLen, special)
 }
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
