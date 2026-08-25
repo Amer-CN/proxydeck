@@ -59,17 +59,23 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - 已知上游故障：间歇 400 "Invalid model name passed in model=None"（多实例映射失步，
   插件已内置 3 次重试；高发期可能连撞，等待即可）
 
-#### ⚠ 团结风控识别特征（2026-08-25 实测定论，血泪教训）
+#### ⚠ 团结风控识别特征（2026-08-25 实测，血泪教训）
 - **状态**：2026-08 官方被封过号（Unity 登录锁死、access token 失效、网页无法登录）。
-- **已证实的差异**（本地抓取官方 CLI vs ZCode 请求体对比）：
-  - 官方 CLI：极简请求体，仅 `model/max_tokens/messages`，2 条消息、单条 ≤1KB、
-    **无 stream / 无 stream_options / 无 tools / 无 tool_choice**。
-  - ZCode/agent：带 `stream_options / tools / tool_choice / stream`，4~6 条消息、
-    单条上万字符、system 6K+——服务端看请求体即可零成本区分。
-- **结论**：反代流量在**应用层请求形态**上和官方 CLI 完全不同，一行规则就能筛出；
-  TLS 指纹假说已被排除（两边都走 Clash 7897，指纹一致）。
-- **修复边界**：服务端判定黑盒、规则随时变，**无 100% 保证**；可做的是降低暴露
-  （见下"可选缓解"），不保证长期有效。
+- **✅ 抓包实证的核心差异（2026-08-25 直连抓包 894 包）**：
+  - **官方 CLI 的连接目标是 `codely.tuanjie.cn`**（35 条 TLS 连接 SNI 全是它），
+    由官方后端转发到 litellm；
+  - **我们的反代直连 `codely-litellm.tuanjie.cn`**（litellm 网关本体）。
+  - 这是最硬的判定信号：litellm 网关很可能只接受官方后端转发来的流量，
+    外部直连 litellm = 一眼反代。
+- **次一级的差异**（本地 8788 诊断日志对比）：
+  - 官方 CLI：极简请求体（`model/max_tokens/messages`、2 条消息、无 stream/tools）；
+  - ZCode/agent：带 `stream_options / tools / tool_choice / stream`、超大消息。
+- **协议层**：官方 CLI 消息角色含 `gemini/gemini_reasoning`（会话存档实证），
+  ZCode 是 OpenAI 角色（assistant/reasoning_content）——疑似差异，未完全实锤。
+- **排除项**：TLS 指纹（官方 CLI 走 Clash 时与我们同指纹）；
+  "走 Gemini 协议" 的早期判断因 SDK 方法名误判，已推翻（详见 git 历史）。
+- **修复边界**：服务端判定黑盒、规则随时变，**无 100% 保证**；修改连接路径
+  （改连 codely.tuanjie.cn）需要换认证方式，风险高收益不确定，不建议投入。
 
 #### 可选缓解（不保证，风险自担）
 - 转发层裁剪请求：去掉 `stream_options`（官方 CLI 不带）、隐藏 `tools/tool_choice`
