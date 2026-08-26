@@ -365,6 +365,25 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 		verdict.Reason = plainVerdictReason(verdict.Light)
 	}
 
+	// 上游 402 预算拦截检测：LiteLLM 团队预算受限（Max budget -1 异常）时
+	// 所有探针都会带 Budget exceeded 错误——此时如实显示"账号被网关限制"，
+	// 绝不能再判"疑似注水"（此前 38261 账号被 402 拦截时就误报过红灯）。
+	// 多数探针（≥3/8）命中 402 预算错误即判网关限制——finish_* 等探针
+	// 在 402 下只报"缺失"不会带 Budget 字样，全探针判定太严会漏判
+	hitBudget := 0
+	for _, p := range probes {
+		txt := p.Value + p.Note
+		if strings.Contains(txt, "Budget has been exceeded") || strings.Contains(txt, "`402`") || strings.Contains(txt, "402") {
+			hitBudget++
+		}
+	}
+	quotaBlocked := hitBudget >= 3
+	if quotaBlocked {
+		verdict.Light = "grey"
+		verdict.Score = 0
+		verdict.Reason = "账号在网关侧被预算限制（402 Budget exceeded）——非注水信号，请到团结侧恢复或更换账号"
+	}
+
 	// 金丝雀答题（能力项；失败不阻断报告，item 标 ⚠）
 	var canary *WaterProbeResult
 	if channel == "tuanjie" {

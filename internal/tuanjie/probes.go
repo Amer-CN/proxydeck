@@ -183,15 +183,21 @@ func RunPipelineProbes(ctx context.Context, target *probeTarget, model string) [
 
 	for _, t := range tokenizerProbeTexts {
 		msgs := []map[string]any{{"role": "user", "content": t.Text}}
-		tok1, _, _, _, _, e1 := probeCall(ctx, target, model, msgs, nil)
-		tok2, _, _, _, _, e2 := probeCall(ctx, target, model, msgs, nil)
+		tok1, _, _, _, te1, e1 := probeCall(ctx, target, model, msgs, nil)
+		tok2, _, _, _, te2, e2 := probeCall(ctx, target, model, msgs, nil)
 		switch {
 		case e1 != nil || e2 != nil:
 			out = append(out, probeResult{Name: t.Name, Status: "error",
 				Note: firstErrText(e1, e2)})
 		case tok1 <= 0 || tok2 <= 0:
-			out = append(out, probeResult{Name: t.Name, Status: "unstable",
-				Note: "usage 缺失（prompt_tokens=0）"})
+			// usage 缺失：无错误 = 渠道不报 usage（unstable）；有上游错误文本
+			// （如 402 Budget exceeded）就保留——它是渠道被限的确凿信号，
+			// 丢了会让 402 被误判成"疑似注水"
+			note, st := "usage 缺失（prompt_tokens=0）", "unstable"
+			if te1 != "" || te2 != "" {
+				note, st = firstNonEmpty(te1, te2), "error"
+			}
+			out = append(out, probeResult{Name: t.Name, Status: st, Note: note})
 		case tok1 != tok2:
 			out = append(out, probeResult{Name: t.Name, Value: fmt.Sprintf("%d", tok1-aTok),
 				Status: "unstable", Note: fmt.Sprintf("双发不一致 %d vs %d（多主机路由？）", tok1, tok2)})
@@ -252,6 +258,14 @@ func RunPipelineProbes(ctx context.Context, target *probeTarget, model string) [
 		out = append(out, probeResult{Name: "finish_length", Value: fin2, Status: "ok"})
 	}
 	return out
+}
+
+// firstNonEmpty 取首个非空字符串。
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 func firstErrText(errs ...error) string {
