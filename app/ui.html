@@ -4947,7 +4947,7 @@ var PT_I18N = {
       renderWaterPassive(d.passive);
     } catch (e) { /* 代理未启动：保持上次显示 */ }
   }
-  function openWaterPage() { selectMode('water'); bindWaterBtn(); loadWaterHistory(); loadWaterPassive(); loadWaterChannels(); }
+  function openWaterPage() { PTApp.selectMode('water'); bindWaterBtn(); loadWaterHistory(); loadWaterPassive(); loadWaterChannels(); }
   /* 渠道+模型双下拉：GET /water-probe?channels=1 拉四渠道及各自模型 */
   function loadWaterChannels() {
     var chSel = $('wtChannel'), mSel = $('wtModel');
