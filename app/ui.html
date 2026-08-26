@@ -2236,10 +2236,33 @@ body.pt-try { background: var(--pt-paper); }
 .acc-f-help { margin: 2px 0 0; font-size: 12px; line-height: 1.8; color: var(--pt-ink2); }
 .acc-f-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
-/* 宽版模态（外部账号子页面） */
+/* 团结多账号矩阵（学群友 Codely Relay 账号池） */
+.acc-list { display: flex; flex-direction: column; gap: 5px; }
+.acc-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center;
+  padding: 7px 10px; border: 1px solid var(--pt-hairline); border-radius: 8px;
+  background: linear-gradient(var(--pt-hi-40), transparent 35%), var(--pt-hatch);
+}
+.acc-row.off { opacity: .5; }
+.acc-row .a-name { font-size: 12px; font-weight: 650; color: var(--pt-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acc-row .a-meta { font-size: 9.5px; color: var(--pt-ink2); margin-top: 2px; }
+.acc-row .a-meta .warn { color: var(--pt-accent); font-weight: 600; }
+.acc-tag {
+  font-family: var(--pt-font-disp); font-size: 8.5px; font-weight: 600; letter-spacing: .5px;
+  border-radius: 3px; padding: 1.5px 5px; color: var(--pt-paper);
+}
+.acc-tag.glm { background: #ff6b9d; }
+.acc-tag.budget { background: var(--pt-accent); }
+.acc-tag.expired { background: var(--pt-ink2); }
+
+/* 宽版模态（账号矩阵/外部账号子页面） */
 .modal-box.wide { width: 92%; max-width: 780px; }
 
+/* 账号矩阵子页面头部（自动探测/手动添加一行；注水检测已独立成子页面） */
+.mx-head { display: flex; justify-content: flex-end; gap: 8px; margin: 10px 0; }
 
+/* 账号矩阵卡片（学群友 acc-card：LED/徽章/次数/剩余/进度条/到期） */
 .mx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 10px; }
 .mx-card { border: 1px solid var(--pt-hairline); border-radius: 10px; padding: 10px 12px;
   background: var(--pt-paper); position: relative; }
@@ -2249,11 +2272,17 @@ body.pt-try { background: var(--pt-paper); }
   background: #3ecf8e; box-shadow: 0 0 6px #3ecf8e88; }
 .mx-led.off { background: var(--pt-ink2); box-shadow: none; }
 .mx-name { font-size: 12.5px; font-weight: 700; color: var(--pt-ink); }
+.mx-uid { font-size: 10px; color: var(--pt-ink2); margin-left: auto; }
 .mx-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 7px 0 6px; }
 .mx-meta { display: flex; justify-content: space-between; gap: 8px;
   font-size: 10.5px; color: var(--pt-ink2); margin-top: 3px; }
 .mx-meta b { color: var(--pt-ink); font-weight: 650; }
+.mx-bar { height: 5px; border-radius: 3px; background: var(--pt-hairline);
   overflow: hidden; margin: 7px 0 4px; }
+.mx-bar i { display: block; height: 100%; border-radius: 3px; }
+.mx-bar i.ok { background: #3ecf8e; }
+.mx-bar i.warn { background: #e8b34b; }
+.mx-bar i.crit { background: var(--pt-accent); }
 .mx-act { display: flex; gap: 6px; margin-top: 8px; }
 
 /* 外部账号卡片（学群友 renderProviderCard 口径） */
@@ -2409,6 +2438,7 @@ body.pt-try { background: var(--pt-paper); }
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="tjK3"><span data-i18n="app.dot.k3">K3 节奏</span><b></b></span>
+                    <span class="pt-dot" data-dot="tjMatrix"><span>账号矩阵</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -2613,9 +2643,10 @@ body.pt-try { background: var(--pt-paper); }
                   <span class="pt-val">~/.codely-cli/oauth_creds.json 自动读取</span>
                 </div></div>
 
-                <div class="pt-subhead"><span class="pt-silk sm">登录态 · Auth</span>
-                  <span class="pt-val" id="tjReroute" style="display:none" title="媒体改路由：不识图模型收到识图请求时自动改写为识图模型转发的累计次数">改路由 <b>0</b> 次</span></div>
-                <div class="pt-row"><div class="pt-label"><div class="t">当前账号</div></div><span class="pt-val">~/.codely-cli/oauth_creds.json（单账号模式）</span></div>
+                <div class="pt-subhead"><span class="pt-silk sm">账号池 · Accounts</span>
+                  <span class="pt-val" id="tjReroute" style="display:none" title="媒体改路由：不识图模型收到识图请求时自动改写为识图模型转发的累计次数">改路由 <b>0</b> 次</span>
+                  <button type="button" class="ibtn2" id="tjMatrixBtn" title="全屏查看账号矩阵（每账号一张信息卡）">▦ 账号矩阵</button></div>
+                <div class="acc-list" id="tjAccList"><div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号启用多账号轮换</div></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm">进行中请求 · Inflight</span></div>
                 <div class="if-list" id="tjInflight"><div class="if-empty">// 流式请求进行时实时显示</div></div>
@@ -4338,6 +4369,8 @@ var PT_I18N = {
   /* ================= 团结多账号池 + 进行中请求（学群友 Codely Relay） ================= */
   function escHtml(s) { return String(s).replace(/[<>&"]/g, function (c) { return {"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;"}[c]; }); }
   async function loadTuanjieAccounts() {
+    var box = $('tjAccList');
+    if (!box) return;
     try {
       var d = await (await fetch("http://127.0.0.1:8788/accounts")).json();
       var rr = $('tjReroute');
@@ -4346,6 +4379,53 @@ var PT_I18N = {
         rr.style.display = n ? '' : 'none';
         rr.querySelector('b').textContent = n;
       }
+      /* 上屏「账号矩阵」灯：多账号池模式亮（N/M 在线/总数）；单账号不亮 */
+      if (d.ok && d.accounts && d.accounts.length) {
+        var online = d.accounts.filter(function (a) { return a.enabled && !a.budget_exceeded; }).length;
+        PTApp.dot('tjMatrix', true, false, online + '/' + d.accounts.length);
+      } else {
+        PTApp.dot('tjMatrix', false, false, '单账号');
+      }
+      if (!d.ok || !d.accounts || !d.accounts.length) {
+        box.innerHTML = '<div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号启用多账号轮换</div>';
+        return;
+      }
+      var h = '';
+      d.accounts.forEach(function (a) {
+        var tags = '';
+        if (a.has_glm53) tags += '<span class="acc-tag glm">GLM</span> ';
+        if (a.budget_exceeded) tags += '<span class="acc-tag budget">402</span> ';
+        if (a.token_remaining_hours !== undefined && a.token_remaining_hours < 24) tags += '<span class="acc-tag expired">剩' + a.token_remaining_hours + 'h</span> ';
+        var meta = (a.username ? escHtml(a.username) + ' · ' : '') + '用 ' + (a.use_count || 0) + ' 次' +
+          (a.inflight ? ' · <b class="warn">进行中 ' + a.inflight + '</b>' : '') +
+          (a.token_expires && a.token_expires !== '未知' ? ' · token 至 ' + a.token_expires : '');
+        h += '<div class="acc-row' + (a.enabled ? '' : ' off') + '">' +
+          '<div><div class="a-name">' + escHtml(a.user_id) + '</div><div class="a-meta">' + meta + '</div></div>' +
+          '<div>' + tags + '</div>' +
+          '<div class="acc-act">' +
+          '<button type="button" class="ibtn2" data-acc-toggle="' + escHtml(a.user_id) + '" data-on="' + a.enabled + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
+          '<button type="button" class="ibtn2" data-acc-del="' + escHtml(a.user_id) + '">删</button>' +
+          '</div></div>';
+      });
+      box.innerHTML = h;
+      box.querySelectorAll('[data-acc-toggle]').forEach(function (b) {
+        b.onclick = async function () {
+          await fetch("http://127.0.0.1:8788/accounts", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "toggle", user_id: b.dataset.accToggle, enabled: b.dataset.on !== "true" })
+          });
+          loadTuanjieAccounts();
+        };
+      });
+      box.querySelectorAll('[data-acc-del]').forEach(function (b) {
+        b.onclick = async function () {
+          await fetch("http://127.0.0.1:8788/accounts", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "remove", user_id: b.dataset.accDel })
+          });
+          loadTuanjieAccounts();
+        };
+      });
     } catch (e) { /* 插件未启动：保持上次显示 */ }
   }
 
@@ -4582,6 +4662,144 @@ var PT_I18N = {
     openMediaReroutePage();
   }
 
+  function wideModal(html) {
+    openModal(html);
+    var box = document.querySelector('.modal-box');
+    if (box) box.classList.add('wide');
+  }
+  function mxCardHtml(a) {
+    var hrs = Number(a.token_remaining_hours || 0);
+    var expCls = hrs > 72 ? 'ok' : hrs > 24 ? 'warn' : 'crit';
+    var expPct = Math.max(2, Math.min(100, hrs / 720 * 100));
+    var stateTag = a.budget_exceeded ? '<span class="acc-tag budget">配额用尽</span>'
+      : a.enabled ? '<span class="acc-tag" style="background:#3ecf8e">运行中</span>'
+      : '<span class="acc-tag expired">已禁用</span>';
+    var load = a.inflight || 0;
+    var tags = stateTag
+      + (a.has_glm53 ? ' <span class="acc-tag glm">GLM</span>' : '')
+      + (load > 0 ? ' <span class="acc-tag" style="background:var(--pt-ink)">进行中 ' + load + '</span>' : '');
+    var meta2 = (a.token_expires && a.token_expires !== '未知' ? '到期 ' + escHtml(String(a.token_expires)) : '到期 未知');
+    return '<div class="mx-card' + (a.enabled ? '' : ' off') + '">' +
+      '<div class="mx-top"><span class="mx-led' + (a.enabled && !a.budget_exceeded ? '' : ' off') + '"></span>' +
+      '<span class="mx-name">' + escHtml(a.username || a.user_id) + '</span>' +
+      '<span class="mx-uid">#' + escHtml(a.user_id) + '</span></div>' +
+      '<div class="mx-badges">' + tags + '</div>' +
+      '<div class="mx-meta"><span>调用 <b>' + (a.use_count || 0) + '</b> 次</span><span>KEY 剩余 <b>' + escHtml(String(a.token_remaining_hours != null ? a.token_remaining_hours : '—')) + 'h</b></span></div>' +
+      '<div class="mx-bar"><i class="' + expCls + '" style="width:' + expPct + '%"></i></div>' +
+      '<div class="mx-meta"><span>' + meta2 + '</span>' +
+      '<span>' + (a.last_used ? '最近 ' + escHtml(String(a.last_used).slice(5, 16).replace('T', ' ')) : '未使用') + '</span></div>' +
+      '<div class="mx-act">' +
+      '<button type="button" class="ibtn2" data-mx-toggle="' + escHtml(a.user_id) + '" data-on="' + a.enabled + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
+      '<button type="button" class="ibtn2" data-mx-del="' + escHtml(a.user_id) + '">删除</button></div>' +
+      '</div>';
+  }
+  async function renderTuanjieMatrix() {
+    var grid = $('mxGrid');
+    if (!grid) return;
+    try {
+      var d = await (await fetch("http://127.0.0.1:8788/accounts")).json();
+      var accs = d.accounts || [];
+      var onlineEl = $('mxOnline');
+      if (onlineEl) {
+        var on = accs.filter(function (a) { return a.enabled && !a.budget_exceeded; }).length;
+        onlineEl.textContent = accs.length ? on + '/' + accs.length + ' ONLINE' : '';
+      }
+      /* 上屏「账号矩阵」灯与子页面 ONLINE 徽章同口径（enabled 且未 402） */
+      PTApp.dot('tjMatrix', accs.length > 0, false, accs.length ? (accs.filter(function (a) { return a.enabled && !a.budget_exceeded; }).length + '/' + accs.length) : '单账号');
+      if (!accs.length) { grid.className = 'm-body'; grid.innerHTML = '<div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号后显示矩阵</div>'; return; }
+      grid.className = 'mx-grid';
+      grid.innerHTML = accs.map(function (a) { return mxCardHtml(a); }).join('');
+      grid.querySelectorAll('[data-mx-toggle]').forEach(function (b) {
+        b.onclick = async function () {
+          await fetch("http://127.0.0.1:8788/accounts", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "toggle", user_id: b.dataset.mxToggle, enabled: b.dataset.on !== "true" })
+          });
+          renderTuanjieMatrix(); loadTuanjieAccounts();
+        };
+      });
+      grid.querySelectorAll('[data-mx-del]').forEach(function (b) {
+        b.onclick = async function () {
+          await fetch("http://127.0.0.1:8788/accounts", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "remove", user_id: b.dataset.mxDel })
+          });
+          renderTuanjieMatrix(); loadTuanjieAccounts();
+        };
+      });
+    } catch (e) { grid.className = 'm-body'; grid.innerHTML = '<div class="if-empty">// 读取失败（代理未启动？）</div>'; }
+  }
+  function openTuanjieMatrix() {
+    wideModal('<h3>账号矩阵 · MATRIX <span class="pt-val" id="mxOnline" style="margin-left:8px"></span></h3>' +
+      '<div class="mx-head">' +
+      '<button type="button" class="ibtn2 accent" id="tjAccAuto" title="自动从浏览器读取团结登录态（需以调试模式启动浏览器，登录态不受影响）">⚡ 自动探测</button>' +
+      '<button type="button" class="ibtn2" id="tjAccAdd">＋ 手动添加</button></div>' +
+      '<div class="m-body" id="mxGrid">读取中…</div>');
+    bindAccAuto(); bindAccAdd();
+    renderTuanjieMatrix();
+  }
+
+  function bindAccAuto() {
+    var btn = $('tjAccAuto');
+    if (!btn) return;
+    btn.onclick = async function () {
+      confirmModal("自动探测 · AUTO DETECT",
+        "将弹出一个专用的浏览器窗口并打开团结登录页。<br>请在那扇窗口里登录你要添加的账号（一次性，之后全自动）；日常浏览器不受影响。",
+        async function () {
+          btn.disabled = true; btn.textContent = "等待登录…（在弹出的窗口里登录团结）";
+          try {
+            var r = await (await fetch("http://127.0.0.1:8788/accounts", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "auto" })
+            })).json();
+            toast(r.ok ? "ok" : "err", r.ok ? "自动探测成功" : "探测未成功", r.msg || "");
+            if (r.ok) logInto($('logStream'), "ok", "账号池：已自动添加账号 " + (r.user_id || ""));
+          } catch (e) { toast("err", "探测失败", String(e)); }
+          btn.disabled = false; btn.textContent = "⚡ 自动探测";
+          loadTuanjieAccounts();
+        });
+    };
+  }
+
+  function bindAccAdd() {
+    var btn = $('tjAccAdd');
+    if (!btn) return;
+    var ACC_FORM = '<h3>添加账号 · ADD ACCOUNT</h3><div class="m-body acc-form">' +
+      '<div class="acc-f-row"><label>user_id</label>' +
+      '<input class="pt-field" id="accUid" placeholder="jwt.io 解码 sub 字段" spellcheck="false" autocomplete="off"></div>' +
+      '<div class="acc-f-row"><label>access_token</label>' +
+      '<input class="pt-field" id="accToken" type="password" placeholder="F12 请求头 Bearer 冒号后的整串" spellcheck="false" autocomplete="off">' +
+      '<button type="button" class="pt-key-eye" id="accEye" title="显示/隐藏">👁</button></div>' +
+      '<p class="acc-f-help">取法：浏览器登录 codely.tuanjie.cn → F12 → 网络面板任一 api 请求 → 请求头 Bearer 整串即 token；粘到 jwt.io 解码，sub 就是 user_id。</p>' +
+      '<div class="acc-f-actions"><button type="button" class="ibtn2 accent" id="accSubmit">添加</button></div></div>';
+    btn.onclick = function () {
+      openModal(ACC_FORM);
+      var eye = $('accEye');
+      if (eye) eye.onclick = function () {
+        var t = $('accToken');
+        t.type = t.type === 'password' ? 'text' : 'password';
+      };
+      var submit = $('accSubmit');
+      if (!submit) return;
+      submit.onclick = async function () {
+        var uid = ($('accUid').value || '').trim();
+        var token = ($('accToken').value || '').trim();
+        if (!uid || !token) { toast("err", "缺少字段", "user_id 和 access_token 都要填"); return; }
+        submit.disabled = true; submit.textContent = "添加中…";
+        try {
+          var r = await (await fetch("http://127.0.0.1:8788/accounts", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "add", user_id: uid, token: token })
+          })).json();
+          toast(r.ok ? "ok" : "err", r.ok ? "账号已添加" : "添加失败", r.msg || "");
+          if (r.ok) document.querySelector(".modal-close").click();
+        } catch (e) { toast("err", "添加失败", String(e)); }
+        submit.disabled = false; submit.textContent = "添加";
+        loadTuanjieAccounts();
+      };
+    };
+  }
+
   // 进行中请求（学群友完整版：LED 三档 + 账号 + 流式 + 字节 + 静默 + 计数 + 负载摘要）
   var ifCount = null;
   async function loadTuanjieInflight() {
@@ -4649,6 +4867,8 @@ var PT_I18N = {
 
   
   (function bindMatrixAndProviders() {
+    var mx = $('tjMatrixBtn');
+    if (mx) mx.onclick = openTuanjieMatrix;
     var md = $('tjMediaBtn');
     if (md) md.onclick = openMediaReroutePage;
     var wt = $('tjWaterBtn');
@@ -4943,6 +5163,7 @@ var PT_I18N = {
 
   setInterval(function () {
     loadTuanjieAccounts(); loadTuanjieInflight(); loadTuanjieActivity();
+    if ($('mxGrid')) renderTuanjieMatrix();
   }, 3000);
 
   var PLUGIN_VENDOR_COLORS = { glm: '#ff6b9d', kimi: '#b06bff', deepseek: '#4d8dff', minimax: '#ffb300',

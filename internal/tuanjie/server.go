@@ -21,6 +21,7 @@ import (
 // Server 是团结转发的本地 OpenAI 兼容服务。
 type Server struct {
 	client *Client
+	pool   *AccountPool
 	ln     net.Listener
 	mu     sync.Mutex
 	srv    *http.Server
@@ -53,7 +54,7 @@ type modelStat struct {
 
 // NewServer 创建服务。
 func NewServer() *Server {
-	s := &Server{client: NewClient(), stats: map[string]*modelStat{}, startedAt: time.Now(), pacer: NewPacer(),
+	s := &Server{client: NewClient(), pool: NewAccountPool(), stats: map[string]*modelStat{}, startedAt: time.Now(), pacer: NewPacer(),
 		registry: NewRegistry(), water: LoadWater(), activity: NewActivityLog(),
 		providers: NewProviderStore(), baselines: LoadBaselines()}
 	LoadMediaConfig()
@@ -560,6 +561,120 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 				model = last
 			}
 		}
+	}
+
+	// 多账号池：有池时按账号选号转发（402 自动禁用/负载感知/GLM 路由）
+	_, poolUID, usePool := s.accountTokenFor(model)
+	if usePool {
+		acc := s.pool.Get(poolUID)
+		if acc == nil {
+			writeJSON(w, map[string]any{"error": map[string]any{"message": "账号池无可用账号", "type": "server_error"}})
+			return
+		}
+		s.pool.IncLoad(poolUID)
+		defer s.pool.DecLoad(poolUID)
+		start := time.Now()
+		rid := s.registry.Register(model, poolUID, wantsStream)
+		defer s.registry.Finish(rid)
+		resp, err := s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, acc.AccessToken, sessionID)
+		if err != nil {
+			writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
+			return
+		}
+		defer resp.Body.Close()
+		// 402 配额耗尽：禁用该账号并换下一个重试（学群友）
+		if resp.StatusCode == http.StatusPaymentRequired {
+			s.pool.MarkBudgetExceeded(poolUID)
+			s.activity.Add("error", "账号 "+poolUID+" 配额用尽，自动禁用", model, poolUID, 0, 0, 402)
+			log.Printf("[tuanjie] account=%s 402 budget_exceeded 已禁用，切换下一账号", poolUID)
+			if next := s.pool.Pick(model); next != nil && next.UserID != poolUID {
+				resp.Body.Close()
+				resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, next.AccessToken, sessionID)
+				if err != nil {
+					writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
+					return
+				}
+				defer resp.Body.Close()
+			}
+		}
+		// 上游瞬时错误（模型未映射/网关抖动）重试，与单账号路径对齐
+		var poolErrBody []byte
+		for attempt := 0; resp != nil && resp.StatusCode != http.StatusOK &&
+			resp.StatusCode != http.StatusPaymentRequired &&
+			resp.StatusCode != http.StatusTooManyRequests && attempt < 3; attempt++ {
+			eb, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			resp.Body.Close()
+			if !retriableUpstream(string(eb)) {
+				poolErrBody = eb
+				break
+			}
+			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d 重试 %d/3 err=%s",
+				model, poolUID, resp.StatusCode, attempt+1, truncate(string(eb), 200))
+			time.Sleep(800 * time.Millisecond)
+			resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, acc.AccessToken, sessionID)
+			if err != nil {
+				writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
+				return
+			}
+			defer resp.Body.Close()
+			poolErrBody = nil
+		}
+		// 非 200 透传错误体（含重试后仍失败的情况）
+		if resp.StatusCode != http.StatusOK {
+			if poolErrBody == nil {
+				poolErrBody, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			}
+			s.activity.Add("error", model+" · 账号 "+poolUID+" 上游返回 "+strconv.Itoa(resp.StatusCode),
+				model, poolUID, time.Since(start).Milliseconds(), 0, resp.StatusCode)
+			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d err=%s",
+				model, poolUID, resp.StatusCode, truncate(string(poolErrBody), 300))
+			writeErr(w, resp.StatusCode, string(poolErrBody))
+			return
+		}
+		// 200 透传（流式逐块冲刷 + 注册表 touch + usage 入账）
+		copyHeader(w, resp)
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.Header().Set("Cache-Control", "no-cache")
+		log.Printf("[tuanjie] pool chat model=%s account=%s status=200", model, poolUID)
+		if wantsStream {
+			if f, ok := w.(http.Flusher); ok {
+				lineScan := newUsageScanner(model, s)
+				buf := make([]byte, 32*1024)
+				for {
+					n, rerr := resp.Body.Read(buf)
+					if n > 0 {
+						lineScan.feed(buf[:n])
+						s.registry.Touch(rid, int64(n))
+						if _, werr := w.Write(buf[:n]); werr != nil {
+							return
+						}
+						f.Flush()
+					}
+					if rerr != nil {
+						lineScan.finish()
+						return
+					}
+				}
+			}
+		}
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+		_, _ = w.Write(respBody)
+		var done struct {
+			Model string `json:"model"`
+			Usage *struct {
+				PromptTokens     int64 `json:"prompt_tokens"`
+				CompletionTokens int64 `json:"completion_tokens"`
+				TotalTokens      int64 `json:"total_tokens"`
+			} `json:"usage"`
+		}
+		if json.Unmarshal(respBody, &done) == nil && done.Usage != nil {
+			s.addStat(model, done.Usage.PromptTokens, done.Usage.CompletionTokens, done.Usage.TotalTokens)
+			// 被动注水观测：非流式能直接读响应 model
+			s.water.RecordPassive(model, done.Model, poolUID)
+			s.activity.Add("ok", model+" · 账号 "+poolUID, model, poolUID,
+				time.Since(start).Milliseconds(), done.Usage.TotalTokens, 200)
+		}
+		return
 	}
 
 	start := time.Now()
