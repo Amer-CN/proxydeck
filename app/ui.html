@@ -2437,7 +2437,7 @@ body.pt-try { background: var(--pt-paper); }
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.1.0</span>
+                    <span class="v ver" id="etchVer">v3.2.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -2477,7 +2477,7 @@ body.pt-try { background: var(--pt-paper); }
                   <button type="button" class="ibtn2" id="closeDismiss" data-i18n="app.btn.gotIt">知道了</button>
                 </div>
                 <div class="pt-banner" id="updBanner" style="display:none">
-                  <span>⚡ <b>发现新版本</b> <b id="updVer">—</b>（当前 <b>v3.1.0</b>）</span>
+                  <span>⚡ <b>发现新版本</b> <b id="updVer">—</b>（当前 <b>v3.2.0</b>）</span>
                   <button type="button" class="ibtn2 accent" id="updGo" data-i18n="app.btn.download">前往下载</button>
                 </div>
 
@@ -2789,13 +2789,13 @@ body.pt-try { background: var(--pt-paper); }
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.1.0">v3.1.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.2.0">v3.2.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">UI v3.1.0 / CORE v1.2.0</div>
+                    <div class="s" id="buildNo">UI v3.2.0 / CORE v1.2.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">UI v3.1.0 · CORE v1.2.0</span>
+                  <span class="pt-val" id="verChip">UI v3.2.0 · CORE v1.2.0</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -3955,7 +3955,7 @@ var PT_I18N = {
       baseUrl: 'http://127.0.0.1:55990/v1',
       uptime: demoRunning ? Math.floor((Date.now() - demoStartAt) / 1000) : 0,
       autostart: false, apiKey: '', noticeDismissed: false, closeHintDismissed: false,
-      version: 'v3.1.0', core: 'v1.2.0', pid: 12345 }; },
+      version: 'v3.2.0', core: 'v1.2.0', pid: 12345 }; },
     start: function () { demoRunning = true; demoStartAt = Date.now(); return { ok: true, msg: '模拟点火成功' }; },
     stop: function () { demoRunning = false; return { ok: true, msg: '模拟停堆' }; },
     stats: function () { if (!demoRunning) return { ok: false };
@@ -5565,6 +5565,10 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.2.0', date: '2026-08-27', groups: [
+      { label: '🚀 新功能', items: [
+        '请求体对齐官方 CLI：转发前按官方 buildCreateParams 字段序重组（model 在前、stream 在尾），补齐 parallel_tool_calls / metadata.user_id / litellm_session_id / prompt_cache_key 官方默认字段，非流式删 stream 字段——请求形态与官方一致',
+        'uTLS 指纹伪装：TLS ClientHello 换 Chrome/BoringSSL 系指纹（与官方 CLI 的 Node.js 同源），Clash 代理走 CONNECT 隧道内嵌指纹，消除 Go 原生 TLS 的反代识别特征' ] } ] },
     { v: 'v3.1.0', date: '2026-08-26', groups: [
       { label: '🚀 新功能', items: [
         '团结视图改单账号模式：彻底移除账号矩阵/账号池/CDP 自动探测，登录态只读 ~/.codely-cli/oauth_creds.json（读桌面端登录态），杜绝多账号轮换的封号风险' ] },
@@ -5946,7 +5950,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.1.0';
+  var UI_CUR = 'v3.2.0';
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
     var pb = (b || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });

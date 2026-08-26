@@ -1,5 +1,12 @@
 # 更新日志
 
+## v3.2.0 · 请求体对齐 · uTLS 指纹
+
+### 🚀 新功能
+
+- **请求体对齐官方 CLI**：转发前按官方 `buildCreateParams` 字段序重组（model 在前、stream/stream_options 在尾），补齐官方默认字段 `parallel_tool_calls:true` / `metadata.user_id`（稳定 device-id）/ `litellm_session_id` / `prompt_cache_key`（与 x-litellm-session-id 头同值）；非流式请求删除 stream/stream_options 字段（官方行为）——请求形态与官方 CLI 一致
+- **uTLS 指纹伪装**：TLS ClientHello 换 Chrome/BoringSSL 系指纹（HelloChrome_Auto，与官方 CLI 的 Node.js 同源），Clash 代理场景走自建 CONNECT 隧道内嵌指纹握手，消除 Go 原生 TLS 的反代识别特征；socks5 代理回落标准行为
+
 ## v3.1.0 · 单账号模式 · 请求头对齐
 
 ### 🚀 新功能
