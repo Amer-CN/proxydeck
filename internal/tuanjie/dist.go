@@ -91,7 +91,7 @@ func parseDistAnswer(s string) int {
 // 探针裸发（无 system prompt），temperature=1.0。max_tokens 取 96 而非
 // hlwy 的 10：GLM-5.3 等思考型模型推理段常吃掉几十 token，10 会把预算全烧在
 // reasoning_content 上、content 恒空（实测 64 出数字率约 1/2，96 约 7/8）。
-func collectDistSamples(ctx context.Context, cliKey, model string, n int) *distResult {
+func collectDistSamples(ctx context.Context, target *probeTarget, model string, n int) *distResult {
 	if n < 1 {
 		n = 1
 	}
@@ -109,7 +109,7 @@ func collectDistSamples(ctx context.Context, cliKey, model string, n int) *distR
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			_, _, _, content, _, e := probeCall(ctx, cliKey, model,
+			_, _, _, content, _, e := probeCall(ctx, target, model,
 				[]map[string]any{{"role": "user", "content": distPrompt}},
 				map[string]any{"temperature": 1.0, "max_tokens": 96})
 			if e != nil {

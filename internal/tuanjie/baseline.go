@@ -18,6 +18,7 @@ import (
 // Baseline 单模型的官方基准：第一层探针值 + 第二层分布。
 type Baseline struct {
 	Model       string          `json:"model"`
+	Channel     string          `json:"channel,omitempty"` // 所属渠道（tuanjie/command/workbuddy/bai）
 	Probes      []probeResult   `json:"probes"`      // tokenizer 4 值 / 错误文本 2 / finish 2
 	Dist        *distResult     `json:"dist,omitempty"` // 355 维分布 + 统计（不足 40 样本时缺省）
 	SampledAt   string          `json:"sampled_at"`
@@ -25,7 +26,7 @@ type Baseline struct {
 	SampleCount int             `json:"sample_count"`
 }
 
-// BaselineStore 基准库（model 名 → 基准）。
+// BaselineStore 基准库（"渠道|模型" → 基准）。
 type BaselineStore struct {
 	mu        sync.Mutex
 	path      string
@@ -36,13 +37,25 @@ func baselinesFilePath() string {
 	return filepath.Join(exeDirForAccounts(), "tuanjie-baselines.json")
 }
 
-// LoadBaselines 从磁盘恢复（缺失 = 空库）。
+// LoadBaselines 从磁盘恢复（缺失 = 空库）。旧版键为裸模型名（"GLM-5.3"），
+// 加载时自动迁移为渠道前缀键（"tuanjie|GLM-5.3"）并落盘一次。
 func LoadBaselines() *BaselineStore {
 	bs := &BaselineStore{path: baselinesFilePath(), Baselines: map[string]*Baseline{}}
 	if b, err := os.ReadFile(bs.path); err == nil {
 		_ = json.Unmarshal(b, bs)
 		if bs.Baselines == nil {
 			bs.Baselines = map[string]*Baseline{}
+		}
+		migrated := false
+		for k, v := range bs.Baselines {
+			if !strings.Contains(k, "|") {
+				bs.Baselines["tuanjie|"+k] = v
+				delete(bs.Baselines, k)
+				migrated = true
+			}
+		}
+		if migrated {
+			bs.save()
 		}
 	}
 	return bs
@@ -56,20 +69,21 @@ func (bs *BaselineStore) save() {
 	_ = os.WriteFile(bs.path, b, 0o600)
 }
 
-// Get 返回模型基准（无基准返回 nil）。
-func (bs *BaselineStore) Get(model string) *Baseline {
+// Get 返回渠道+模型的基准（无基准返回 nil）。
+func (bs *BaselineStore) Get(channel, model string) *Baseline {
 	bs.mu.Lock()
 	defer bs.mu.Unlock()
-	return bs.Baselines[model]
+	return bs.Baselines[channel+"|"+model]
 }
 
 // CollectBaseline 采集基准：跑第一层全部探针 + 第二层分布采样（N 默认 60），
-// 落盘为该模型的官方基准（以最新一次为准）。
-func (bs *BaselineStore) CollectBaseline(ctx context.Context, cliKey, model, account string, n int) (*Baseline, error) {
-	probes := RunPipelineProbes(ctx, cliKey, model)
-	dist := collectDistSamples(ctx, cliKey, model, n)
+// 落盘为该渠道+模型的官方基准（以最新一次为准）。
+func (bs *BaselineStore) CollectBaseline(ctx context.Context, target *probeTarget, channel, model, account string, n int) (*Baseline, error) {
+	probes := RunPipelineProbes(ctx, target, model)
+	dist := collectDistSamples(ctx, target, model, n)
 	bl := &Baseline{
 		Model:       model,
+		Channel:     channel,
 		Probes:      probes,
 		Dist:        dist,
 		SampledAt:   time.Now().Format("2006-01-02 15:04:05"),
@@ -77,7 +91,7 @@ func (bs *BaselineStore) CollectBaseline(ctx context.Context, cliKey, model, acc
 		SampleCount: dist.Valid,
 	}
 	bs.mu.Lock()
-	bs.Baselines[model] = bl
+	bs.Baselines[channel+"|"+model] = bl
 	bs.save()
 	bs.mu.Unlock()
 	return bl, nil
