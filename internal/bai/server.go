@@ -157,6 +157,18 @@ func estTokens(msgs []any) int {
 				}
 			}
 		}
+		// 工具调用：arguments 常含大段代码/文件内容，漏算会低估窗口导致截断后仍超窗
+		if tcs, ok := msg["tool_calls"].([]any); ok {
+			for _, rawTc := range tcs {
+				if tc, ok := rawTc.(map[string]any); ok {
+					if fn, ok := tc["function"].(map[string]any); ok {
+						if args, _ := fn["arguments"].(string); args != "" {
+							total += len([]rune(args)) / 4
+						}
+					}
+				}
+			}
+		}
 		// 每个消息的 overhead（角色名/结构 ≈ 4 token）
 		total += 4
 	}
@@ -184,15 +196,32 @@ func truncateToContext(msgs []any) ([]any, bool) {
 		}
 		tail = append(tail, raw)
 	}
-	// 从最早的轮次逐条删，删到达标为止
-	for _, raw := range tail {
-		if estTokens(out) <= baiContextLimit {
+	// 从最老的轮次截起：从尾部倒推"还能保留多少最近的轮次"，
+	// 保证截断后保留尽量多的有效上下文（而不是全删只剩头尾）。
+	keepStart := len(tail) // 默认全删
+	acc := estTokens(out)  // system + 最后一条
+	for i := len(tail) - 1; i >= 0; i-- {
+		one := estTokens([]any{tail[i]})
+		if acc+one > baiContextLimit {
 			break
 		}
-		out = append(out, raw)
+		acc += one
+		keepStart = i
 	}
+	// 配对保护：保留序列开头不能是孤立 role=tool 消息（其配对的
+	// assistant.tool_calls 已被删则上游必 400）——跨过它们（tool 响应通常很小）
+	for keepStart < len(tail) {
+		if mm, ok := tail[keepStart].(map[string]any); ok {
+			if role, _ := mm["role"].(string); role == "tool" {
+				keepStart++
+				continue
+			}
+		}
+		break
+	}
+	out = append(out, tail[keepStart:]...) // 保留最近的轮次，顺序不变
 	if estTokens(out) > baiContextLimit {
-		return out, true // 尽力截断（再删就只剩 system+当前问题了）
+		return out, true // 最后一条本身超窗的极端情况：尽力截断，由上游判
 	}
 	return out, true
 }
