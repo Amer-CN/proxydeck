@@ -107,8 +107,9 @@ func SetVideoModel(m string) {
 // 媒体改路由只兜底"不识图的文本模型"（学群友 vision_capable_models——
 // 劫持原生识图模型等于剥夺它自己的能力，还可能改路由到更差的源）。
 var builtinVisionCapable = []string{
-	"codely-vl", // 团结官方视觉模型
-	"KIMI-K3",   // Kimi K3 原生多模态
+	"codely-vl",      // 团结官方视觉模型
+	"KIMI-K3",        // Kimi K3 原生多模态
+	"GLM-5.3-FLASH",  // GLM-5.3-FLASH 原生多模态（rc.55 新增模型，实测识图正常）
 }
 
 // visionCapableExtra 用户扩展的原生识图模型（tuanjie-media.json vision_capable 数组）。
