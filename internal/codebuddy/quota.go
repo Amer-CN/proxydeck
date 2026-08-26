@@ -173,10 +173,11 @@ func buildQuota(accounts []account) *Quota {
 		if err != nil || !now.Before(endT) {
 			continue
 		}
+		// 官方口径为 CycleCapacityRemain（周期剩余）直接合计——实测体验版包
+		// CycleCapacityRemain=0 时 CapacityRemain=500（总授予量未扣），两者
+		// 语义不同，不能 fallback：官方 APP 显示 1569.69 = 周期剩余合计，
+		// 加了这 500 会虚高成 2069（用户对账确认）。
 		rem := a.CycleCapacityRemain
-		if rem == 0 {
-			rem = a.CapacityRemain
-		}
 		unexpired = append(unexpired, pack{a, rem, endT})
 	}
 	q := &Quota{Source: "live"}

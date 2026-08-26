@@ -4061,7 +4061,10 @@ var PT_I18N = {
 
   /* ---------------- 通用格式化 ---------------- */
   function fmt(n) { return (n || 0).toLocaleString('en-US'); }
-  function intFmt(n) { return Math.round(n).toLocaleString(); }
+  function intFmt(n) {
+    if (typeof n !== 'number' || isNaN(n)) return '—';
+    return n % 1 === 0 ? Math.round(n).toLocaleString() : n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
   function tkFmt(n) { return n >= 1e8 ? (n / 1e8).toFixed(1) + '亿' : n >= 1e4 ? (n / 1e4).toFixed(1) + '万' : String(n || 0); }
   function fmtTok(n) { return n >= 1048576 ? Math.round(n / 1048576) + 'M' : n >= 1024 ? Math.round(n / 1024) + 'K' : (n || '—'); }
   function fmtUptime(s) {
