@@ -711,11 +711,6 @@ html.cap { scroll-behavior: auto; }
   background: var(--pt-accent); box-shadow: 0 0 4px rgba(232, 72, 63, .55);
 }
 
-/* 副页态（双击翻页后）：键保持按压，状态灯转蓝 + 键名换成副页名（JS 同步 textContent） */
-.pt-key.on-alt::after {
-  background: #4d8dff; box-shadow: 0 0 4px rgba(77, 141, 255, .6);
-}
-
 .pt-transport { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 
 .pt-track {
@@ -2442,23 +2437,6 @@ body.pt-try { background: var(--pt-paper); }
                 </div>
               </div>
 
-              <!-- B.AI 屏体（隐藏页：双击 COMMAND 键进入） -->
-              <div class="pt-sc-body bai" data-body="bai">
-                <div class="sc-unified">
-                  <div class="run-line">
-                    <span class="pt-dot grn" data-dot="baiRun"><span class="run-name">B.AI · 8891</span><b></b></span>
-                  </div>
-                  <div class="pt-system-readout">
-                    <span class="pt-silk">Uptime</span>
-                    <div class="pt-odo pt-sc" data-odo="baiUptime">0:00:00</div>
-                  </div>
-                  <div class="pt-sc-sep"></div>
-                  <div class="pt-dots">
-                    <span class="pt-dot" data-dot="baiFree"><span>免费</span><b></b></span>
-                  </div>
-                </div>
-              </div>
-
               <!-- WORKBUDDY 屏体 -->
               <div class="pt-sc-body cb" data-body="cb">
                 <div class="sc-unified">
@@ -2490,7 +2468,7 @@ body.pt-try { background: var(--pt-paper); }
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.3.0</span>
+                    <span class="v ver" id="etchVer">v3.0.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -2530,7 +2508,7 @@ body.pt-try { background: var(--pt-paper); }
                   <button type="button" class="ibtn2" id="closeDismiss" data-i18n="app.btn.gotIt">知道了</button>
                 </div>
                 <div class="pt-banner" id="updBanner" style="display:none">
-                  <span>⚡ <b>发现新版本</b> <b id="updVer">—</b>（当前 <b>v3.3.0</b>）</span>
+                  <span>⚡ <b>发现新版本</b> <b id="updVer">—</b>（当前 <b>v3.0.0</b>）</span>
                   <button type="button" class="ibtn2 accent" id="updGo" data-i18n="app.btn.download">前往下载</button>
                 </div>
 
@@ -2751,54 +2729,6 @@ body.pt-try { background: var(--pt-paper); }
                </div></div>
               </div>
 
-              <!-- —————— B.AI 甲板（隐藏页：双击 COMMAND 键进入） —————— -->
-              <div class="pt-deck" data-deck="bai">
-               <div class="pt-deck-scroll"><div class="inner">
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t" data-i18n="app.ignite">点火拉杆</div>
-                    <div class="s" data-i18n="app.s.baiLever">拉到底点火（8891）· 拉回熄火 · Go 栈直连 api.b.ai</div>
-                  </div>
-                </div></div>
-                <button type="button" class="pt-activation" data-ignite="baiRun" data-lever-mode="activate"
-                        aria-label="点火拉杆">
-                  <span class="rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-                  <span class="legend">IGNITE</span>
-                  <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
-                </button>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t" data-i18n="app.baseUrl">BASE URL</div>
-                    <div class="s" data-i18n="app.s.copy">点击复制</div>
-                  </div>
-                  <span class="pt-val click" id="baEndpoint">http://127.0.0.1:8891/v1</span>
-                </div></div>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label"><div class="t">协议适配</div></div>
-                  <span class="pt-val">透明转发 · developer→system · effort max→high · 免费可用</span>
-                </div></div>
-
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
-                  <button type="button" class="ibtn2" id="baRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
-                <div class="pt-grid">
-                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
-                    <span class="rv" id="baStModels">—</span><span class="rs" id="baStModelsSub">实时拉取</span></div>
-                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.health">健康检查</span>
-                    <span class="rv" id="baStHealth">—<span class="u">ms</span></span><span class="rs" id="baStHealthSub">本地回环</span></div>
-                </div>
-
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.models">模型矩阵 · Models</span>
-                  <span class="pt-val" id="baModelCount">OFFLINE</span></div>
-                <div id="baModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
-
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
-                  <button type="button" class="ibtn2" id="baClearLog" data-i18n="app.btn.clear">清空</button></div>
-                <div class="pt-log" id="baLog"></div>
-               </div></div>
-              </div>
-
               <!-- —————— 设置 甲板 —————— -->
               <div class="pt-deck" data-deck="set">
                <div class="pt-deck-scroll"><div class="inner fill">
@@ -2891,13 +2821,13 @@ body.pt-try { background: var(--pt-paper); }
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.3.0">v3.3.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.0.0">v3.0.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">UI v3.3.0 / CORE v1.2.0</div>
+                    <div class="s" id="buildNo">UI v3.0.0 / CORE v1.2.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">UI v3.3.0 · CORE v1.2.0</span>
+                  <span class="pt-val" id="verChip">UI v3.0.0 · CORE v1.2.0</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -3466,15 +3396,11 @@ var PT_I18N = {
 
   /* ══════════════════ 3. 状态与模式 ══════════════════ */
   var st = { mode: 'cmd', soundSet: 1 };
-  var MODES = ['cmd', 'tj', 'cb', 'bai', 'set'];
-  /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；其余键暂无副页，双击无效果） */
-  var ALT_MODE = { cmd: 'bai', bai: 'cmd' };
-  /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
-  var ALT_LABEL = { cmd: 'B.AI' };
+  var MODES = ['cmd', 'tj', 'cb', 'set'];
   /* 鼓轮 5 格 DOM [cmd,tj,cb,set,cmd]；居中格 = children[--i]（CSS 按 --y−--i 定位，
      cell 的 --y 与 children 序号一致）。cmd 居中用尾格 idx4（首格 idx0 是绕接占位） */
   var DRUM_IDX = { cmd: 4, tj: 1, cb: 2, set: 3 };
-  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, bai: 3, set: 4 };
+  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, set: 3 };
   /* lx（灵犀+设置）与 no 共用第 4 颗键：已停在 no 时再点该键进 lx（双职责），
      鼓轮/传送带各自有独立位；键盘方向键沿 MODES 全链可达。 */
   var modeListeners = [];
@@ -3555,18 +3481,8 @@ var PT_I18N = {
     });
     $$('.pt-key').forEach(function (k) {
       var on = k.dataset.mode === m;
-      /* 副页模式（如 bai）：无物理键的主键保持按压态 + on-alt（灯变蓝、键名换副页名） */
-      var alt = ALT_MODE[k.dataset.mode];
-      var onAlt = !on && alt === m;
-      k.setAttribute('aria-checked', (on || onAlt) ? 'true' : 'false');
-      k.classList.toggle('on-alt', onAlt);
+      k.setAttribute('aria-checked', on ? 'true' : 'false');
       k.tabIndex = on ? 0 : -1;
-      /* 键名跟随：主键在副页时显示副页名，回主页恢复原名 */
-      var label = k.querySelector('span');
-      if (label) {
-        var orig = k.dataset.origLabel || (k.dataset.origLabel = label.textContent);
-        label.textContent = onAlt ? ALT_LABEL[k.dataset.mode] : orig;
-      }
     });
     /* 音效旋钮 */
     var knob = $('.pt-knob');
@@ -3589,27 +3505,12 @@ var PT_I18N = {
     modeListeners.forEach(function (f) { try { f(m); } catch (e) {} });
   }
   $$('.pt-key[data-mode]').forEach(function (k) {
-    k.addEventListener('click', function () {
-      /* 单击有副页的键：当前已在该键或它的副页上 → 翻副页/翻回；
-         否则普通切换到该键。COMMAND ⇄ B.AI 即此机制 */
-      var alt = ALT_MODE[k.dataset.mode];
-      if (alt && (k.dataset.mode === st.mode || alt === st.mode)) {
-        /* 当前在副页（alt===st.mode）→ 回主键；当前在主页（k.dataset.mode===st.mode）→ 去副页 */
-        selectMode(alt === st.mode ? k.dataset.mode : alt);
-        return;
-      }
-      selectMode(k.dataset.mode);
-    });
+    k.addEventListener('click', function () { selectMode(k.dataset.mode); });
     k.addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter' || ev.key === ' ') {
         /* 阻断冒泡：全局「空格=点火/停堆」快捷键不能跟着触发（双动作 bug） */
         ev.preventDefault();
         ev.stopPropagation();
-        var altK = ALT_MODE[k.dataset.mode];
-        if (altK && (k.dataset.mode === st.mode || altK === st.mode)) {
-          selectMode(altK === st.mode ? k.dataset.mode : altK);
-          return;
-        }
         selectMode(k.dataset.mode);
         return;
       }
@@ -4086,7 +3987,7 @@ var PT_I18N = {
       baseUrl: 'http://127.0.0.1:55990/v1',
       uptime: demoRunning ? Math.floor((Date.now() - demoStartAt) / 1000) : 0,
       autostart: false, apiKey: '', noticeDismissed: false, closeHintDismissed: false,
-      version: 'v3.3.0', core: 'v1.2.0', pid: 12345 }; },
+      version: 'v3.0.0', core: 'v1.2.0', pid: 12345 }; },
     start: function () { demoRunning = true; demoStartAt = Date.now(); return { ok: true, msg: '模拟点火成功' }; },
     stop: function () { demoRunning = false; return { ok: true, msg: '模拟停堆' }; },
     stats: function () { if (!demoRunning) return { ok: false };
@@ -4923,7 +4824,8 @@ var PT_I18N = {
   function openWaterPage() {
     wideModal('<h3>注水检测 · WATER PROBE</h3>' +
       '<div class="mx-head">' +
-      '<input class="pt-field" id="wtModel" value="GLM-5.3" spellcheck="false" autocomplete="off" style="width:150px" title="要检测的模型名">' +
+      '<select class="ibtn2" id="wtChannel" title="检测哪个渠道的模型" style="max-width:130px"></select>' +
+      '<select class="ibtn2" id="wtModel" title="要检测的模型" style="max-width:170px"></select>' +
       '<button type="button" class="ibtn2 accent" id="wtRunBtn" title="一键全流程：自动跑探针 / 比对官方基准 / 出报告">检测</button></div>' +
       '<div class="wt-sub">一键检测模型真实性：自动跑探针 / 比对官方基准 / 出报告</div>' +
       '<div class="wt-sub">检测报告 · REPORT</div>' +
@@ -4935,6 +4837,35 @@ var PT_I18N = {
     bindWaterBtn();
     loadWaterHistory();
     loadWaterPassive();
+    loadWaterChannels();
+  }
+  /* 渠道+模型双下拉：GET /water-probe?channels=1 拉四渠道及各自模型 */
+  function loadWaterChannels() {
+    var chSel = $('wtChannel'), mSel = $('wtModel');
+    if (!chSel || !mSel) return;
+    fetch("http://127.0.0.1:8788/water-probe?channels=1").then(function (r) { return r.json(); }).then(function (d) {
+      var chs = d.channels || [];
+      chSel.innerHTML = chs.map(function (c) {
+        return '<option value="' + escHtml(c.id) + '">' + escHtml(c.name || c.id) + (c.ok ? '' : '（不通）') + '</option>';
+      }).join('');
+      fillWaterModels();
+      chSel.onchange = fillWaterModels;
+    }).catch(function () {
+      chSel.innerHTML = '<option value="tuanjie">tuanjie</option>';
+      fillWaterModels();
+    });
+  }
+  function fillWaterModels() {
+    var chSel = $('wtChannel'), mSel = $('wtModel');
+    if (!chSel || !mSel) return;
+    var cur = chSel.value;
+    fetch("http://127.0.0.1:8788/water-probe?channels=1").then(function (r) { return r.json(); }).then(function (d) {
+      var ch = (d.channels || []).filter(function (c) { return c.id === cur; })[0];
+      var models = ch && ch.models ? ch.models : [];
+      mSel.innerHTML = models.length
+        ? models.map(function (m) { return '<option value="' + escHtml(m) + '">' + escHtml(m) + '</option>'; }).join('')
+        : '<option value="">（该渠道无模型列表）</option>';
+    }).catch(function () { mSel.innerHTML = '<option value=""></option>'; });
   }
   /* 综合判定块渲染（绿/黄/红/灰灯 + 大字 + 文案） */
   function renderWaterVerdict(v, hasBaseline) {
@@ -4986,14 +4917,16 @@ var PT_I18N = {
     var btn = $('wtRunBtn');
     if (!btn) return;
     btn.onclick = async function () {
-      var model = (($('wtModel') && $('wtModel').value) || "").trim() || "GLM-5.3";
+      var model = (($('wtModel') && $('wtModel').value) || "").trim();
+      var channel = (($('wtChannel') && $('wtChannel').value) || "tuanjie");
+      if (!model) { toast('err', '注水检测', '请先选渠道和模型'); btn.disabled = false; return; }
       btn.disabled = true; btn.textContent = "检测中…";
       var box = $('wtReport');
       if (box) box.innerHTML = '<div class="if-empty">// 检测中（跑管道探针 + 分布采样 + 金丝雀答题，约 1-2 分钟）…</div>';
       try {
         var r = await (await fetch("http://127.0.0.1:8788/water-probe", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "check", model: model })
+          body: JSON.stringify({ action: "check", channel: channel, model: model })
         })).json();
         if (r.ok && r.report) {
           renderWaterCheck(r);
@@ -5016,8 +4949,9 @@ var PT_I18N = {
     var colorMap = { green: '#3ecf8e', yellow: '#ffb300', red: '#ff5f5f', grey: '#8a8f98' };
     var c = colorMap[light] || '#8a8f98';
     var reason = v.reason || '检测完成';
+    var channel = rep.channel || 'tuanjie';
     var score = v.score ? '<span class="pt-val" style="color:' + c + '">相似度 ' + v.score + '%</span>' : '';
-    var meta = escHtml((rep.model || '') + ' · 账号 ' + (rep.account || '—') + ' · ' + (rep.at || '') + (rep.first_time ? ' · 首次检测' : ''));
+    var meta = escHtml((rep.channel || 'tuanjie') + ' 渠道 · ' + (rep.model || '') + ' · 账号 ' + (rep.account || '—') + ' · ' + (rep.at || '') + (rep.first_time ? ' · 首次检测' : ''));
     var box = $('wtReport');
     if (!box) return;
     box.innerHTML = '<div class="if-list" style="max-height:none">' +
@@ -5206,8 +5140,7 @@ var PT_I18N = {
   /* ---------------- 插件视图注册表 ---------------- */
   var PV = {
     tj: { id: 'tuanjie', port: 8788, pfx: 'tj', mode: 'tj', uptime: null, phase: 'idle' },
-    cb: { id: 'codebuddy', port: 8787, pfx: 'cb', mode: 'cb', uptime: null, phase: 'idle' },
-    bai: { id: 'bai', port: 8891, pfx: 'ba', mode: 'bai', uptime: null, phase: 'idle' }
+    cb: { id: 'codebuddy', port: 8787, pfx: 'cb', mode: 'cb', uptime: null, phase: 'idle' }
   };
   function pSet(V, id, val) { var el = $(V.pfx + id); if (el) el.textContent = val; }
 
@@ -5591,16 +5524,35 @@ var PT_I18N = {
           quotaErr = true;
         }
         if (!quotaErr) {
-          // 官网真实口径拆开：今日固定配额（每日重置）与赠送池（跨日共享）分开显示。
-          // 消费顺序：先扣今日固定配额，耗尽后扣赠送池。
+          // 官网 coding_plan 套餐窗口（LITE 三档：5h/周/月）——此前漏解析，
+          // 误把 daily_allowance 当套餐总量。现在套餐窗口为主，每日消耗为辅。
+          var mk = {};
+          (q.plan && q.plan.windows || []).forEach(function (w) { mk[w.type] = w; });
+          var w5 = mk['usage_5h'], ww = mk['subscription_week'], wm = mk['subscription_month'];
+          var dailyUsed = Math.min(q.daily.used || 0, q.daily.quota || 0);
           var dailyQuota = q.daily.quota || 0;
-          var dailyUsed = Math.min(q.daily.used || 0, dailyQuota);
-          var dailyPct = dailyQuota > 0 ? Math.round(dailyUsed / dailyQuota * 100) : 0;
-          var gift = (q.gift && q.gift.remaining) || 0;
-          pSet(V, 'StBudget', intFmt(dailyQuota)); pSet(V, 'StBudgetSub', '今日固定配额 · 已用 ' + dailyPct + '%');
-          pSet(V, 'StSpent', intFmt(dailyUsed) + ' / ' + intFmt(dailyQuota)); pSet(V, 'StSpentSub', '今日已用 / 固定配额 · 24:00 重置');
-          pSet(V, 'StLeft', intFmt(gift)); pSet(V, 'StLeftSub', '赠送池余额 · 固定配额耗尽后扣这里');
-          pSet(V, 'StReset', intFmt(q.total)); pSet(V, 'StResetSub', '可用总额 = 固定剩余 + 赠送池');
+          // 卡1 积分总额 = 月套餐剩余（最权威的当前可用总量口径）
+          if (wm) {
+            pSet(V, 'StBudget', intFmt(wm.remaining)); pSet(V, 'StBudgetSub', '月套餐 ' + intFmt(wm.quota) + ' · 已用 ' + intFmt(wm.used));
+          } else {
+            pSet(V, 'StBudget', intFmt(q.total)); pSet(V, 'StBudgetSub', '可用总额');
+          }
+          // 卡2 今日已用（每日消耗）
+          pSet(V, 'StSpent', intFmt(dailyUsed) + (dailyQuota ? ' / ' + intFmt(dailyQuota) : '')); pSet(V, 'StSpentSub', '今日消耗' + (dailyQuota ? '（日赠 ' + intFmt(dailyQuota) + '）' : '') + ' · 24:00 重置');
+          // 卡3 5h 窗口
+          if (w5) {
+            pSet(V, 'StLeft', intFmt(w5.remaining)); pSet(V, 'StLeftSub', w5.exhausted ? '5h 窗口 ' + intFmt(w5.quota) + ' 已用满' : '5h 窗口 ' + intFmt(w5.quota) + ' · 剩 ' + intFmt(w5.remaining));
+          } else {
+            var gift = (q.gift && q.gift.remaining) || 0;
+            pSet(V, 'StLeft', intFmt(gift)); pSet(V, 'StLeftSub', '赠送池余额');
+          }
+          // 卡4 周窗口
+          if (ww) {
+            pSet(V, 'StReset', intFmt(ww.remaining)); pSet(V, 'StResetSub', '周套餐 ' + intFmt(ww.quota) + ' · 剩 ' + intFmt(ww.remaining));
+          } else {
+            pSet(V, 'StReset', intFmt(q.total)); pSet(V, 'StResetSub', '可用总额');
+          }
+          // 卡5 月度统计（当月实际消耗）
           pSet(V, 'StTopModel', intFmt(q.month.points));
           pSet(V, 'StTopModelSub', tkFmt(q.month.totalTokens) + ' token · ' + q.month.requests + ' 次 · ' + q.month.startDate + '~' + q.month.endDate);
         }
@@ -5785,7 +5737,6 @@ var PT_I18N = {
     'app.btn.checkNow':     { zh: '立即检查', 'zh-hant': '立即檢查', en: 'Check Now', de: 'Jetzt prüfen', ja: '今すぐ確認', fr: 'Vérifier', es: 'Comprobar' },
     'app.btn.download':     { zh: '前往下载', 'zh-hant': '前往下載', en: 'Download', de: 'Herunterladen', ja: 'ダウンロード', fr: 'Télécharger', es: 'Descargar' },
     'app.btn.github':     { zh: 'GitHub⌝', 'zh-hant': 'GitHub⌝', en: 'GitHub⌝', de: 'GitHub⌝', ja: 'GitHub⌝', fr: 'GitHub⌝', es: 'GitHub⌝' },
-    'app.s.baiLever':     { zh: '拉到底点火（8891）· 拉回熄火 · Go 栈直连 api.b.ai', 'zh-hant': '拉到底點火（8891）· 拉回熄火 · Go 棧直連 api.b.ai', en: 'Pull to ignite (8891) · Back to stop · Go stack to api.b.ai', de: 'Ziehen zum Starten (8891) · Zurück zum Stoppen · Go-Stack zu api.b.ai', ja: '引いて起動（8891）· 戻して停止 · Goスタックで api.b.ai へ', fr: 'Tirer pour démarrer (8891) · Retour pour arrêter · Pile Go vers api.b.ai', es: 'Tira para encender (8891) · Vuelve para apagar · Pila Go a api.b.ai' },
     'app.rk.total':     { zh: '总消耗 TOKEN', 'zh-hant': '總消耗 TOKEN', en: 'Total Tokens', de: 'Tokens gesamt', ja: '合計トークン', fr: 'Total tokens', es: 'Tokens totales' },
     'app.rk.today':     { zh: '今日消耗', 'zh-hant': '今日消耗', en: 'Today', de: 'Heute', ja: '本日', fr: 'Aujourd’hui', es: 'Hoy' },
     'app.rk.cost':     { zh: '估算金额', 'zh-hant': '估算金額', en: 'Est. Cost', de: 'Geschätzt', ja: '概算額', fr: 'Coût estimé', es: 'Costo est.' },
@@ -5907,22 +5858,6 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
-    { v: 'v3.3.0', date: '2026-08-27', groups: [
-      { label: '🚀 新功能', items: [
-        'B.AI 回归：双击当前选中键翻副页（COMMAND⇄B.AI），三键格局不变、容量翻倍；副页态保持按压+状态灯变蓝+键名切换，状态一目了然',
-        'B.AI 插件 8891：Go 栈透明转发 api.b.ai，协议怪癖适配（developer→system、effort max→high、max_tokens 钳 8192、5xx 重试、上游代理自探测）' ] },
-      { label: '🗑️ 移除', items: [
-        'Notion / 灵犀彻底移除：internal 包、插件注册、子模式、flag 全部清除' ] } ] },
-    { v: 'v3.2.0', date: '2026-08-27', groups: [
-      { label: '🚀 新功能', items: [
-        '请求体对齐官方 CLI：转发前按官方 buildCreateParams 字段序重组，补齐 parallel_tool_calls / metadata.user_id / litellm_session_id / prompt_cache_key，非流式删 stream 字段',
-        'uTLS 指纹伪装：TLS ClientHello 换 Chrome/BoringSSL 系指纹（与官方 CLI 的 Node.js 同源），Clash 代理 CONNECT 隧道内嵌指纹' ] } ] },
-    { v: 'v3.1.0', date: '2026-08-26', groups: [
-      { label: '🚀 新功能', items: [
-        '团结视图改单账号模式：移除账号矩阵/账号池/CDP 自动探测，登录态只读 ~/.codely-cli（桌面端）',
-        '请求头对齐官方 CLI：User-Agent 换官方真值 rc.54，补齐 DashScope 标记头' ] },
-      { label: '✨ 体验优化', items: [
-        'CommandCode 模型目录同步官方 61 个（Go 套餐 36 个），旧前缀名保留兼容别名' ] } ] },
     { v: 'v3.0.0', date: '2026-08-23', groups: [
       { label: '🚀 全新界面', items: [
         '换上机械风操作面板——奶油色机身、红绿灯、黑色点阵屏、点火拉杆',
@@ -6238,12 +6173,12 @@ var PT_I18N = {
     try { var saved = localStorage.getItem('latProxy'); if (saved) $('latProxy').value = saved; } catch (e) {}
 
     /* —— 插件启停 —— */
-    ['tj', 'cb', 'bai'].forEach(bindPluginToggle);
-    ['tjEndpoint', 'cbEndpoint', 'baEndpoint'].forEach(function (id) {
+    ['tj', 'cb'].forEach(bindPluginToggle);
+    ['tjEndpoint', 'cbEndpoint'].forEach(function (id) {
       var el = $(id);
       if (el) el.onclick = function () { copyText(el.textContent, 'Base URL'); };
     });
-    ['tj', 'cb', 'bai'].forEach(function (mode) {
+    ['tj', 'cb'].forEach(function (mode) {
       var V = PV[mode];
       var clr = $(V.pfx + 'ClearLog');
       if (clr) clr.onclick = function () { $(V.pfx + 'Log').innerHTML = ''; plog(V, 'sys', '日志已清空'); };
@@ -6252,7 +6187,7 @@ var PT_I18N = {
     });
 
     /* —— 设置区 —— */
-    $('githubBtn').onclick = function () { call('Open', 'https://github.com/Amer-CN/proxydeck'); };
+    $('githubBtn').onclick = function () { call('Open', 'https://github.com/Amer-CN/command-code-proxy-tools'); };
     $('checkUpdateBtn').onclick = function () { checkUpdateNow(); };
 
     /* —— 电源拨杆：彻底关机——连带后台代理进程一起结束。
@@ -6296,7 +6231,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.3.0';
+  var UI_CUR = 'v3.0.0';
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
     var pb = (b || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });

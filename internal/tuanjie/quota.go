@@ -32,6 +32,7 @@ type Quota struct {
 	Gift     GiftQuota     `json:"gift"`               // 赠送积分
 	Month    MonthQuota    `json:"month"`              // 月度统计
 	BySource []SourceSpend `json:"bySource,omitempty"` // 消耗 TOP（按积分降序）
+	Plan     PlanQuota      `json:"plan,omitempty"`  // 套餐窗口（coding_plan，LITE 三档）
 	Source   string        `json:"source"`             // live / cache / none
 	Err      string        `json:"err,omitempty"`
 }
@@ -47,6 +48,24 @@ type DailyQuota struct {
 // GiftQuota 赠送积分。
 type GiftQuota struct {
 	Remaining float64 `json:"remaining"`
+}
+
+// PlanQuota 套餐窗口（官网 coding_plan 字段——此前漏解析，日配额被误当
+// 套餐总量显示，实际套餐是三窗口：5h/周/月，如 LITE 800/4000/16000）。
+type PlanQuota struct {
+	EffectiveRemaining float64     `json:"effective_remaining"`
+	NextBoundaryAt     string      `json:"next_boundary_at,omitempty"`
+	Windows            []PlanWindow `json:"windows,omitempty"`
+}
+
+// PlanWindow 单窗口：type=usage_5h|subscription_week|subscription_month。
+type PlanWindow struct {
+	Type      string  `json:"type"`
+	Quota     float64 `json:"quota"`
+	Used      float64 `json:"used"`
+	Remaining float64 `json:"remaining"`
+	Exhausted bool    `json:"exhausted"`
+	PeriodEnd string  `json:"period_end,omitempty"`
 }
 
 // MonthQuota 月度统计。
@@ -143,6 +162,15 @@ func (c *Client) fetchQuotaLive(ctx context.Context) (*Quota, error) {
 	q.Daily.Remaining, _ = strconv.ParseFloat(s.DailyAllowance.RemainingPoints, 64)
 	q.Daily.PeriodEnd = s.DailyAllowance.PeriodEndAt
 	q.Gift.Remaining, _ = strconv.ParseFloat(s.GiftCredits.RemainingPoints, 64)
+	q.Plan.EffectiveRemaining, _ = strconv.ParseFloat(s.CodingPlan.EffectiveRemainingPoints, 64)
+	q.Plan.NextBoundaryAt = s.CodingPlan.NextBoundaryAt
+	for _, w := range s.CodingPlan.Windows {
+		pw := PlanWindow{Type: w.WindowType, Exhausted: w.Exhausted, PeriodEnd: w.Period.EndAt}
+		pw.Quota, _ = strconv.ParseFloat(w.QuotaPoints, 64)
+		pw.Used, _ = strconv.ParseFloat(w.UsedPoints, 64)
+		pw.Remaining, _ = strconv.ParseFloat(w.RemainingPoints, 64)
+		q.Plan.Windows = append(q.Plan.Windows, pw)
+	}
 	q.Total = q.Daily.Remaining + q.Gift.Remaining + s.Billing.EffectiveAvailablePoints
 	q.Month = MonthQuota{
 		Points:           s.Totals.RecordedPoints,
@@ -186,6 +214,20 @@ type summaryResp struct {
 	GiftCredits struct {
 		RemainingPoints string `json:"remaining_points"`
 	} `json:"gift_credits"`
+	CodingPlan struct {
+		EffectiveRemainingPoints string `json:"effective_remaining_points"`
+		NextBoundaryAt           string `json:"next_boundary_at"`
+		Windows                  []struct {
+			WindowType      string `json:"window_type"`
+			QuotaPoints     string `json:"quota_points"`
+			UsedPoints      string `json:"used_points"`
+			RemainingPoints string `json:"remaining_points"`
+			Exhausted       bool   `json:"exhausted"`
+			Period          struct {
+				EndAt string `json:"end_at"`
+			} `json:"period"`
+		} `json:"windows"`
+	} `json:"coding_plan"`
 	Period struct {
 		StartDate string `json:"start_date"`
 		EndDate   string `json:"end_date"`
