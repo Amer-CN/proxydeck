@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -124,10 +125,84 @@ func detectUpstreamTransport() http.RoundTripper {
 	return http.DefaultTransport
 }
 
+// baiContextLimit B.ai DeepSeek 系列实测上下文上限（约 1M token：
+// 6M 字符进 75 万正常、8M 字符被 400 拒）。zcode 侧配置 context=1000000。
+const baiContextLimit = 1_000_000
+
+// estTokens 保守估算 messages 占用的 token 数（4 字符 ≈ 1 token，
+// 中文/英文混合的通用保守值；宁可高估多压缩，也要保证不超窗被上游拒）。
+func estTokens(msgs []any) int {
+	total := 0
+	for _, raw := range msgs {
+		msg, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		switch c := msg["content"].(type) {
+		case string:
+			total += len([]rune(c)) / 4
+		case []any:
+			for _, part := range c {
+				if p, ok := part.(map[string]any); ok {
+					if t, _ := p["text"].(string); t != "" {
+						total += len([]rune(t)) / 4
+					} else if img, ok := p["image_url"].(map[string]any); ok {
+						// 图片按固定代价估算（data URI 的 base64 按体积折算进窗口）
+						if u, _ := img["url"].(string); strings.HasPrefix(u, "data:image") {
+							total += len(u) / 4 / 8 // base64 文本的 token 代价
+						} else {
+							total += 512 // 外链图固定估 512 token
+						}
+					}
+				}
+			}
+		}
+		// 每个消息的 overhead（角色名/结构 ≈ 4 token）
+		total += 4
+	}
+	return total
+}
+
+// truncateToContext 超窗时从最早的非 system 轮次截起（保留 system 与最近
+// 轮次），直到估算达标或只剩 system+最后一条。返回 (新messages, 是否截断)。
+func truncateToContext(msgs []any) ([]any, bool) {
+	if estTokens(msgs) <= baiContextLimit {
+		return msgs, false
+	}
+	out := make([]any, 0, len(msgs))
+	var tail []any
+	for i, raw := range msgs {
+		if msg, ok := raw.(map[string]any); ok {
+			if role, _ := msg["role"].(string); role == "system" {
+				out = append(out, raw) // system 永远保留
+				continue
+			}
+		}
+		if i == len(msgs)-1 {
+			out = append(out, raw) // 最后一条（当前问题）永远保留
+			continue
+		}
+		tail = append(tail, raw)
+	}
+	// 从最早的轮次逐条删，删到达标为止
+	for _, raw := range tail {
+		if estTokens(out) <= baiContextLimit {
+			break
+		}
+		out = append(out, raw)
+	}
+	if estTokens(out) > baiContextLimit {
+		return out, true // 尽力截断（再删就只剩 system+当前问题了）
+	}
+	return out, true
+}
+
 // adaptQuirks 适配 b.ai 的协议怪癖（DSH 接入包实战经验 + 官方 API 常见约束）：
 //  1. 不认 developer 角色 → 降级为 system（否则 400）；
 //  2. reasoning_effort 只认 off/low/medium/high → max 改写成 high；
-//  3. max_tokens 超过 8192 钳到 8192（b.ai 上限，超发会被拒）。
+//  3. max_tokens 超过 8192 钳到 8192（b.ai 上限，超发会被拒）；
+//  4. messages 超上下文窗口（约 1M token）→ 截断最早对话轮次，防上游
+//     "Input token exceed the limit" 400（即用户遇到的 ZCode 报错）。
 // 只动 JSON 请求体；改写后同步 Content-Length。解析失败的原样放行（让上游报错）。
 func adaptQuirks(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +212,7 @@ func adaptQuirks(next http.Handler) http.Handler {
 				if json.Unmarshal(buf, &m) == nil {
 					changed := false
 					if msgs, ok := m["messages"].([]any); ok {
+						cut := false
 						for _, raw := range msgs {
 							if msg, ok := raw.(map[string]any); ok {
 								if role, _ := msg["role"].(string); role == "developer" {
@@ -144,6 +220,12 @@ func adaptQuirks(next http.Handler) http.Handler {
 									changed = true
 								}
 							}
+						}
+						msgs, cut = truncateToContext(msgs)
+						if cut {
+							m["messages"] = msgs
+							changed = true
+							log.Printf("bai-plugin: 上下文超窗已截断最早对话轮次（截断后估算 %d token ≤ %d）", estTokens(msgs), baiContextLimit)
 						}
 					}
 					if eff, ok := m["reasoning_effort"].(string); ok && eff == "max" {
