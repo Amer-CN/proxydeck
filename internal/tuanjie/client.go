@@ -101,6 +101,12 @@ type Client struct {
 	apiKey   string
 	keyAt    time.Time
 	keyFetch bool // 正在换取，防止并发重复换取
+
+	tokenFP string // 换取 key 所用 access_token 的指纹（mtime+size）；
+	// 桌面端切换账号会更新 ~/.codely-cli/oauth_creds.json，指纹变化=账号变了，
+	// 缓存里的 key 作废重换，避免继续用旧账号的 cli_api_key（否则官方踢号后
+	// 返回 400 而非 401，InvalidateKey 触发不了，1 小时内容器一直被旧 key 卡死）。
+	fpOK    bool // 首次未采样前不做失效判断（避免误杀首次换取）
 }
 
 // NewClient 创建客户端。
@@ -120,6 +126,16 @@ func oauthCredsPath() string {
 type oauthCreds struct {
 	AccessToken string `json:"access_token"`
 	UserID      int    `json:"user_id"`
+}
+
+// accessTokenFP 返回 oauth 凭据文件的轻量指纹（mtime+size）。
+// 桌面端切换账号会重写该文件——指纹变化即账号变化（不读内容，避免每次请求解析 JWT）。
+func accessTokenFP() (string, bool) {
+	b, err := os.Stat(oauthCredsPath())
+	if err != nil {
+		return "", false
+	}
+	return fmt.Sprintf("%d-%d", b.ModTime().UnixNano(), b.Size()), true
 }
 
 // loadAccessToken 读取本地登录态。
@@ -169,12 +185,26 @@ func (c *Client) fetchKey(ctx context.Context) (string, error) {
 	if err := json.Unmarshal(body, &out); err != nil || out.CliAPIKey == "" {
 		return "", fmt.Errorf("换取 cli_api_key 响应异常: %s", truncate(string(body), 200))
 	}
+	// 记录本次换取所用 access_token 的指纹（换 key 成功才更新）
+	if fp, ok := accessTokenFP(); ok {
+		c.mu.Lock()
+		c.tokenFP = fp
+		c.fpOK = true
+		c.mu.Unlock()
+	}
 	return out.CliAPIKey, nil
 }
 
 // apiKeyCached 返回有效的 cli_api_key（过期自动换取）。
 func (c *Client) apiKeyCached(ctx context.Context) (string, error) {
 	c.mu.Lock()
+	// 账号指纹变化（桌面端切换了登录账号）→ 缓存 key 作废
+	if c.apiKey != "" && c.fpOK {
+		if fp, ok := accessTokenFP(); ok && fp != c.tokenFP {
+			c.apiKey = ""
+			c.keyAt = time.Time{}
+		}
+	}
 	if c.apiKey != "" && time.Since(c.keyAt) < keyCacheTTL {
 		k := c.apiKey
 		c.mu.Unlock()
