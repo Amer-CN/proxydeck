@@ -711,6 +711,11 @@ html.cap { scroll-behavior: auto; }
   background: var(--pt-accent); box-shadow: 0 0 4px rgba(232, 72, 63, .55);
 }
 
+/* 副页态（双击翻页后）：键保持按压，状态灯转蓝 + 键名换成副页名（JS 同步 textContent） */
+.pt-key.on-alt::after {
+  background: #4d8dff; box-shadow: 0 0 4px rgba(77, 141, 255, .6);
+}
+
 .pt-transport { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 
 .pt-track {
@@ -3464,6 +3469,8 @@ var PT_I18N = {
   var MODES = ['cmd', 'tj', 'cb', 'bai', 'set'];
   /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；其余键暂无副页，双击无效果） */
   var ALT_MODE = { cmd: 'bai', bai: 'cmd' };
+  /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
+  var ALT_LABEL = { cmd: 'B.AI' };
   /* 鼓轮 5 格 DOM [cmd,tj,cb,set,cmd]；居中格 = children[--i]（CSS 按 --y−--i 定位，
      cell 的 --y 与 children 序号一致）。cmd 居中用尾格 idx4（首格 idx0 是绕接占位） */
   var DRUM_IDX = { cmd: 4, tj: 1, cb: 2, set: 3 };
@@ -3548,8 +3555,18 @@ var PT_I18N = {
     });
     $$('.pt-key').forEach(function (k) {
       var on = k.dataset.mode === m;
-      k.setAttribute('aria-checked', on ? 'true' : 'false');
+      /* 副页模式（如 bai）：无物理键的主键保持按压态 + on-alt（灯变蓝、键名换副页名） */
+      var alt = ALT_MODE[k.dataset.mode];
+      var onAlt = !on && alt === m;
+      k.setAttribute('aria-checked', (on || onAlt) ? 'true' : 'false');
+      k.classList.toggle('on-alt', onAlt);
       k.tabIndex = on ? 0 : -1;
+      /* 键名跟随：主键在副页时显示副页名，回主页恢复原名 */
+      var label = k.querySelector('span');
+      if (label) {
+        var orig = k.dataset.origLabel || (k.dataset.origLabel = label.textContent);
+        label.textContent = onAlt ? ALT_LABEL[k.dataset.mode] : orig;
+      }
     });
     /* 音效旋钮 */
     var knob = $('.pt-knob');
