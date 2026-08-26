@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -39,12 +40,13 @@ var waterChannels = []waterChannelDef{
 
 // channelInfo 渠道在 channels 列表里的呈现（GUI 双下拉数据源）。
 type channelInfo struct {
-	ID     string   `json:"id"`
-	Name   string   `json:"name"`
-	Port   int      `json:"port"`
-	OK     bool     `json:"ok"`
-	Models []string `json:"models,omitempty"`
-	Note   string   `json:"note,omitempty"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Port    int      `json:"port"`
+	OK      bool     `json:"ok"`
+	NeedKey bool     `json:"need_key,omitempty"` // 该渠道需 key 且未配置（前端显示输入框）
+	Models  []string `json:"models,omitempty"`
+	Note    string   `json:"note,omitempty"`
 }
 
 // channelKeyCfg 渠道密钥配置项（tuanjie-water-channels.json）。
@@ -71,6 +73,30 @@ func LoadChannelKeys() map[string]string {
 		}
 	}
 	return keys
+}
+
+// SaveChannelKey 保存单渠道 key 到 tuanjie-water-channels.json（前端输入用；
+// 含密钥，文件已在 .gitignore 排除，勿入库）。
+func SaveChannelKey(id, key string) error {
+	if id == "" || key == "" {
+		return fmt.Errorf("渠道/key 不能为空")
+	}
+	existing := LoadChannelKeys()
+	existing[id] = key
+	cfgs := make([]channelKeyCfg, 0, len(existing))
+	names := make([]string, 0, len(existing))
+	for k := range existing {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		cfgs = append(cfgs, channelKeyCfg{ID: k, Key: existing[k]})
+	}
+	b, err := json.MarshalIndent(cfgs, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(channelsConfigPath(), b, 0o600)
 }
 
 // readAPIKeyFile 读 exe 同目录 api-key.txt（command 渠道 Bearer；存在才带）。
@@ -125,7 +151,7 @@ func (s *Server) buildChannels(ctx context.Context) []channelInfo {
 	keys := LoadChannelKeys()
 	out := make([]channelInfo, 0, len(waterChannels))
 	for _, c := range waterChannels {
-		ci := channelInfo{ID: c.ID, Name: c.Name, Port: c.Port, OK: true}
+		ci := channelInfo{ID: c.ID, Name: c.Name, Port: c.Port, OK: true, NeedKey: c.BearerFrom == "config" && keys[c.ID] == ""}
 		models, note := s.fetchChannelModels(ctx, c, keys)
 		if note != "" {
 			ci.OK = false
@@ -177,9 +203,11 @@ func (s *Server) fetchTuanjieModels(ctx context.Context) ([]string, string) {
 	return models, ""
 }
 
-// fetchLocalModels 本地渠道模型：GET {base}/models（Bearer 视渠道定义）。
+// fetchLocalModels 本地渠道模型：GET {base}/v1/models（Bearer 视渠道定义）。
+// 注意渠道定义 BaseURL 不带 /v1（探针层也按此约定），这里必须补全——
+// 漏 /v1 会 404（command/workbuddy 模型列表曾因此显示不出的根因）。
 func fetchLocalModels(ctx context.Context, c waterChannelDef, keys map[string]string) ([]string, string) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/v1/models", nil)
 	if err != nil {
 		return nil, "构造请求失败: " + err.Error()
 	}

@@ -2896,9 +2896,9 @@ body.pt-try { background: var(--pt-paper); }
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">UI v3.4.0 / CORE v1.2.0</div>
+                    <div class="s" id="buildNo">v3.4.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">UI v3.4.0 · CORE v1.2.0</span>
+                  <span class="pt-val" id="verChip">v3.4.0</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -4931,6 +4931,8 @@ var PT_I18N = {
       '<select class="ibtn2" id="wtModel" title="要检测的模型" style="max-width:170px"></select>' +
       '<button type="button" class="ibtn2 accent" id="wtRunBtn" title="一键全流程：自动跑探针 / 比对官方基准 / 出报告">检测</button></div>' +
       '<div class="wt-sub">一键检测模型真实性：自动跑探针 / 比对官方基准 / 出报告</div>' +
+      '<div class="wt-sub" id="wtKeyRow" style="display:none"><input class="pt-field" id="wtKeyInput" type="password" placeholder="渠道 API key" spellcheck="false" autocomplete="off" style="width:200px">' +
+      '<button type="button" class="ibtn2 accent" id="wtKeySave">保存</button> <span class="if-empty" id="wtKeyNote"></span></div>' +
       '<div class="wt-sub">检测报告 · REPORT</div>' +
       '<div class="if-list" id="wtReport" style="max-height:none"><div class="if-empty">// 输入模型名，点「检测」一键出报告</div></div>' +
       '<div class="wt-sub">检测历史 · HISTORY</div>' +
@@ -4951,12 +4953,37 @@ var PT_I18N = {
       chSel.innerHTML = chs.map(function (c) {
         return '<option value="' + escHtml(c.id) + '">' + escHtml(c.name || c.id) + (c.ok ? '' : '（不通）') + '</option>';
       }).join('');
+      renderChannelKeyInput(chs);
       fillWaterModels();
-      chSel.onchange = fillWaterModels;
+      chSel.onchange = function () { fillWaterModels(); renderChannelKeyInput(chs); };
     }).catch(function () {
       chSel.innerHTML = '<option value="tuanjie">tuanjie</option>';
       fillWaterModels();
     });
+  }
+  /* bai 等需密钥渠道：未配置时给输入框，保存到 tuanjie-water-channels.json */
+  function renderChannelKeyInput(chs) {
+    var chSel = $('wtChannel');
+    if (!chSel) return;
+    var cur = chSel.value;
+    var ch = (chs || []).filter(function (c) { return c.id === cur; })[0];
+    var row = $('wtKeyRow');
+    if (!ch || !row) return;
+    if (ch.ok || !ch.needKey) { row.style.display = 'none'; return; }
+    row.style.display = '';
+    var note = $('wtKeyNote');
+    if (note) note.textContent = (ch.note || '该渠道需要 API key') + ' —— 填好保存即可';
+    var save = $('wtKeySave');
+    if (save) save.onclick = async function () {
+      var k = (($('wtKeyInput') && $('wtKeyInput').value) || '').trim();
+      if (!k) { toast('err', '渠道 key', 'key 不能为空'); return; }
+      var r = await (await fetch("http://127.0.0.1:8788/water-probe", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setkey", channel_key_id: cur, channel_key: k })
+      })).json();
+      toast(r.ok ? 'ok' : 'err', '渠道 key', r.msg || '');
+      if (r.ok) { loadWaterChannels(); }
+    };
   }
   function fillWaterModels() {
     var chSel = $('wtChannel'), mSel = $('wtModel');
@@ -5970,6 +5997,15 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.4.0', date: '2026-08-27', groups: [
+      { label: '🚀 新功能', items: [
+        '注水检测多渠道化：团结 / Command / WorkBuddy / B.AI 四渠道全部可检——渠道选择器 + 各渠道模型联动，一键检测模型真伪',
+        'B.AI 上下文超限自动压缩：估算超 1M 窗口自动截断最早对话轮次（保留最近轮），根治 Input token exceed 400' ] },
+      { label: '🔧 修复', items: [
+        '团结积分显示与官方套餐不符（根因：官网 coding_plan 三窗口 5h/周/月 漏解析）——现按套餐口径显示',
+        'WorkBuddy 总积分虚高（体验版包周期剩余 0 误加 500）与当前消耗包误选已用满包——均已对齐官方',
+        'B.AI 前端翻页回归（并行工作区只改产物被构建覆盖，已反解移植回源件）',
+        '版本显示位大面积残留 v3.0.0（蚀刻/铭牌/构建号/芯片/编译常量）——全部对齐 v3.4.0' ] } ] },
     { v: 'v3.3.0', date: '2026-08-27', groups: [
       { label: '🚀 新功能', items: [
         'B.AI 回归：双击当前选中键翻副页（COMMAND⇄B.AI），三键格局不变、容量翻倍；副页态保持按压+状态灯变蓝+键名切换，状态一目了然',
@@ -6366,7 +6402,7 @@ var PT_I18N = {
     var upd = window._UPDATE || {};
     var dl = upd.downloads > 0 ? upd.downloads : 0;
     if (!(dl > 0)) { try { dl = parseInt(localStorage.getItem('dlCount') || '0', 10) || 0; } catch (e) {} }
-    if (!(dl > 0)) dl = 2;
+    // 兜底 2 是假数据（用户观察到 29/49 跳变的根因）——拉不到 API 就如实显示 0，不编造
     var el = $('dlCount');
     if (el) el.textContent = pad9(dl);
   }

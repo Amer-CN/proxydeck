@@ -238,7 +238,9 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 		Action  string `json:"action"` // check | quick | deep | baseline（缺省=quick，旧调用兼容）
 		UserID  string `json:"user_id"`
 		Model   string `json:"model"`
-		Channel string `json:"channel"` // 渠道（缺省 tuanjie）
+		Channel      string `json:"channel"` // 渠道（缺省 tuanjie）
+		ChannelKeyID string `json:"channel_key_id"` // setkey：渠道 id
+		ChannelKey   string `json:"channel_key"`    // setkey：key 明文
 		Samples int    `json:"samples"` // baseline/deep/check 的分布采样数（默认 60，上限 200）
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -256,6 +258,14 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// deep/baseline：在单账号模式下直接跑
+	if req.Action == "setkey" {
+		if err := SaveChannelKey(req.ChannelKeyID, req.ChannelKey); err != nil {
+			writeJSON(w, map[string]any{"ok": false, "msg": err.Error()})
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "msg": "渠道 key 已保存"})
+		return
+	}
 	if req.Action == "deep" || req.Action == "baseline" {
 		s.handleWaterDeepOrBaseline(w, r, req.Action, req.UserID, req.Model, req.Samples)
 		return
