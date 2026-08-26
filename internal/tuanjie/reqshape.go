@@ -3,12 +3,6 @@ package tuanjie
 import (
 	"bytes"
 	"encoding/json"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
-
-	"github.com/google/uuid"
 )
 
 // reqshape.go：把转发到团结 LiteLLM 的请求体重排成官方 CLI buildCreateParams
@@ -16,16 +10,16 @@ import (
 //
 // 官方顺序（[ ] 为按需出现）：
 //   model, messages, [temperature], [max_completion_tokens|max_tokens],
-//   [reasoning_effort], [top_p], [tools, parallel_tool_calls:true],
-//   [tool_choice], [metadata.user_id], [litellm_session_id],
-//   [prompt_cache_key], stream:true, stream_options:{include_usage:true}
+//   [reasoning_effort], [top_p], [metadata], [litellm_session_id],
+//   [prompt_cache_key], [tools, parallel_tool_calls:true],
+//   [tool_choice], stream:true, stream_options:{include_usage:true}
 // 非流式时官方不带 stream / stream_options（delete 掉）。
 //
-// 重排保守原则：客户端没发的字段不凭空造值——只补四个官方带的默认字段
-// （parallel_tool_calls / metadata.user_id / litellm_session_id /
-// prompt_cache_key），其余字段一律按客户端原值透传；罕见字段
-// （frequency_penalty 等官方清单外的）放在 tool_choice 的位置之后
-// （metadata 之前），按字母序稳定输出。
+// 重排保守原则：客户端没发的字段不凭空造值——只补三个官方带的默认字段
+// （parallel_tool_calls / litellm_session_id / prompt_cache_key），
+// 其余字段一律按客户端原值透传（含 metadata，官方 OpenAI chat 路径
+// 不带 user_id，客户端带了就原样保留）；罕见字段（frequency_penalty 等
+// 官方清单外的）放在 metadata 之前，按字母序稳定输出。
 
 // officialFieldOrder 官方字段顺序。
 var officialFieldOrder = []string{
@@ -36,12 +30,12 @@ var officialFieldOrder = []string{
 	"max_tokens",
 	"reasoning_effort",
 	"top_p",
-	"tools",
-	"parallel_tool_calls",
-	"tool_choice",
 	"metadata",
 	"litellm_session_id",
 	"prompt_cache_key",
+	"tools",
+	"parallel_tool_calls",
+	"tool_choice",
 	"stream",
 	"stream_options",
 }
@@ -54,46 +48,6 @@ func fieldRank(name string) int {
 		}
 	}
 	return len(officialFieldOrder)
-}
-
-// machineDeviceID 机器级稳定 device_id（metadata.user_id 用）：
-// 进程内缓存一次并落盘 exe 同目录（跨进程稳定）。
-var machineDeviceID struct {
-	mu sync.Mutex
-	id string
-}
-
-// deviceIDCachePath device_id 缓存文件路径（exe 同目录 tuanjie-device-id.txt，
-// 拿不到 exe 目录时退回当前目录）。
-func deviceIDCachePath() string {
-	if p, err := os.Executable(); err == nil {
-		return filepath.Join(filepath.Dir(p), "tuanjie-device-id.txt")
-	}
-	if wd, err := os.Getwd(); err == nil {
-		return filepath.Join(wd, "tuanjie-device-id.txt")
-	}
-	return "tuanjie-device-id.txt"
-}
-
-// DeviceID 返回稳定的机器级 device_id（官方 CLI 的 metadata.user_id 形态）。
-// 首次调用生成 uuid 并缓存：内存 + exe 同目录文件；文件读写失败就退化为
-// 进程级一次（功能不因此拦截）。
-func DeviceID() string {
-	machineDeviceID.mu.Lock()
-	defer machineDeviceID.mu.Unlock()
-	if machineDeviceID.id != "" {
-		return machineDeviceID.id
-	}
-	if b, err := os.ReadFile(deviceIDCachePath()); err == nil {
-		if id := strings.TrimSpace(string(b)); id != "" {
-			machineDeviceID.id = id
-			return id
-		}
-	}
-	id := "device-" + uuid.New().String()
-	machineDeviceID.id = id
-	_ = os.WriteFile(deviceIDCachePath(), []byte(id), 0o644)
-	return id
 }
 
 type orderedField struct {
@@ -143,7 +97,7 @@ func reshapeChatBody(body []byte, sessionID string) []byte {
 		}
 	}
 
-	// 罕见字段（官方清单外）：字母序，插在 tool_choice 的位置之后（metadata 前）
+	// 罕见字段（官方清单外）：字母序，插在 metadata 之前
 	extras := make([]string, 0, len(m))
 	for k := range m {
 		if fieldRank(k) < len(officialFieldOrder) {
@@ -158,7 +112,7 @@ func reshapeChatBody(body []byte, sessionID string) []byte {
 	fields := make([]orderedField, 0, len(m)+4)
 	rareDone := false
 	for _, name := range officialFieldOrder {
-		// 罕见字段在 metadata 之前统一插入（= 官方 tool_choice 位之后）
+		// 罕见字段在 metadata 之前统一插入
 		if name == "metadata" && !rareDone {
 			for _, k := range extras {
 				fields = append(fields, orderedField{key: k, value: json.RawMessage(m[k])})
@@ -195,13 +149,6 @@ func reshapeChatBody(body []byte, sessionID string) []byte {
 		if _, hasTools := m["tools"]; hasTools {
 			fields = insertField(fields, "parallel_tool_calls", true, "tools")
 		}
-	}
-	if _, ok := m["metadata"]; !ok {
-		fields = insertField(fields, "metadata", json.RawMessage(orderedJSON([]orderedField{
-			{key: "user_id", value: DeviceID()},
-		})), "tool_choice")
-	} else {
-		fields = patchMetadataUserID(fields)
 	}
 	if _, ok := m["litellm_session_id"]; !ok {
 		fields = insertField(fields, "litellm_session_id", sessionID, "metadata")
@@ -242,36 +189,6 @@ func insertField(fields []orderedField, key string, value any, anchor string) []
 	out = append(out, orderedField{key: key, value: value})
 	out = append(out, fields[idx+1:]...)
 	return out
-}
-
-// patchMetadataUserID 给客户端已带的 metadata 补 user_id（缺才补；
-// user_id 放首位对齐官方，其余键按字母序稳定输出）。
-func patchMetadataUserID(fields []orderedField) []orderedField {
-	for i, f := range fields {
-		if f.key != "metadata" {
-			continue
-		}
-		raw, _ := f.value.(json.RawMessage)
-		var md map[string]json.RawMessage
-		if json.Unmarshal(raw, &md) != nil {
-			return fields
-		}
-		if _, ok := md["user_id"]; ok {
-			return fields
-		}
-		keys := make([]string, 0, len(md))
-		for k := range md {
-			keys = append(keys, k)
-		}
-		sortStrings(keys)
-		pairs := []orderedField{{key: "user_id", value: json.RawMessage(`"` + DeviceID() + `"`)}}
-		for _, k := range keys {
-			pairs = append(pairs, orderedField{key: k, value: json.RawMessage(md[k])})
-		}
-		fields[i].value = json.RawMessage(orderedJSON(pairs))
-		return fields
-	}
-	return fields
 }
 
 // indexField 返回字段下标（-1 不存在）。

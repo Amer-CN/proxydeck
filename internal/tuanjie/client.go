@@ -32,10 +32,11 @@ const (
 	codelyAPIBase   = "https://codely.tuanjie.cn"
 	litellmAPIBase  = "https://codely-litellm.tuanjie.cn"
 	cliAPIKeyURL    = codelyAPIBase + "/api/api-token/cli-api-key"
-	// 官方 UA 真值（2026-08-25 从 @unity-china/codely-cli rc.54 源码 getRealUserAgent 提取）：
-	// `Codely-CLI - OSS/${版本} (Codely-Cli/${版本})`。旧值 codely-cli/1.0.0-release.52
-	// 外壳与版本格式都不对（官方是 rc.54 且无平台后缀），已对齐官方格式。
-	cliUserAgent    = "Codely-CLI - OSS/1.0.0-rc.54 (Codely-Cli/1.0.0-rc.54)"
+	// 官方 HTTP 请求真正的 UA（2026-08-25 从 @unity-china/codely-cli rc.54 源码
+	// Dre/QEe 构造器 defaultHeaders 提取）：fmt.Sprintf("codely-cli/%s (%s; %s)",
+	// cliVersion, platform, arch) = codely-cli/1.0.0-rc.54 (win32; x64)。
+	// 小写、带 Node platform/arch 枚举；本产品仅跑 Windows，win32/x64 写死。
+	cliUserAgent    = "codely-cli/1.0.0-rc.54 (win32; x64)"
 	keyCacheTTL     = time.Hour
 	defaultTimeout  = 300 * time.Second
 	keyFetchTimeout = 15 * time.Second
@@ -231,8 +232,10 @@ func newLitellmSessionID() string { return uuid.New().String() }
 // litellmHeaders 构造伪装 codely CLI 的请求头。path 参与签名，是上游路径。
 // sessionID 为本请求的会话 id（x-litellm-session-id 头与请求体
 // litellm_session_id 字段同值，与官方 CLI 一致）。
-// 2026-08-25 对照官方 CLI 源码（@unity-china/codely-cli rc.54）补齐：
-// DashScope 分支标记头（GLM/Kimi 走阿里后端时官方会带，缺了易被识别为反代）。
+	// 2026-08-25 对照官方 CLI 源码（@unity-china/codely-cli rc.54）：官方仅
+	// isDashScopeProvider() 为真（authType=QWEN_OAUTH 或 baseUrl 指向
+	// dashscope.aliyuncs.com）才发 X-DashScope-* 头；我们上游是
+	// codely-litellm.tuanjie.cn，官方这条路线不发，故不设置。
 func (c *Client) litellmHeaders(path, key, sessionID string) http.Header {
 	h := http.Header{}
 	h.Set("Authorization", "Bearer "+key)
@@ -244,9 +247,6 @@ func (c *Client) litellmHeaders(path, key, sessionID string) http.Header {
 	}
 	h.Set("x-litellm-session-id", sessionID)
 	h.Set("X-Codely-Signature", SignLitellm(path, key, time.Now()))
-	// 官方 DashScope provider 标记头（源码实证；GLM/Kimi 大概率走此分支）
-	h.Set("X-DashScope-CacheControl", "enable")
-	h.Set("X-DashScope-UserAgent", cliUserAgent)
 	return h
 }
 

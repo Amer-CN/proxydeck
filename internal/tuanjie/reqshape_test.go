@@ -45,7 +45,7 @@ func wantOfficialOrder(t *testing.T, body []byte, want []string) {
 }
 
 // TestReshapeStreamOfficialOrder 流式 ZCode 形态重排：字段序=官方序，
-// 补 parallel_tool_calls/metadata/litellm_session_id/prompt_cache_key，
+// 补 parallel_tool_calls/litellm_session_id/prompt_cache_key（不补 metadata），
 // stream/stream_options 在尾且 include_usage 注入。
 func TestReshapeStreamOfficialOrder(t *testing.T) {
 	in := []byte(`{"stream_options":{"include_usage":true},"model":"codely-flash","max_tokens":20,"reasoning_effort":"low","messages":[{"role":"user","content":"OK"}],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"auto","stream":true}`)
@@ -53,7 +53,7 @@ func TestReshapeStreamOfficialOrder(t *testing.T) {
 	wantOfficialOrder(t, out, []string{
 		"model", "messages", "max_tokens", "reasoning_effort",
 		"tools", "parallel_tool_calls", "tool_choice",
-		"metadata", "litellm_session_id", "prompt_cache_key",
+		"litellm_session_id", "prompt_cache_key",
 		"stream", "stream_options",
 	})
 	var m map[string]any
@@ -63,9 +63,8 @@ func TestReshapeStreamOfficialOrder(t *testing.T) {
 	if m["parallel_tool_calls"] != true {
 		t.Fatalf("parallel_tool_calls 应补 true，得到 %v", m["parallel_tool_calls"])
 	}
-	md, _ := m["metadata"].(map[string]any)
-	if md == nil || md["user_id"] == "" || !strings.HasPrefix(md["user_id"].(string), "device-") {
-		t.Fatalf("metadata.user_id 应补 device- 前缀 id，得到 %v", m["metadata"])
+	if _, ok := m["metadata"]; ok {
+		t.Fatalf("客户端未带 metadata 时不应补 metadata: %s", out)
 	}
 	if m["litellm_session_id"] != "sess-123" {
 		t.Fatalf("litellm_session_id 应与 sessionID 同值，得到 %v", m["litellm_session_id"])
@@ -98,7 +97,7 @@ func TestReshapeNonStreamDropsStreamFields(t *testing.T) {
 	}
 	wantOfficialOrder(t, out, []string{
 		"model", "messages", "max_tokens",
-		"metadata", "litellm_session_id", "prompt_cache_key",
+		"litellm_session_id", "prompt_cache_key",
 	})
 }
 
@@ -131,21 +130,21 @@ func TestReshapeNoToolsNoParallel(t *testing.T) {
 	}
 }
 
-// TestReshapeRareFieldsAfterToolChoice 罕见字段（官方清单外）排 tool_choice
-// 之后（= metadata 之前），字母序稳定。
-func TestReshapeRareFieldsAfterToolChoice(t *testing.T) {
+// TestReshapeRareFieldsBeforeMetadata 罕见字段（官方清单外）排 metadata 之前，
+// 字母序稳定。
+func TestReshapeRareFieldsBeforeMetadata(t *testing.T) {
 	in := []byte(`{"frequency_penalty":0.5,"model":"m","messages":[{"role":"user","content":"OK"}],"presence_penalty":0.1,"stream":true}`)
 	out := reshapeChatBody(in, "s")
 	wantOfficialOrder(t, out, []string{
 		"model", "messages",
 		"frequency_penalty", "presence_penalty",
-		"metadata", "litellm_session_id", "prompt_cache_key",
+		"litellm_session_id", "prompt_cache_key",
 		"stream", "stream_options",
 	})
 }
 
 // TestReshapeClientValuesPreserved 客户端真传的值原样保留（temperature/top_p/
-// max_completion_tokens 系、已有 metadata.user_id 不覆盖）。
+// max_completion_tokens 系、已有 metadata 原值透传不增删键）。
 func TestReshapeClientValuesPreserved(t *testing.T) {
 	in := []byte(`{"model":"m","messages":[{"role":"user","content":"OK"}],"temperature":0.2,"top_p":0.9,"max_completion_tokens":100,"metadata":{"user_id":"my-dev","tag":"x"},"stream":true,"parallel_tool_calls":false}`)
 	out := reshapeChatBody(in, "s")
@@ -164,7 +163,7 @@ func TestReshapeClientValuesPreserved(t *testing.T) {
 	}
 	md, _ := m["metadata"].(map[string]any)
 	if md == nil || md["user_id"] != "my-dev" || md["tag"] != "x" {
-		t.Fatalf("已有 metadata 的 user_id 及其余键应保留: %s", out)
+		t.Fatalf("已有 metadata 应原值透传（不补不删键），得到 %v", m["metadata"])
 	}
 	if _, ok := m["litellm_session_id"]; !ok {
 		t.Fatalf("litellm_session_id 应补: %s", out)
@@ -193,16 +192,5 @@ func TestReshapeStreamOptionsPreserved(t *testing.T) {
 	so, _ := m["stream_options"].(map[string]any)
 	if so == nil || so["include_usage"] != true {
 		t.Fatalf("stream_options.include_usage 应强制 true，得到 %v", m["stream_options"])
-	}
-}
-
-// TestDeviceIDStable DeviceID 进程内稳定且带 device- 前缀。
-func TestDeviceIDStable(t *testing.T) {
-	a, b := DeviceID(), DeviceID()
-	if a != b {
-		t.Fatalf("DeviceID 应稳定: %s != %s", a, b)
-	}
-	if !strings.HasPrefix(a, "device-") {
-		t.Fatalf("DeviceID 应 device- 前缀: %s", a)
 	}
 }
