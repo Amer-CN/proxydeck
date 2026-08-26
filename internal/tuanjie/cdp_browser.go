@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -225,13 +226,12 @@ func base64URLDecode(s string) ([]byte, error) {
 	return out, nil
 }
 
-// launchBrowserWithCDP 用【独立专用 profile】拉起 Edge/Chrome 带调试口。
+// launchBrowserWithCDP 用【独立一次性 profile】拉起 Edge/Chrome 带调试口。
 // 关键（实测）：Edge/Chrome 136+ 对默认 profile 忽略 --remote-debugging-port
 // （安全变更），必须指定独立的 --user-data-dir 调试口才会开。
-// 专用 profile 与用户日常浏览器互不干扰；用户在弹出的窗口里登录团结账号
-// （一次性），登录态存入专用 profile，之后探测全自动。
-func launchBrowserWithCDP(port string) (string, error) {
-	profileDir := probeProfileDir()
+// profileDir 由调用方传入——每次探测一个全新目录，登录态不跨会话复用，
+// 保证连续探测读到的是刚登录的账号而不是上一次的旧登录态。
+func launchBrowserWithCDP(port, profileDir string) (string, error) {
 	for _, p := range browserPaths {
 		if !fileExistsStr(p) {
 			continue
@@ -256,6 +256,63 @@ func launchBrowserWithCDP(port string) (string, error) {
 // probeProfileDir 是自动探测专用浏览器 profile 目录（独立于用户日常配置）。
 func probeProfileDir() string {
 	return filepath.Join(os.TempDir(), "proxydeck-codely-probe")
+}
+
+// newProbeSessionDir 为每次探测生成一个全新的临时 profile 目录（带 UnixNano 后缀保证唯一）。
+// 一次性会话：登录态只进本次目录，不跨探测复用，避免读到上一次账号。
+func newProbeSessionDir() string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("proxydeck-codely-probe-%d", time.Now().UnixNano()))
+}
+
+// freeCDPPort 从 9222 起到 9229 找第一个当前可监听的空闲端口，监听后立即关闭并返回。
+// 使每个探测会话使用独立调试口，避免与其它在跑窗口/浏览器冲突。
+func freeCDPPort() string {
+	for i := 9222; i <= 9229; i++ {
+		port := strconv.Itoa(i)
+		ln, err := net.Listen("tcp", "127.0.0.1:"+port)
+		if err != nil {
+			continue
+		}
+		_ = ln.Close()
+		return port
+	}
+	return "9222" // 兜底：全部占用时退回默认口（极少发生）
+}
+
+// probeCDPBrowserQuiet 只探测单个端口的 CDP，读到登录态返回凭据，否则返回 nil。
+// 安静版：不报错、不遍历其它端口——只盯本次拉起的会话窗口，避免读到别的窗口的旧登录态。
+func probeCDPBrowserQuiet(port string) *CDPBrowserCreds {
+	creds, err := cdpFetchCodelyCreds(port)
+	if err != nil {
+		return nil
+	}
+	return creds
+}
+
+// cleanupStaleProbeProfiles 清理 %TEMP% 下 mtime 超 24h 的 proxydeck-codely-probe 前缀目录。
+// 只清过期的：用户可能还没登录完（新目录未过期），交给本函数惰性清理。
+func cleanupStaleProbeProfiles() {
+	entries, err := os.ReadDir(os.TempDir())
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-24 * time.Hour)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasPrefix(name, "proxydeck-codely-probe") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			_ = os.RemoveAll(filepath.Join(os.TempDir(), name))
+		}
+	}
 }
 
 // hiddenCmd 创建隐藏窗口的命令（不弹黑窗；tasklist/taskkill 等 CLI 工具用）。

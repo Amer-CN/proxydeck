@@ -98,24 +98,29 @@ func (s *Server) handleAccountAuto(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// 2. 探测不到 → 拉起【专用 profile】浏览器带调试口（136+ 版本安全限制：
+	// 2. 探测不到 → 拉起【一次性独立 profile】浏览器带调试口（136+ 版本安全限制：
 	//    默认 profile 忽略调试参数，必须独立 user-data-dir），打开团结 dashboard。
-	path, err := launchBrowserWithCDP("9222")
+	//    每次探测用全新目录 + 独立端口，登录态不跨会话复用。
+	cleanupStaleProbeProfiles()
+	port := freeCDPPort()
+	path, err := launchBrowserWithCDP(port, newProbeSessionDir())
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": false, "msg": "未探测到调试口，且启动浏览器失败: " + err.Error()})
 		return
 	}
-	// 3. 长轮询等登录：专用 profile 是全新环境，需要在弹出的窗口里登录一次；
-	//    登录后 cookie 写入该 profile，读取入池。最长 150 秒，每 2 秒查一次。
+	// 3. 长轮询等登录：一次性 profile 是全新环境，需要在弹出的窗口里登录一次；
+	//    登录后 cookie 写入该 profile，读取入池。只盯本会话端口，避免读到其它窗口旧登录态。
+	//    最长 150 秒，每 2 秒查一次。
 	deadline := time.Now().Add(150 * time.Second)
 	for time.Now().Before(deadline) {
 		time.Sleep(2 * time.Second)
-		if creds := probeCDPBrowser(); creds != nil {
+		if creds := probeCDPBrowserQuiet(port); creds != nil {
 			if accountTokenInvalid(r.Context(), creds.AccessToken) {
 				writeJSON(w, map[string]any{"ok": false, "msg": invalidTokenMsg})
 				return
 			}
 			if s.pool.Add(creds.UserID, creds.AccessToken, creds.UserID, "") {
+				log.Printf("[tuanjie] 自动探测成功：探测窗口可以关了（port=%s user_id=%s）", port, creds.UserID)
 				writeJSON(w, map[string]any{"ok": true, "msg": "已读取登录态并入池（弹出的浏览器窗口可以关了）", "user_id": creds.UserID, "browser": path})
 			} else {
 				writeJSON(w, map[string]any{"ok": false, "msg": "该账号已在池里（user_id " + creds.UserID + "）", "user_id": creds.UserID})
@@ -126,6 +131,7 @@ func (s *Server) handleAccountAuto(w http.ResponseWriter, r *http.Request) {
 			return // 客户端断开，不再等
 		}
 	}
+	log.Printf("[tuanjie] 自动探测超时：探测窗口可以关了（port=%s，150 秒未读到期）", port)
 	writeJSON(w, map[string]any{"ok": false, "msg": "等待登录超时（150 秒）——请在弹出的浏览器窗口里登录团结账号后再点一次探测"})
 }
 
