@@ -132,3 +132,26 @@ node --check <js>                    # ui.html 抽取 script 后语法校验
 curl http://127.0.0.1:8788/health    # 健康检查
 git push myrepo HEAD:main            # 推送（remote 名是 myrepo 不是 origin）
 ```
+
+## 🔴 红线：团结凭证链（2026-08-27 官方客服实证）
+
+官方客服原话：「我们是通过 session 的签名 sp 来封的，cliapi 这块不动，就不会」。
+即封号判定依据 = **session（x-litellm-session-id）+ 签名（X-Codely-Signature）凭证链**。
+只要请求携带这套 CLI 凭证链，官方不管流量从哪个客户端壳发出。
+
+**我们的实现必须逐字节保持与官方 CLI（@unity-china/codely-cli rc.54）一致，任何"顺手优化/重构"都禁止触碰以下项：**
+
+1. `codelySigningSeedHex = "406f00f74768ba0cb0cd30f097ec6c2bdacb89c61a38b7dd140838bbd0e98018"`（client.go）
+2. 签名密钥派生：`HMAC(seed,"codely-signing-v1") → HMAC(k1, cli_api_key)`（codelySigningKey）
+3. 签名消息体：`["v1", path, timestamp].join("
+")`，输出 `v1.<ts>.<base64url>`（SignLitellm）
+4. x-litellm-session-id 头 = 请求体 litellm_session_id = prompt_cache_key（每请求 randomUUID）
+5. cli_api_key 换取路径 `codely.tuanjie.cn/api/api-token/cli-api-key`（不能改成其他换取源）
+6. cliUserAgent = `Codely-CLI - OSS/1.0.0-rc.54 (Codely-Cli/1.0.0-rc.54)`（官方真值）
+7. DashScope 标记头 X-DashScope-CacheControl/X-DashScope-UserAgent（GLM/Kimi 分支必带）
+8. 请求体重排（reqshape.go）：官方 buildCreateParams 字段序 + 默认字段，非流式删 stream
+
+**改动以上任何一项 = 掉出安全线 = 有被官方按凭证链封号的风险。**
+如需变更（官方发新版 CLI、签名算法迭代），必须先逆向新版源码实证、再改，改后必须用
+真实流量 200 验证并提交。历史教训：56574 账号 401 被封发生在签名/UA 未对齐时期，
+对齐后新账号流量稳定 200 未被扫。

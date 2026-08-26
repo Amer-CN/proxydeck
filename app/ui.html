@@ -3590,15 +3590,12 @@ var PT_I18N = {
   }
   $$('.pt-key[data-mode]').forEach(function (k) {
     k.addEventListener('click', function () {
-      /* 双击当前选中键 → 翻到该键副页（隐藏甲板，不占键位；再双击翻回） */
-      if (k.dataset.mode === st.mode) {
-        var now = Date.now();
-        if (window.__keyLastClick && now - window.__keyLastClick < 400) {
-          window.__keyLastClick = 0;
-          var alt = ALT_MODE[k.dataset.mode];
-          if (alt) { selectMode(alt); return; }
-        }
-        window.__keyLastClick = now;
+      /* 单击有副页的键：当前已在该键或它的副页上 → 翻副页/翻回；
+         否则普通切换到该键。COMMAND ⇄ B.AI 即此机制 */
+      var alt = ALT_MODE[k.dataset.mode];
+      if (alt && (k.dataset.mode === st.mode || alt === st.mode)) {
+        selectMode(alt);
+        return;
       }
       selectMode(k.dataset.mode);
     });
@@ -3607,6 +3604,11 @@ var PT_I18N = {
         /* 阻断冒泡：全局「空格=点火/停堆」快捷键不能跟着触发（双动作 bug） */
         ev.preventDefault();
         ev.stopPropagation();
+        var altK = ALT_MODE[k.dataset.mode];
+        if (altK && (k.dataset.mode === st.mode || altK === st.mode)) {
+          selectMode(altK);
+          return;
+        }
         selectMode(k.dataset.mode);
         return;
       }
