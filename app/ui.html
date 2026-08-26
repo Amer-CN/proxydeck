@@ -3594,7 +3594,8 @@ var PT_I18N = {
          否则普通切换到该键。COMMAND ⇄ B.AI 即此机制 */
       var alt = ALT_MODE[k.dataset.mode];
       if (alt && (k.dataset.mode === st.mode || alt === st.mode)) {
-        selectMode(alt);
+        /* 当前在副页（alt===st.mode）→ 回主键；当前在主页（k.dataset.mode===st.mode）→ 去副页 */
+        selectMode(alt === st.mode ? k.dataset.mode : alt);
         return;
       }
       selectMode(k.dataset.mode);
@@ -3606,7 +3607,7 @@ var PT_I18N = {
         ev.stopPropagation();
         var altK = ALT_MODE[k.dataset.mode];
         if (altK && (k.dataset.mode === st.mode || altK === st.mode)) {
-          selectMode(altK);
+          selectMode(altK === st.mode ? k.dataset.mode : altK);
           return;
         }
         selectMode(k.dataset.mode);
