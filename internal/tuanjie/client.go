@@ -398,11 +398,15 @@ func newLitellmSessionID() string { return newLitellmSession().ID }
 // sess 为本请求的会话（x-litellm-session-id 头与请求体 litellm_session_id
 // 字段同值）；sess 为 nil 时现场造一次性会话。
 	// 头集合 = 官方 CLI 实际发送的最小集（rc.55 源码逐项实证）：
+	//   - Authorization Bearer <cli_api_key> 必带——2026-08-27 排查教训：
+	//     直连测试脚本漏了这个头会得 401「请升级到最新版」（param=
+	//     x-codely-signature 的误导性响应），曾被误诊为"签名换锁/TLS WAF
+	//     拦截"。直连实测是完全可行的排查路径，别跳过；UA 版本号不影响
+	//     放行（rc.54/rc.55 UA 直连均 200，矩阵实测）
 	//   - DashScope 头不带：官方仅 isDashScopeProvider() 路线发，团结
 	//     LiteLLM 路线官方不发（2026-08-25 实证）
 	//   - B3 追踪头不带：telemetry 默认 enabled:!1 且 SDK 未注册 B3
-	//     propagator，官方默认不发（2026-08-27 实证 + A/B 大小请求均 200；
-	//     401 修复靠 UA 版本号，与 B3 无关）
+	//     propagator，官方默认不发（2026-08-27 实证 + A/B 大小请求均 200）
 func (c *Client) litellmHeaders(path, key string, sess *LitellmSession) http.Header {
 	if sess == nil {
 		sess = newLitellmSession()
