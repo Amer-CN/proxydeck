@@ -12,7 +12,7 @@ func TestBuildWaterReportItemsAllMatch(t *testing.T) {
 	}
 	sim := distSimilarity{Cosine: 0.9, Overall: 0.98, ModeA: 10, ModeB: 10}
 	canary := &WaterProbeResult{Answers: map[string]bool{"repeat": true, "math": true, "knowledge": true}}
-	items := buildWaterReportItems(canary, cmps, sim, base, false)
+	items := buildWaterReportItems("tuanjie", canary, cmps, sim, base, false)
 	if len(items) != 4 {
 		t.Fatalf("应有 4 个检测项，得到 %d: %+v", len(items), items)
 	}
@@ -30,7 +30,7 @@ func TestBuildWaterReportItemsFirstTime(t *testing.T) {
 	cmps := []probeCompare{{Name: "tokenizer_en", Current: "100", Baseline: "100", Match: true, Status: "ok"}}
 	sim := distSimilarity{Cosine: 0.9, Overall: 0.99, ModeA: 7, ModeB: 7}
 	canary := &WaterProbeResult{Answers: map[string]bool{"repeat": true, "math": true, "knowledge": true}}
-	items := buildWaterReportItems(canary, cmps, sim, base, true)
+	items := buildWaterReportItems("tuanjie", canary, cmps, sim, base, true)
 	if len(items) != 4 {
 		t.Fatalf("应有 4 个检测项，得到 %d", len(items))
 	}
@@ -50,7 +50,7 @@ func TestBuildWaterReportItemsMismatchAndNoDist(t *testing.T) {
 		{Name: "finish_stop", Current: "stop", Baseline: "length", Match: false, Status: "ok"},
 	}
 	canary := &WaterProbeResult{Answers: map[string]bool{"repeat": true, "math": false, "knowledge": true}}
-	items := buildWaterReportItems(canary, cmps, distSimilarity{}, base, false)
+	items := buildWaterReportItems("tuanjie", canary, cmps, distSimilarity{}, base, false)
 	if items[0].Result != "✖" {
 		t.Errorf("①身份指纹应 ✖，得到 %q", items[0].Result)
 	}
@@ -64,7 +64,7 @@ func TestBuildWaterReportItemsMismatchAndNoDist(t *testing.T) {
 
 func TestBuildWaterReportItemsCanaryNil(t *testing.T) {
 	base := &Baseline{Model: "GLM-5.3", Account: "38261", SampledAt: "2026-08-25 15:55:50"}
-	items := buildWaterReportItems(nil, nil, distSimilarity{}, base, false)
+	items := buildWaterReportItems("tuanjie", nil, nil, distSimilarity{}, base, false)
 	if items[2].Result != "⚠" {
 		t.Errorf("金丝雀失败应 ⚠，得到 %q", items[2].Result)
 	}

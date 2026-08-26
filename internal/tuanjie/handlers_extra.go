@@ -181,6 +181,7 @@ func (s *Server) handleInflight(w http.ResponseWriter, r *http.Request) {
 // waterHistoryEntry 一条注水检测历史（内存环形 20 条）。
 type waterHistoryEntry struct {
 	At      string  `json:"at"`
+	Channel string  `json:"channel,omitempty"`
 	Model   string  `json:"model"`
 	Account string  `json:"account"`
 	Light   string  `json:"verdict_light"`
@@ -209,8 +210,10 @@ func (s *Server) waterHistory() []waterHistoryEntry {
 
 // handleWaterProbe 注水检测（action 字段分发）：
 //   - GET ?history=1：返回检测历史（最近 20 条）
+//   - GET ?channels=1：返回四渠道列表（含各渠道 models，3s 缓存）
 //   - check（前端唯一入口）：一键全流程——有基准直接比对出报告；
-//     无基准自动采集官方基准后同账号比对自检（报告标注首次检测）
+//     无基准自动采集官方基准后同渠道比对自检（报告标注首次检测）；
+//     channel 缺省 tuanjie，非 tuanjie 渠道探针直打该渠道本地端点
 //   - quick（默认，兼容旧调用）：现有金丝雀探针（漂移+答题）+ 第一层管道探针入结果
 //   - deep：第一层 + 第二层分布采样 + 与基准库比对（综合灯色）
 //   - baseline：跑第一层全部探针 + 第二层分布采样（N=60），落盘为该模型官方基准
@@ -218,6 +221,10 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		if r.URL.Query().Get("history") == "1" {
 			writeJSON(w, map[string]any{"ok": true, "history": s.waterHistory()})
+			return
+		}
+		if r.URL.Query().Get("channels") == "1" {
+			s.handleChannels(w, r)
 			return
 		}
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -231,6 +238,7 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 		Action  string `json:"action"` // check | quick | deep | baseline（缺省=quick，旧调用兼容）
 		UserID  string `json:"user_id"`
 		Model   string `json:"model"`
+		Channel string `json:"channel"` // 渠道（缺省 tuanjie）
 		Samples int    `json:"samples"` // baseline/deep/check 的分布采样数（默认 60，上限 200）
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -244,7 +252,7 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 		req.Samples = 60
 	}
 	if req.Action == "check" {
-		s.handleWaterCheck(w, r, req.UserID, req.Model, req.Samples)
+		s.handleWaterCheck(w, r, req.Channel, req.UserID, req.Model, req.Samples)
 		return
 	}
 	// deep/baseline：在单账号模式下直接跑
@@ -267,82 +275,108 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 	key, kerr := fetchKeyWithToken(r.Context(), accessToken)
 	var probes []probeResult
 	if kerr == nil {
-		probes = RunPipelineProbes(r.Context(), key, req.Model)
+		probes = RunPipelineProbes(r.Context(), tuanjieTarget(key), req.Model)
 	}
 	writeJSON(w, map[string]any{"ok": true, "action": "quick", "results": []*WaterProbeResult{res}, "probes": probes})
 }
 
 // handleWaterCheck action=check：一键全流程出报告。
 //   - 有基准：跑金丝雀 + 管道探针 + 分布采样（N=60）+ CompareToBaseline
-//   - 无基准：先 CollectBaseline（无感自动采集）再同账号跑一遍比对自检，
+//   - 无基准：先 CollectBaseline（无感自动采集）再同渠道跑一遍比对自检，
 //     报告标注 first_time=true（本次为新模型首次检测，基准已自动采集）
+//   - channel：缺省 tuanjie（走账号池 fetchKeyWithToken 换 key 直探上游）；
+//     非 tuanjie 渠道探针直打该渠道本地端点（probeTarget），不走账号池。
 //
-// 响应：{ok, action:"check", report:{model,account,at,verdict:{light,score,reason},
-// items:[{name,result,detail}...], first_time}, probes, probe_compare, dist,
-// dist_similarity, canary}。报告顶层附各层原始证据供前端折叠区渲染。
-func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, userID, model string, samples int) {
+// 响应：{ok, action:"check", report:{model,channel,account,at,verdict:{light,
+// score,reason}, items:[{name,result,detail}...], first_time}, probes,
+// probe_compare, dist, dist_similarity, canary}。
+func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channel, userID, model string, samples int) {
 	account := userID
 	if account == "" {
 		account = "38261" // 单账号模式账号标识（与既有官方基准采集账号一致）
 	}
-	accessToken, atErr := loadAccessToken()
-	if atErr != nil {
-		writeJSON(w, map[string]any{"ok": false, "msg": "未找到团结登录态（请先登录团结 Cowork 桌面端）"})
-		return
-	}
-	key, err := fetchKeyWithToken(r.Context(), accessToken)
-	if err != nil {
-		writeJSON(w, map[string]any{"ok": false, "msg": "换取 key 失败: " + err.Error()})
-		return
+	if channel == "" {
+		channel = "tuanjie"
 	}
 
-	base := s.baselines.Get(model)
+	// 构造探针 target：tuanjie 走账号池换 key；其余渠道走本地端点
+	accessToken := ""
+	var target *probeTarget
+	if channel == "tuanjie" {
+		var atErr error
+		accessToken, atErr = loadAccessToken()
+		if atErr != nil {
+			writeJSON(w, map[string]any{"ok": false, "msg": "未找到团结登录态（请先登录团结 Cowork 桌面端）"})
+			return
+		}
+		key, err := fetchKeyWithToken(r.Context(), accessToken)
+		if err != nil {
+			writeJSON(w, map[string]any{"ok": false, "msg": "换取 key 失败: " + err.Error()})
+			return
+		}
+		target = tuanjieTarget(key)
+	} else {
+		t, err := s.channelTarget(channel)
+		if err != nil {
+			writeJSON(w, map[string]any{"ok": false, "msg": err.Error()})
+			return
+		}
+		target = t
+	}
+
+	base := s.baselines.Get(channel, model)
 	firstTime := base == nil
 
 	var (
-		probes []probeResult
-		dist   *distResult
-		cmps   []probeCompare
-		sim    distSimilarity
+		probes  []probeResult
+		dist    *distResult
+		cmps    []probeCompare
+		sim     distSimilarity
 		verdict overallVerdict
 	)
 	if firstTime {
-		// 无基准：先自动采集官方基准（无感模式），再同账号比对自检
-		bl, blErr := s.baselines.CollectBaseline(r.Context(), key, model, account, samples)
+		// 无基准：先自动采集官方基准（无感模式），再同渠道比对自检
+		bl, blErr := s.baselines.CollectBaseline(r.Context(), target, channel, model, account, samples)
 		if blErr != nil {
 			writeJSON(w, map[string]any{"ok": false, "msg": blErr.Error()})
 			return
 		}
-		probes = RunPipelineProbes(r.Context(), key, model)
-		dist = collectDistSamples(r.Context(), key, model, samples)
+		probes = RunPipelineProbes(r.Context(), target, model)
+		dist = collectDistSamples(r.Context(), target, model, samples)
 		cmps, sim, verdict = CompareToBaseline(bl, probes, dist)
 		base = bl
 		verdict.Light = "grey"
 		verdict.Label = "首次"
 		verdict.Reason = plainVerdictReason("grey")
 	} else {
-		probes = RunPipelineProbes(r.Context(), key, model)
-		dist = collectDistSamples(r.Context(), key, model, samples)
+		probes = RunPipelineProbes(r.Context(), target, model)
+		dist = collectDistSamples(r.Context(), target, model, samples)
 		cmps, sim, verdict = CompareToBaseline(base, probes, dist)
 		verdict.Reason = plainVerdictReason(verdict.Light)
 	}
 
 	// 金丝雀答题（能力项；失败不阻断报告，item 标 ⚠）
-	canary, cErr := s.water.ProbeAccount(r.Context(), accessToken, "local", model)
-	if cErr != nil {
-		log.Printf("[tuanjie] check canary 失败: %v", cErr)
+	var canary *WaterProbeResult
+	if channel == "tuanjie" {
+		canary, _ = s.water.ProbeAccount(r.Context(), accessToken, "local", model)
+	} else {
+		canary, _ = s.water.ProbeAccountTarget(r.Context(), target, "local", model)
+	}
+	if canary == nil {
+		log.Printf("[tuanjie] check canary 失败 channel=%s model=%s", channel, model)
 	}
 
 	at := time.Now().Format("2006-01-02 15:04:05")
 	report := map[string]any{
 		"model":      model,
+		"channel":    channel,
 		"account":    account,
 		"at":         at,
 		"verdict":    map[string]any{"light": verdict.Light, "score": verdict.Score, "reason": verdict.Reason},
-		"items":      buildWaterReportItems(canary, cmps, sim, base, firstTime),
+		"items":      buildWaterReportItems(channel, canary, cmps, sim, base, firstTime),
 		"first_time": firstTime,
 	}
-	s.pushWaterHistory(waterHistoryEntry{At: at, Model: model, Account: account, Light: verdict.Light, Score: verdict.Score})
+	s.pushWaterHistory(waterHistoryEntry{At: at, Channel: channel, Model: model, Account: account, Light: verdict.Light, Score: verdict.Score})
 	writeJSON(w, map[string]any{
 		"ok": true, "action": "check", "report": report,
 		"probes": probes, "probe_compare": cmps,
@@ -373,9 +407,10 @@ type waterReportItem struct {
 
 // buildWaterReportItems 组装四个人话检测项（纯函数，可单测）：
 // ①身份指纹（管道探针比对）②权重指纹（分布相似度+众数）③能力答题（金丝雀）
-// ④基准状态（有基准=采样时间+账号；无=首次自动采集说明）。
-func buildWaterReportItems(canary *WaterProbeResult, cmps []probeCompare, sim distSimilarity, base *Baseline, firstTime bool) []waterReportItem {
+// ④基准状态（有基准=采样时间+账号；无=首次自动采集说明）。文案带渠道人话名。
+func buildWaterReportItems(channel string, canary *WaterProbeResult, cmps []probeCompare, sim distSimilarity, base *Baseline, firstTime bool) []waterReportItem {
 	items := make([]waterReportItem, 0, 4)
+	chName := channelNameOf(channel) + "渠道"
 
 	// ①身份指纹：tokenizer 4 值 + 错误文本 + finish_reason 与基准比对
 	comparable, mismatch := 0, 0
@@ -389,13 +424,13 @@ func buildWaterReportItems(canary *WaterProbeResult, cmps []probeCompare, sim di
 	}
 	switch {
 	case comparable == 0:
-		items = append(items, waterReportItem{Name: "身份指纹", Result: "—", Detail: "探针值缺失（unstable/error 过多），无法与官方基准比对"})
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "—", Detail: "探针值缺失（unstable/error 过多），无法与" + chName + "官方基准比对"})
 	case mismatch == 0:
-		items = append(items, waterReportItem{Name: "身份指纹", Result: "✔", Detail: "管道指纹（分词器 / 报错原文 / 完停词）与官方基准全部一致"})
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "✔", Detail: "管道指纹（分词器 / 报错原文 / 完停词）与" + chName + "官方基准全部一致"})
 	case mismatch == 1:
-		items = append(items, waterReportItem{Name: "身份指纹", Result: "⚠", Detail: "1 项管道指纹偏离官方基准，其余一致"})
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "⚠", Detail: "1 项管道指纹偏离" + chName + "官方基准，其余一致"})
 	default:
-		items = append(items, waterReportItem{Name: "身份指纹", Result: "✖", Detail: strconv.Itoa(mismatch) + " 项管道指纹偏离官方基准（疑似换模型）"})
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "✖", Detail: strconv.Itoa(mismatch) + " 项管道指纹偏离" + chName + "官方基准（疑似换模型）"})
 	}
 
 	// ②权重指纹：分布相似度百分比 + 众数比对（双方样本不足则不可比）
@@ -463,8 +498,9 @@ func (s *Server) handleWaterDeepOrBaseline(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	tgt := tuanjieTarget(key)
 	if action == "baseline" {
-		bl, err := s.baselines.CollectBaseline(r.Context(), key, model, userID, samples)
+		bl, err := s.baselines.CollectBaseline(r.Context(), tgt, "tuanjie", model, userID, samples)
 		if err != nil {
 			writeJSON(w, map[string]any{"ok": false, "msg": err.Error()})
 			return
@@ -478,9 +514,9 @@ func (s *Server) handleWaterDeepOrBaseline(w http.ResponseWriter, r *http.Reques
 	}
 
 	// action=deep：第一层 + 第二层 + 基准比对
-	probes := RunPipelineProbes(r.Context(), key, model)
-	dist := collectDistSamples(r.Context(), key, model, samples)
-	base := s.baselines.Get(model)
+	probes := RunPipelineProbes(r.Context(), tgt, model)
+	dist := collectDistSamples(r.Context(), tgt, model, samples)
+	base := s.baselines.Get("tuanjie", model)
 	cmps, sim, verdict := CompareToBaseline(base, probes, dist)
 	writeJSON(w, map[string]any{
 		"ok": true, "action": "deep", "model": model, "user_id": userID,
