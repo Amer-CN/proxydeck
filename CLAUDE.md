@@ -147,8 +147,13 @@ git push myrepo HEAD:main            # 推送（remote 名是 myrepo 不是 orig
 ")`，输出 `v1.<ts>.<base64url>`（SignLitellm）
 4. x-litellm-session-id 头 = 请求体 litellm_session_id = prompt_cache_key（每请求 randomUUID）
 5. cli_api_key 换取路径 `codely.tuanjie.cn/api/api-token/cli-api-key`（不能改成其他换取源）
-6. cliUserAgent = `Codely-CLI - OSS/1.0.0-rc.54 (Codely-Cli/1.0.0-rc.54)`（官方真值）
-7. DashScope 标记头 X-DashScope-CacheControl/X-DashScope-UserAgent（GLM/Kimi 分支必带）
+6. cliUserAgent = `codely-cli/1.0.0-rc.54 (win32; x64)`（官方 HTTP UA 真值：Dre/QEe 构造器
+   defaultHeaders，`codely-cli/${版本} (${process.platform}; ${process.arch})`。
+   注意：`Codely-CLI - OSS/...` 是官方 telemetry 埋点字段（getRealUserAgent），
+   不是 HTTP 请求 UA——2026-08-27 曾误用并已修正）
+7. **不带** X-DashScope-CacheControl/X-DashScope-UserAgent（官方仅 isDashScopeProvider
+   路径发：authType=QWEN_OAUTH 或 baseUrl 指向 dashscope.aliyuncs.com；团结 LiteLLM
+   路径官方不发，我们发了就是多出来的识别信号，2026-08-27 已删）
 8. 请求体重排（reqshape.go）：官方 buildCreateParams 字段序 + 默认字段，非流式删 stream
 
 **改动以上任何一项 = 掉出安全线 = 有被官方按凭证链封号的风险。**
