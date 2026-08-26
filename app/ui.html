@@ -4431,6 +4431,12 @@ var PT_I18N = {
   }
 
 
+  /* 识图引擎切换状态（fb7625c 时代声明，425557c 改造时误删导致严格模式
+     ReferenceError——2026-08-27 补回。TJ_VIS_TJ 同批丢失一并补） */
+  var TJ_VIS_TJ = 'codely-vl';
+  var tjVisBusy = false;
+  var tjMediaBusy = false;
+  var tjVisModel = ''; /* 当前生效识图模型（loadTuanjieVision 刷新） */
   function modelKind(m) {
     m = (m || '').toLowerCase();
     if (m.indexOf('image') >= 0) return 'image';
