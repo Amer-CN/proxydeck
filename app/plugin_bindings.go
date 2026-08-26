@@ -42,7 +42,7 @@ func (a *app) bindPluginBindings(w webview.WebView) {
 		b, _ := json.Marshal(map[string]any{"ok": true, "lines": all})
 		return string(b)
 	})
-	// 启动插件（tuanjie / codebuddy / notion / lingxi）。
+	// 启动插件（tuanjie / codebuddy / bai）。
 	_ = w.Bind("ccPluginStart", func(id string) string {
 		if err := a.pluginStart(strings.TrimSpace(id)); err != nil {
 			return jsonErr(err)

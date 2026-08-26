@@ -7,9 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Amer-CN/proxydeck/internal/bai"
 	"github.com/Amer-CN/proxydeck/internal/codebuddy"
-	"github.com/Amer-CN/proxydeck/internal/lingxi"
-	"github.com/Amer-CN/proxydeck/internal/notion"
 	"github.com/Amer-CN/proxydeck/internal/tuanjie"
 )
 
@@ -17,11 +16,10 @@ var (
 	flagPluginTuanjie     = flag.Bool("plugin-tuanjie", false, "团结 Cowork (Codely) 插件服务模式（GUI 托管时自动 spawn）")
 	flagPluginCodebuddy   = flag.Bool("plugin-codebuddy", false, "CodeBuddy/WorkBuddy 插件服务模式（GUI 托管时自动 spawn；--desensitize 可选）")
 	flagDesensitize       = flag.Bool("desensitize", false, "CodeBuddy 插件：对 system/developer/tools 做零宽脱敏，缓解腾讯审核误拦")
-	flagPluginNotion      = flag.Bool("plugin-notion", false, "Notion AI 插件服务模式（凭据经 CDP 自动读取）")
-	flagPluginLingxi      = flag.Bool("plugin-lingxi", false, "WPS 灵犀插件服务模式（凭据经 CDP 自动读取）")
+	flagPluginBai         = flag.Bool("plugin-bai", false, "B.AI 插件服务模式（本地转发到 api.b.ai，OpenAI 兼容）")
 )
 
-// runPluginMode 处理 --plugin-tuanjie / --plugin-codebuddy / --plugin-notion / --plugin-lingxi
+// runPluginMode 处理 --plugin-tuanjie / --plugin-codebuddy / --plugin-bai
 // 子模式：进程内直接跑对应插件服务（无窗口，关 GUI 不受影响）。
 func runPluginMode() int {
 	// 团结插件服务模式：进程内直接跑 internal/tuanjie 服务。
@@ -53,23 +51,13 @@ func runPluginMode() int {
 		select {}
 	}
 
-	// Notion AI 插件服务模式：CDP 自动读桌面端令牌 → OpenAI 兼容端点。
-	if *flagPluginNotion {
-		srv := notion.NewServer()
-		log.Printf("notion-plugin: starting on %s:%s", *flagHost, *flagPort)
+	// B.AI 插件服务模式：本地 Go 栈转发 api.b.ai（OpenAI 兼容）。
+	if *flagPluginBai {
+		srv := bai.NewServer()
+		log.Printf("bai-plugin: starting on %s:%s", *flagHost, *flagPort)
 		if err := srv.Start(*flagHost, *flagPort); err != nil {
-			_ = os.WriteFile(filepath.Join(exeDir(), "notion-plugin-error.log"),
+			_ = os.WriteFile(filepath.Join(exeDir(), "bai-plugin-error.log"),
 				[]byte(err.Error()), 0o600)
-			os.Exit(1)
-		}
-		select {}
-	}
-	// WPS 灵犀插件服务模式。
-	if *flagPluginLingxi {
-		srv := lingxi.NewServer()
-		log.Printf("lingxi-plugin: starting on %s:%s", *flagHost, *flagPort)
-		if err := srv.Start(*flagHost, *flagPort); err != nil {
-			_ = os.WriteFile(filepath.Join(exeDir(), "lingxi-plugin-error.log"), []byte(err.Error()), 0o600)
 			os.Exit(1)
 		}
 		select {}

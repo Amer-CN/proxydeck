@@ -4,9 +4,13 @@ package tuanjie
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 )
 
 // handleAccounts GET=单账号状态+被动注水事件+改路由计数。
@@ -174,20 +178,60 @@ func (s *Server) handleInflight(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "requests": s.registry.Inflight()})
 }
 
-// handleWaterProbe 注水检测三 action（action 字段分发）：
+// waterHistoryEntry 一条注水检测历史（内存环形 20 条）。
+type waterHistoryEntry struct {
+	At      string  `json:"at"`
+	Model   string  `json:"model"`
+	Account string  `json:"account"`
+	Light   string  `json:"verdict_light"`
+	Score   float64 `json:"verdict_score"`
+}
+
+// pushWaterHistory 检测历史入列（环形 20 条，超限丢最旧）。
+func (s *Server) pushWaterHistory(e waterHistoryEntry) {
+	s.waterHistMu.Lock()
+	defer s.waterHistMu.Unlock()
+	if len(s.waterHist) >= 20 {
+		s.waterHist = append(s.waterHist[1:], e)
+	} else {
+		s.waterHist = append(s.waterHist, e)
+	}
+}
+
+// waterHistory 返回检测历史副本（旧→新）。
+func (s *Server) waterHistory() []waterHistoryEntry {
+	s.waterHistMu.Lock()
+	defer s.waterHistMu.Unlock()
+	out := make([]waterHistoryEntry, len(s.waterHist))
+	copy(out, s.waterHist)
+	return out
+}
+
+// handleWaterProbe 注水检测（action 字段分发）：
+//   - GET ?history=1：返回检测历史（最近 20 条）
+//   - check（前端唯一入口）：一键全流程——有基准直接比对出报告；
+//     无基准自动采集官方基准后同账号比对自检（报告标注首次检测）
 //   - quick（默认，兼容旧调用）：现有金丝雀探针（漂移+答题）+ 第一层管道探针入结果
 //   - deep：第一层 + 第二层分布采样 + 与基准库比对（综合灯色）
 //   - baseline：跑第一层全部探针 + 第二层分布采样（N=60），落盘为该模型官方基准
 func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		if r.URL.Query().Get("history") == "1" {
+			writeJSON(w, map[string]any{"ok": true, "history": s.waterHistory()})
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	var req struct {
-		Action  string `json:"action"` // quick | deep | baseline（缺省=quick，旧调用兼容）
+		Action  string `json:"action"` // check | quick | deep | baseline（缺省=quick，旧调用兼容）
 		UserID  string `json:"user_id"`
 		Model   string `json:"model"`
-		Samples int    `json:"samples"` // baseline/deep 的分布采样数（默认 60，上限 200）
+		Samples int    `json:"samples"` // baseline/deep/check 的分布采样数（默认 60，上限 200）
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "msg": "请求体解析失败"})
@@ -199,9 +243,13 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 	if req.Samples <= 0 {
 		req.Samples = 60
 	}
+	if req.Action == "check" {
+		s.handleWaterCheck(w, r, req.UserID, req.Model, req.Samples)
+		return
+	}
 	// deep/baseline：在单账号模式下直接跑
 	if req.Action == "deep" || req.Action == "baseline" {
-		s.handleWaterDeepOrBaseline(w, r, req.Action, "", req.Model, req.Samples)
+		s.handleWaterDeepOrBaseline(w, r, req.Action, req.UserID, req.Model, req.Samples)
 		return
 	}
 	// action=quick：单账号金丝雀探针 + 管道探针
@@ -222,6 +270,183 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 		probes = RunPipelineProbes(r.Context(), key, req.Model)
 	}
 	writeJSON(w, map[string]any{"ok": true, "action": "quick", "results": []*WaterProbeResult{res}, "probes": probes})
+}
+
+// handleWaterCheck action=check：一键全流程出报告。
+//   - 有基准：跑金丝雀 + 管道探针 + 分布采样（N=60）+ CompareToBaseline
+//   - 无基准：先 CollectBaseline（无感自动采集）再同账号跑一遍比对自检，
+//     报告标注 first_time=true（本次为新模型首次检测，基准已自动采集）
+//
+// 响应：{ok, action:"check", report:{model,account,at,verdict:{light,score,reason},
+// items:[{name,result,detail}...], first_time}, probes, probe_compare, dist,
+// dist_similarity, canary}。报告顶层附各层原始证据供前端折叠区渲染。
+func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, userID, model string, samples int) {
+	account := userID
+	if account == "" {
+		account = "38261" // 单账号模式账号标识（与既有官方基准采集账号一致）
+	}
+	accessToken, atErr := loadAccessToken()
+	if atErr != nil {
+		writeJSON(w, map[string]any{"ok": false, "msg": "未找到团结登录态（请先登录团结 Cowork 桌面端）"})
+		return
+	}
+	key, err := fetchKeyWithToken(r.Context(), accessToken)
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": false, "msg": "换取 key 失败: " + err.Error()})
+		return
+	}
+
+	base := s.baselines.Get(model)
+	firstTime := base == nil
+
+	var (
+		probes []probeResult
+		dist   *distResult
+		cmps   []probeCompare
+		sim    distSimilarity
+		verdict overallVerdict
+	)
+	if firstTime {
+		// 无基准：先自动采集官方基准（无感模式），再同账号比对自检
+		bl, blErr := s.baselines.CollectBaseline(r.Context(), key, model, account, samples)
+		if blErr != nil {
+			writeJSON(w, map[string]any{"ok": false, "msg": blErr.Error()})
+			return
+		}
+		probes = RunPipelineProbes(r.Context(), key, model)
+		dist = collectDistSamples(r.Context(), key, model, samples)
+		cmps, sim, verdict = CompareToBaseline(bl, probes, dist)
+		base = bl
+		verdict.Light = "grey"
+		verdict.Label = "首次"
+		verdict.Reason = plainVerdictReason("grey")
+	} else {
+		probes = RunPipelineProbes(r.Context(), key, model)
+		dist = collectDistSamples(r.Context(), key, model, samples)
+		cmps, sim, verdict = CompareToBaseline(base, probes, dist)
+		verdict.Reason = plainVerdictReason(verdict.Light)
+	}
+
+	// 金丝雀答题（能力项；失败不阻断报告，item 标 ⚠）
+	canary, cErr := s.water.ProbeAccount(r.Context(), accessToken, "local", model)
+	if cErr != nil {
+		log.Printf("[tuanjie] check canary 失败: %v", cErr)
+	}
+
+	at := time.Now().Format("2006-01-02 15:04:05")
+	report := map[string]any{
+		"model":      model,
+		"account":    account,
+		"at":         at,
+		"verdict":    map[string]any{"light": verdict.Light, "score": verdict.Score, "reason": verdict.Reason},
+		"items":      buildWaterReportItems(canary, cmps, sim, base, firstTime),
+		"first_time": firstTime,
+	}
+	s.pushWaterHistory(waterHistoryEntry{At: at, Model: model, Account: account, Light: verdict.Light, Score: verdict.Score})
+	writeJSON(w, map[string]any{
+		"ok": true, "action": "check", "report": report,
+		"probes": probes, "probe_compare": cmps,
+		"dist": dist, "dist_similarity": sim, "canary": canary,
+	})
+}
+
+// plainVerdictReason 综合灯 → 一句话人话结论（专业词只进折叠详情）。
+func plainVerdictReason(light string) string {
+	switch light {
+	case "green":
+		return "模型一致，未发现注水"
+	case "yellow":
+		return "有轻微偏差，建议复测"
+	case "red":
+		return "指纹与官方基准不符，疑似注水"
+	default:
+		return "已自动采集官方基准并完成首次检测"
+	}
+}
+
+// waterReportItem 一个人话检测项（前端直接渲染）。
+type waterReportItem struct {
+	Name   string `json:"name"`
+	Result string `json:"result"` // ✔ | ✖ | ⚠ | — | 🆕
+	Detail string `json:"detail"`
+}
+
+// buildWaterReportItems 组装四个人话检测项（纯函数，可单测）：
+// ①身份指纹（管道探针比对）②权重指纹（分布相似度+众数）③能力答题（金丝雀）
+// ④基准状态（有基准=采样时间+账号；无=首次自动采集说明）。
+func buildWaterReportItems(canary *WaterProbeResult, cmps []probeCompare, sim distSimilarity, base *Baseline, firstTime bool) []waterReportItem {
+	items := make([]waterReportItem, 0, 4)
+
+	// ①身份指纹：tokenizer 4 值 + 错误文本 + finish_reason 与基准比对
+	comparable, mismatch := 0, 0
+	for _, c := range cmps {
+		if c.Status == "ok" {
+			comparable++
+			if !c.Match {
+				mismatch++
+			}
+		}
+	}
+	switch {
+	case comparable == 0:
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "—", Detail: "探针值缺失（unstable/error 过多），无法与官方基准比对"})
+	case mismatch == 0:
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "✔", Detail: "管道指纹（分词器 / 报错原文 / 完停词）与官方基准全部一致"})
+	case mismatch == 1:
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "⚠", Detail: "1 项管道指纹偏离官方基准，其余一致"})
+	default:
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "✖", Detail: strconv.Itoa(mismatch) + " 项管道指纹偏离官方基准（疑似换模型）"})
+	}
+
+	// ②权重指纹：分布相似度百分比 + 众数比对（双方样本不足则不可比）
+	distReady := base != nil && base.Dist != nil && !base.Dist.Insufficient && sim.Cosine > 0
+	if !distReady {
+		items = append(items, waterReportItem{Name: "权重指纹", Result: "—", Detail: "分布有效样本不足 40，无法统计比对"})
+	} else {
+		pct := math.Round(sim.Overall * 100)
+		switch {
+		case pct >= 96:
+			items = append(items, waterReportItem{Name: "权重指纹", Result: "✔",
+				Detail: fmt.Sprintf("分布相似度 %d%%（众数 %d vs 基准 %d），与官方基准一致", int(pct), sim.ModeA, sim.ModeB)})
+		case pct >= 90:
+			items = append(items, waterReportItem{Name: "权重指纹", Result: "⚠",
+				Detail: fmt.Sprintf("分布相似度 %d%%（众数 %d vs 基准 %d），有轻微偏差", int(pct), sim.ModeA, sim.ModeB)})
+		default:
+			items = append(items, waterReportItem{Name: "权重指纹", Result: "✖",
+				Detail: fmt.Sprintf("分布相似度 %d%%（众数 %d vs 基准 %d），显著偏离官方基准", int(pct), sim.ModeA, sim.ModeB)})
+		}
+	}
+
+	// ③能力答题：金丝雀答题对错（repeat 题只采 tokenizer 指纹无 answer，
+	// 已并入①身份指纹，这里只数有答案的算术/常识两题）
+	if canary == nil {
+		items = append(items, waterReportItem{Name: "能力答题", Result: "⚠", Detail: "金丝雀答题未完成（网络或上游异常），未纳入本次判定"})
+	} else {
+		var wrong []string
+		for _, q := range canaryQuestions[1:] {
+			if !canary.Answers[q.ID] {
+				wrong = append(wrong, q.Title)
+			}
+		}
+		if len(wrong) == 0 {
+			items = append(items, waterReportItem{Name: "能力答题", Result: "✔", Detail: "金丝雀答题（算术 / 常识）全部答对"})
+		} else {
+			items = append(items, waterReportItem{Name: "能力答题", Result: "✖",
+				Detail: "金丝雀答题有错：「" + strings.Join(wrong, "」「") + "」与预期不符"})
+		}
+	}
+
+	// ④基准状态：有基准=采样时间+账号；无=首次自动采集说明
+	switch {
+	case firstTime:
+		items = append(items, waterReportItem{Name: "基准状态", Result: "🆕", Detail: "新模型首次检测：官方基准已自动采集（本次即基准）"})
+	case base != nil:
+		items = append(items, waterReportItem{Name: "基准状态", Result: "✔",
+			Detail: "官方基准采样于 " + base.SampledAt + "（账号 " + base.Account + "）"})
+	default:
+		items = append(items, waterReportItem{Name: "基准状态", Result: "—", Detail: "无官方基准"})
+	}
+	return items
 }
 
 // handleWaterDeepOrBaseline deep/baseline 的公共骨架：换 key → 跑第一层

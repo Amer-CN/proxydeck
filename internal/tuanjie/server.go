@@ -38,6 +38,9 @@ type Server struct {
 	providers     *ProviderStore // 外部账号（管理 + 信息展示，不接入转发）
 	baselines     *BaselineStore // 绝对基准库（注水检测三层：探针+分布比对锚点）
 	mediaReroutes atomic.Int64   // 媒体改路由累计次数（GUI 展示）
+
+	waterHistMu sync.Mutex
+	waterHist   []waterHistoryEntry // 注水检测历史（内存环形 20 条，GET ?history=1）
 }
 
 // modelStat 单模型用量累计。

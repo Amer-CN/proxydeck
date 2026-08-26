@@ -36,14 +36,9 @@ var pluginDefs = []pluginDef{
 		Args: []string{"--desensitize"}, Port: 8787, Health: "/health",
 	},
 	{
-		ID: "notion", Name: "Notion AI",
-		Native: "notion",
-		Port:   8789, Health: "/health",
-	},
-	{
-		ID: "lingxi", Name: "WPS 灵犀",
-		Native: "lingxi",
-		Port:   8790, Health: "/health",
+		ID: "bai", Name: "B.AI",
+		Native: "bai",
+		Port:   8891, Health: "/health",
 	},
 }
 

@@ -44,7 +44,7 @@ var (
 	flagDebug    = flag.Bool("debug", false, "调试模式：打印请求/响应体到日志（headless-error.log）")
 	flagVersion  = flag.Bool("version", false, "打印版本并退出")
 
-	// 插件子模式（--plugin-tuanjie / --plugin-codebuddy / --plugin-notion / --plugin-lingxi / --desensitize）
+	// 插件子模式（--plugin-tuanjie / --plugin-codebuddy / --plugin-bai / --desensitize）
 	// 定义在 plugin_modes.go。
 )
 
@@ -102,8 +102,8 @@ func main() {
 
 	app := newApp(*flagHost, *flagPort, *flagAPIKey)
 
-	// 插件子模式（团结 / CodeBuddy / Notion / 灵犀）：实现见 plugin_modes.go
-	if *flagPluginTuanjie || *flagPluginCodebuddy || *flagPluginNotion || *flagPluginLingxi {
+	// 插件子模式（团结 / CodeBuddy / B.AI）：实现见 plugin_modes.go
+	if *flagPluginTuanjie || *flagPluginCodebuddy || *flagPluginBai {
 		os.Exit(runPluginMode())
 	}
 
