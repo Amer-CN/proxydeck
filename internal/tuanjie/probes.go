@@ -14,12 +14,50 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-// probeTimeout 单个探针请求超时（max_tokens 极小，正常秒级返回）。
-const probeTimeout = 60 * time.Second
+// probeTimeout 单个探针请求超时（max_tokens 极小，正常秒级返回；慢渠道
+// workbuddy 实测单请求可达 90s+，2026-08-25 提到 120s 覆盖）。
+const probeTimeout = 120 * time.Second
+
+// probeTarget 一次探针要打到哪、带什么头：渠道端点 + 静态请求头 + 渠道名。
+// 动态头（团结的 X-Codely-Signature / x-litellm-session-id 每请求现算）由
+// requestHeaders 按 Channel 现场构造；本地渠道（command/workbuddy/bai）的头
+// 全部静态，直接进 Headers 即可。
+type probeTarget struct {
+	BaseURL string
+	Headers map[string]string
+	Channel string
+}
+
+// tuanjieTarget 构造团结渠道探针目标（cli_api_key 走账号池换取；签名头、
+// session 头由 requestHeaders 每请求生成，行为与改造前一致）。
+func tuanjieTarget(cliKey string) *probeTarget {
+	return &probeTarget{
+		BaseURL: litellmAPIBase,
+		Channel: "tuanjie",
+		Headers: map[string]string{"Authorization": "Bearer " + cliKey},
+	}
+}
+
+// requestHeaders 构造本次请求的完整请求头：公共底座（Content-Type/Accept/
+// User-Agent）+ 渠道静态头；团结渠道追加 x-litellm-session-id 与签名头
+// （签名密钥取 Authorization 里的 cli_api_key，每请求实时时间戳）。
+func (t *probeTarget) requestHeaders(path string) http.Header {
+	h := http.Header{}
+	h.Set("Content-Type", "application/json")
+	h.Set("Accept", "application/json")
+	h.Set("User-Agent", cliUserAgent)
+	for k, v := range t.Headers {
+		h.Set(k, v)
+	}
+	if t.Channel == "tuanjie" {
+		h.Set("x-litellm-session-id", newLitellmSessionID())
+		key := strings.TrimPrefix(t.Headers["Authorization"], "Bearer ")
+		h.Set("X-Codely-Signature", SignLitellm(path, key, time.Now()))
+	}
+	return h
+}
 
 // tokenizerProbeTexts 四段钉死文本（不动！基准依赖逐字节稳定）。
 var tokenizerProbeTexts = []struct{ Name, Text string }{
@@ -38,31 +76,40 @@ type probeResult struct {
 	Note   string `json:"note,omitempty"`
 }
 
-// probeCall 对单账号+模型发一次裸请求（无 system prompt），带自定义参数。
-// 返回 (promptTokens, completionTokens, finishReason, content, errorText, err)。
-func probeCall(ctx context.Context, cliKey, model string, msgs []map[string]any, extra map[string]any) (promptTokens, completionTokens int, finish, content, errText string, err error) {
+// probeCall 对单渠道+模型发一次裸请求（无 system prompt），带自定义参数。
+// 请求打到哪、带什么头全部由 target 决定；返回
+// (promptTokens, completionTokens, finishReason, content, errorText, err)。
+func probeCall(ctx context.Context, target *probeTarget, model string, msgs []map[string]any, extra map[string]any) (promptTokens, completionTokens int, finish, content, errText string, err error) {
+	// max_tokens 按模型自适应：思考型模型（deepseek/GLM-5.3 等会先出
+	// reasoning_content）8 个预算全烧在推理段、content 恒空——给 96 保
+	// content 出得来（GLM-5.3 采基准实测 96 出数率约 7/8）。非思考模型
+	// 多给的预算用不完，无副作用。
+	mt := 8
+	lm := strings.ToLower(model)
+	if strings.Contains(lm, "deepseek") || strings.Contains(lm, "glm-5") ||
+		strings.Contains(lm, "kimi") || strings.Contains(lm, "o1") || strings.Contains(lm, "o3") {
+		mt = 96
+	}
 	body := map[string]any{
 		"model":      model,
 		"stream":     false,
 		"messages":   msgs,
-		"max_tokens": 8,
+		"max_tokens": mt,
 	}
 	for k, v := range extra {
 		body[k] = v
 	}
 	b, _ := json.Marshal(body)
 	req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost,
-		litellmAPIBase+"/v1/chat/completions", strings.NewReader(string(b)))
+		target.BaseURL+"/v1/chat/completions", strings.NewReader(string(b)))
 	if reqErr != nil {
 		return 0, 0, "", "", "", reqErr
 	}
-	req.Header.Set("Authorization", "Bearer "+cliKey)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", cliUserAgent)
-	req.Header.Set("x-litellm-session-id", uuid.NewString())
-	req.Header.Set("X-Codely-Signature", SignLitellm("/v1/chat/completions", cliKey, time.Now()))
-
+	for k, vs := range target.requestHeaders("/v1/chat/completions") {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
 	client := &http.Client{Timeout: probeTimeout, Transport: smartProxyTransport}
 	resp, doErr := client.Do(req)
 	if doErr != nil {
@@ -127,17 +174,17 @@ func scrubErrorText(s string) string {
 //   - finish_reason 词汇 ×2：max_tokens=400 正常 stop + max_tokens=6 强制截断
 //
 // 同文本双发 token 数不一致 → unstable（多主机路由迹象）。
-func RunPipelineProbes(ctx context.Context, cliKey, model string) []probeResult {
+func RunPipelineProbes(ctx context.Context, target *probeTarget, model string) []probeResult {
 	var out []probeResult
 
 	// "a" 单字符基准（所有 tokenizer 探针的归一化底座）
-	_, aTok, _, _, _, _ := probeCall(ctx, cliKey, model,
+	_, aTok, _, _, _, _ := probeCall(ctx, target, model,
 		[]map[string]any{{"role": "user", "content": "a"}}, nil)
 
 	for _, t := range tokenizerProbeTexts {
 		msgs := []map[string]any{{"role": "user", "content": t.Text}}
-		tok1, _, _, _, _, e1 := probeCall(ctx, cliKey, model, msgs, nil)
-		tok2, _, _, _, _, e2 := probeCall(ctx, cliKey, model, msgs, nil)
+		tok1, _, _, _, _, e1 := probeCall(ctx, target, model, msgs, nil)
+		tok2, _, _, _, _, e2 := probeCall(ctx, target, model, msgs, nil)
 		switch {
 		case e1 != nil || e2 != nil:
 			out = append(out, probeResult{Name: t.Name, Status: "error",
@@ -154,7 +201,7 @@ func RunPipelineProbes(ctx context.Context, cliKey, model string) []probeResult 
 	}
 
 	// 错误探针 1：temperature=2.0 抓校验报错原文（scrub 后）
-	_, _, _, _, errText, e := probeCall(ctx, cliKey, model,
+	_, _, _, _, errText, e := probeCall(ctx, target, model,
 		[]map[string]any{{"role": "user", "content": "hello"}},
 		map[string]any{"temperature": 2.0})
 	switch {
@@ -167,7 +214,7 @@ func RunPipelineProbes(ctx context.Context, cliKey, model string) []probeResult 
 	}
 
 	// 错误探针 2：max_tokens=10^9 抓拒绝信息（真实输出上限是厂商 DNA）
-	_, _, _, _, errText2, e2 := probeCall(ctx, cliKey, model,
+	_, _, _, _, errText2, e2 := probeCall(ctx, target, model,
 		[]map[string]any{{"role": "user", "content": "hello"}},
 		map[string]any{"max_tokens": 1000000000})
 	switch {
@@ -180,7 +227,7 @@ func RunPipelineProbes(ctx context.Context, cliKey, model string) []probeResult 
 	}
 
 	// finish_reason 词汇 1：max_tokens=400 正常说完 → 期望 stop
-	_, _, fin1, _, _, e3 := probeCall(ctx, cliKey, model,
+	_, _, fin1, _, _, e3 := probeCall(ctx, target, model,
 		[]map[string]any{{"role": "user", "content": "回复一个字：好"}},
 		map[string]any{"max_tokens": 400})
 	switch {
@@ -193,7 +240,7 @@ func RunPipelineProbes(ctx context.Context, cliKey, model string) []probeResult 
 	}
 
 	// finish_reason 词汇 2：max_tokens=6 强制截断 → 期望 length
-	_, _, fin2, _, _, e4 := probeCall(ctx, cliKey, model,
+	_, _, fin2, _, _, e4 := probeCall(ctx, target, model,
 		[]map[string]any{{"role": "user", "content": "写一篇五百字的散文，主题是秋天。"}},
 		map[string]any{"max_tokens": 6})
 	switch {

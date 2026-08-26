@@ -134,6 +134,43 @@ func (w *WaterCheck) PassiveEvents() []passiveEvent {
 	return out
 }
 
+// ProbeAccountTarget 金丝雀探针的渠道无关版：按 probeTarget 发题（多渠道
+// 注水检测用）。tuanjie 渠道请继续用 ProbeAccount（含账号漂移基线记账）。
+func (w *WaterCheck) ProbeAccountTarget(ctx context.Context, target *probeTarget, userID, model string) (*WaterProbeResult, error) {
+	result := &WaterProbeResult{UserID: userID, Model: model, Answers: map[string]bool{},
+		At: time.Now().Format("2006-01-02 15:04:05")}
+	for _, q := range canaryQuestions {
+		pt, _, _, answer, errText, err := probeCall(ctx, target, model,
+			[]map[string]any{{"role": "user", "content": q.Prompt}}, nil)
+		if err != nil {
+			result.Answers[q.ID] = false
+			result.Detail = errText
+			if result.PromptTok == 0 {
+				result.PromptTok = pt
+			}
+			continue
+		}
+		if q.ID == canaryQuestions[0].ID {
+			result.PromptTok = pt // 指纹题：只记 prompt_tokens
+			result.Answers[q.ID] = containsCI(answer, q.Expect)
+			continue
+		}
+		result.Answers[q.ID] = containsCI(answer, q.Expect)
+	}
+	for _, ok := range result.Answers {
+		if !ok {
+			result.Pass = false
+			break
+		}
+	}
+	if result.Pass {
+		result.Detail = ""
+	} else if result.Detail == "" {
+		result.Detail = "金丝雀答题有错误"
+	}
+	return result, nil
+}
+
 // ProbeAccount 对单账号跑金丝雀探针（直连上游，不经轮询）。
 // model 通常探测 GLM-5.3（最贵的、最可能被注水的）。
 func (w *WaterCheck) ProbeAccount(ctx context.Context, accessToken, userID, model string) (*WaterProbeResult, error) {

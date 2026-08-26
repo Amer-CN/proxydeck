@@ -169,7 +169,7 @@ func TestBaselineStoreSaveLoad(t *testing.T) {
 	defer func() { exeDirOverride = old }()
 
 	bs := LoadBaselines()
-	if bs.Get("GLM-5.3") != nil {
+	if bs.Get("tuanjie", "GLM-5.3") != nil {
 		t.Fatal("空库不应有基准")
 	}
 	// 手工构造一份基准并借 save 落盘
@@ -188,12 +188,12 @@ func TestBaselineStoreSaveLoad(t *testing.T) {
 		Account:     "u1",
 		SampleCount: 50,
 	}
-	bs.Baselines["GLM-5.3"] = bl
+	bs.Baselines["tuanjie|GLM-5.3"] = bl
 	bs.save()
 
 	// 重新加载：往返一致
 	bs2 := LoadBaselines()
-	got := bs2.Get("GLM-5.3")
+	got := bs2.Get("tuanjie", "GLM-5.3")
 	if got == nil {
 		t.Fatal("落盘后重读应能拿到基准")
 	}
