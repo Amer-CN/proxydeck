@@ -5566,13 +5566,20 @@ var PT_I18N = {
           pSet(V, 'StPoints', intFmt(q2.total));
           pSet(V, 'StPointsSub', (q2.packs || 0) + ' 个资源包 · 官方数据');
           if (q2.active && q2.active.name) {
-            pSet(V, 'StBudget', intFmt(q2.active.used) + '/' + intFmt(q2.active.size));
             var an = String(q2.active.name).length > 12 ? String(q2.active.name).slice(0, 12) + '…' : q2.active.name;
+            pSet(V, 'StBudget', intFmt(q2.active.used) + '/' + intFmt(q2.active.size));
             pSet(V, 'StBudgetSub', an + ' · ' + String(q2.active.end || '').slice(0, 10) + ' 到期');
+          } else if (q2.total > 0) {
+            // 所有消耗中包都已用满：显示总剩余，避免"100/100 满 vs 总剩余 2069"矛盾
+            pSet(V, 'StBudget', intFmt(q2.total));
+            pSet(V, 'StBudgetSub', '剩余积分（当前消耗包已用满）');
           }
           if (q2.nearestEnd && q2.nearestEnd.name) {
-            pSet(V, 'StSpent', intFmt(q2.nearestEnd.remain));
-            pSet(V, 'StSpentSub', '积分 · ' + String(q2.nearestEnd.date || '').slice(0, 10) + ' 到期 · 优先用');
+            var nr = q2.nearestEnd.remain || 0;
+            pSet(V, 'StSpent', intFmt(nr));
+            pSet(V, 'StSpentSub', nr > 0
+              ? '积分 · ' + String(q2.nearestEnd.date || '').slice(0, 10) + ' 到期 · 优先用'
+              : String(q2.nearestEnd.date || '').slice(0, 10) + ' 到期的包已用满');
           }
         }
       } catch (e) { cbFallback(); }

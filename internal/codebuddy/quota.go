@@ -195,15 +195,18 @@ func buildQuota(accounts []account) *Quota {
 		}
 	}
 	for _, p := range unexpired {
-		if p.acct.CapacityUsed > 0 {
-			q.Active = ActivePack{
-				Name: p.acct.PackageName,
-				Used: p.acct.CapacityUsed,
-				Size: p.acct.CapacitySize,
-				End:  p.acct.CycleEndTime,
-			}
-			break
+		// 跳过已用满的包（used>=size 无剩余额度）——否则"当前消耗包"显示
+		// 100/100 已满，与总剩余（其他包还有额度）矛盾，用户看着像积分识别错误
+		if p.acct.CapacityUsed <= 0 || p.acct.CapacityUsed >= p.acct.CapacitySize {
+			continue
 		}
+		q.Active = ActivePack{
+			Name: p.acct.PackageName,
+			Used: p.acct.CapacityUsed,
+			Size: p.acct.CapacitySize,
+			End:  p.acct.CycleEndTime,
+		}
+		break
 	}
 	return q
 }
