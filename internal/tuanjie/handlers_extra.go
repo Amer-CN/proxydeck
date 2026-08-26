@@ -123,9 +123,9 @@ func (s *Server) accountTokenFor(model string) (string, string, bool) {
 }
 
 // ForwardDirect 用指定 access_token 直连转发（多账号池的 chat 转发用：
-// key 换取按账号独立，不经 Client 单账号缓存）。sessionID 与请求体
-// litellm_session_id 同值（handleChat 重排后走这里，上游会话亲和路由靠它）。
-func (s *Server) ForwardDirect(ctx context.Context, method, path string, body []byte, accessToken, sessionID string) (*http.Response, error) {
+// key 换取按账号独立，不经 Client 单账号缓存）。sess 为本请求会话
+// （请求体 litellm_session_id 与头同值，上游会话亲和路由靠它）。
+func (s *Server) ForwardDirect(ctx context.Context, method, path string, body []byte, accessToken string, sess *LitellmSession) (*http.Response, error) {
 	key, err := fetchKeyWithToken(ctx, accessToken)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (s *Server) ForwardDirect(ctx context.Context, method, path string, body []
 	if err != nil {
 		return nil, err
 	}
-	for k, vs := range s.client.litellmHeaders(path, key, sessionID) {
+	for k, vs := range s.client.litellmHeaders(path, key, sess) {
 		for _, v := range vs {
 			req.Header.Add(k, v)
 		}

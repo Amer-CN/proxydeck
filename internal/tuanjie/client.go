@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,11 +33,6 @@ const (
 	codelyAPIBase   = "https://codely.tuanjie.cn"
 	litellmAPIBase  = "https://codely-litellm.tuanjie.cn"
 	cliAPIKeyURL    = codelyAPIBase + "/api/api-token/cli-api-key"
-	// 官方 HTTP 请求真正的 UA（2026-08-25 从 @unity-china/codely-cli rc.54 源码
-	// Dre/QEe 构造器 defaultHeaders 提取）：fmt.Sprintf("codely-cli/%s (%s; %s)",
-	// cliVersion, platform, arch) = codely-cli/1.0.0-rc.54 (win32; x64)。
-	// 小写、带 Node platform/arch 枚举；本产品仅跑 Windows，win32/x64 写死。
-	cliUserAgent    = "codely-cli/1.0.0-rc.54 (win32; x64)"
 	keyCacheTTL     = time.Hour
 	defaultTimeout  = 300 * time.Second
 	keyFetchTimeout = 15 * time.Second
@@ -44,7 +40,52 @@ const (
 	// codelySigningSeedHex 是官方 CLI 内置的签名种子（逆向自 1.0.0-release.52），
 	// 与 cli_api_key 两层 HMAC 派生签名密钥。
 	codelySigningSeedHex = "406f00f74768ba0cb0cd30f097ec6c2bdacb89c61a38b7dd140838bbd0e98018"
+
+	// cliUserAgentFallback 探测不到本机 CLI 版本时的兜底 UA（构建时最新版）。
+	// 格式：fmt.Sprintf("codely-cli/%s (%s; %s)", cliVersion, platform, arch)。
+	cliUserAgentFallback = "codely-cli/1.0.0-rc.55 (win32; x64)"
 )
+
+// cliUserAgent 启动时解析：优先读本机 npm 全局安装的 codely-cli 实际版本
+// （CLI 升级后代理自动跟随，不用改代码）；读不到用兜底值。小写、带 Node
+// platform/arch 枚举；本产品仅跑 Windows，win32/x64 写死。
+var cliUserAgent = resolveCLIUserAgent()
+
+func resolveCLIUserAgent() string {
+	if v := detectLocalCliVersion(); v != "" {
+		return "codely-cli/" + v + " (win32; x64)"
+	}
+	return cliUserAgentFallback
+}
+
+// detectLocalCliVersion 读本机 npm 全局 codely-cli 的 package.json 版本号。
+// 候选路径：APPDATA 环境变量与 home\AppData\Roaming\npm（Windows npm
+// 用户级全局安装标准位置）。版本需形如 x.y.z[-prerelease] 才采信。
+func detectLocalCliVersion() string {
+	var candidates []string
+	if appdata := os.Getenv("APPDATA"); appdata != "" {
+		candidates = append(candidates, filepath.Join(appdata, "npm", "node_modules", "@unity-china", "codely-cli", "package.json"))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, "AppData", "Roaming", "npm", "node_modules", "@unity-china", "codely-cli", "package.json"))
+	}
+	for _, p := range candidates {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var pkg struct {
+			Version string `json:"version"`
+		}
+		if json.Unmarshal(b, &pkg) == nil && cliVersionRe.MatchString(pkg.Version) {
+			return pkg.Version
+		}
+	}
+	return ""
+}
+
+// cliVersionRe 合法 semver（含 prerelease 后缀，如 1.0.0-rc.55）。
+var cliVersionRe = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`)
 
 // smartProxyTransport 读系统代理设置（环境变量 + Windows 注册表），
 // 代理不可达时自动回退直连——Clash/v2ray 没开时不崩。
@@ -254,28 +295,124 @@ func SignLitellm(path, cliAPIKey string, now time.Time) string {
 	return "v1." + ts + "." + base64.RawURLEncoding.EncodeToString(sig)
 }
 
-// newLitellmSessionID 生成每请求随机的 x-litellm-session-id。
-// session 每请求随机：上游按 session 做实例亲和路由，固定 session 会
-// 粘死在映射失步的实例上持续 400 model=None（实测 2026-08-21）。
-func newLitellmSessionID() string { return uuid.New().String() }
+// LitellmSession 一次上游会话，语义对齐官方 CLI 的「一个 CLI 窗口」：
+// 窗口内所有请求复用同一 session id；窗口关闭（闲置清理）后消失。
+type LitellmSession struct {
+	ID string // x-litellm-session-id（同时进请求体 litellm_session_id）
+
+	inUse     int       // 并发占用计数（>0 = 忙）
+	createdAt time.Time // 创建时间（4h 轮换依据）
+	lastUsed  time.Time // 最近归还时间（30min 闲置清理依据）
+}
+
+// 会话池参数（对齐官方 CLI 行为画像，社区逆向情报 2026-08-26）：
+//   - 串行请求自然复用同一空闲会话（单窗口连续对话）
+//   - 并发全忙时新建（模拟再开一个 CLI 窗口）
+//   - 闲置 30 分钟清理（模拟关闭窗口）
+//   - 会话最长存活 4 小时（模拟 CLI 重启）
+//   - 池上限 16：并发爆发超限时共享最闲会话（官方单窗口本来也允许
+//     并发请求共享同一 session），避免短时间冒出几十上百个"会话"
+//     的反代特征
+var (
+	sessionPoolMu      sync.Mutex
+	sessionPool        []*LitellmSession
+	sessionIdleTTL     = 30 * time.Minute
+	sessionMaxAge      = 4 * time.Hour
+	sessionPoolMaxSize = 16
+)
+
+// AcquireLitellmSession 从会话池租借一个会话：
+// 优先复用最近使用的空闲会话（串行请求 → 恒同一会话，贴近官方单窗口）；
+// 全忙且未达上限 → 新建；达上限 → 共享占用最少的。
+// 取用时顺带清理闲置超时/超龄的空闲会话。
+func AcquireLitellmSession() *LitellmSession {
+	sessionPoolMu.Lock()
+	defer sessionPoolMu.Unlock()
+	now := time.Now()
+	// 清理：空闲（inUse==0）且（闲置>30min 或 年龄>4h）
+	kept := sessionPool[:0]
+	for _, s := range sessionPool {
+		if s.inUse == 0 && (now.Sub(s.lastUsed) > sessionIdleTTL || now.Sub(s.createdAt) > sessionMaxAge) {
+			continue
+		}
+		kept = append(kept, s)
+	}
+	sessionPool = kept
+	// 1) 最近使用的空闲会话
+	var idle *LitellmSession
+	for _, s := range sessionPool {
+		if s.inUse == 0 && (idle == nil || s.lastUsed.After(idle.lastUsed)) {
+			idle = s
+		}
+	}
+	if idle != nil {
+		idle.inUse++
+		idle.lastUsed = now
+		return idle
+	}
+	// 2) 全忙：未达上限 → 新建
+	if len(sessionPool) < sessionPoolMaxSize {
+		s := newLitellmSession()
+		s.inUse = 1
+		s.lastUsed = now
+		sessionPool = append(sessionPool, s)
+		return s
+	}
+	// 3) 达上限：共享占用最少的（官方单窗口本就并发共享同一 session）
+	var share *LitellmSession
+	for _, s := range sessionPool {
+		if share == nil || s.inUse < share.inUse {
+			share = s
+		}
+	}
+	share.inUse++
+	share.lastUsed = now
+	return share
+}
+
+// ReleaseLitellmSession 归还会话（handleChat defer 调用，响应写完才算闲置）。
+func ReleaseLitellmSession(s *LitellmSession) {
+	if s == nil {
+		return
+	}
+	sessionPoolMu.Lock()
+	defer sessionPoolMu.Unlock()
+	if s.inUse > 0 {
+		s.inUse--
+	}
+	s.lastUsed = time.Now()
+}
+
+// newLitellmSession 生成一个全新会话。
+func newLitellmSession() *LitellmSession {
+	return &LitellmSession{
+		ID:        uuid.New().String(),
+		createdAt: time.Now(),
+	}
+}
+
+// newLitellmSessionID 生成不入池的一次性会话 id（reshape 兜底/旧路径兼容）。
+func newLitellmSessionID() string { return newLitellmSession().ID }
 
 // litellmHeaders 构造伪装 codely CLI 的请求头。path 参与签名，是上游路径。
-// sessionID 为本请求的会话 id（x-litellm-session-id 头与请求体
-// litellm_session_id 字段同值，与官方 CLI 一致）。
-	// 2026-08-25 对照官方 CLI 源码（@unity-china/codely-cli rc.54）：官方仅
-	// isDashScopeProvider() 为真（authType=QWEN_OAUTH 或 baseUrl 指向
-	// dashscope.aliyuncs.com）才发 X-DashScope-* 头；我们上游是
-	// codely-litellm.tuanjie.cn，官方这条路线不发，故不设置。
-func (c *Client) litellmHeaders(path, key, sessionID string) http.Header {
+// sess 为本请求的会话（x-litellm-session-id 头与请求体 litellm_session_id
+// 字段同值）；sess 为 nil 时现场造一次性会话。
+	// 头集合 = 官方 CLI 实际发送的最小集（rc.55 源码逐项实证）：
+	//   - DashScope 头不带：官方仅 isDashScopeProvider() 路线发，团结
+	//     LiteLLM 路线官方不发（2026-08-25 实证）
+	//   - B3 追踪头不带：telemetry 默认 enabled:!1 且 SDK 未注册 B3
+	//     propagator，官方默认不发（2026-08-27 实证 + A/B 大小请求均 200；
+	//     401 修复靠 UA 版本号，与 B3 无关）
+func (c *Client) litellmHeaders(path, key string, sess *LitellmSession) http.Header {
+	if sess == nil {
+		sess = newLitellmSession()
+	}
 	h := http.Header{}
 	h.Set("Authorization", "Bearer "+key)
 	h.Set("Content-Type", "application/json")
 	h.Set("Accept", "application/json")
 	h.Set("User-Agent", cliUserAgent)
-	if sessionID == "" {
-		sessionID = newLitellmSessionID()
-	}
-	h.Set("x-litellm-session-id", sessionID)
+	h.Set("x-litellm-session-id", sess.ID)
 	h.Set("X-Codely-Signature", SignLitellm(path, key, time.Now()))
 	return h
 }
@@ -284,12 +421,12 @@ func (c *Client) litellmHeaders(path, key, sessionID string) http.Header {
 // 返回上游响应（调用方负责关闭 Body）。上游 401 时自动换 key 重试一次。
 // body 会先整体读入内存，保证重试时能完整重放。
 func (c *Client) Forward(ctx context.Context, method, path string, bodyIn io.Reader, contentType string) (*http.Response, error) {
-	return c.ForwardWithSession(ctx, method, path, bodyIn, contentType, "")
+	return c.ForwardWithSession(ctx, method, path, bodyIn, contentType, nil)
 }
 
-// ForwardWithSession 同 Forward，但显式指定 x-litellm-session-id（请求体
-// litellm_session_id 与头同值时用，handleChat 重排后走这里）。
-func (c *Client) ForwardWithSession(ctx context.Context, method, path string, bodyIn io.Reader, contentType, sessionID string) (*http.Response, error) {
+// ForwardWithSession 同 Forward，但显式指定会话（请求体 litellm_session_id
+// 与头同值时用，handleChat 从会话池租借后走这里；重试共用同一会话）。
+func (c *Client) ForwardWithSession(ctx context.Context, method, path string, bodyIn io.Reader, contentType string, sess *LitellmSession) (*http.Response, error) {
 	var body []byte
 	if bodyIn != nil {
 		b, err := io.ReadAll(bodyIn)
@@ -307,7 +444,7 @@ func (c *Client) ForwardWithSession(ctx context.Context, method, path string, bo
 		if err != nil {
 			return nil, err
 		}
-		for k, vs := range c.litellmHeaders(path, key, sessionID) {
+		for k, vs := range c.litellmHeaders(path, key, sess) {
 			for _, v := range vs {
 				req.Header.Add(k, v)
 			}
