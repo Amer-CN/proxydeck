@@ -4393,19 +4393,20 @@ var PT_I18N = {
       var h = '';
       d.accounts.forEach(function (a) {
         var tags = '';
+        if (a.source === 'local') tags += '<span class="acc-tag">本地客户端</span> ';
         if (a.has_glm53) tags += '<span class="acc-tag glm">GLM</span> ';
         if (a.budget_exceeded) tags += '<span class="acc-tag budget">402</span> ';
         if (a.token_remaining_hours !== undefined && a.token_remaining_hours < 24) tags += '<span class="acc-tag expired">剩' + a.token_remaining_hours + 'h</span> ';
         var meta = (a.username ? escHtml(a.username) + ' · ' : '') + '用 ' + (a.use_count || 0) + ' 次' +
           (a.inflight ? ' · <b class="warn">进行中 ' + a.inflight + '</b>' : '') +
           (a.token_expires && a.token_expires !== '未知' ? ' · token 至 ' + a.token_expires : '');
+        var act = a.source === 'local' ? '' :
+          '<button type="button" class="ibtn2" data-acc-toggle="' + escHtml(a.user_id) + '" data-on="' + a.enabled + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
+          '<button type="button" class="ibtn2" data-acc-del="' + escHtml(a.user_id) + '">删</button>';
         h += '<div class="acc-row' + (a.enabled ? '' : ' off') + '">' +
           '<div><div class="a-name">' + escHtml(a.user_id) + '</div><div class="a-meta">' + meta + '</div></div>' +
           '<div>' + tags + '</div>' +
-          '<div class="acc-act">' +
-          '<button type="button" class="ibtn2" data-acc-toggle="' + escHtml(a.user_id) + '" data-on="' + a.enabled + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
-          '<button type="button" class="ibtn2" data-acc-del="' + escHtml(a.user_id) + '">删</button>' +
-          '</div></div>';
+          '<div class="acc-act">' + act + '</div></div>';
       });
       box.innerHTML = h;
       box.querySelectorAll('[data-acc-toggle]').forEach(function (b) {
@@ -4676,6 +4677,7 @@ var PT_I18N = {
       : '<span class="acc-tag expired">已禁用</span>';
     var load = a.inflight || 0;
     var tags = stateTag
+      + (a.source === 'local' ? ' <span class="acc-tag">本地客户端</span>' : '')
       + (a.has_glm53 ? ' <span class="acc-tag glm">GLM</span>' : '')
       + (load > 0 ? ' <span class="acc-tag" style="background:var(--pt-ink)">进行中 ' + load + '</span>' : '');
     var meta2 = (a.token_expires && a.token_expires !== '未知' ? '到期 ' + escHtml(String(a.token_expires)) : '到期 未知');
@@ -4689,8 +4691,9 @@ var PT_I18N = {
       '<div class="mx-meta"><span>' + meta2 + '</span>' +
       '<span>' + (a.last_used ? '最近 ' + escHtml(String(a.last_used).slice(5, 16).replace('T', ' ')) : '未使用') + '</span></div>' +
       '<div class="mx-act">' +
+      (a.source === 'local' ? '' :
       '<button type="button" class="ibtn2" data-mx-toggle="' + escHtml(a.user_id) + '" data-on="' + a.enabled + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
-      '<button type="button" class="ibtn2" data-mx-del="' + escHtml(a.user_id) + '">删除</button></div>' +
+      '<button type="button" class="ibtn2" data-mx-del="' + escHtml(a.user_id) + '">删除</button>') + '</div>' +
       '</div>';
   }
   async function renderTuanjieMatrix() {

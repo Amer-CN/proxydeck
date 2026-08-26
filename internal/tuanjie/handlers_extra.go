@@ -20,7 +20,7 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		writeJSON(w, map[string]any{
 			"ok":             true,
-			"accounts":       s.pool.Status(),
+			"accounts":       s.accountList(),
 			"mode":           map[bool]string{true: "pool", false: "single"}[s.pool.Size() > 0],
 			"passive":        s.water.PassiveEvents(),
 			"media_reroutes": s.mediaReroutes.Load(),
@@ -50,14 +50,26 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, map[string]any{"ok": false, "msg": "缺少 user_id 或 token"})
 			return
 		}
+		if accountTokenInvalid(r.Context(), req.Token) {
+			writeJSON(w, map[string]any{"ok": false, "msg": invalidTokenMsg})
+			return
+		}
 		if s.pool.Add(req.UserID, req.Token, req.Username, req.OrgID) {
 			writeJSON(w, map[string]any{"ok": true, "msg": "账号已添加"})
 		} else {
 			writeJSON(w, map[string]any{"ok": false, "msg": "账号已存在"})
 		}
 	case "remove":
+		if req.UserID == localAccountSub() {
+			writeJSON(w, map[string]any{"ok": false, "msg": "本地账号不可删除"})
+			return
+		}
 		writeJSON(w, map[string]any{"ok": s.pool.Remove(req.UserID)})
 	case "toggle":
+		if req.UserID == localAccountSub() {
+			writeJSON(w, map[string]any{"ok": false, "msg": "本地账号不可启停"})
+			return
+		}
 		writeJSON(w, map[string]any{"ok": s.pool.Toggle(req.UserID, req.Enabled)})
 	case "setglm":
 		writeJSON(w, map[string]any{"ok": s.pool.SetGLM(req.UserID, req.HasGLM53)})
@@ -75,6 +87,10 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAccountAuto(w http.ResponseWriter, r *http.Request) {
 	// 1. 直接探测（浏览器可能已带调试口在跑）
 	if creds := probeCDPBrowser(); creds != nil {
+		if accountTokenInvalid(r.Context(), creds.AccessToken) {
+			writeJSON(w, map[string]any{"ok": false, "msg": invalidTokenMsg})
+			return
+		}
 		if s.pool.Add(creds.UserID, creds.AccessToken, creds.UserID, "") {
 			writeJSON(w, map[string]any{"ok": true, "msg": "已从浏览器读取并添加账号", "user_id": creds.UserID, "browser": creds.Browser})
 		} else {
@@ -95,6 +111,10 @@ func (s *Server) handleAccountAuto(w http.ResponseWriter, r *http.Request) {
 	for time.Now().Before(deadline) {
 		time.Sleep(2 * time.Second)
 		if creds := probeCDPBrowser(); creds != nil {
+			if accountTokenInvalid(r.Context(), creds.AccessToken) {
+				writeJSON(w, map[string]any{"ok": false, "msg": invalidTokenMsg})
+				return
+			}
 			if s.pool.Add(creds.UserID, creds.AccessToken, creds.UserID, "") {
 				writeJSON(w, map[string]any{"ok": true, "msg": "已读取登录态并入池（弹出的浏览器窗口可以关了）", "user_id": creds.UserID, "browser": path})
 			} else {
@@ -107,6 +127,72 @@ func (s *Server) handleAccountAuto(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, map[string]any{"ok": false, "msg": "等待登录超时（150 秒）——请在弹出的浏览器窗口里登录团结账号后再点一次探测"})
+}
+
+// invalidTokenMsg 是入池前预验证失败（token 无效）的固定报错文案。
+const invalidTokenMsg = "该账号凭据无效（换取 key 401）——请确认浏览器已登录 codely.tuanjie.cn 且会话未过期后重试"
+
+// accountTokenInvalid 入池前预验证 access_token：能换取 cli_api_key 才算有效。
+// 命中 401（token 无效）等错误返回 true，应拒绝入池。
+func accountTokenInvalid(ctx context.Context, token string) bool {
+	_, err := fetchKeyWithToken(ctx, token)
+	return err != nil
+}
+
+// localAccountSub 返回本地登录态 JWT 的 sub（user_id）；未登录或解析失败返回空串。
+func localAccountSub() string {
+	token, err := loadAccessToken()
+	if err != nil {
+		return ""
+	}
+	return jwtSub(token)
+}
+
+// accountList 组装 GET /accounts 的账号数组：本地账号入列（首位，source=local），
+// 池内账号补 source=pool 保持一致。本地未登录时不加本地条目（行为同现状）。
+func (s *Server) accountList() []map[string]any {
+	statuses := s.pool.Status()
+	accts := make([]map[string]any, 0, len(statuses)+1)
+	for _, st := range statuses {
+		accts = append(accts, map[string]any{
+			"user_id":               st.UserID,
+			"username":              st.Username,
+			"org_id":                st.OrgID,
+			"enabled":               st.Enabled,
+			"use_count":             st.UseCount,
+			"last_used":             st.LastUsed,
+			"token_expires":         st.TokenExpires,
+			"token_remaining_hours": st.TokenRemainHrs,
+			"has_glm53":             st.HasGLM53,
+			"budget_exceeded":       st.BudgetExceeded,
+			"inflight":              st.Inflight,
+			"source":                "pool",
+		})
+	}
+	token, err := loadAccessToken()
+	if err == nil {
+		if sub := jwtSub(token); sub != "" {
+			exp, ok := jwtExpiry(token)
+			remain := 0.0
+			expires := "未知"
+			if ok {
+				remain = time.Until(exp).Hours()
+				if remain < 0 {
+					remain = 0
+				}
+				expires = exp.Format("2006-01-02 15:04")
+			}
+			accts = append([]map[string]any{{
+				"user_id":               sub,
+				"username":              "本地客户端",
+				"enabled":               true,
+				"source":                "local",
+				"token_expires":         expires,
+				"token_remaining_hours": float64(int(remain*10)) / 10,
+			}}, accts...)
+		}
+	}
+	return accts
 }
 
 // accountTokenFor 返回当前请求应使用的 access_token（多账号池选号或单账号回退）。
