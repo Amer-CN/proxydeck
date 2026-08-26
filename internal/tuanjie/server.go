@@ -499,7 +499,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 请求体重排：字段顺序/默认值对齐官方 CLI buildCreateParams（model 在前、
-	// stream/stream_options 在尾，补 parallel_tool_calls/metadata.user_id/
+	//
 	// litellm_session_id/prompt_cache_key；非流式删 stream/stream_options）。
 	// 放在 media 改路由后、provider 分流前——provider 路径的 body 也会被重排，
 	// 但 reshape 只动字段序+补官方默认，不改语义，对外部 provider 同样无害。
