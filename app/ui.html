@@ -2495,7 +2495,7 @@ body.pt-try { background: var(--pt-paper); }
 
           <!-- ========== 四颗模式键 ========== -->
           <div class="pt-keys" role="radiogroup" aria-label="甲板">
-            <button type="button" class="pt-key" role="radio" data-mode="cmd" aria-checked="true"><span>COMMAND</span></button>
+            <button type="button" class="pt-key" role="radio" data-mode="cmd" aria-checked="true"><span class="dual-key"><b>COMMAND</b><i>⇄ B.AI</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="tj" aria-checked="false" tabindex="-1"><span>TUANJIE</span></button>
             <button type="button" class="pt-key" role="radio" data-mode="cb" aria-checked="false" tabindex="-1"><span>WORKBUDDY</span></button>
             <button type="button" class="pt-key" role="radio" data-mode="set" aria-checked="false" tabindex="-1"><span>设置</span></button>
@@ -3624,8 +3624,15 @@ var PT_I18N = {
       k.classList.toggle('on-alt', faceAlt);
       var label = k.querySelector('span');
       if (label) {
-        var orig = k.dataset.origLabel || (k.dataset.origLabel = label.textContent);
-        label.textContent = faceAlt ? ALT_LABEL[keyMode] : orig;
+        /* 双职责键（dual-key）：主名在 <b>，副行 <i> 显示"再点一次去另一张脸" */
+        var dual = label.classList.contains('dual-key');
+        var main = dual ? label.querySelector('b') : label;
+        var orig = k.dataset.origLabel || (k.dataset.origLabel = main.textContent);
+        main.textContent = faceAlt ? ALT_LABEL[keyMode] : orig;
+        if (dual) {
+          var sub = label.querySelector('i');
+          if (sub) sub.textContent = faceAlt ? '⇄ COMMAND' : '⇄ ' + (ALT_LABEL[keyMode] || '');
+        }
       }
     });
     /* 音效旋钮 */
@@ -6619,7 +6626,7 @@ var PT_I18N = {
     '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（伴随自检仪式）；运行中<b>拉回最左</b>熄火。三个代理甲板（COMMAND 55990 / TUANJIE 8788 / WORKBUDDY 8787）各有独立拉杆。<br>' +
     '<b>【后台常驻】</b> 平时关窗（红灯 / 系统关闭）<b>不停后台代理</b>，重开面板自动识别运行中；只有设置页的「彻底关机」拨杆会连后台一起停。<br>' +
     '<b>【接入】</b> 任意 OpenAI 兼容客户端：Base URL 填各甲板显示的地址（如 <code>http://127.0.0.1:55990/v1</code>）；API Key 用 CommandCode Studio 生成的 Key（点火前填好，程序记住）。<br>' +
-    '<b>【甲板】</b> 四颗模式键：<b>COMMAND / TUANJIE / WORKBUDDY / 设置</b>；键盘方向键也能切换。<b>注水检测</b>与<b>媒体转路由</b>是子页面：上屏（黑屏）看信息、甲板做操作，返回按 <b>设置</b> 键或「← 返回」，Esc 也可以。<br>' +
+    '<b>【甲板】</b> 四颗模式键：<b>COMMAND / TUANJIE / WORKBUDDY / 设置</b>；键盘方向键也能切换。<b>COMMAND 键再点一次翻到 B.AI</b>（键帽副行 ⇄ 提示，再点翻回）。<b>注水检测</b>与<b>媒体转路由</b>是子页面：上屏（黑屏）看信息、甲板做操作，返回按 <b>设置</b> 键或「← 返回」，Esc 也可以。<br>' +
     '<b>【模型】</b> 悬停任意模型键帽 1 秒 → 上屏显示价格 / 上下文详情；点击键帽复制模型名；COMMAND 甲板支持 <b>GO / 全部</b> 筛选。<br>' +
     '<b>【消耗统计】</b> 各甲板「消耗 TOP」条形图自动统计（TUANJIE 显示官方积分口径）。<br>' +
     '<b>【窗口】</b> 顶部台肩（红绿灯条）空白处按住<b>拖动窗口</b>、双击最大化；红灯=关面板 · 黄灯=最小化 · 绿灯=最大化/还原。<br>' +
