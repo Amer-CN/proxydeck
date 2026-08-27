@@ -18,6 +18,7 @@ import (
 // handleAccounts GET=账号列表+被动注水事件+改路由计数；POST=增删/启停/GLM 标记（action 字段分发）。
 func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
+		s.pool.EnsureLocalAccount()
 		writeJSON(w, map[string]any{
 			"ok":             true,
 			"accounts":       s.accountList(),
@@ -66,10 +67,6 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{"ok": s.pool.Remove(req.UserID)})
 	case "toggle":
-		if req.UserID == localAccountSub() {
-			writeJSON(w, map[string]any{"ok": false, "msg": "本地账号不可启停"})
-			return
-		}
 		writeJSON(w, map[string]any{"ok": s.pool.Toggle(req.UserID, req.Enabled)})
 	case "setglm":
 		writeJSON(w, map[string]any{"ok": s.pool.SetGLM(req.UserID, req.HasGLM53)})
@@ -154,15 +151,23 @@ func localAccountSub() string {
 	return jwtSub(token)
 }
 
-// accountList 组装 GET /accounts 的账号数组：本地账号入列（首位，source=local），
-// 池内账号补 source=pool 保持一致。本地未登录时不加本地条目（行为同现状）。
+// accountList 组装 GET /accounts 的账号数组：池内账号统一补 source 字段（local=本地客户端，
+// pool=入池账号）。本地账号由 Source=="local" 识别（已纳入池），username 显示为本地客户端。
 func (s *Server) accountList() []map[string]any {
 	statuses := s.pool.Status()
-	accts := make([]map[string]any, 0, len(statuses)+1)
+	accts := make([]map[string]any, 0, len(statuses))
 	for _, st := range statuses {
+		source := st.Source
+		if source == "" {
+			source = "pool"
+		}
+		username := st.Username
+		if source == "local" {
+			username = "本地客户端"
+		}
 		accts = append(accts, map[string]any{
 			"user_id":               st.UserID,
-			"username":              st.Username,
+			"username":              username,
 			"org_id":                st.OrgID,
 			"enabled":               st.Enabled,
 			"use_count":             st.UseCount,
@@ -172,46 +177,24 @@ func (s *Server) accountList() []map[string]any {
 			"has_glm53":             st.HasGLM53,
 			"budget_exceeded":       st.BudgetExceeded,
 			"inflight":              st.Inflight,
-			"source":                "pool",
+			"source":                source,
 		})
-	}
-	token, err := loadAccessToken()
-	if err == nil {
-		if sub := jwtSub(token); sub != "" {
-			exp, ok := jwtExpiry(token)
-			remain := 0.0
-			expires := "未知"
-			if ok {
-				remain = time.Until(exp).Hours()
-				if remain < 0 {
-					remain = 0
-				}
-				expires = exp.Format("2006-01-02 15:04")
-			}
-			accts = append([]map[string]any{{
-				"user_id":               sub,
-				"username":              "本地客户端",
-				"enabled":               true,
-				"source":                "local",
-				"token_expires":         expires,
-				"token_remaining_hours": float64(int(remain*10)) / 10,
-			}}, accts...)
-		}
 	}
 	return accts
 }
 
 // accountTokenFor 返回当前请求应使用的 access_token（多账号池选号或单账号回退）。
 // 多账号模式返回 (token, userID, true)；单账号返回 ("", "", false) 表示走 Client 原路径。
+// token 经过 PickWithToken 解析：本地账号实时读 oauth_creds.json，池账号用快照。
 func (s *Server) accountTokenFor(model string) (string, string, bool) {
 	if s.pool.Size() == 0 {
 		return "", "", false
 	}
-	acc := s.pool.Pick(model)
+	acc, token := s.pool.PickWithToken(model)
 	if acc == nil {
 		return "", "", false
 	}
-	return acc.AccessToken, acc.UserID, true
+	return token, acc.UserID, true
 }
 
 // ForwardDirect 用指定 access_token 直连转发（多账号池的 chat 转发用：
@@ -446,13 +429,13 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Action  string `json:"action"` // check | quick | deep | baseline（缺省=quick，旧调用兼容）
-		UserID  string `json:"user_id"`
-		Model   string `json:"model"`
-		Channel      string `json:"channel"` // 渠道（缺省 tuanjie）
+		Action       string `json:"action"` // check | quick | deep | baseline（缺省=quick，旧调用兼容）
+		UserID       string `json:"user_id"`
+		Model        string `json:"model"`
+		Channel      string `json:"channel"`        // 渠道（缺省 tuanjie）
 		ChannelKeyID string `json:"channel_key_id"` // setkey：渠道 id
 		ChannelKey   string `json:"channel_key"`    // setkey：key 明文
-		Samples int    `json:"samples"` // baseline/deep/check 的分布采样数（默认 60，上限 200）
+		Samples      int    `json:"samples"`        // baseline/deep/check 的分布采样数（默认 60，上限 200）
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "msg": "请求体解析失败"})
@@ -748,7 +731,7 @@ func (s *Server) handleWaterDeepOrBaseline(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, map[string]any{
 			"ok": true, "action": "baseline", "model": model,
 			"baseline": bl,
-			"msg": "基准已采集落盘（tuanjie-baselines.json）",
+			"msg":      "基准已采集落盘（tuanjie-baselines.json）",
 		})
 		return
 	}
@@ -762,7 +745,7 @@ func (s *Server) handleWaterDeepOrBaseline(w http.ResponseWriter, r *http.Reques
 		"ok": true, "action": "deep", "model": model, "user_id": userID,
 		"probes": probes, "probe_compare": cmps,
 		"dist": dist, "dist_similarity": sim,
-		"verdict": verdict,
+		"verdict":      verdict,
 		"has_baseline": base != nil,
 	})
 }

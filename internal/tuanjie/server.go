@@ -572,7 +572,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 多账号池：有池时按账号选号转发（402 自动禁用/负载感知/GLM 路由）
-	_, poolUID, usePool := s.accountTokenFor(model)
+	token, poolUID, usePool := s.accountTokenFor(model)
 	if usePool {
 		acc := s.pool.Get(poolUID)
 		if acc == nil {
@@ -584,7 +584,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rid := s.registry.Register(model, poolUID, wantsStream)
 		defer s.registry.Finish(rid)
-		resp, err := s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, acc.AccessToken, sess)
+		resp, err := s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, token, sess)
 		if err != nil {
 			writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
 			return
@@ -595,9 +595,11 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			s.pool.MarkBudgetExceeded(poolUID)
 			s.activity.Add("error", "账号 "+poolUID+" 配额用尽，自动禁用", model, poolUID, 0, 0, 402)
 			log.Printf("[tuanjie] account=%s 402 budget_exceeded 已禁用，切换下一账号", poolUID)
-			if next := s.pool.Pick(model); next != nil && next.UserID != poolUID {
+			if nAcc, nTok := s.pool.PickWithToken(model); nAcc != nil && nAcc.UserID != poolUID {
 				resp.Body.Close()
-				resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, next.AccessToken, sess)
+				token = nTok
+				poolUID = nAcc.UserID
+				resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, nTok, sess)
 				if err != nil {
 					writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
 					return
@@ -619,7 +621,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d 重试 %d/3 err=%s",
 				model, poolUID, resp.StatusCode, attempt+1, truncate(string(eb), 200))
 			time.Sleep(800 * time.Millisecond)
-			resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, acc.AccessToken, sess)
+			resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, token, sess)
 			if err != nil {
 				writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
 				return

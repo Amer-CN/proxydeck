@@ -6,6 +6,7 @@ package tuanjie
 import (
 	"encoding/base64"
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,6 +20,7 @@ type Account struct {
 	Username       string `json:"username,omitempty"`
 	OrgID          string `json:"org_id,omitempty"`
 	AccessToken    string `json:"access_token"`
+	Source         string `json:"source,omitempty"` // "pool"=入池账号（默认）；"local"=本地客户端（AccessToken 恒空，实时读 oauth_creds.json）
 	LastUsed       string `json:"last_used,omitempty"`
 	UseCount       int64  `json:"use_count,omitempty"`
 	Enabled        bool   `json:"enabled"`
@@ -39,6 +41,7 @@ type AccountStatus struct {
 	HasGLM53       bool    `json:"has_glm53"`
 	BudgetExceeded bool    `json:"budget_exceeded"`
 	Inflight       int     `json:"inflight"`
+	Source         string  `json:"source,omitempty"`
 }
 
 // AccountPool 管理多账号：轮询选号、402 禁用、GLM 资格路由、负载感知。
@@ -56,6 +59,7 @@ func accountsFilePath() string { return filepath.Join(exeDirForAccounts(), "tuan
 func NewAccountPool() *AccountPool {
 	p := &AccountPool{loads: map[string]int{}}
 	p.reload()
+	p.EnsureLocalAccount()
 	return p
 }
 
@@ -74,7 +78,12 @@ func (p *AccountPool) reload() {
 		return
 	}
 	for _, a := range data.Accounts {
-		if a == nil || a.UserID == "" || a.AccessToken == "" {
+		if a == nil || a.UserID == "" {
+			continue
+		}
+		// 本地账号（source=local）AccessToken 恒空串（实时读 oauth_creds.json），不能丢弃；
+		// 其余账号必须有非空 token 才入池。
+		if a.Source != "local" && a.AccessToken == "" {
 			continue
 		}
 		p.accounts = append(p.accounts, a)
@@ -163,6 +172,33 @@ func (p *AccountPool) Pick(model string) *Account {
 	return nil
 }
 
+// effectiveAccessToken 返回账号实际使用的 access_token：本地账号实时读 oauth_creds.json
+// （桌面端切号自动跟随、不因快照过期失效），池账号用入池快照。
+func (a *Account) effectiveAccessToken() (string, error) {
+	if a.Source == "local" {
+		return loadAccessToken()
+	}
+	return a.AccessToken, nil
+}
+
+// PickWithToken 选号并解析可用 token：本地账号实时读 token（读失败换下一账号，最多试池大小次），
+// 池账号用快照。无可选账号或全部本地号读不到 token 时返回 (nil,"")。
+func (p *AccountPool) PickWithToken(model string) (*Account, string) {
+	n := p.Size()
+	for i := 0; i < n; i++ {
+		a := p.Pick(model)
+		if a == nil {
+			return nil, ""
+		}
+		tok, err := a.effectiveAccessToken()
+		if err == nil {
+			return a, tok
+		}
+		log.Printf("[tuanjie] 账号 %s 取 token 失败：%v，跳过换下一账号", a.UserID, err)
+	}
+	return nil, ""
+}
+
 // MarkBudgetExceeded 标记账号 402 并持久化（选号自动绕过）。
 func (p *AccountPool) MarkBudgetExceeded(userID string) {
 	p.mu.Lock()
@@ -170,6 +206,9 @@ func (p *AccountPool) MarkBudgetExceeded(userID string) {
 	for _, a := range p.accounts {
 		if a.UserID == userID {
 			a.BudgetExceeded = true
+			if a.Source == "local" {
+				log.Printf("[tuanjie] 本地账号 %s 命中预算超额（BudgetExceeded=true 置 UI 标记，不物理删除）", userID)
+			}
 			p.saveLocked()
 			return
 		}
@@ -218,6 +257,7 @@ func (p *AccountPool) Status() []AccountStatus {
 			HasGLM53:       a.HasGLM53,
 			BudgetExceeded: a.BudgetExceeded,
 			Inflight:       p.loads[a.UserID],
+			Source:         a.Source,
 		})
 	}
 	return out
@@ -235,6 +275,38 @@ func (p *AccountPool) Add(userID, token, username, orgID string) bool {
 	p.accounts = append(p.accounts, &Account{
 		UserID: userID, AccessToken: token, Username: username, OrgID: orgID,
 		Enabled: true, HasGLM53: true,
+	})
+	p.saveLocked()
+	return true
+}
+
+// EnsureLocalAccount 把本地客户端（桌面端登录态）纳入账号池使其参与轮询。
+// 本地账号 AccessToken 恒为空串（每次用到时实时 loadAccessToken），Source=local。
+// 读 loadAccessToken()+jwtSub 成功则确保池里有 {UserID:<sub>, Source:local, Enabled:true,
+// HasGLM53:true, AccessToken:""} 记录（无则加；sub 变了就更新该条 UserID）；
+// 本地未登录/解析失败返回 false。
+func (p *AccountPool) EnsureLocalAccount() bool {
+	token, err := loadAccessToken()
+	if err != nil {
+		return false
+	}
+	sub := jwtSub(token)
+	if sub == "" {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, a := range p.accounts {
+		if a.Source == "local" {
+			if a.UserID != sub {
+				a.UserID = sub
+				p.saveLocked()
+			}
+			return true
+		}
+	}
+	p.accounts = append(p.accounts, &Account{
+		UserID: sub, Source: "local", Enabled: true, HasGLM53: true,
 	})
 	p.saveLocked()
 	return true

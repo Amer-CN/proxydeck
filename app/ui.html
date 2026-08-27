@@ -4400,9 +4400,10 @@ var PT_I18N = {
         var meta = (a.username ? escHtml(a.username) + ' · ' : '') + '用 ' + (a.use_count || 0) + ' 次' +
           (a.inflight ? ' · <b class="warn">进行中 ' + a.inflight + '</b>' : '') +
           (a.token_expires && a.token_expires !== '未知' ? ' · token 至 ' + a.token_expires : '');
-        var act = a.source === 'local' ? '' :
+        var act =
           '<button type="button" class="ibtn2" data-acc-toggle="' + escHtml(a.user_id) + '" data-on="' + a.enabled + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
-          '<button type="button" class="ibtn2" data-acc-del="' + escHtml(a.user_id) + '">删</button>';
+          (a.source === 'local' ? '' :
+          '<button type="button" class="ibtn2" data-acc-del="' + escHtml(a.user_id) + '">删</button>');
         h += '<div class="acc-row' + (a.enabled ? '' : ' off') + '">' +
           '<div><div class="a-name">' + escHtml(a.user_id) + '</div><div class="a-meta">' + meta + '</div></div>' +
           '<div>' + tags + '</div>' +
@@ -4697,8 +4698,8 @@ var PT_I18N = {
       '<div class="mx-meta"><span>' + meta2 + '</span>' +
       '<span>' + (a.last_used ? '最近 ' + escHtml(String(a.last_used).slice(5, 16).replace('T', ' ')) : '未使用') + '</span></div>' +
       '<div class="mx-act">' +
-      (a.source === 'local' ? '' :
       '<button type="button" class="ibtn2" data-mx-toggle="' + escHtml(a.user_id) + '" data-on="' + a.enabled + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
+      (a.source === 'local' ? '' :
       '<button type="button" class="ibtn2" data-mx-del="' + escHtml(a.user_id) + '">删除</button>') + '</div>' +
       '</div>';
   }
