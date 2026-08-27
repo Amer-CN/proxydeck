@@ -117,6 +117,10 @@ func (s *Server) Start(host, port string) error {
 	mux.HandleFunc("/v1/videos/", s.handleVideoQuery)                   // 生视频任务轮询（GET /v1/videos/{id}）
 	mux.HandleFunc("/agnesapi", s.handleVideoQuery)                     // Agnes 推荐的 GET /agnesapi?video_id=
 
+	// 预热外部账号计费缓存：Infos 冷启动要同步等远端查询，不预热的用户第一次点开
+	// 「媒体转路由」就会卡在那一下上。放这里而不是 NewServer，避免测试构造服务时打网络。
+	go s.providers.Infos()
+
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
 	if err != nil {
 		return fmt.Errorf("端口 %s 被占用: %w", port, err)
@@ -164,6 +168,12 @@ var (
 	modelsCacheMu sync.Mutex
 	modelsCache   []byte
 	modelsCacheAt time.Time
+
+	// fullModelsCache：?full=true 全量模型缓存（5 分钟）。该路径每 3s 被
+	// GUI 轮询，逐账号换 key 直打官网——不缓存会 429 限流（2026-08-27 事故）。
+	fullModelsCacheMu sync.Mutex
+	fullModelsCache   []byte
+	fullModelsCacheAt time.Time
 )
 
 // mergeProviderModels 把 provider 模型条目合并进 /v1/models 响应体
@@ -225,17 +235,33 @@ func (s *Server) mergeProviderModels(body []byte) []byte {
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
+	// ?full=true：遍历账号池找能拉到最多模型的账号（付费号通常返回更全的列表）。
+	// GUI 全量口径 = 纯团结原生模型，不合并 provider 条目（模型矩阵不显示 Agnes 等）。
+	if r.URL.Query().Get("full") == "true" {
+		s.handleModelsFull(w, r)
+		return
+	}
+	s.serveModels(w, r, true)
+}
+
+// serveModels 拉取上游模型列表（失败回退缓存）并写响应。mergeProviders=false
+// 供 ?full=true 的兜底路径用：provider 条目只进客户端看到的普通 /v1/models，
+// 不进 GUI 模型矩阵。缓存始终存原生列表，写出时才合并——避免 full 兜底读到
+// 已混入 provider 条目的缓存。
+func (s *Server) serveModels(w http.ResponseWriter, r *http.Request, mergeProviders bool) {
 	resp, err := s.client.Forward(r.Context(), http.MethodGet, "/v1/models", nil, "")
 	if err == nil && resp.StatusCode == http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		resp.Body.Close()
-		body = s.mergeProviderModels(body)
 		modelsCacheMu.Lock()
 		if len(body) > 0 {
 			modelsCache = body
 			modelsCacheAt = time.Now()
 		}
 		modelsCacheMu.Unlock()
+		if mergeProviders {
+			body = s.mergeProviderModels(body)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		_, _ = w.Write(body)
@@ -249,6 +275,9 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	cached, fresh := modelsCache, time.Since(modelsCacheAt) < time.Hour && len(modelsCache) > 0
 	modelsCacheMu.Unlock()
 	if fresh {
+		if mergeProviders {
+			cached = s.mergeProviderModels(cached)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		_, _ = w.Write(cached)
@@ -259,6 +288,70 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeErr(w, 502, "上游模型列表不可用")
+}
+
+// handleModelsFull 遍历账号池所有 enabled 账号，用各自 token 拉 /v1/models，
+// 返回模型数最多的结果。付费号通常能看到全量模型，免费号只能看受限列表。
+// 结果缓存 5 分钟——GUI 每 3s 轮询本端点，逐账号换 key 直打官网，
+// 不缓存会把官网打到 429 限流。
+func (s *Server) handleModelsFull(w http.ResponseWriter, r *http.Request) {
+	fullModelsCacheMu.Lock()
+	if len(fullModelsCache) > 0 && time.Since(fullModelsCacheAt) < 5*time.Minute {
+		body := fullModelsCache
+		fullModelsCacheMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		_, _ = w.Write(body)
+		return
+	}
+	fullModelsCacheMu.Unlock()
+
+	ids := s.pool.SortedUserIDs()
+	var bestBody []byte
+	bestCount := -1
+	for _, uid := range ids {
+		acc := s.pool.Get(uid)
+		if acc == nil || !acc.Enabled || acc.BudgetExceeded {
+			continue
+		}
+		tok, err := acc.effectiveAccessToken()
+		if err != nil || tok == "" {
+			continue
+		}
+		resp, err := s.ForwardDirect(r.Context(), http.MethodGet, "/v1/models", nil, tok, nil)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			continue
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+		resp.Body.Close()
+		// 解析计算模型数
+		var m struct {
+			Data []json.RawMessage `json:"data"`
+		}
+		count := 0
+		if json.Unmarshal(body, &m) == nil {
+			count = len(m.Data)
+		}
+		if count > bestCount {
+			bestCount = count
+			bestBody = body
+		}
+	}
+	if len(bestBody) > 0 {
+		fullModelsCacheMu.Lock()
+		fullModelsCache = bestBody
+		fullModelsCacheAt = time.Now()
+		fullModelsCacheMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		_, _ = w.Write(bestBody)
+		return
+	}
+	// 所有账号都失败 → 回退普通拉取（同样不合并 provider 条目）
+	s.serveModels(w, r, false)
 }
 
 // ModelInfo 是单个模型的元数据（供 GUI 模型指南展示）。
@@ -1190,8 +1283,34 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleQuota 返回团结积分快照（GUI 链路监测积分卡）。
+// 可选 ?user_id=xxx 查看指定池中账号的积分（不传则用本地客户端账号）；
+// ?refresh=1 跳过缓存强制实时（GUI「↻ 刷新」按钮）。
 func (s *Server) handleQuota(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.client.FetchQuota(r.Context()))
+	uid := r.URL.Query().Get("user_id")
+	refresh := r.URL.Query().Get("refresh") == "1"
+	if uid == "" {
+		if refresh {
+			writeJSON(w, s.client.FetchQuotaForce(r.Context(), ""))
+			return
+		}
+		writeJSON(w, s.client.FetchQuota(r.Context()))
+		return
+	}
+	acc := s.pool.Get(uid)
+	if acc == nil {
+		writeJSON(w, &Quota{Source: "none", Err: "账号不在池中"})
+		return
+	}
+	tok, err := acc.effectiveAccessToken()
+	if err != nil {
+		writeJSON(w, &Quota{Source: "none", Err: "读取 token 失败: " + err.Error()})
+		return
+	}
+	if refresh {
+		writeJSON(w, s.client.FetchQuotaForce(r.Context(), tok))
+		return
+	}
+	writeJSON(w, s.client.FetchQuotaFor(r.Context(), tok))
 }
 
 // handleKimiPacing 节奏器开关端点（GUI 团结视图一键切换）：

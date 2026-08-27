@@ -25,7 +25,8 @@ type Account struct {
 	UseCount       int64  `json:"use_count,omitempty"`
 	Enabled        bool   `json:"enabled"`
 	HasGLM53       bool   `json:"has_glm53"`
-	BudgetExceeded bool   `json:"budget_exceeded"`
+	BudgetExceeded bool     `json:"budget_exceeded"`
+	Models         []string `json:"models,omitempty"` // 该账号认领的模型列表（精确匹配）；空 = 兜底接所有未被认领的模型
 }
 
 // AccountStatus 是给前端的账号摘要（不含 token 本体）。
@@ -40,8 +41,9 @@ type AccountStatus struct {
 	TokenRemainHrs float64 `json:"token_remaining_hours"`
 	HasGLM53       bool    `json:"has_glm53"`
 	BudgetExceeded bool    `json:"budget_exceeded"`
-	Inflight       int     `json:"inflight"`
-	Source         string  `json:"source,omitempty"`
+	Inflight       int      `json:"inflight"`
+	Source         string   `json:"source,omitempty"`
+	Models         []string `json:"models"`
 }
 
 // AccountPool 管理多账号：轮询选号、402 禁用、GLM 资格路由、负载感知。
@@ -127,6 +129,27 @@ func (p *AccountPool) Pick(model string) *Account {
 	}
 	if len(enabled) == 0 {
 		return nil
+	}
+	// 模型路由：精确匹配账号 Models 列表；空列表 = 兜底接未认领模型
+	if model != "" {
+		var claimers, fallbacks []*Account
+		for _, a := range enabled {
+			if len(a.Models) == 0 {
+				fallbacks = append(fallbacks, a)
+				continue
+			}
+			for _, m := range a.Models {
+				if m == model {
+					claimers = append(claimers, a)
+					break
+				}
+			}
+		}
+		if len(claimers) > 0 {
+			enabled = claimers
+		} else if len(fallbacks) > 0 {
+			enabled = fallbacks
+		}
 	}
 	// GLM 资格路由
 	if isGLMModel(model) {
@@ -258,6 +281,7 @@ func (p *AccountPool) Status() []AccountStatus {
 			BudgetExceeded: a.BudgetExceeded,
 			Inflight:       p.loads[a.UserID],
 			Source:         a.Source,
+			Models:         a.Models,
 		})
 	}
 	return out
@@ -355,6 +379,24 @@ func (p *AccountPool) SetGLM(userID string, has bool) bool {
 	for _, a := range p.accounts {
 		if a.UserID == userID {
 			a.HasGLM53 = has
+			p.saveLocked()
+			return true
+		}
+	}
+	return false
+}
+
+// SetModels 设置账号认领的模型列表（精确匹配）；空切片等价于兜底。
+func (p *AccountPool) SetModels(userID string, models []string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, a := range p.accounts {
+		if a.UserID == userID {
+			if len(models) == 0 {
+				a.Models = nil
+			} else {
+				a.Models = append([]string(nil), models...)
+			}
 			p.saveLocked()
 			return true
 		}

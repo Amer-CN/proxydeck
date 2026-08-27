@@ -33,13 +33,14 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Action   string `json:"action"` // add | remove | toggle | setglm | auto
-		UserID   string `json:"user_id"`
-		Token    string `json:"token"`
-		Username string `json:"username"`
-		OrgID    string `json:"org_id"`
-		Enabled  bool   `json:"enabled"`
-		HasGLM53 bool   `json:"has_glm53"`
+		Action   string   `json:"action"` // add | remove | toggle | setglm | setmodels | auto
+		UserID   string   `json:"user_id"`
+		Token    string   `json:"token"`
+		Username string   `json:"username"`
+		OrgID    string   `json:"org_id"`
+		Enabled  bool     `json:"enabled"`
+		HasGLM53 bool     `json:"has_glm53"`
+		Models   []string `json:"models"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "msg": "请求体解析失败"})
@@ -70,6 +71,12 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": s.pool.Toggle(req.UserID, req.Enabled)})
 	case "setglm":
 		writeJSON(w, map[string]any{"ok": s.pool.SetGLM(req.UserID, req.HasGLM53)})
+	case "setmodels":
+		if req.UserID == "" {
+			writeJSON(w, map[string]any{"ok": false, "msg": "缺少 user_id"})
+			return
+		}
+		writeJSON(w, map[string]any{"ok": s.pool.SetModels(req.UserID, req.Models)})
 	case "auto":
 		s.handleAccountAuto(w, r)
 		return
@@ -83,17 +90,17 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 // 登录态保留），等就绪后重试。探测/入池全程只针对 codely.tuanjie.cn 域。
 func (s *Server) handleAccountAuto(w http.ResponseWriter, r *http.Request) {
 	// 1. 直接探测（浏览器可能已带调试口在跑）
+	//    读到已在池的账号时不拦截——fall through 到弹窗流程，让用户可以登新号或查余额。
+	//    token 无效（过期/被吊销）也不拦截——同样 fall through 到弹窗让用户重新登录。
 	if creds := probeCDPBrowser(); creds != nil {
 		if accountTokenInvalid(r.Context(), creds.AccessToken) {
-			writeJSON(w, map[string]any{"ok": false, "msg": invalidTokenMsg})
-			return
-		}
-		if s.pool.Add(creds.UserID, creds.AccessToken, creds.UserID, "") {
+			log.Printf("[tuanjie] 直接探测到 %s 但 token 无效，继续弹窗流程以便用户重新登录", creds.UserID)
+		} else if s.pool.Add(creds.UserID, creds.AccessToken, creds.UserID, "") {
 			writeJSON(w, map[string]any{"ok": true, "msg": "已从浏览器读取并添加账号", "user_id": creds.UserID, "browser": creds.Browser})
+			return
 		} else {
-			writeJSON(w, map[string]any{"ok": false, "msg": "该账号已在池里（user_id " + creds.UserID + "）", "user_id": creds.UserID})
+			log.Printf("[tuanjie] 直接探测到 %s 已在池里，继续弹窗流程以便用户登新号/查余额", creds.UserID)
 		}
-		return
 	}
 	// 2. 探测不到 → 拉起【一次性独立 profile】浏览器带调试口（136+ 版本安全限制：
 	//    默认 profile 忽略调试参数，必须独立 user-data-dir），打开团结 dashboard。
@@ -178,6 +185,7 @@ func (s *Server) accountList() []map[string]any {
 			"budget_exceeded":       st.BudgetExceeded,
 			"inflight":              st.Inflight,
 			"source":                source,
+			"models":                func() []string { if st.Models == nil { return []string{} }; return st.Models }(),
 		})
 	}
 	return accts

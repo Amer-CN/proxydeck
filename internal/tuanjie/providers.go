@@ -19,6 +19,10 @@ import (
 // providerTTL 计费查询缓存时长（学群友 120s）。
 const providerTTL = 120 * time.Second
 
+// providerFetchTimeout 单个 provider 计费/模型查询超时。8s 是"管理端同步调用无所谓"
+// 时代的口径，但子页面打开就是 8s×N 的白屏，压到 2.5s：拉不到就下次后台补。
+const providerFetchTimeout = 2500 * time.Millisecond
+
 // ExternalProvider 用户配置的外部 provider（tuanjie-providers.json）。
 // Models 是参与转发的模型列表（缺省空 = 仅展示不转发，向后兼容旧配置）。
 type ExternalProvider struct {
@@ -36,20 +40,21 @@ type ProviderInfo struct {
 	BaseURL      string         `json:"base_url"`
 	ConfigModels []string       `json:"config_models"`
 	Models       []string       `json:"models"`
-	OK          bool           `json:"ok"`
-	Error       string         `json:"error,omitempty"`
-	SubStatus   string         `json:"subscription_status,omitempty"`
-	Sub         map[string]any `json:"subscription,omitempty"`
-	UsageStatus string         `json:"usage_status,omitempty"`
-	Usage       map[string]any `json:"usage,omitempty"`
+	OK           bool           `json:"ok"`
+	Error        string         `json:"error,omitempty"`
+	SubStatus    string         `json:"subscription_status,omitempty"`
+	Sub          map[string]any `json:"subscription,omitempty"`
+	UsageStatus  string         `json:"usage_status,omitempty"`
+	Usage        map[string]any `json:"usage,omitempty"`
 }
 
 // ProviderStore 外部 provider 配置 + 计费信息缓存。
 type ProviderStore struct {
-	mu    sync.Mutex
-	path  string
-	list  []ExternalProvider
-	cache map[string]cachedInfo
+	mu         sync.Mutex
+	path       string
+	list       []ExternalProvider
+	cache      map[string]cachedInfo
+	refreshing map[string]bool
 }
 
 type cachedInfo struct {
@@ -63,7 +68,7 @@ func providersFilePath() string {
 
 // NewProviderStore 从 tuanjie-providers.json 加载（文件缺失 = 空）。
 func NewProviderStore() *ProviderStore {
-	ps := &ProviderStore{path: providersFilePath(), cache: map[string]cachedInfo{}}
+	ps := &ProviderStore{path: providersFilePath(), cache: map[string]cachedInfo{}, refreshing: map[string]bool{}}
 	raw, err := os.ReadFile(ps.path)
 	if err == nil {
 		_ = json.Unmarshal(raw, &ps.list)
@@ -214,31 +219,72 @@ func (ps *ProviderStore) Remove(name string) bool {
 	return false
 }
 
-// Infos 返回全部 provider 的展示信息：缓存 120s 内直接用，过期同步刷新
-// （管理端低频调用，同步实现最简单；单个查询超时 8s，学群友口径）。
+// Infos 返回全部 provider 的展示信息（stale-while-revalidate）：120s 内直接用
+// 缓存，过期也先把旧值立刻返回、刷新丢给后台单飞并行——管理端子页面（媒体转路由
+// /外部账号）点开不能被远端计费查询同步阻塞。只有完全没有缓存可兜底的头一次才
+// 同步等（并行拉取 + providerFetchTimeout 超时）。
 func (ps *ProviderStore) Infos() []ProviderInfo {
 	ps.mu.Lock()
 	list := make([]ExternalProvider, len(ps.list))
 	copy(list, ps.list)
-	out := make([]ProviderInfo, 0, len(list))
-	stale := map[string]ExternalProvider{}
-	for _, p := range list {
-		if c, ok := ps.cache[p.Name]; ok && time.Since(c.fetched) < providerTTL {
-			out = append(out, c.info)
+	out := make([]ProviderInfo, len(list))
+	var cold, warm []providerJob
+	for i, p := range list {
+		c, ok := ps.cache[p.Name]
+		if ok {
+			out[i] = c.info
 		} else {
-			stale[p.Name] = p
+			out[i] = baseInfo(p)
+		}
+		if ok && time.Since(c.fetched) < providerTTL {
+			continue
+		}
+		if ps.refreshing[p.Name] {
+			continue // 另一路 Infos 已在拉，本次先把占位/旧值给出去
+		}
+		ps.refreshing[p.Name] = true
+		if ok {
+			warm = append(warm, providerJob{p: p, idx: i})
+		} else {
+			cold = append(cold, providerJob{p: p, idx: i})
 		}
 	}
 	ps.mu.Unlock()
 
-	for _, p := range stale {
-		info := fetchProviderInfo(p)
-		ps.mu.Lock()
-		ps.cache[p.Name] = cachedInfo{info: info, fetched: time.Now()}
-		ps.mu.Unlock()
-		out = append(out, info)
+	if len(cold) > 0 {
+		ps.fetchInto(cold, out)
+	}
+	if len(warm) > 0 {
+		go ps.fetchInto(warm, nil)
 	}
 	return out
+}
+
+// providerJob 一次计费查询任务，idx 指向 Infos 结果切片中的落位。
+type providerJob struct {
+	p   ExternalProvider
+	idx int
+}
+
+// fetchInto 并行拉取 jobs 并写缓存（同时复位 refreshing）；out 非 nil 时按 idx 回填。
+// out 会被调用方持有，因此后台刷新路径必须传 nil——否则会写进已交给调用方的切片。
+func (ps *ProviderStore) fetchInto(jobs []providerJob, out []ProviderInfo) {
+	var wg sync.WaitGroup
+	for _, j := range jobs {
+		wg.Add(1)
+		go func(j providerJob) {
+			defer wg.Done()
+			info := fetchProviderInfo(j.p)
+			ps.mu.Lock()
+			ps.cache[j.p.Name] = cachedInfo{info: info, fetched: time.Now()}
+			delete(ps.refreshing, j.p.Name)
+			ps.mu.Unlock()
+			if out != nil {
+				out[j.idx] = info
+			}
+		}(j)
+	}
+	wg.Wait()
 }
 
 // Invalidate 清空缓存（添加/删除后调用，让下次 Infos 全量刷新）。
@@ -248,10 +294,16 @@ func (ps *ProviderStore) Invalidate() {
 	ps.cache = map[string]cachedInfo{}
 }
 
+// baseInfo 仅由本地配置拼出的展示信息（不发网络），供冷启动占位与拉取初值共用。
+func baseInfo(p ExternalProvider) ProviderInfo {
+	return ProviderInfo{Name: p.Name, BaseURL: p.BaseURL,
+		ConfigModels: append([]string{}, p.Models...), Models: []string{}}
+}
+
 // fetchProviderInfo 查单个 provider：模型列表 + 订阅 + 用量。
 func fetchProviderInfo(p ExternalProvider) ProviderInfo {
-	info := ProviderInfo{Name: p.Name, BaseURL: p.BaseURL, ConfigModels: append([]string{}, p.Models...), Models: []string{}}
-	cl := &http.Client{Timeout: 8 * time.Second, Transport: smartProxyTransport}
+	info := baseInfo(p)
+	cl := &http.Client{Timeout: providerFetchTimeout, Transport: smartProxyTransport}
 	hdr := map[string]string{"Authorization": "Bearer " + p.APIKey, "Accept": "application/json"}
 
 	// 模型列表（失败不致命：留空列表）

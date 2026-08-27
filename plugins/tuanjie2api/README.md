@@ -95,7 +95,7 @@ curl http://127.0.0.1:8788/v1/chat/completions \
 {
   "access_token": "eyJhbGci...",
   "cli_api_key": "sk-xxxxx",
-  "user_id": 44432
+  "user_id": 12345678
 }
 ```
 
@@ -110,7 +110,7 @@ Authorization: Bearer {access_token}
 
 返回：
 ```json
-{"cli_api_key": "sk-JxLUKF2aY6S41Gbpz8zB4g", "user_id": 44432}
+{"cli_api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxx（示例已脱敏）", "user_id": 12345678}
 ```
 
 ### 第三步：转发请求到 LiteLLM
@@ -119,7 +119,7 @@ Authorization: Bearer {access_token}
 
 ```
 POST https://codely-litellm.tuanjie.cn/v1/chat/completions
-Authorization: Bearer sk-JxLUKF2aY6S41Gbpz8zB4g
+Authorization: Bearer sk-xxxxxxxxxxxxxxxxxxxxxxxx（示例已脱敏）
 Content-Type: application/json
 User-Agent: codely-cli/1.0.0-release.43 (win32; x64)
 x-litellm-session-id: {random-uuid}
@@ -131,7 +131,7 @@ x-litellm-session-id: {random-uuid}
 2. **直接用 cli_api_key 调 LiteLLM** → 401 Unauthorized
 3. **逆向 codely.exe 二进制** → 发现 `ensureCliApiKey()` 方法和 `CODELY_OAUTH_DYNAMIC_TOKEN` 环境变量
 4. **找到 cli-api-key 端点** → `https://codely.tuanjie.cn/api/api-token/cli-api-key`
-5. **用 access_token 换取新的 cli_api_key 成功** → `sk-JxLUKF2aY6S41Gbpz8zB4g`
+5. **用 access_token 换取新的 cli_api_key 成功** → `sk-xxxxxxxxxxxxxxxxxxxxxxxx（示例已脱敏）`
 6. **用新 cli_api_key 调 LiteLLM** → 400 "欢迎使用Codely"
 7. **用 mitmproxy 抓包 codely.exe 的实际请求** → 发现需要 `x-litellm-session-id` header 和特定 `User-Agent`
 8. **补上 header 后成功** → 200 OK，模型正常回复

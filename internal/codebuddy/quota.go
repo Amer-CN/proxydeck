@@ -102,6 +102,29 @@ func (s *Server) FetchQuota(ctx context.Context) *Quota {
 	return q
 }
 
+// FetchQuotaForce 强制实时拉取（手动刷新按钮用），绕过缓存并回写。
+// 失败时回退缓存，与 FetchQuota 同口径。
+func (s *Server) FetchQuotaForce(ctx context.Context) *Quota {
+	q, err := s.fetchQuotaLive(ctx)
+	if err != nil {
+		qc.mu.Lock()
+		cached := qc.q
+		qc.mu.Unlock()
+		if cached != nil {
+			cp := *cached
+			cp.Source = "cache"
+			cp.Err = err.Error()
+			return &cp
+		}
+		return &Quota{Source: "none", Err: err.Error()}
+	}
+	qc.mu.Lock()
+	qc.q = q
+	qc.at = time.Now()
+	qc.mu.Unlock()
+	return q
+}
+
 func (s *Server) fetchQuotaLive(ctx context.Context) (*Quota, error) {
 	hdr, err := s.cred.Headers(ctx)
 	if err != nil {

@@ -10,6 +10,8 @@ package tuanjie
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -87,52 +89,103 @@ type SourceSpend struct {
 	Requests int64   `json:"requests"`
 }
 
-type quotaCache struct {
-	mu sync.Mutex
+type quotaCacheEntry struct {
 	q  *Quota
 	at time.Time
 }
 
-var qc quotaCache
+// quotaCache 按 token 哈希键控的积分缓存。官网对同 token 高频调用会 429
+// 限流（2026-08-27 事故：GUI 每 3s 轮询 /quota × FetchQuotaFor 无缓存 =
+// 每分钟 20 次直打官网，用户官网查积分直接 429），故两条查询路径统一走这里。
+type quotaCache struct {
+	mu sync.Mutex
+	m  map[string]quotaCacheEntry
+}
 
-const quotaTTL = 5 * time.Minute
+var qc = quotaCache{m: map[string]quotaCacheEntry{}}
 
-// FetchQuota 拉取官网积分快照（带缓存）。
-func (c *Client) FetchQuota(ctx context.Context) *Quota {
-	qc.mu.Lock()
-	if qc.q != nil && time.Since(qc.at) < quotaTTL {
-		q := *qc.q
-		q.Source = "cache"
-		qc.mu.Unlock()
-		return &q
-	}
-	qc.mu.Unlock()
+const (
+	quotaTTL    = 5 * time.Minute
+	quotaErrTTL = 60 * time.Second // 失败负缓存：短时间内不重试，避免持续打官网
+)
 
-	q, err := c.fetchQuotaLive(ctx)
-	if err != nil {
+// quotaCacheKey 对 token 做 sha256 截断做缓存键（明文 token 不进内存键）。
+func quotaCacheKey(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:8])
+}
+
+// fetchQuotaCached 带 per-token 缓存的积分拉取（成功 5 分钟，失败负缓存 60 秒；
+// 失败但有旧成功缓存时回退旧值）。force=true 跳过缓存直拉官网并刷新缓存
+// （GUI「↻ 刷新」按钮用）。
+func (c *Client) fetchQuotaCached(ctx context.Context, at string, force bool) *Quota {
+	key := quotaCacheKey(at)
+	if !force {
 		qc.mu.Lock()
-		cached := qc.q
+		if e, ok := qc.m[key]; ok {
+			ttl := quotaTTL
+			if e.q.Source == "none" {
+				ttl = quotaErrTTL
+			}
+			if time.Since(e.at) < ttl {
+				cp := *e.q
+				if e.q.Source == "live" {
+					cp.Source = "cache"
+				}
+				qc.mu.Unlock()
+				return &cp
+			}
+		}
 		qc.mu.Unlock()
-		if cached != nil {
-			cp := *cached
+	}
+
+	q, err := c.fetchQuotaWithToken(ctx, at)
+	qc.mu.Lock()
+	defer qc.mu.Unlock()
+	if err != nil {
+		if e, ok := qc.m[key]; ok && e.q.Source == "live" {
+			cp := *e.q
 			cp.Source = "cache"
 			cp.Err = err.Error()
 			return &cp
 		}
+		eq := &Quota{Source: "none", Err: err.Error()}
+		qc.m[key] = quotaCacheEntry{q: eq, at: time.Now()}
 		return &Quota{Source: "none", Err: err.Error()}
 	}
-	qc.mu.Lock()
-	qc.q = q
-	qc.at = time.Now()
-	qc.mu.Unlock()
+	qc.m[key] = quotaCacheEntry{q: q, at: time.Now()}
 	return q
 }
 
-func (c *Client) fetchQuotaLive(ctx context.Context) (*Quota, error) {
+// FetchQuota 拉取官网积分快照（本地账号 token，带缓存）。
+func (c *Client) FetchQuota(ctx context.Context) *Quota {
 	at, err := loadAccessToken()
 	if err != nil {
-		return nil, err
+		return &Quota{Source: "none", Err: err.Error()}
 	}
+	return c.fetchQuotaCached(ctx, at, false)
+}
+
+// FetchQuotaFor 用指定 access_token 查积分（账号池切换账号用），同走缓存。
+func (c *Client) FetchQuotaFor(ctx context.Context, accessToken string) *Quota {
+	return c.fetchQuotaCached(ctx, accessToken, false)
+}
+
+// FetchQuotaForce 强制实时拉取并刷新缓存（GUI「↻ 刷新」按钮用）。
+// accessToken 为空时用本地客户端 token。
+func (c *Client) FetchQuotaForce(ctx context.Context, accessToken string) *Quota {
+	at := accessToken
+	if at == "" {
+		t, err := loadAccessToken()
+		if err != nil {
+			return &Quota{Source: "none", Err: err.Error()}
+		}
+		at = t
+	}
+	return c.fetchQuotaCached(ctx, at, true)
+}
+
+func (c *Client) fetchQuotaWithToken(ctx context.Context, at string) (*Quota, error) {
 	ctx2, cancel := context.WithTimeout(ctx, billingTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx2, http.MethodGet, billingSummaryURL, nil)

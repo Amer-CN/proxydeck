@@ -293,7 +293,8 @@ var (
 	updateCache   string
 )
 
-// 官网用量缓存：bind 读缓存，后台 goroutine 刷新（15s 周期 + 前端触发即时刷新）。
+// 官网用量缓存：bind 读缓存，后台 goroutine 只在前端触发（usageRefreshCh）时
+// 刷新一次——拉杆启动/手动刷新各触发一次，不做周期轮询（官网 429 限流教训）。
 var (
 	usageCacheMu   sync.Mutex
 	usageCache     string
@@ -441,20 +442,16 @@ func (a *app) bindAll(w webview.WebView) {
 		}
 		return `{"ok":false,"msg":"统计加载中"}`
 	})
-	// 后台异步刷新官网用量（失败静默，下次轮询重试）。
-	// usageRefreshCh：前端遇到"统计加载中"时触发立即刷新，缩短首屏等待。
+	// 后台异步刷新官网用量（失败静默，前端下次手动触发重试）。
+	// 事件驱动：只在收到 usageRefreshCh 信号（拉杆启动成功/手动刷新按钮）时
+	// 拉一轮官网 4 接口，不做周期轮询——GUI 未启动 COMMAND 也会频繁访问官网
+	// 曾触发限流（429 事故）。
 	go func() {
-		for {
+		for range usageRefreshCh {
 			if s, ok := httpGetSlow(a.baseURL() + "/v1/usage"); ok {
 				usageCacheMu.Lock()
 				usageCache = s
 				usageCacheMu.Unlock()
-			}
-			select {
-			case <-usageRefreshCh:
-				// 前端请求立即刷新 → 不等待，马上再来一轮
-			case <-time.After(15 * time.Second):
-				// 常规周期 15s
 			}
 		}
 	}()

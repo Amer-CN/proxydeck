@@ -144,8 +144,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-// handleQuota 返回官方积分快照（GUI 积分卡用）。
+// handleQuota 返回官方积分快照（GUI 积分卡用）。refresh=1 强制实时（手动刷新按钮）。
 func (s *Server) handleQuota(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("refresh") == "1" {
+		writeJSON(w, s.FetchQuotaForce(r.Context()))
+		return
+	}
 	writeJSON(w, s.FetchQuota(r.Context()))
 }
 
