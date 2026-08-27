@@ -2583,6 +2583,11 @@ body.pt-try { background: var(--pt-paper); }
               <!-- —————— 团结甲板 —————— -->
               <div class="pt-deck" data-deck="tj">
                <div class="pt-deck-scroll"><div class="inner">
+                <div class="pt-banner warn" id="tjJudgeBanner" style="display:none">
+                  <div style="flex:1 1 auto"><b>疑似官方判定变更，请检查官方 CLI 更新</b>
+                    <div id="tjJudgeDetail" style="margin-top:2px"></div></div>
+                  <button type="button" class="ibtn2" id="tjJudgeDismiss" title="本次会话不再提示">×</button>
+                </div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.ignite">点火拉杆</div>
@@ -5967,6 +5972,31 @@ var PT_I18N = {
     } catch (e) {}
   }
 
+  /* 疑似官方判定变更警示条（tj 甲板顶部）。tjJudgeDismissed 为会话内变量：
+     关闭后本轮会话不再自动弹出（轮询仍在跑，只是不显示）。 */
+  var tjJudgeDismissed = false;
+  var tjJudgeBound = false;
+  function updateJudgeBanner(h) {
+    var banner = $('tjJudgeBanner'), detail = $('tjJudgeDetail');
+    if (!banner || !detail) return;
+    if (!tjJudgeBound) {
+      tjJudgeBound = true;
+      $('tjJudgeDismiss').onclick = function () {
+        tjJudgeDismissed = true;
+        banner.style.display = 'none';
+      };
+    }
+    if (!h.judgment_alert || tjJudgeDismissed) {
+      banner.style.display = 'none';
+      return;
+    }
+    var txt = '';
+    if (h.judgment_signal) txt += h.judgment_signal;
+    if (h.judgment_since) txt += ' · ' + new Date(h.judgment_since * 1000).toLocaleString();
+    detail.textContent = txt;
+    banner.style.display = '';
+  }
+
   async function loadPluginStats(V, mode) {
     try {
       var h = await (await fetch('http://127.0.0.1:' + V.port + '/health')).json();
@@ -5974,6 +6004,7 @@ var PT_I18N = {
         V.uptime = h.uptimeSec;
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
       }
+      if (V.id === 'tuanjie') updateJudgeBanner(h);
     } catch (e) {}
     /* 团结/WorkBuddy 积分卡都不轮询——拉杆启动拉一次 + 手动刷新，轮询只留本地（官网 429 保护） */
     /* 消耗 TOP：团结由 loadTuanjieQuota（启动/手动刷新）渲染积分口径，

@@ -40,6 +40,7 @@ type Server struct {
 	providers     *ProviderStore // 外部账号（管理 + 信息展示，不接入转发）
 	baselines     *BaselineStore // 绝对基准库（注水检测三层：探针+分布比对锚点）
 	mediaReroutes atomic.Int64   // 媒体改路由累计次数（GUI 展示）
+	judgeAlert    judgmentAlert  // 疑似官方判定变更告警（互斥锁保护）
 
 	waterHistMu sync.Mutex
 	waterHist   []waterHistoryEntry // 注水检测历史（内存环形 20 条，GET ?history=1）
@@ -51,6 +52,16 @@ type modelStat struct {
 	InputTok  int64 `json:"inputTokens"`
 	OutputTok int64 `json:"outputTokens"`
 	TotalTok  int64 `json:"totalTokens"`
+}
+
+// judgmentAlert 疑似官方判定变更告警状态（noteUpstreamError/noteUpstreamOK 更新，
+// handleHealth 快照给 GUI）。consec401 累计「换 key 后仍 401」次数，连续 3 次触发告警。
+type judgmentAlert struct {
+	mu        sync.Mutex
+	active    bool
+	since     time.Time
+	signal    string
+	consec401 int
 }
 
 // NewServer 创建服务。
@@ -157,8 +168,61 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		resp["cli_api_key"] = key[:10] + "..."
 		resp["backend"] = litellmAPIBase
 	}
+	s.judgeAlert.mu.Lock()
+	resp["judgment_alert"] = s.judgeAlert.active
+	resp["judgment_signal"] = s.judgeAlert.signal
+	var judgeSince int64
+	if !s.judgeAlert.since.IsZero() {
+		judgeSince = s.judgeAlert.since.Unix()
+	}
+	resp["judgment_since"] = judgeSince
+	s.judgeAlert.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// noteUpstreamError 记录上游错误响应，检测疑似官方判定变更：
+// - 401 且错误体含「请升级」/「x-codely-signature」→ 立即置告警（判定被官方判无效）
+// - 401 其他情况 → consec401+1，连续 3 次置告警（换 key 后仍被拒）
+// body 只读已读出的错误体字符串，不额外读取/缓冲响应体。
+func (s *Server) noteUpstreamError(status int, body string) {
+	low := strings.ToLower(body)
+	hit := ""
+	if status == http.StatusUnauthorized {
+		if strings.Contains(low, "请升级") {
+			hit = "请升级"
+		} else if strings.Contains(low, "x-codely-signature") {
+			hit = "x-codely-signature"
+		}
+	}
+	s.judgeAlert.mu.Lock()
+	defer s.judgeAlert.mu.Unlock()
+	if hit != "" {
+		s.judgeAlert.active = true
+		s.judgeAlert.since = time.Now()
+		s.judgeAlert.signal = hit + " 状态码 " + strconv.Itoa(status)
+		return
+	}
+	if status == http.StatusUnauthorized {
+		s.judgeAlert.consec401++
+		if s.judgeAlert.consec401 >= 3 {
+			s.judgeAlert.active = true
+			s.judgeAlert.since = time.Now()
+			s.judgeAlert.signal = "换 key 后连续 401"
+		}
+	}
+}
+
+// noteUpstreamOK 上游 200 成功：consec401 清零，告警 active 则清除（active/since/signal 全清）。
+func (s *Server) noteUpstreamOK() {
+	s.judgeAlert.mu.Lock()
+	defer s.judgeAlert.mu.Unlock()
+	s.judgeAlert.consec401 = 0
+	if s.judgeAlert.active {
+		s.judgeAlert.active = false
+		s.judgeAlert.since = time.Time{}
+		s.judgeAlert.signal = ""
+	}
 }
 
 // handleModels 转发 /v1/models（透传 LiteLLM 实时列表，自动含新模型），
@@ -731,10 +795,12 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 				model, poolUID, time.Since(start).Milliseconds(), 0, resp.StatusCode)
 			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d err=%s",
 				model, poolUID, resp.StatusCode, truncate(string(poolErrBody), 300))
+			s.noteUpstreamError(resp.StatusCode, string(poolErrBody))
 			writeErr(w, resp.StatusCode, string(poolErrBody))
 			return
 		}
 		// 200 透传（流式逐块冲刷 + 注册表 touch + usage 入账）
+		s.noteUpstreamOK()
 		copyHeader(w, resp)
 		w.Header().Set("X-Accel-Buffering", "no")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -855,9 +921,11 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		if retryAfter != "-" {
 			w.Header().Set("Retry-After", retryAfter)
 		}
+		s.noteUpstreamError(resp.StatusCode, string(errBody))
 		writeErr(w, resp.StatusCode, string(errBody))
 		return
 	}
+	s.noteUpstreamOK()
 
 	// 200 但内容为空（上游过载时偶发，ZCode 侧表现为 empty_model_response）：
 	// 在写给客户端之前嗅探，空则丢弃本次响应重放一次。
