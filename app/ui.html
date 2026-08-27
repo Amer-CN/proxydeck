@@ -2491,7 +2491,7 @@ body.pt-try { background: var(--pt-paper); }
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.4.0</span>
+                    <span class="v ver" id="etchVer">v3.5.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -2539,7 +2539,7 @@ body.pt-try { background: var(--pt-paper); }
                   <button type="button" class="ibtn2" id="closeDismiss" data-i18n="app.btn.gotIt">知道了</button>
                 </div>
                 <div class="pt-banner" id="updBanner" style="display:none">
-                  <span>⚡ <b>发现新版本</b> <b id="updVer">—</b>（当前 <b>v3.4.0</b>）</span>
+                  <span>⚡ <b>发现新版本</b> <b id="updVer">—</b>（当前 <b>v3.5.0</b>）</span>
                   <button type="button" class="ibtn2 accent" id="updGo" data-i18n="app.btn.download">前往下载</button>
                 </div>
 
@@ -2900,13 +2900,13 @@ body.pt-try { background: var(--pt-paper); }
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.4.0">v3.4.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.5.0">v3.5.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.4.0</div>
+                    <div class="s" id="buildNo">v3.5.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.4.0</span>
+                  <span class="pt-val" id="verChip">v3.5.0</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -4119,7 +4119,7 @@ var PT_I18N = {
       baseUrl: 'http://127.0.0.1:55990/v1',
       uptime: demoRunning ? Math.floor((Date.now() - demoStartAt) / 1000) : 0,
       autostart: false, apiKey: '', noticeDismissed: false, closeHintDismissed: false,
-      version: 'v3.4.0', core: 'v1.2.0', pid: 12345 }; },
+      version: 'v3.5.0', core: 'v1.2.0', pid: 12345 }; },
     start: function () { demoRunning = true; demoStartAt = Date.now(); return { ok: true, msg: '模拟点火成功' }; },
     stop: function () { demoRunning = false; return { ok: true, msg: '模拟停堆' }; },
     stats: function () { if (!demoRunning) return { ok: false };
@@ -6010,6 +6010,15 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.5.0', date: '2026-08-27', groups: [
+      { label: '🚀 新功能', items: [
+        '账号池回归：自动探测改一次性会话（每次探测=全新未登录窗口，可连续添加多账号）；本地客户端账号入列显示（本地+池内账号同屏，来源徽章区分）；探测/手动添加 token 预验证（无效凭据不再静默入池）',
+        'B.AI 插件回归：COMMAND 键单击切换副页（COMMAND⇄B.AI），副页态保持按压+灯变蓝+键名切换；8891 端口 Go 栈透明转发，协议怪癖适配，上下文超限自动压缩',
+        'GLM-5.3-FLASH 加入原生识图白名单（不再被媒体改路由劫持）',
+        '反封号联审实施：metadata 四字段注入（prompt_id/session_id/cwd/litellm_conversation_id，对齐官方 buildMetadata）+ 会话生命周期随机化（闲置 20~40min、存活 3~5.5h，去机器特征）+ key TTL 1h→24h（401 被动失效+账号指纹检测双兜底）' ] },
+      { label: '🐛 Bug 修复', items: [
+        '媒体转路由弹窗报 tjvisModel is not defined——补回 4 个丢失的 var 声明（严格模式 IIFE 赋值未声明变量即崩）',
+        '自动探测每 2 秒强刷登录页（导航兜底被长轮询反复触发）——已移除，探测窗口可安静登录' ] } ] },
     { v: 'v3.4.0', date: '2026-08-27', groups: [
       { label: '🚀 新功能', items: [
         '注水检测多渠道化：团结 / Command / WorkBuddy / B.AI 四渠道全部可检——渠道选择器 + 各渠道模型联动，一键检测模型真伪',
@@ -6408,7 +6417,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.4.0';
+  var UI_CUR = 'v3.5.0';
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
     var pb = (b || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
