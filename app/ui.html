@@ -2443,7 +2443,7 @@ body.pt-try { background: var(--pt-paper); }
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.6.0</span>
+                    <span class="v ver" id="etchVer">v3.6.1</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -2864,13 +2864,13 @@ body.pt-try { background: var(--pt-paper); }
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.6.0">v3.6.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.6.1">v3.6.1</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.6.0</div>
+                    <div class="s" id="buildNo">v3.6.1</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.6.0</span>
+                  <span class="pt-val" id="verChip">v3.6.1</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -4159,7 +4159,7 @@ var PT_I18N = {
       baseUrl: 'http://127.0.0.1:55990/v1',
       uptime: demoRunning ? Math.floor((Date.now() - demoStartAt) / 1000) : 0,
       autostart: false, apiKey: '', noticeDismissed: false, closeHintDismissed: false,
-      version: 'v3.6.0', core: 'v1.2.0', pid: 12345 }; },
+      version: 'v3.6.1', core: 'v1.2.0', pid: 12345 }; },
     start: function () { demoRunning = true; demoStartAt = Date.now(); return { ok: true, msg: '模拟点火成功' }; },
     stop: function () { demoRunning = false; return { ok: true, msg: '模拟停堆' }; },
     stats: function () { if (!demoRunning) return { ok: false };
@@ -6393,6 +6393,11 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.6.1', date: '2026-08-28', groups: [
+      { label: '🚀 新功能', items: [
+        '疑似官方判定变更告警：上游 401 命中「请升级 / x-codely-signature」（官方明示签名被判无效）即时告警；换 cli_api_key 后仍连续 401≥3 次亦告警——团结视图顶部红色警示条提示「检查官方 CLI 更新」，附命中信号与发生时间，可关闭，恢复 200 自动解除；/health 暴露 judgment_alert / judgment_signal / judgment_since 供脚本监测' ] },
+      { label: '🐛 Bug 修复', items: [
+        'appVersion 停在 v3.4.0（v3.5.0 / v3.6.0 两次升版漏同步）——补齐至 v3.6.1' ] } ] },
     { v: 'v3.6.0', date: '2026-08-28', groups: [
       { label: '🚀 新功能', items: [
         '账号矩阵模型多选：账号卡点「✎ 编辑」弹出全部模型勾选列表，勾选即分配、保存即生效；多账号认领同一模型自动轮询分摊，付费号认领付费模型、免费号兜底（替代手动输入模型名）',
@@ -6897,7 +6902,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.6.0';
+  var UI_CUR = 'v3.6.1';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
