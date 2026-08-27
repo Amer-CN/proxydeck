@@ -515,7 +515,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		body = nb
 		log.Printf("[tuanjie] agent-identity 脱敏已应用（system 含竞品身份声明）")
 	}
-	body = reshapeChatBody(body, sess.ID)
+	body = reshapeChatBody(body, sess)
 	logRequestShape(model, body) // 重排后 shape（验证字段序效果）
 
 	// 外部 provider 模型：直接转发（静态 Bearer key，不占账号池、不做团结签名，

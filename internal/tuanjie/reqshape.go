@@ -3,6 +3,7 @@ package tuanjie
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 )
 
 // reqshape.go：把转发到团结 LiteLLM 的请求体重排成官方 CLI buildCreateParams
@@ -77,12 +78,15 @@ func orderedJSON(fields []orderedField) []byte {
 }
 
 // reshapeChatBody 把 chat/completions 请求体重排为官方 CLI 字段顺序并补默认。
-// sessionID 为本请求的 x-litellm-session-id（litellm_session_id 与其同值，
-// prompt_cache_key 取会话 id）。body 非法 JSON 时原样返回（不拦转发）。
-func reshapeChatBody(body []byte, sessionID string) []byte {
-	if sessionID == "" {
-		sessionID = newLitellmSessionID()
+// sess 为本请求的会话（litellm_session_id / prompt_cache_key 取会话 id，
+// metadata 四字段从会话对象取）。sess 为 nil 时现场造一次性会话（仅兜底，
+// 正常流程 handleChat 总是传真实会话）。body 非法 JSON 时原样返回（不拦转发）。
+func reshapeChatBody(body []byte, sess *LitellmSession) []byte {
+	if sess == nil {
+		sess = newLitellmSession()
+		sess.promptSeq = 1
 	}
+	sessionID := sess.ID
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(body, &m); err != nil {
 		return body
@@ -112,12 +116,16 @@ func reshapeChatBody(body []byte, sessionID string) []byte {
 	fields := make([]orderedField, 0, len(m)+4)
 	rareDone := false
 	for _, name := range officialFieldOrder {
-		// 罕见字段在 metadata 之前统一插入
+		// 罕见字段在 metadata 之前统一插入；客户端没带 metadata 时在此补注入
+		// （官方 buildMetadata 每请求都带 metadata，字段序在 top_p 之后）。
 		if name == "metadata" && !rareDone {
 			for _, k := range extras {
 				fields = append(fields, orderedField{key: k, value: json.RawMessage(m[k])})
 			}
 			rareDone = true
+			if _, ok := m["metadata"]; !ok {
+				fields = append(fields, orderedField{key: "metadata", value: buildMetadataPayload(sess)})
+			}
 		}
 		if name == "max_completion_tokens" || name == "max_tokens" {
 			// 互斥同位：两个名字占同一个官方位置，带哪个放哪个（都带按
@@ -173,6 +181,19 @@ func reshapeChatBody(body []byte, sessionID string) []byte {
 		fields = append(fields, orderedField{key: "stream_options", value: so})
 	}
 	return orderedJSON(fields)
+}
+
+// buildMetadataPayload 构造 metadata 字段（对齐官方 buildMetadata LiteLLM
+// 分支：prompt_id/session_id/cwd/litellm_conversation_id，字段序按官方）。
+// 用 orderedJSON 保序——官方内层字段序即此序，map 序列化会打乱。
+func buildMetadataPayload(sess *LitellmSession) json.RawMessage {
+	fields := []orderedField{
+		{key: "prompt_id", value: fmt.Sprintf("%s########%d", sess.ID, sess.promptSeq)},
+		{key: "session_id", value: sess.ID},
+		{key: "cwd", value: exeDirForAccounts()},
+		{key: "litellm_conversation_id", value: sess.ConversationID},
+	}
+	return json.RawMessage(orderedJSON(fields))
 }
 
 // insertField 在 anchor 字段之后插入新字段（anchor 不存在则追加到末尾）。

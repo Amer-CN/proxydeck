@@ -30,6 +30,15 @@ func topFieldOrder(t *testing.T, body []byte) []string {
 	return order
 }
 
+// testSess 构造 metadata 注入所需的测试会话（signature 变更为 *LitellmSession）。
+func testSess(id string) *LitellmSession {
+	return &LitellmSession{
+		ID:             id,
+		ConversationID: "litellm_conversation_1700000000000_abc123",
+		promptSeq:      1,
+	}
+}
+
 // wantOfficialOrder 官方 CLI 字段顺序断言（裁掉请求里没带的可选字段后应严格命中）。
 func wantOfficialOrder(t *testing.T, body []byte, want []string) {
 	t.Helper()
@@ -45,15 +54,16 @@ func wantOfficialOrder(t *testing.T, body []byte, want []string) {
 }
 
 // TestReshapeStreamOfficialOrder 流式 ZCode 形态重排：字段序=官方序，
-// 补 parallel_tool_calls/litellm_session_id/prompt_cache_key（不补 metadata），
-// stream/stream_options 在尾且 include_usage 注入。
+// 补 parallel_tool_calls/litellm_session_id/prompt_cache_key，客户端未带
+// metadata 时注入四字段（官方 buildMetadata 每请求都带），stream/stream_options
+// 在尾且 include_usage 注入。
 func TestReshapeStreamOfficialOrder(t *testing.T) {
 	in := []byte(`{"stream_options":{"include_usage":true},"model":"codely-flash","max_tokens":20,"reasoning_effort":"low","messages":[{"role":"user","content":"OK"}],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"auto","stream":true}`)
-	out := reshapeChatBody(in, "sess-123")
+	out := reshapeChatBody(in, testSess("sess-123"))
 	wantOfficialOrder(t, out, []string{
 		"model", "messages", "max_tokens", "reasoning_effort",
+		"metadata", "litellm_session_id", "prompt_cache_key",
 		"tools", "parallel_tool_calls", "tool_choice",
-		"litellm_session_id", "prompt_cache_key",
 		"stream", "stream_options",
 	})
 	var m map[string]any
@@ -63,8 +73,14 @@ func TestReshapeStreamOfficialOrder(t *testing.T) {
 	if m["parallel_tool_calls"] != true {
 		t.Fatalf("parallel_tool_calls 应补 true，得到 %v", m["parallel_tool_calls"])
 	}
-	if _, ok := m["metadata"]; ok {
-		t.Fatalf("客户端未带 metadata 时不应补 metadata: %s", out)
+	md, ok := m["metadata"].(map[string]any)
+	if !ok || md == nil {
+		t.Fatalf("客户端未带 metadata 时应注入，得到 %s", out)
+	}
+	for _, k := range []string{"prompt_id", "session_id", "cwd", "litellm_conversation_id"} {
+		if _, ok := md[k]; !ok {
+			t.Fatalf("注入的 metadata 缺字段 %s: %s", k, out)
+		}
 	}
 	if m["litellm_session_id"] != "sess-123" {
 		t.Fatalf("litellm_session_id 应与 sessionID 同值，得到 %v", m["litellm_session_id"])
@@ -81,10 +97,65 @@ func TestReshapeStreamOfficialOrder(t *testing.T) {
 	}
 }
 
+// TestReshapeInjectMetadata 客户端未带 metadata 时注入四子字段（官方
+// buildMetadata 每请求都带）：prompt_id=<ID>########<N>（会话粒度计数）、
+// session_id=会话 id、cwd=exe 目录、litellm_conversation_id=会话 ConversationID；
+// 字段序时 metadata 在 top_p 之后。
+func TestReshapeInjectMetadata(t *testing.T) {
+	in := []byte(`{"stream_options":{"include_usage":true},"model":"codely-flash","max_tokens":20,"reasoning_effort":"low","messages":[{"role":"user","content":"OK"}],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"auto","stream":true,"top_p":0.9}`)
+	sess := testSess("sess-777")
+	sess.promptSeq = 7
+	out := reshapeChatBody(in, sess)
+	wantOfficialOrder(t, out, []string{
+		"model", "messages", "max_tokens", "reasoning_effort", "top_p",
+		"metadata", "litellm_session_id", "prompt_cache_key",
+		"tools", "parallel_tool_calls", "tool_choice",
+		"stream", "stream_options",
+	})
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("重排后 JSON 非法: %v", err)
+	}
+	md, ok := m["metadata"].(map[string]any)
+	if !ok || md == nil {
+		t.Fatalf("应注入 metadata 四字段: %s", out)
+	}
+	if md["prompt_id"] != "sess-777########7" {
+		t.Fatalf("prompt_id 应=<会话ID>########<N>，得到 %v", md["prompt_id"])
+	}
+	if md["session_id"] != "sess-777" {
+		t.Fatalf("session_id 应=会话 id，得到 %v", md["session_id"])
+	}
+	if md["litellm_conversation_id"] != sess.ConversationID {
+		t.Fatalf("litellm_conversation_id 应=会话 ConversationID，得到 %v", md["litellm_conversation_id"])
+	}
+	if cwd, _ := md["cwd"].(string); cwd == "" {
+		t.Fatalf("cwd 应为 exe 目录绝对路径，得到 %v", md["cwd"])
+	}
+}
+
+// TestReshapeClientMetadataNotOverridden 客户端自带 metadata 时原样保留，
+// 不补官方四字段、不删除客户端已有键。
+func TestReshapeClientMetadataNotOverridden(t *testing.T) {
+	in := []byte(`{"model":"m","messages":[{"role":"user","content":"OK"}],"metadata":{"user_id":"my-dev","tag":"x"},"stream":true}`)
+	out := reshapeChatBody(in, testSess("s-9"))
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("重排后 JSON 非法: %v", err)
+	}
+	md, _ := m["metadata"].(map[string]any)
+	if md == nil || md["user_id"] != "my-dev" || md["tag"] != "x" {
+		t.Fatalf("客户端自带 metadata 应原值透传（不补不删键），得到 %v", m["metadata"])
+	}
+	if _, ok := md["prompt_id"]; ok {
+		t.Fatalf("客户端自带 metadata 不应被注入 prompt_id（不覆盖）: %s", out)
+	}
+}
+
 // TestReshapeNonStreamDropsStreamFields 非流式：stream/stream_options 都删（官方行为）。
 func TestReshapeNonStreamDropsStreamFields(t *testing.T) {
 	in := []byte(`{"model":"codely-flash","stream_options":{"include_usage":true},"messages":[{"role":"user","content":"OK"}],"max_tokens":20,"stream":false}`)
-	out := reshapeChatBody(in, "sess-456")
+	out := reshapeChatBody(in, testSess("sess-456"))
 	var m map[string]any
 	if err := json.Unmarshal(out, &m); err != nil {
 		t.Fatalf("重排后 JSON 非法: %v", err)
@@ -96,7 +167,7 @@ func TestReshapeNonStreamDropsStreamFields(t *testing.T) {
 		t.Fatalf("非流式不应带 stream_options 字段: %s", out)
 	}
 	wantOfficialOrder(t, out, []string{
-		"model", "messages", "max_tokens",
+		"model", "messages", "max_tokens", "metadata",
 		"litellm_session_id", "prompt_cache_key",
 	})
 }
@@ -104,7 +175,7 @@ func TestReshapeNonStreamDropsStreamFields(t *testing.T) {
 // TestReshapeMissingStreamField 客户端根本没发 stream 字段：视为非流式。
 func TestReshapeMissingStreamField(t *testing.T) {
 	in := []byte(`{"messages":[{"role":"user","content":"OK"}],"model":"codely-flash"}`)
-	out := reshapeChatBody(in, "s")
+	out := reshapeChatBody(in, testSess("s"))
 	var m map[string]any
 	if err := json.Unmarshal(out, &m); err != nil {
 		t.Fatalf("重排后 JSON 非法: %v", err)
@@ -120,7 +191,7 @@ func TestReshapeMissingStreamField(t *testing.T) {
 // TestReshapeNoToolsNoParallel 无 tools 时不补 parallel_tool_calls（官方成对出现）。
 func TestReshapeNoToolsNoParallel(t *testing.T) {
 	in := []byte(`{"model":"m","messages":[{"role":"user","content":"OK"}],"stream":true}`)
-	out := reshapeChatBody(in, "s")
+	out := reshapeChatBody(in, testSess("s"))
 	var m map[string]any
 	if err := json.Unmarshal(out, &m); err != nil {
 		t.Fatalf("重排后 JSON 非法: %v", err)
@@ -134,11 +205,11 @@ func TestReshapeNoToolsNoParallel(t *testing.T) {
 // 字母序稳定。
 func TestReshapeRareFieldsBeforeMetadata(t *testing.T) {
 	in := []byte(`{"frequency_penalty":0.5,"model":"m","messages":[{"role":"user","content":"OK"}],"presence_penalty":0.1,"stream":true}`)
-	out := reshapeChatBody(in, "s")
+	out := reshapeChatBody(in, testSess("s"))
 	wantOfficialOrder(t, out, []string{
 		"model", "messages",
 		"frequency_penalty", "presence_penalty",
-		"litellm_session_id", "prompt_cache_key",
+		"metadata", "litellm_session_id", "prompt_cache_key",
 		"stream", "stream_options",
 	})
 }
@@ -147,7 +218,7 @@ func TestReshapeRareFieldsBeforeMetadata(t *testing.T) {
 // max_completion_tokens 系、已有 metadata 原值透传不增删键）。
 func TestReshapeClientValuesPreserved(t *testing.T) {
 	in := []byte(`{"model":"m","messages":[{"role":"user","content":"OK"}],"temperature":0.2,"top_p":0.9,"max_completion_tokens":100,"metadata":{"user_id":"my-dev","tag":"x"},"stream":true,"parallel_tool_calls":false}`)
-	out := reshapeChatBody(in, "s")
+	out := reshapeChatBody(in, testSess("s"))
 	var m map[string]any
 	if err := json.Unmarshal(out, &m); err != nil {
 		t.Fatalf("重排后 JSON 非法: %v", err)
@@ -176,7 +247,7 @@ func TestReshapeClientValuesPreserved(t *testing.T) {
 // TestReshapeInvalidJSONPassthrough 非 JSON 请求原样返回（不拦转发）。
 func TestReshapeInvalidJSONPassthrough(t *testing.T) {
 	in := []byte("not json")
-	if out := reshapeChatBody(in, "s"); string(out) != "not json" {
+	if out := reshapeChatBody(in, testSess("s")); string(out) != "not json" {
 		t.Fatalf("非法 JSON 应原样返回，得到 %s", out)
 	}
 }
@@ -184,7 +255,7 @@ func TestReshapeInvalidJSONPassthrough(t *testing.T) {
 // TestReshapeStreamOptionsPreserved 客户端 stream_options 已有其他键时保留并强include_usage。
 func TestReshapeStreamOptionsPreserved(t *testing.T) {
 	in := []byte(`{"model":"m","messages":[{"role":"user","content":"OK"}],"stream":true,"stream_options":{"include_usage":false}}`)
-	out := reshapeChatBody(in, "s")
+	out := reshapeChatBody(in, testSess("s"))
 	var m map[string]any
 	if err := json.Unmarshal(out, &m); err != nil {
 		t.Fatalf("重排后 JSON 非法: %v", err)

@@ -47,17 +47,19 @@ func TestSessionPoolIdleCleanup(t *testing.T) {
 
 	a := AcquireLitellmSession()
 	ReleaseLitellmSession(a)
-	// 手动把 lastUsed 拨回 31 分钟前 → 下次 Acquire 应清理并新建
+	// 随机 TTL 下用每会话自己的 idleTTL 字段（替代已移除的全局常量）：
+	// 把 lastUsed 拨回 idleTTL+1min 前 → 下次 Acquire 应清理并新建
 	sessionPoolMu.Lock()
 	for _, s := range sessionPool {
-		s.lastUsed = s.lastUsed.Add(-sessionIdleTTL - time.Minute)
+		s.idleTTL = time.Minute
+		s.lastUsed = s.lastUsed.Add(-s.idleTTL - time.Minute)
 	}
 	sessionPoolMu.Unlock()
 
 	b := AcquireLitellmSession()
 	ReleaseLitellmSession(b)
 	if a.ID == b.ID {
-		t.Fatal("闲置超 30 分钟的会话应被清理，新请求拿新会话")
+		t.Fatal("闲置超时（本会话 idleTTL）的会话应被清理，新请求拿新会话")
 	}
 }
 
@@ -68,17 +70,19 @@ func TestSessionPoolMaxAgeRotation(t *testing.T) {
 
 	a := AcquireLitellmSession()
 	ReleaseLitellmSession(a)
-	// 年龄拨到 4h+1min（仍「最近用过」）→ 超龄轮换应生效
+	// 随机 TTL 下用每会话自己的 maxAge 字段（替代已移除的全局常量）：
+	// 年龄拨回 maxAge+1min（仍「最近用过」）→ 超龄轮换应生效
 	sessionPoolMu.Lock()
 	for _, s := range sessionPool {
-		s.createdAt = s.createdAt.Add(-sessionMaxAge - time.Minute)
+		s.maxAge = time.Minute
+		s.createdAt = s.createdAt.Add(-s.maxAge - time.Minute)
 	}
 	sessionPoolMu.Unlock()
 
 	b := AcquireLitellmSession()
 	ReleaseLitellmSession(b)
 	if a.ID == b.ID {
-		t.Fatal("超过 4 小时的会话应轮换，新请求拿新会话")
+		t.Fatal("超过本会话 maxAge 的会话应轮换，新请求拿新会话")
 	}
 }
 

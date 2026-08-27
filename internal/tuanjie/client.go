@@ -9,8 +9,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -33,7 +35,7 @@ const (
 	codelyAPIBase   = "https://codely.tuanjie.cn"
 	litellmAPIBase  = "https://codely-litellm.tuanjie.cn"
 	cliAPIKeyURL    = codelyAPIBase + "/api/api-token/cli-api-key"
-	keyCacheTTL     = time.Hour
+	keyCacheTTL     = 24 * time.Hour
 	defaultTimeout  = 300 * time.Second
 	keyFetchTimeout = 15 * time.Second
 
@@ -300,39 +302,48 @@ func SignLitellm(path, cliAPIKey string, now time.Time) string {
 type LitellmSession struct {
 	ID string // x-litellm-session-id（同时进请求体 litellm_session_id）
 
+	// metadata 注入所需：会话级 conversation_id + prompt_id 计数器
+	// （promptSeq 在 Acquire 时 +1，贴近官方"每轮 +1"）。
+	ConversationID string
+	promptSeq      int
+
 	inUse     int       // 并发占用计数（>0 = 忙）
-	createdAt time.Time // 创建时间（4h 轮换依据）
-	lastUsed  time.Time // 最近归还时间（30min 闲置清理依据）
+	createdAt time.Time // 创建时间（轮换依据）
+	lastUsed  time.Time // 最近归还时间（闲置清理依据）
+
+	// 会话生命周期随机化（去机械化）：每会话独立，创建时随机，
+	// 避免上游看到"所有会话生命周期完全一致"的机器特征。
+	idleTTL time.Duration
+	maxAge  time.Duration
 }
 
 // 会话池参数（对齐官方 CLI 行为画像，社区逆向情报 2026-08-26）：
 //   - 串行请求自然复用同一空闲会话（单窗口连续对话）
 //   - 并发全忙时新建（模拟再开一个 CLI 窗口）
-//   - 闲置 30 分钟清理（模拟关闭窗口）
-//   - 会话最长存活 4 小时（模拟 CLI 重启）
+//   - 闲置清理（每会话随机 20~40 分钟，模拟关闭窗口）
+//   - 会话最长存活（每会话随机 3~5.5 小时，模拟 CLI 重启）
 //   - 池上限 16：并发爆发超限时共享最闲会话（官方单窗口本来也允许
 //     并发请求共享同一 session），避免短时间冒出几十上百个"会话"
 //     的反代特征
 var (
 	sessionPoolMu      sync.Mutex
 	sessionPool        []*LitellmSession
-	sessionIdleTTL     = 30 * time.Minute
-	sessionMaxAge      = 4 * time.Hour
 	sessionPoolMaxSize = 16
 )
 
 // AcquireLitellmSession 从会话池租借一个会话：
 // 优先复用最近使用的空闲会话（串行请求 → 恒同一会话，贴近官方单窗口）；
 // 全忙且未达上限 → 新建；达上限 → 共享占用最少的。
-// 取用时顺带清理闲置超时/超龄的空闲会话。
+// 取用时顺带清理闲置超时/超龄的空闲会话；每次租借 promptSeq +1
+// （metadata.prompt_id 的轮次计数）。Acquire 已持锁，无需再加锁。
 func AcquireLitellmSession() *LitellmSession {
 	sessionPoolMu.Lock()
 	defer sessionPoolMu.Unlock()
 	now := time.Now()
-	// 清理：空闲（inUse==0）且（闲置>30min 或 年龄>4h）
+	// 清理：空闲（inUse==0）且（闲置>本会话 idleTTL 或 年龄>本会话 maxAge）
 	kept := sessionPool[:0]
 	for _, s := range sessionPool {
-		if s.inUse == 0 && (now.Sub(s.lastUsed) > sessionIdleTTL || now.Sub(s.createdAt) > sessionMaxAge) {
+		if s.inUse == 0 && (now.Sub(s.lastUsed) > s.idleTTL || now.Sub(s.createdAt) > s.maxAge) {
 			continue
 		}
 		kept = append(kept, s)
@@ -348,6 +359,7 @@ func AcquireLitellmSession() *LitellmSession {
 	if idle != nil {
 		idle.inUse++
 		idle.lastUsed = now
+		idle.promptSeq++
 		return idle
 	}
 	// 2) 全忙：未达上限 → 新建
@@ -355,6 +367,7 @@ func AcquireLitellmSession() *LitellmSession {
 		s := newLitellmSession()
 		s.inUse = 1
 		s.lastUsed = now
+		s.promptSeq++
 		sessionPool = append(sessionPool, s)
 		return s
 	}
@@ -367,6 +380,7 @@ func AcquireLitellmSession() *LitellmSession {
 	}
 	share.inUse++
 	share.lastUsed = now
+	share.promptSeq++
 	return share
 }
 
@@ -383,16 +397,61 @@ func ReleaseLitellmSession(s *LitellmSession) {
 	s.lastUsed = time.Now()
 }
 
-// newLitellmSession 生成一个全新会话。
+// newLitellmSession 生成一个全新会话：随机 idleTTL/maxAge + 会话级
+// litellm_conversation_id（对齐官方 VAt() 格式，每会话一个）。
 func newLitellmSession() *LitellmSession {
 	return &LitellmSession{
-		ID:        uuid.New().String(),
-		createdAt: time.Now(),
+		ID:             uuid.New().String(),
+		ConversationID: newLitellmConversationID(),
+		createdAt:      time.Now(),
+		idleTTL:        randSessionIdleTTL(),
+		maxAge:         randSessionMaxAge(),
 	}
 }
 
 // newLitellmSessionID 生成不入池的一次性会话 id（reshape 兜底/旧路径兼容）。
 func newLitellmSessionID() string { return newLitellmSession().ID }
+
+// newLitellmConversationID 生成 litellm_conversation_<ms>_<rand36>，
+// 对齐官方 VAt()：litellm_conversation_${Date.now()}_${Math.random().toString(36).substring(7)}。
+func newLitellmConversationID() string {
+	return fmt.Sprintf("litellm_conversation_%d_%s", time.Now().UnixMilli(), rand36())
+}
+
+// rand36 用 crypto/rand 生成 7~11 位小写字母数字随机串
+// （对齐官方 Math.random().toString(36).substring(7) 的可观察形态）。
+func rand36() string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	n := 7 + randIntN(5) // 7..11 位
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = charset[randIntN(len(charset))]
+	}
+	return string(b)
+}
+
+// randIntN 用 crypto/rand 返回 [0,n) 的整数；crypto/rand 异常时退化为
+// 时间派生（不阻塞转发路径，退化仅损失随机性、不影响正确性）。
+func randIntN(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	var buf [4]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return int(time.Now().UnixNano() % int64(n))
+	}
+	return int(binary.LittleEndian.Uint32(buf[:]) % uint32(n))
+}
+
+// randSessionIdleTTL 每会话独立的闲置阈值：20~40 分钟均匀随机。
+func randSessionIdleTTL() time.Duration {
+	return time.Duration(20+randIntN(21)) * time.Minute
+}
+
+// randSessionMaxAge 每会话独立的最长存活：3~5.5 小时（180~330 分钟）均匀随机。
+func randSessionMaxAge() time.Duration {
+	return time.Duration(180+randIntN(151)) * time.Minute
+}
 
 // litellmHeaders 构造伪装 codely CLI 的请求头。path 参与签名，是上游路径。
 // sess 为本请求的会话（x-litellm-session-id 头与请求体 litellm_session_id
