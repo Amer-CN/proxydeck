@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -88,6 +89,13 @@ type zuluProc struct {
 	spawned bool
 }
 
+// hideConsole 隐藏子进程控制台窗口：zulu.cmd 是批处理（console 子系统），
+// 不加标志时每次 spawn 都会弹可见 cmd 窗口——serve 常驻不关、list-model 每次刷新闪现。
+// 写法与 internal/tuanjie/cdp_browser.go 一致。
+func hideConsole(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000} // CREATE_NO_WINDOW
+}
+
 // ensureZuluServe 保证内部 zulu serve 在线：
 // 已健康则复用（不 spawn）；否则 spawn `cmd /c <zulu.cmd> serve --port 8792 --host 127.0.0.1 -l <license>`
 // 并轮询 health 最多 20s（间隔 500ms）。
@@ -97,6 +105,7 @@ func ensureZuluServe(zuluPath, license string) (*zuluProc, error) {
 	}
 	cmd := exec.Command("cmd", "/c", zuluPath, "serve",
 		"--port", zuluPort, "--host", "127.0.0.1", "-l", license)
+	hideConsole(cmd)
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("启动 zulu serve 失败: %v", err)
 	}
@@ -127,6 +136,7 @@ type modelInfo struct {
 // listModels 调用 `cmd /c <zulu.cmd> list-model -l <license>` 并解析 JSON 数组。
 func listModels(zuluPath, license string) ([]modelInfo, error) {
 	cmd := exec.Command("cmd", "/c", zuluPath, "list-model", "-l", license)
+	hideConsole(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("list-model 失败: %v", err)
