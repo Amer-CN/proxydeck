@@ -578,7 +578,7 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 
 .pt-self-test-copy { font: 400 10px/1.25 var(--pt-font-ui); color: var(--pt-sc-ink2); }
 
-.pt-keys { flex: none; display: flex; gap: 8px; height: 42px; }
+.pt-keys { flex: none; display: flex; gap: 10px; height: 42px; }
 
 .pt-key {
   flex: 1 1 0; min-width: 0; height: 42px; position: relative;
@@ -2510,13 +2510,12 @@ body.pt-try { background: var(--pt-paper); }
             <div class="pt-sc-hover" id="scHover" aria-hidden="true"></div>
           </div>
 
-          <!-- ========== 五颗模式键 ========== -->
+          <!-- ========== 四颗模式键（COMMAND/TUANJIE 为双职责键，再按一次翻副页） ========== -->
           <div class="pt-keys" role="radiogroup" aria-label="甲板">
             <button type="button" class="pt-key" role="radio" data-mode="cmd" aria-checked="true"><span class="dual-key"><b>COMMAND</b><i>⇄ B.AI</i></span></button>
-            <button type="button" class="pt-key" role="radio" data-mode="tj" aria-checked="false" tabindex="-1"><span>TUANJIE</span></button>
+            <button type="button" class="pt-key" role="radio" data-mode="tj" aria-checked="false" tabindex="-1"><span class="dual-key"><b>TUANJIE</b><i>⇄ COMATE</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="cb" aria-checked="false" tabindex="-1"><span>WORKBUDDY</span></button>
             <button type="button" class="pt-key" role="radio" data-mode="set" aria-checked="false" tabindex="-1"><span>设置</span></button>
-            <button type="button" class="pt-key" role="radio" data-mode="comate" aria-checked="false" tabindex="-1"><span>COMATE</span></button>
           </div>
 
           <!-- ========== 甲板传送带 ========== -->
@@ -3576,19 +3575,19 @@ var PT_I18N = {
 
   /* ══════════════════ 3. 状态与模式 ══════════════════ */
   var st = { mode: 'cmd', soundSet: 1 };
-  var MODES = ['cmd', 'tj', 'cb', 'comate', 'bai', 'set', 'media', 'water'];
-  /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；其余键暂无副页，双击无效果） */
-  var ALT_MODE = { cmd: 'bai', bai: 'cmd' };
+  var MODES = ['cmd', 'tj', 'comate', 'cb', 'bai', 'set', 'media', 'water'];
+  /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；tj 的副页是 COMATE） */
+  var ALT_MODE = { cmd: 'bai', bai: 'cmd', tj: 'comate', comate: 'tj' };
   /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
-  var ALT_LABEL = { cmd: 'B.AI' };
+  var ALT_LABEL = { cmd: 'B.AI', tj: 'COMATE' };
   /* 鼓轮 8 格 DOM [comate,tj,cb,set,cmd,bai,media,water]；居中格 = children[--i]（CSS 按 --y−--i 定位，
-     cell 的 --y 与 children 序号一致）。cmd 居中用尾格 idx4（首格 idx0 原是绕接占位，已换成 COMATE）。
-     B.AI 紧跟 COMMAND 真格（同一颗键的两张脸，切换只滚 1 格）；子页顺序 设置→媒体→注水 */
+     cell 的 --y 与 children 序号一致）。cmd 居中用尾格 idx4；COMATE 占首格 idx0——与 TUANJIE idx1 相邻，
+     同一颗键的两张脸切换只滚 1 格（同 COMMAND→B.AI 滚 1 格的既有韵律）；子页顺序 设置→媒体→注水 */
   var DRUM_IDX = { comate: 0, tj: 1, cb: 2, set: 3, cmd: 4, bai: 5, media: 6, water: 7 };
-  /* 实体键面子记忆：COMMAND 键有两张脸（COMMAND/B.AI）。在哪张脸上离开，
+  /* 实体键面子记忆：COMMAND/TUANJIE 各有两张脸（COMMAND/B.AI、TUANJIE/COMATE）。在哪张脸上离开，
      键帽就保持那张脸的名字，从别的页再按它也回到那张脸（点 TUANJIE 再回来
      不能落回 COMMAND ——「从什么界面离开，就保持什么界面」） */
-  var keyFace = { cmd: 'cmd' };
+  var keyFace = { cmd: 'cmd', tj: 'tj' };
   function faceOf(keyMode) { return keyFace[keyMode] || keyMode; }
   function noteFace(m) {
     Object.keys(ALT_MODE).forEach(function (h) {
@@ -3702,7 +3701,7 @@ var PT_I18N = {
         main.textContent = faceAlt ? ALT_LABEL[keyMode] : orig;
         if (dual) {
           var sub = label.querySelector('i');
-          if (sub) sub.textContent = faceAlt ? '⇄ COMMAND' : '⇄ ' + (ALT_LABEL[keyMode] || '');
+          if (sub) sub.textContent = faceAlt ? '⇄ ' + orig : '⇄ ' + (ALT_LABEL[keyMode] || '');
         }
       }
     });
