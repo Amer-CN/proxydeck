@@ -578,7 +578,7 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 
 .pt-self-test-copy { font: 400 10px/1.25 var(--pt-font-ui); color: var(--pt-sc-ink2); }
 
-.pt-keys { flex: none; display: flex; gap: 10px; height: 42px; }
+.pt-keys { flex: none; display: flex; gap: 8px; height: 42px; }
 
 .pt-key {
   flex: 1 1 0; min-width: 0; height: 42px; position: relative;
@@ -2344,7 +2344,7 @@ body.pt-try { background: var(--pt-paper); }
               <span class="pt-sc-mode">
                 <span class="pt-silk sm">Mode</span>
                 <span class="pt-drum" style="--i:0">
-                  <i data-mode="cmd" class="cur"><span>COMMAND</span></i>
+                  <i data-mode="comate"><span>COMATE</span></i>
                   <i data-mode="tj"><span>TUANJIE</span></i>
                   <i data-mode="cb"><span>WORKBUDDY</span></i>
                   <i data-mode="set"><span>设置</span></i>
@@ -2408,6 +2408,23 @@ body.pt-try { background: var(--pt-paper); }
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="baiFree"><span>免费</span><b></b></span>
                     <span class="pt-dot warn" data-dot="baiProxy" title="B.AI 上游在境外：本机必须挂代理/梯子才能连通，免费不等于可直接用"><span>需代理</span><b></b></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Comate 屏体 -->
+              <div class="pt-sc-body comate" data-body="comate">
+                <div class="sc-unified">
+                  <div class="run-line">
+                    <span class="pt-dot grn" data-dot="comateRun"><span class="run-name">COMATE · 8786</span><b></b></span>
+                  </div>
+                  <div class="pt-system-readout">
+                    <span class="pt-silk">Uptime</span>
+                    <div class="pt-odo pt-sc" data-odo="comateUptime">0:00:00</div>
+                  </div>
+                  <div class="pt-sc-sep"></div>
+                  <div class="pt-dots">
+                    <span class="pt-dot" data-dot="comateZulu" title="托管 Comate zulu serve 会话引擎（内部 8792）"><span>zulu 托管</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -2493,12 +2510,13 @@ body.pt-try { background: var(--pt-paper); }
             <div class="pt-sc-hover" id="scHover" aria-hidden="true"></div>
           </div>
 
-          <!-- ========== 四颗模式键 ========== -->
+          <!-- ========== 五颗模式键 ========== -->
           <div class="pt-keys" role="radiogroup" aria-label="甲板">
             <button type="button" class="pt-key" role="radio" data-mode="cmd" aria-checked="true"><span class="dual-key"><b>COMMAND</b><i>⇄ B.AI</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="tj" aria-checked="false" tabindex="-1"><span>TUANJIE</span></button>
             <button type="button" class="pt-key" role="radio" data-mode="cb" aria-checked="false" tabindex="-1"><span>WORKBUDDY</span></button>
             <button type="button" class="pt-key" role="radio" data-mode="set" aria-checked="false" tabindex="-1"><span>设置</span></button>
+            <button type="button" class="pt-key" role="radio" data-mode="comate" aria-checked="false" tabindex="-1"><span>COMATE</span></button>
           </div>
 
           <!-- ========== 甲板传送带 ========== -->
@@ -2920,6 +2938,54 @@ body.pt-try { background: var(--pt-paper); }
                     <span class="s" data-i18n="app.s.quit">拨下拨杆退出界面——代理以后台进程继续运行。</span>
                   </span>
                 </button>
+               </div></div>
+              </div>
+
+              <!-- —————— Comate 甲板 —————— -->
+              <div class="pt-deck" data-deck="comate">
+               <div class="pt-deck-scroll"><div class="inner">
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.ignite">点火拉杆</div>
+                    <div class="s" data-i18n="app.s.comateLever">拉杆点火，托管 Comate 智能体引擎</div>
+                  </div>
+                </div></div>
+                <button type="button" class="pt-activation" data-ignite="comateRun" data-lever-mode="activate"
+                        aria-label="点火拉杆">
+                  <span class="rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                  <span class="legend">IGNITE</span>
+                  <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
+                </button>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.baseUrl">BASE URL</div>
+                    <div class="s" data-i18n="app.s.copy">点击复制</div>
+                  </div>
+                  <span class="pt-val click" id="comateEndpoint">http://127.0.0.1:8786/v1</span>
+                </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label"><div class="t">协议适配</div></div>
+                  <span class="pt-val">zulu 会话引擎 · OpenAI 兼容 · 免费可用</span>
+                </div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
+                  <button type="button" class="ibtn2" id="comateRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
+                <div class="pt-grid">
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
+                    <span class="rv" id="comateStModels">—</span><span class="rs" id="comateStModelsSub">实时拉取</span></div>
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.health">健康检查</span>
+                    <span class="rv" id="comateStHealth">—<span class="u">ms</span></span><span class="rs" id="comateStHealthSub">本地回环</span></div>
+                </div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.models">模型矩阵 · Models</span>
+                  <span class="pt-val" id="comateModelCount">OFFLINE</span></div>
+                <div id="comateModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
+                  <button type="button" class="ibtn2" id="comateClearLog" data-i18n="app.btn.clear">清空</button></div>
+                <div class="pt-log" id="comateLog"></div>
                </div></div>
               </div>
 
@@ -3510,15 +3576,15 @@ var PT_I18N = {
 
   /* ══════════════════ 3. 状态与模式 ══════════════════ */
   var st = { mode: 'cmd', soundSet: 1 };
-  var MODES = ['cmd', 'tj', 'cb', 'bai', 'set', 'media', 'water'];
+  var MODES = ['cmd', 'tj', 'cb', 'comate', 'bai', 'set', 'media', 'water'];
   /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；其余键暂无副页，双击无效果） */
   var ALT_MODE = { cmd: 'bai', bai: 'cmd' };
   /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
   var ALT_LABEL = { cmd: 'B.AI' };
-  /* 鼓轮 8 格 DOM [cmd,tj,cb,set,cmd,bai,media,water]；居中格 = children[--i]（CSS 按 --y−--i 定位，
-     cell 的 --y 与 children 序号一致）。cmd 居中用尾格 idx4（首格 idx0 是绕接占位）。
+  /* 鼓轮 8 格 DOM [comate,tj,cb,set,cmd,bai,media,water]；居中格 = children[--i]（CSS 按 --y−--i 定位，
+     cell 的 --y 与 children 序号一致）。cmd 居中用尾格 idx4（首格 idx0 原是绕接占位，已换成 COMATE）。
      B.AI 紧跟 COMMAND 真格（同一颗键的两张脸，切换只滚 1 格）；子页顺序 设置→媒体→注水 */
-  var DRUM_IDX = { cmd: 4, tj: 1, cb: 2, set: 3, bai: 5, media: 6, water: 7 };
+  var DRUM_IDX = { comate: 0, tj: 1, cb: 2, set: 3, cmd: 4, bai: 5, media: 6, water: 7 };
   /* 实体键面子记忆：COMMAND 键有两张脸（COMMAND/B.AI）。在哪张脸上离开，
      键帽就保持那张脸的名字，从别的页再按它也回到那张脸（点 TUANJIE 再回来
      不能落回 COMMAND ——「从什么界面离开，就保持什么界面」） */
@@ -3530,9 +3596,9 @@ var PT_I18N = {
       if (m === h || m === ALT_MODE[h]) keyFace[h] = m;
     });
   }
-  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, bai: 3, set: 4, media: 5, water: 6 };
-  /* 上屏 Wheel 音量条只亮着四个主页可见；set/water/media 里它挡住屏体右侧读数 */
-  var VU_HOME = ['cmd', 'tj', 'cb', 'bai'];
+  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, bai: 3, set: 4, comate: 5, media: 6, water: 7 };
+  /* 上屏 Wheel 音量条只亮着五个主页可见；set/water/media 里它挡住屏体右侧读数 */
+  var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate'];
   /* lx（灵犀+设置）与 no 共用第 4 颗键：已停在 no 时再点该键进 lx（双职责），
      鼓轮/传送带各自有独立位；键盘方向键沿 MODES 全链可达。 */
   var modeListeners = [];
@@ -3588,12 +3654,12 @@ var PT_I18N = {
 
   function paint() {
     var m = st.mode;
-    /* Wheel 音量条只属于四个主页（cmd/tj/cb/bai）：设置与子页面里它会盖住屏体右侧读数 */
+    /* Wheel 音量条只属于五个主页（cmd/tj/cb/bai/comate）：设置与子页面里它会盖住屏体右侧读数 */
     var vuWrap = $('#scVuWrap');
     if (vuWrap) vuWrap.style.display = VU_HOME.indexOf(m) >= 0 ? '' : 'none';
     var drum = $('.pt-drum');
     if (drum) {
-      /* 居中格 = children[--i]：cmd→idx4（尾格绕接）、tj→1、cb→2、set→3；
+      /* 居中格 = children[--i]：comate→0、tj→1、cb→2、set→3、cmd→4（尾格）、bai→5；
          没有专属格的 mode 保持鼓轮上一位置，不能把 --i 设成 undefined（calc 失效，格子会叠成一坨） */
       var di = DRUM_IDX[m];
       if (di != null) {
@@ -5562,7 +5628,8 @@ var PT_I18N = {
   var PV = {
     tj: { id: 'tuanjie', port: 8788, pfx: 'tj', mode: 'tj', uptime: null, phase: 'idle' },
     cb: { id: 'codebuddy', port: 8787, pfx: 'cb', mode: 'cb', uptime: null, phase: 'idle' },
-    bai: { id: 'bai', port: 8891, pfx: 'ba', mode: 'bai', uptime: null, phase: 'idle' }
+    bai: { id: 'bai', port: 8891, pfx: 'ba', mode: 'bai', uptime: null, phase: 'idle' },
+    comate: { id: 'comate', port: 8786, pfx: 'comate', mode: 'comate', uptime: null, phase: 'idle' }
   };
   function pSet(V, id, val) { var el = $(V.pfx + id); if (el) el.textContent = val; }
 
@@ -6254,6 +6321,7 @@ var PT_I18N = {
     'app.s.tjLever':     { zh: '拉到底点火（8788）· 运行后拉回最左熄火', 'zh-hant': '拉到底點火（8788）· 運行後拉回最左熄火', en: 'Pull fully to ignite (8788) · Pull back left to stop', de: 'Ganz ziehen zum Start (8788) · Links zurück zum Stop', ja: '右端まで引いて点火（8788）・左へ戻して停止', fr: 'Tirer à fond (8788) · Ramener à gauche', es: 'Tira al fondo (8788) · Vuelve a la izquierda' },
     'app.s.cbLever':     { zh: '拉到底点火（8787）· 拉回熄火 · 模型探测首次约 20 秒', 'zh-hant': '拉到底點火（8787）· 拉回熄火 · 模型探測首次約 20 秒', en: 'Pull fully to ignite (8787) · Pull back to stop · Probe ~20s first run', de: 'Ganz ziehen (8787) · Zurück zum Stop · Erste Suche ~20 s', ja: '右端まで引いて点火（8787）・初回検出約20秒', fr: 'Tirer à fond (8787) · Détection ~20 s au début', es: 'Tira al fondo (8787) · Detección ~20 s la primera vez' },
     'app.s.baiLever':     { zh: '拉到底点火（8891）· 拉回熄火 · Go 栈直连 api.b.ai', 'zh-hant': '拉到底點火（8891）· 拉回熄火 · Go 棧直連 api.b.ai', en: 'Pull to ignite (8891) · Back to stop · Go stack to api.b.ai', de: 'Ziehen zum Starten (8891) · Zurück zum Stoppen · Go-Stack zu api.b.ai', ja: '引いて起動（8891）· 戻して停止 · Goスタックで api.b.ai へ', fr: 'Tirer pour démarrer (8891) · Retour pour arrêter · Pile Go vers api.b.ai', es: 'Tira para encender (8891) · Vuelve para apagar · Pila Go a api.b.ai' },
+    'app.s.comateLever':     { zh: '拉杆点火，托管 Comate 智能体引擎（8786）· 拉回熄火', 'zh-hant': '拉桿點火，託管 Comate 智能體引擎（8786）· 拉回熄火', en: 'Pull to ignite, hosting the Comate agent engine (8786) · Pull back to stop', de: 'Ziehen zum Start, hostet die Comate-Engine (8786) · Zurück zum Stoppen', ja: '引いて点火、Comate エージェントエンジンをホスト（8786）· 戻して停止', fr: 'Tirer pour démarrer, héberge le moteur Comate (8786) · Retour pour arrêter', es: 'Tira para encender, aloja el motor de Comate (8786) · Vuelve para apagar' },
     'app.s.copy':     { zh: '点击复制', 'zh-hant': '點擊複製', en: 'Click to copy', de: 'Klicken zum Kopieren', ja: 'クリックでコピー', fr: 'Cliquer pour copier', es: 'Clic para copiar' },
     'app.s.autostart':     { zh: '登录 Windows 后无窗口自动点火（软件统一，非按代理单独）。', 'zh-hant': '登錄 Windows 後無窗口自動點火（軟件統一，非按代理單獨）。', en: 'Auto-ignite headless after Windows sign-in (app-wide).', de: 'Nach Anmeldung automatisch headless starten (app-weit).', ja: 'Windowsログイン後に自動点火（アプリ全体）。', fr: 'Démarrage auto sans fenêtre après connexion (global).', es: 'Arranque automático sin ventana al iniciar Windows (global).' },
     'app.s.sound':     { zh: '操作每个控件时的轻微咔哒声——开关、挡位、按键与拨杆。', 'zh-hant': '操作每個控件時的輕微咔噠聲——開關、擋位、按鍵與撥杆。', en: 'Slight clicks on every control — switches, gears, keys, levers.', de: 'Leises Klicken bei jeder Bedienung.', ja: '各コントロール操作時の軽いカチッ音。', fr: 'Légers clics sur chaque contrôle.', es: 'Suaves clics en cada control.' },
@@ -6830,20 +6898,20 @@ var PT_I18N = {
     try { var saved = localStorage.getItem('latProxy'); if (saved) $('latProxy').value = saved; } catch (e) {}
 
     /* —— 插件启停 —— */
-    ['tj', 'cb', 'bai'].forEach(bindPluginToggle);
-    ['tjEndpoint', 'cbEndpoint', 'baEndpoint'].forEach(function (id) {
+    ['tj', 'cb', 'bai', 'comate'].forEach(bindPluginToggle);
+    ['tjEndpoint', 'cbEndpoint', 'baEndpoint', 'comateEndpoint'].forEach(function (id) {
       var el = $(id);
       if (el) el.onclick = function () { copyText(el.textContent, 'Base URL'); };
     });
-    ['tj', 'cb', 'bai'].forEach(function (mode) {
+    ['tj', 'cb', 'bai', 'comate'].forEach(function (mode) {
       var V = PV[mode];
       var clr = $(V.pfx + 'ClearLog');
       if (clr) clr.onclick = function () { $(V.pfx + 'Log').innerHTML = ''; plog(V, 'sys', '日志已清空'); };
       /* 积分刷新按钮统一在这里绑（tjRefresh/cbRefresh）：
-         团结/WorkBuddy 强制实时拉一次积分，B.AI 无积分卡只刷视图 */
+         团结/WorkBuddy 强制实时拉一次积分，B.AI/Comate 无积分卡只刷视图 */
       var rf = $(V.pfx + 'Refresh');
       if (rf) rf.onclick = async function () {
-        if (mode === 'bai') { refreshPluginView(mode); plog(V, 'sys', '手动刷新'); return; }
+        if (mode === 'bai' || mode === 'comate') { refreshPluginView(mode); plog(V, 'sys', '手动刷新'); return; }
         if (V.phase !== 'running') { toast('info', '刷新', '插件未启动，无法刷新积分'); return; }
         rf.disabled = true;
         var old = rf.textContent;
