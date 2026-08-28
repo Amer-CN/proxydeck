@@ -123,13 +123,14 @@ func (s *Server) cachedModels(zuluPath, license string) ([]modelInfo, error) {
 }
 
 // handleModels 返回 OpenAI models 格式目录：首条 auto，其后为 list-model 实时目录
-// 或硬编码 fallback。
+// 或硬编码 fallback。对外只暴露去后缀短名（deepseek-v4-flash_a866... → deepseek-v4-flash），
+// 长名由 handleChat 的 resolveModel 负责还原。
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	data := []map[string]any{{"id": "auto", "display_name": "Auto-Free", "object": "model"}}
 	if license, zuluPath := readLicense(), findZulu(); license != "" && zuluPath != "" {
 		if list, err := s.cachedModels(zuluPath, license); err == nil {
 			for _, m := range list {
-				entry := map[string]any{"id": m.ModelID, "object": "model"}
+				entry := map[string]any{"id": shortModelID(m.ModelID), "object": "model"}
 				if m.DisplayName != "" {
 					entry["display_name"] = m.DisplayName
 				}
@@ -137,13 +138,74 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			log.Printf("comate-plugin: list-model 失败，回退硬编码目录: %v", err)
-			data = append(data, fallbackModels...)
+			data = append(data, fallbackShortModels()...)
 		}
 	} else {
-		data = append(data, fallbackModels...)
+		data = append(data, fallbackShortModels()...)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data})
+}
+
+// shortModelID 去掉服务端内部后缀：deepseek-v4-flash_a866... → deepseek-v4-flash。
+func shortModelID(id string) string {
+	if i := strings.IndexByte(id, '_'); i > 0 {
+		return id[:i]
+	}
+	return id
+}
+
+// fallbackShortModels 硬编码目录的去后缀形态（/v1/models 展示用）。
+func fallbackShortModels() []map[string]any {
+	out := make([]map[string]any, 0, len(fallbackModels))
+	for _, m := range fallbackModels {
+		if id, _ := m["id"].(string); id != "" {
+			out = append(out, map[string]any{"id": shortModelID(id), "object": "model"})
+		}
+	}
+	return out
+}
+
+// fullModelList 当前可用的完整 modelId 列表（实时优先，失败回退硬编码）。
+func (s *Server) fullModelList(zuluPath, license string) []string {
+	if zuluPath != "" && license != "" {
+		if list, err := s.cachedModels(zuluPath, license); err == nil {
+			out := make([]string, 0, len(list))
+			for _, m := range list {
+				out = append(out, m.ModelID)
+			}
+			return out
+		}
+	}
+	out := make([]string, 0, len(fallbackModels))
+	for _, m := range fallbackModels {
+		if id, _ := m["id"].(string); id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// resolveModel 把调用方请求的模型名解析成上游完整 modelId：
+// auto/auto-free/空 原样返回（由调用方决定是否带 model 字段）；
+// 完整 id 精确命中原样通过；短名（忽略大小写）命中补全后缀；
+// 未知名原样透传，交由上游校验报错。
+func (s *Server) resolveModel(zuluPath, license, requested string) string {
+	if requested == "" || requested == "auto" || requested == "auto-free" {
+		return requested
+	}
+	list := s.fullModelList(zuluPath, license)
+	for _, id := range list {
+		if id == requested {
+			return id
+		}
+	}
+	for _, id := range list {
+		if strings.EqualFold(shortModelID(id), requested) {
+			return id
+		}
+	}
+	return requested
 }
 
 // chatRequest 是 OpenAI /v1/chat/completions 请求体的最小字段。
@@ -205,9 +267,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		"cwd":     os.TempDir(), // cwd 固定值即可（插件进程工作目录或系统临时目录）
 		"license": license,
 	}
-	model := req.Model
+	model := s.resolveModel(zuluPath, license, req.Model)
 	if model != "" && model != "auto" && model != "auto-free" {
-		body["model"] = model // 其他值原样透传（调用方用 /v1/models 返回的 id）
+		body["model"] = model // 短名已还原成完整 modelId；未知名原样透传交上游校验
 	}
 
 	if req.Stream {
