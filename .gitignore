@@ -9,6 +9,7 @@ notice_dismissed.flag
 close_hint_dismissed.flag
 app.exe
 *.exe
+!ProxyDeck.exe
 *.exe~
 .work/
 tuanjie-pacing.json
