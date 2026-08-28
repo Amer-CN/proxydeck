@@ -728,6 +728,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// KIMI-K3 429 兜底（可开关）：开启且 model 含 "KIMI" 时上游 429 按
+	// Retry-After 等待自动重发（30 分钟总预算）；关闭时零影响直通。
+	pacing := s.pacer.Enabled() && IsPacingModel(model)
+
 	// 多账号池：有池时按账号选号转发（402 自动禁用/负载感知/GLM 路由）
 	token, poolUID, usePool := s.accountTokenFor(model)
 	if usePool {
@@ -785,6 +789,38 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			}
 			defer resp.Body.Close()
 			poolErrBody = nil
+		}
+		// 429 兜底：pacing 开启时代为等待自动重发（同 token/会话），30 分钟
+		// 总预算，超限后透传最后一次原始错误（现有非 200 透传分支）。
+		pacingDeadline := time.Time{}
+		if pacing {
+			pacingDeadline = time.Now().Add(pacingMaxWait)
+			s.pacer.pending.Add(1)
+			defer s.pacer.pending.Add(-1)
+		}
+		for pacing && resp != nil && resp.StatusCode == http.StatusTooManyRequests && time.Now().Before(pacingDeadline) {
+			poolErrBody, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			resp.Body.Close()
+			wait := RetryWait(resp.Header.Get("Retry-After"))
+			if end := time.Now().Add(wait); end.After(pacingDeadline) {
+				wait = time.Until(pacingDeadline)
+				if wait <= 0 {
+					break
+				}
+			}
+			log.Printf("[tuanjie] pacing pool model=%s account=%s status=429 等待 %s 后重发（剩余预算 %s）", model, poolUID, wait.Round(time.Second), time.Until(pacingDeadline).Round(time.Second))
+			select {
+			case <-r.Context().Done():
+			case <-time.After(wait):
+				resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, token, sess)
+				if err != nil {
+					writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
+					return
+				}
+			}
+			if r.Context().Err() != nil {
+				break
+			}
 		}
 		// 非 200 透传错误体（含重试后仍失败的情况）
 		if resp.StatusCode != http.StatusOK {
@@ -853,14 +889,13 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return s.client.ForwardWithSession(r.Context(), http.MethodPost, "/v1/chat/completions", bytes.NewReader(body), r.Header.Get("Content-Type"), sess)
 	}
 
-	// KIMI-K3 节奏器（可开关）：开启且 model 含 "KIMI" 时放行前按滑窗预算排队
-	// （预算不足挂起等待而非立即 429）；关闭时零影响直通。
-	pacing := s.pacer.Enabled() && IsPacingModel(model)
+	// KIMI-K3 429 兜底：开启且 model 含 "KIMI" 时上游 429 按 Retry-After
+	// 等待自动重发（30 分钟总预算）；关闭时零影响直通。
 	pacingDeadline := time.Time{}
 	if pacing {
-		est := EstimateTokens(body)
-		pacingDeadline = s.pacer.Acquire(r.Context(), est)
-		log.Printf("[tuanjie] pacing model=%s est=%d windowUsed=%d 放行", model, est, s.pacer.WindowUsed())
+		pacingDeadline = time.Now().Add(pacingMaxWait)
+		s.pacer.pending.Add(1)
+		defer s.pacer.pending.Add(-1)
 	}
 
 	// 上游多实例可能未同步模型映射（间歇 400 model=None）→ 最多重试 3 次。
@@ -871,7 +906,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	for pacing && err == nil && resp != nil && resp.StatusCode == http.StatusTooManyRequests && time.Now().Before(pacingDeadline) {
 		errBody, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()
-		wait := RateLimitWait(string(errBody))
+		wait := RetryWait(resp.Header.Get("Retry-After"))
 		if end := time.Now().Add(wait); end.After(pacingDeadline) {
 			wait = time.Until(pacingDeadline)
 			if wait <= 0 {
@@ -1381,8 +1416,8 @@ func (s *Server) handleQuota(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.client.FetchQuotaFor(r.Context(), tok))
 }
 
-// handleKimiPacing 节奏器开关端点（GUI 团结视图一键切换）：
-// GET 返回 {"enabled","pending","windowUsed"}；POST {"enabled":bool} 切换并
+// handleKimiPacing 429 兜底开关端点（GUI 团结视图一键切换）：
+// GET 返回 {"enabled","pending"}；POST {"enabled":bool} 切换并
 // 持久化到 exe 同目录 tuanjie-pacing.json（重启记忆）。
 func (s *Server) handleKimiPacing(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
@@ -1397,9 +1432,8 @@ func (s *Server) handleKimiPacing(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[tuanjie] pacing 开关切换 enabled=%v", *req.Enabled)
 	}
 	writeJSON(w, map[string]any{
-		"enabled":    s.pacer.Enabled(),
-		"pending":    s.pacer.Pending(),
-		"windowUsed": s.pacer.WindowUsed(),
+		"enabled": s.pacer.Enabled(),
+		"pending": s.pacer.Pending(),
 	})
 }
 

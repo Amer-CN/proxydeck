@@ -1818,7 +1818,7 @@ body.pt-try { background: var(--pt-paper); }
 .pt-log-line.warn .lv { color: var(--pt-sc-ink); }
 .pt-log-line.ok .lm, .pt-log-line.err .lm { color: var(--pt-sc-ink2); }
 
-/* ———— K3 节奏挡位 ———— */
+/* ———— K3 429 兜底挡位 ———— */
 .pt-gear.k3 .stops span { font-size: 8.5px; }
 
 /* ———— 工作空间自绘下拉（Notion）———— */
@@ -2388,7 +2388,7 @@ body.pt-try { background: var(--pt-paper); }
                   </div>
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
-                    <span class="pt-dot" data-dot="tjK3"><span data-i18n="app.dot.k3">K3 节奏</span><b></b></span>
+                    <span class="pt-dot" data-dot="tjK3"><span data-i18n="app.dot.k3">K3 兜底</span><b></b></span>
                     <span class="pt-dot" data-dot="tjMatrix"><span>账号矩阵</span><b></b></span>
                   </div>
                 </div>
@@ -2642,19 +2642,19 @@ body.pt-try { background: var(--pt-paper); }
                 <div class="pt-subhead"><span class="pt-silk sm">实时动态 · Activity</span></div>
                 <div class="act-list" id="tjActivity"><div class="if-empty">// 请求完成后动态显示</div></div>
 
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.k3">K3 节奏 · Pacing</span></div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.k3">K3 429 兜底 · Retry</span></div>
                 <div class="pt-row">
                   <div class="pt-rowline">
-                    <div class="pt-label"><div class="t" data-i18n="app.k3">KIMI-K3 限流排队</div></div>
+                    <div class="pt-label"><div class="t" data-i18n="app.k3">KIMI-K3 429 兜底</div></div>
                     <span class="pt-val" data-val="tjK3">—</span>
                   </div>
                   <div class="pt-gear k3" style="--s:0;--c:2" data-gear="tjK3" data-count="2"
                        role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="1"
-                       aria-label="KIMI-K3 限流排队">
+                       aria-label="KIMI-K3 429 兜底">
                     <div class="stops"><span class="cur">关</span><span>开</span></div>
                     <div class="pt-rail"><i></i><i></i><span class="k"></span></div>
                   </div>
-                  <p class="pt-notice">开启后 8788 自动等待窗口，避免 429 重试。窗口用量 <b data-val="tjK3Used">—</b><span data-val="tjK3Pend"></span></p>
+                  <p class="pt-notice">开启后 8788 在 KIMI 429 时按上游 Retry-After 自动等待重发（缺省 60s），总预算 30 分钟；关闭时 429 直接透传。等待中 <b data-val="tjK3Pend"></b></p>
                 </div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">积分统计 · Credits</span>
@@ -6248,17 +6248,14 @@ var PT_I18N = {
     }
   }
 
-  /* ================= 团结 K3 节奏 ================= */
+  /* ================= 团结 K3 429 兜底 ================= */
   var tjK3Busy = false;
   function renderTuanjiePacing(st) {
     var on = !!st.enabled;
     PTApp.gear('tjK3', on ? 1 : 0, true);
     var val = document.querySelector('[data-val="tjK3"]');
     if (val) val.textContent = on ? '开' : '关';
-    var used = typeof st.windowUsed === 'number' ? Math.round(st.windowUsed / 1000) + 'K' : '—';
-    var pend = typeof st.pending === 'number' && st.pending > 0 ? ' · 队列' + st.pending : '';
-    var u = document.querySelector('[data-val="tjK3Used"]');
-    if (u) u.textContent = used;
+    var pend = typeof st.pending === 'number' && st.pending > 0 ? ' · 等待' + st.pending : '';
     var p = document.querySelector('[data-val="tjK3Pend"]');
     if (p) p.textContent = pend;
     PTApp.dot('tjK3', on);
@@ -6281,10 +6278,10 @@ var PT_I18N = {
           body: JSON.stringify({ enabled: i === 1 })
         })).json();
         renderTuanjiePacing(r);
-        plog(V, r.enabled ? 'ok' : 'sys', r.enabled ? 'KIMI-K3 节奏器已开启：自动等待窗口，避免 429' : 'KIMI-K3 节奏器已关闭：429 直接透传');
+        plog(V, r.enabled ? 'ok' : 'sys', r.enabled ? 'KIMI-K3 429 兜底已开启：按 Retry-After 自动重发' : 'KIMI-K3 429 兜底已关闭：429 直接透传');
         return true;
       } catch (e) {
-        plog(V, 'err', '节奏器切换失败（插件未启动？）');
+        plog(V, 'err', '429 兜底切换失败（插件未启动？）');
         return false;
       } finally { tjK3Busy = false; }
     })();
@@ -6304,7 +6301,7 @@ var PT_I18N = {
     'app.usage':     { zh: '消耗统计', 'zh-hant': '消耗統計', en: 'Usage', de: 'Verbrauch', ja: '使用量', fr: 'Usage', es: 'Uso' },
     'app.latency':     { zh: '测延迟', 'zh-hant': '測延遲', en: 'Latency', de: 'Latenz', ja: 'レイテンシ', fr: 'Latence', es: 'Latencia' },
     'app.log':     { zh: '运行日志', 'zh-hant': '運行日誌', en: 'Log', de: 'Protokoll', ja: 'ログ', fr: 'Journal', es: 'Registro' },
-    'app.k3':     { zh: 'K3 节奏器', 'zh-hant': 'K3 節奏器', en: 'K3 Pacer', de: 'K3-Takt', ja: 'K3ペーサー', fr: 'Pulseur K3', es: 'Compás K3' },
+    'app.k3':     { zh: 'K3 429 兜底', 'zh-hant': 'K3 429 兜底', en: 'K3 429 Retry', de: 'K3-429-Retry', ja: 'K3 429リトライ', fr: 'Retry 429 K3', es: 'Reintento 429 K3' },
     'app.credits':     { zh: '积分', 'zh-hant': '積分', en: 'Credits', de: 'Guthaben', ja: 'クレジット', fr: 'Crédits', es: 'Créditos' },
     'app.quota':     { zh: '额度', 'zh-hant': '額度', en: 'Quota', de: 'Kontingent', ja: 'クォータ', fr: 'Quota', es: 'Cuota' },
     'app.update':     { zh: '更新', 'zh-hant': '更新', en: 'Update', de: 'Update', ja: 'アップデート', fr: 'Mise à jour', es: 'Actualización' },
@@ -6357,7 +6354,7 @@ var PT_I18N = {
     'app.rk.status':     { zh: '状态', 'zh-hant': '狀態', en: 'Status', de: 'Status', ja: '状態', fr: 'Statut', es: 'Estado' },
     'app.dot.latency':     { zh: '链路延迟', 'zh-hant': '鏈路延遲', en: 'Latency', de: 'Latenz', ja: 'レイテンシ', fr: 'Latence', es: 'Latencia' },
     'app.dot.autostart':     { zh: '开机自启', 'zh-hant': '開機自啟', en: 'Autostart', de: 'Autostart', ja: '自動起動', fr: 'Démarrage auto', es: 'Autoarranque' },
-    'app.dot.k3':     { zh: 'K3 节奏', 'zh-hant': 'K3 節奏', en: 'K3 Pacer', de: 'K3-Takt', ja: 'K3ペーサー', fr: 'Pulseur K3', es: 'Compás K3' },
+    'app.dot.k3':     { zh: 'K3 兜底', 'zh-hant': 'K3 兜底', en: 'K3 Retry', de: 'K3-Retry', ja: 'K3リトライ', fr: 'Retry K3', es: 'Retry K3' },
     'app.dot.sound':     { zh: '界面音效', 'zh-hant': '界面音效', en: 'UI Sounds', de: 'UI-Sounds', ja: 'UIサウンド', fr: 'Sons UI', es: 'Sonidos UI' },
     'app.dot.lang':     { zh: '语言', 'zh-hant': '語言', en: 'Language', de: 'Sprache', ja: '言語', fr: 'Langue', es: 'Idioma' },
     'app.changelog': { zh: '更新日志', 'zh-hant': '更新日誌', en: 'Changelog', de: 'Änderungen', ja: '更新履歴', fr: 'Journal', es: 'Novedades' },
