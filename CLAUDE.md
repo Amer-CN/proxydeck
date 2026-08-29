@@ -30,7 +30,17 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 
 - 端口约定：主代理 55990 / WorkBuddy 8787 / 团结 8788 / Notion 8789 / 灵犀 8790
 - 插件 = spawn 本 exe 的 `--plugin-<id> --port <n>` 子进程，独立常驻，关 GUI 不中断
-- 版本号在 app/main.go（appVersion）和 app/ui.html（多处字符串），改版本要同步
+- **升版本必须同步的 7 处**（漏一处就有地方显示旧版）：
+  1. `app/main.go` `appVersion`
+  2. `app/ui.html` `id="etchVer"`（顶栏蚀刻）
+  3. `app/ui.html` `.pt-nameplate`（铭牌，含 `aria-label` 同行两处）
+  4. `app/ui.html` `id="buildNo"`
+  5. `app/ui.html` `id="verChip"`
+  6. `app/ui.html` `var UI_CUR`（更新检查比对用）
+  7. `app/ui.html` **`var CHANGELOG_DATA`**（甲板内「更新日志」浮层的**独立副本**，不读 `CHANGELOG.md`！
+     只改仓库文件不改这里，浮层就还是旧版——v3.6.2 / v3.6.3 两次都栽在这里）
+  外加 `CHANGELOG.md` 顶条 + GitHub Release（正文＝CHANGELOG 顶条逐字，标题＝`vX.Y.Z · 主题 · 主题`）。
+  全在 `grep -rn "v3\.6\.[0-9]" app/` 一枪能扫到的范围内，改完照这条 grep 复核一遍。
 
 ## 运行服务管理规矩（最重要！）
 
