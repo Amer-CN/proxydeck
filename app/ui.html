@@ -1358,7 +1358,7 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 .fx-brand { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: var(--pp-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fx-no { margin-left: auto; font-family: var(--pt-mono-ui); font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: var(--pp-fine); font-variant-numeric: tabular-nums; }
 .fx-p-meta { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 22px; }
-.fx-p-meta p { margin: 0; font-size: 11.5px; color: var(--pp-fine); letter-spacing: 0.03em; display: flex; align-items: baseline; gap: 4px; padding: 0; min-width: 0; }
+.fx-p-meta p { margin: 0; font-size: 12px; color: var(--pp-fine); letter-spacing: 0.03em; display: flex; align-items: baseline; gap: 4px; padding: 0; min-width: 0; }
 .fx-p-meta p em { font-style: normal; flex: none; color: var(--pp-fine); }
 .fx-p-meta p b { margin-left: 5px; font-family: var(--pt-mono-ui); font-weight: 600; color: var(--pp-ink); font-variant-numeric: tabular-nums; min-width: 0; }
 .fx-email { flex: 1 1 auto; min-width: 0; box-sizing: border-box; height: 17px; padding: 0;
@@ -1370,11 +1370,11 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 /* ————— 纸面往来表单字段（第 8 轮：渠道/模型在纸上选，口径同传真单在纸上填邮箱 .fx-email；第 6 轮现成样式复用）————— */
 .fx-p-meta p.fx-p-field { align-items: baseline; }
 .fx-p-field .fx-p-sel {
-  flex: 1 1 auto; min-width: 0; margin-left: 5px; box-sizing: border-box; height: 16px; padding: 0;
+  flex: 1 1 auto; min-width: 0; margin-left: 5px; box-sizing: border-box; height: 22px; padding: 0;
   appearance: none; -webkit-appearance: none; border: 0;
   border-bottom: 1px dotted var(--pp-rule);
   outline: none; background: transparent; border-radius: 0;
-  font: 400 11.5px/16px var(--pt-mono-ui); color: var(--pp-ink);
+  font: 400 12.5px/22px var(--pt-mono-ui); color: var(--pp-ink);
   font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
   text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
 }
@@ -1442,8 +1442,8 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
    隐藏不做淡出；开态回流的瞬间位置正确，保留淡入 */
 .fx[data-fx-attach="off"] .fx-minfo-clip { opacity: 0; visibility: hidden; transition: none; position: absolute; }
 .fx-minfo { overflow: hidden; min-height: 0; border: 1px dashed var(--pp-rule); border-radius: 8px; padding: 10px 13px 9px; }
-.fx-minfo .bt { margin: 0 0 5px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-fine); }
-.fx-minfo p { margin: 0; display: flex; align-items: baseline; gap: 11px; font-size: 12px; color: var(--pp-ink); padding: 2px 0; }
+.fx-minfo .bt { margin: 0 0 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-fine); }
+.fx-minfo p { margin: 0; display: flex; align-items: baseline; gap: 11px; font-size: 12.5px; color: var(--pp-ink); padding: 2px 0; }
 .fx-minfo p em { font-style: normal; flex: none; width: 52px; color: var(--pp-fine); }
 .fx-minfo p b { font-family: var(--pt-mono-ui); font-weight: 600; color: var(--pp-ink); font-variant-numeric: tabular-nums; }
 .fx-privacy { margin: 11px 0 0; font-size: 10.5px; line-height: 1.7; color: var(--pp-fine); }
@@ -1453,27 +1453,50 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
    本节只把甲板式行样式在纸面作用域内改成「打印体」：去圆角边框、改细横线分隔。 */
 .fx.report-page .fx-body::before { display: none; }   /* 报表自带网格，正文信纸格线退出 */
 .fx.report-page .fx-input { display: none; }          /* 正文书写区在报表页不出现（占位交还报表） */
+/* 第 11 轮 B：报表容器吃满纸剩余高、纵向可滚（内容超窗不截断，四块证据可滚到末块）。
+   fax 浮窗报表页盒子链：cage(上节 flex:1/minH:0) → paper/sheet 有限高 flex column →
+   body flex:1 → 报表区滚动。规则放在 .fx-report 基础样式同锚点之后，覆盖顺序天然正确。 */
+body.fax-standalone .fx.report-page .fx-body { position: relative; }   /* 盒链其余项走上方通用 .fx-cage 规则 */
+body.fax-standalone .fx.report-page .fx-body .fx-report {
+  flex: 1 1 auto; min-height: 0; box-sizing: border-box;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 8px 10px 2px;        /* 右侧让出 4px 细滚动条位 */
+}
+body.fax-standalone .fx.report-page .fx-minfo-clip { flex: none; }
+/* 细滚动条：4px、纸色轨道（不喧宾夺主） */
+body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar { width: 4px; }
+body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-thumb { background: var(--pp-rule); border-radius: 2px; }
+body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-track { background: transparent; }
 .fx-report { padding: 0 2px; }
-.fx-report .fx-report-hint { font-size: 12px; line-height: 1.9; color: var(--pp-fine); padding: 2px 1px; }
-.fx-rsec { margin: 10px 0 0; }
+/* 第 11 轮 C：报表重排版——基准 ≥13px、数据行行高 ≥1.6、标题行加大加粗、正文深墨
+   （--pp-ink 原值；标签中灰提对比），判定/相似度等关键值 14-15px 加粗。 */
+.fx-report .fx-report-hint { font-size: 13px; line-height: 1.9; color: var(--pp-fine); padding: 4px 1px; }
+.fx-rsec { margin: 14px 0 0; }
 .fx-rsec-h {
   display: flex; align-items: baseline; gap: 8px;
-  font-family: var(--pt-font-disp); font-size: 10.5px; font-weight: 700;
+  font-family: var(--pt-font-disp); font-size: 14px; font-weight: 700;
   letter-spacing: .14em; color: var(--pp-ink); text-transform: uppercase;
-  border-bottom: 1px solid var(--pp-rule); padding: 0 1px 3px; margin: 0 0 4px;
+  border-bottom: 1px solid var(--pp-rule); padding: 0 1px 6px; margin: 0 0 10px;
 }
-.fx-rsec-h small { font-family: var(--pt-mono-ui); font-size: 8.5px; font-weight: 500;
+.fx-rsec-h small { font-family: var(--pt-mono-ui); font-size: 11px; font-weight: 500;
   letter-spacing: .12em; color: var(--pp-fine); }
 .fx-report .if-row {
   border: 0; border-bottom: 1px dotted var(--pp-rule); border-radius: 0;
-  padding: 3px 1px; background: transparent; font-size: 11px; color: var(--pp-ink); gap: 8px;
+  padding: 6px 1px; background: transparent; font-size: 13px; color: var(--pp-ink);
+  gap: 8px; line-height: 1.6; align-items: baseline;
 }
-.fx-report .if-row .m { min-width: 0; color: var(--pp-ink); font-size: 11px; }
-.fx-report .if-row .u { color: var(--pp-fine); font-size: 10px; max-width: none; white-space: normal; line-height: 1.45; }
-.fx-report .if-row .detail { margin-left: auto; max-width: 140px; color: var(--pp-ink); font-weight: 600; }
-.fx-report .if-row .led { flex: none; width: 7px; height: 7px; margin: auto 0; }
-.fx-report .acc-tag { font-size: 8.5px; letter-spacing: .3px; }
-.fx-report .if-empty { font-size: 10.5px; padding: 2px 1px; }
+.fx-report .if-row .m { min-width: 0; color: var(--pp-ink); font-size: 14px; font-weight: 600; }
+.fx-report .if-row .u { color: var(--pp-fine); font-size: 13px; max-width: none; white-space: normal; line-height: 1.6; }
+.fx-report .if-row .detail { margin-left: auto; max-width: 150px; color: var(--pp-ink); font-weight: 700; font-size: 14px; }
+.fx-report .if-row .led { flex: none; width: 8px; height: 8px; margin: auto 0; }
+.fx-report .acc-tag { font-size: 14px; letter-spacing: .3px; font-weight: 700; }
+.fx-report .if-empty { font-size: 13px; padding: 3px 1px; }
+/* ① 检测项：结果图标 = 关键判定值（14px 加粗，色块旁保留文字=色盲可辨） */
+.fx-report .acc-tag.pass { color: #2E8B57; }
+.fx-report .acc-tag.fail { color: #B23A2E; }
+.fx-report .acc-tag.warn { color: #B8860B; }
+/* ③ 分布指纹：核心数字 = 关键值（15px 加粗），其余正文 13px */
+.fx-report .if-row .u b { font-weight: 700; color: var(--pp-ink); }
 
 /* ————— 回执 FaxReceiptView（纸色 #E1DCD6 暗于传真纸，层叠在传真纸前方；宽≈纸宽 80%）—————
    差异要点 6：回执用独立纸色变量（--fx-rcp-*），与传真纸 --pp-* 区分。 */
@@ -2375,7 +2398,30 @@ body.fax-standalone > #fxOverlay { position: static; overflow: visible; padding:
 /* 第 10 轮：缩放后残余缝隙与窗底空白用纸色同名消除——视觉上无背板（用户上轮驳回的背板不复现） */
 body.fax-standalone > #fxOverlay { background: var(--pt-paper); }
 body.fax-standalone .fx-overlay-inner { width: 580px; }
-body.fax-standalone .fx-block { margin: 0; border-radius: 0; box-shadow: none; background: var(--pt-paper); }
+body.fax-standalone .fx-block { margin: 0 auto; border-radius: 0; box-shadow: none; background: var(--pt-paper); }
+/* 第 11 轮 A：浮窗内卡片拉满窗高（zoom 后 540 宽贴边）——inner 定高，机器 flex 撑满，
+   控制台贴到卡底=按钮贴窗底（对照原版按钮贴底口径：下缘到窗底距离≈左右边距）。 */
+body.fax-standalone > #fxOverlay { display: flex; }
+/* inner 高度不写 100%（zoom 下 100% 参照未缩放窗高会膨胀出页面滚动条），
+   由 fitFaxZoom 按 innerHeight/z 精确钉值（JS 侧第 11 轮 A/B 修正） */
+body.fax-standalone .fx-overlay-inner { margin: 0 auto; }
+body.fax-standalone .fx-block { width: 100%; height: 100%; }
+/* fx 用 flex 拉满卡高（不用 height:100%——margin-top -9 会让 height:100% 底部差 9px 布局 px）：
+   grow 吃满剩余空间，负 margin 顶边的 9px 由 grow 补齐，fx 底缘=卡底缘=窗底 */
+body.fax-standalone .fx { height: auto; flex: 1 1 auto; min-height: 0; }
+body.fax-standalone .fx-cage { flex: 1; min-height: 0; }   /* 纸区弹性吃满剩余高（缩档由 B 的滚动接管） */
+body.fax-standalone .fx-cage { display: flex; flex-direction: column; }   /* 第 11 轮 B：纸作为 flex 子项吃满笼内高 */
+body.fax-standalone .fx-cage .fx-paper { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+body.fax-standalone .fx-cage .fx-sheet { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+body.fax-standalone .fx-cage .fx-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin-top: 8px; }
+body.fax-standalone .fx-cage .fx-body .fx-input { height: auto; flex: 1 1 auto; min-height: 0; }
+body.fax-standalone .fx-cage .fx-minfo-clip { flex: none; }
+/* 报表页纸笼底板收敛（报表不吃纸笼渐变底色，底板止于键行上方观感保留） */
+body.fax-standalone .fx.report-page .fx-cage { padding-bottom: 16px; }
+/* 控制台在 fax 浮窗里去掉下拉吃 fx padding-bottom 的 -16px（卡已拉满高，键行区自身贴底）；
+   同时 .fx 底 padding 清零——按钮下缘贴窗底（下边距=左右边距=0，对照原版按钮贴底口径） */
+body.fax-standalone .fx-controls { margin-bottom: 0; }
+body.fax-standalone .fx { padding-bottom: 0; }
 /* 台肩=拖拽把手（红点除外，灯有自己的点击语义）；与主界面 #ptLedge 同款走 ccWindowCmd('move') */
 body.fax-standalone .fx-shoulder { -webkit-app-region: drag; app-region: drag; }
 body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-drag; }
@@ -8022,14 +8068,31 @@ var PT_I18N = {
      540 宽下 zoom≈0.93，机器贴满窗宽；缩放后残余缝隙由 #fxOverlay 纸色背景同色消除（见 fax-standalone CSS）。 */
   var fxZoomNatH = 0;
   function fitFaxZoom() {
+    /* zoom 落在包装容器上：Chromium zoom 是布局缩放，inner 的 580 宽随 z 收缩到窗宽，
+       卡片 margin auto 居中；zoom 若打在卡片上，inner 仍 580 会溢出出横向滚动条（上轮实测教训） */
     var blk = document.getElementById('wtFax');
-    if (!blk) return;
+    var inner = blk ? blk.parentElement : null;
+    if (!inner) return;
     if (!fxZoomNatH) {
-      blk.style.zoom = '';
-      fxZoomNatH = blk.offsetHeight || 784;
+      inner.style.zoom = '';
+      /* 第 11 轮 A：量「原版全尺寸自然高」。fax-standalone 盒链（cage/paper/sheet/input flex 拉满）
+         会把书写区拉到吃满剩余高 → inner 量出来比原版高。量测瞬间把纸面书写区临时钉回
+         CSS 固定高（height 100px = 原版 .fx-input 声明），inner 撤 height:auto 回内容高，
+         量完全部还原。机器随后按此基准 zoom 贴窗，高度锁定原版口径。 */
+      var input = document.querySelector('.fx-cage .fx-input');
+      var prevInputH = input ? input.style.height : null;
+      if (input) input.style.height = '100px';
+      inner.style.height = '';
+      fxZoomNatH = inner.offsetHeight || 784;
+      if (input) input.style.height = prevInputH;
     }
+    /* 机器按未缩放自然高（含纸笼 30px 底垫）整只缩放贴窗（zoom≈0.93 @540×760）。
+       第 11 轮 A/B 修正：zoom 下 height:100% 参照未缩放窗高（760），inner 实际只该占 760/z≈816
+       布局 px——100% 会给到 827（滚动条宽掺入）反而撑出页面纵向滚动。
+       故 zoom 后由 JS 把 inner 钉到精确布局高 innerHeight/z，卡片 100% 链稳定拉满窗。 */
     var z = Math.min(1, innerWidth / 580, innerHeight / fxZoomNatH);
-    blk.style.zoom = z;
+    inner.style.zoom = z;
+    inner.style.height = (innerHeight / z) + 'px';
   }
 
   /* ================= 启动 ================= */
