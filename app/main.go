@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -43,10 +44,89 @@ var (
 	flagHeadless = flag.Bool("headless", false, "无窗口后台模式（供开机自启使用）")
 	flagDebug    = flag.Bool("debug", false, "调试模式：打印请求/响应体到日志（headless-error.log）")
 	flagVersion  = flag.Bool("version", false, "打印版本并退出")
+	flagFax      = flag.Bool("fax", false, "注水专线浮窗（独立窗口）")
 
 	// 插件子模式（--plugin-tuanjie / --plugin-codebuddy / --plugin-bai / --desensitize）
 	// 定义在 plugin_modes.go。
 )
+
+// bindFaxLauncher 注水专线浮窗桥（第 9 轮）：ccOpenFax → 拉起独立 --fax 子进程（Start 后不等待，
+// 浮窗独立存活，主窗关闭不影响）。
+// 注：bindAll 定义在 bridge.go，本轮改动被限定在 app/main.go + app/ui.html，
+// 故本桥在 main()（主窗）与 runFaxWindow()（浮窗）两个窗口创建路径上各绑一次。
+func bindFaxLauncher(w webview.WebView) {
+	_ = w.Bind("ccOpenFax", func() string {
+		// 单实例（第 9 轮用户实测多开驳回）：已有注水专线浮窗 → 置顶带回前台，不再重复拉起。
+		// 每台浮窗的发送都是全流程真检测（真打上游、真烧配额），并发多开互相污染判定。
+		if h := findFaxPopup(); h != 0 {
+			foregroundWindow(h)
+			return jsonOK("注水专线浮窗已在前台")
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			return jsonErr(err)
+		}
+		if err := exec.Command(exe, "--fax").Start(); err != nil {
+			return jsonErr(err)
+		}
+		return jsonOK("注水专线浮窗已打开")
+	})
+}
+
+// runFaxWindow 注水专线独立浮窗（--fax 子进程）：独立小窗，与主 GUI 互不干扰、主窗关闭仍存活。
+// 复用 GUI 窗口创建路径：进程内 HTTP 服务内嵌 ui.html（127.0.0.1 随机端口）→ bindAll 挂全桥
+// （弹窗内 HAS_BRIDGE=true，真渠道/真检测/真历史）→ Navigate 加 #fax 独立模式 → Run。
+func runFaxWindow() int {
+	if !faxPopupMutexGuard() {
+		return 0   // 已有浮窗：置前即回，本进程不另开窗（子进程侧单实例保险）
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = fmt.Fprint(w, uiHTML)
+	})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 1
+	}
+	go func() { _ = http.Serve(ln, mux) }()
+
+	w := webview.New(false)
+	if w == nil {
+		return 1
+	}
+	w.SetTitle("注水专线 · WATER PROBE FX-01")
+	// 设备即窗口（与主窗同款）：去原生标题栏与系统边框——机器自带的标题栏（三灯 + 专线铭牌）就是窗框，
+	// 红圆点即关窗；原生壳再包一层 = 双重画框（第 9 轮用户实测驳回）。
+	// 540×760 = 与主界面同尺寸（第 10 轮用户裁决）；机器整体轻微缩放贴宽由前端 zoom 承担（见 ui.html fitFaxZoom）。
+	w.SetSize(540, 760, webview.HintNone)
+	if hwnd := w.Window(); hwnd != nil {
+		setFrameless(uintptr(hwnd))
+		setWindowIcon(uintptr(hwnd))
+	}
+	w.Dispatch(func() {
+		if hwnd := w.Window(); hwnd != nil {
+			setFrameless(uintptr(hwnd))
+			setWindowIcon(uintptr(hwnd))
+		}
+	})
+
+	app := newApp(*flagHost, *flagPort, *flagAPIKey)
+	app.bindAll(w)
+	bindFaxLauncher(w)
+	// 红圆点关窗：桥挂全（与主窗桥面一致，冗余无害）；ccFaxClose → PostMessage WM_CLOSE 优雅关闭。
+	// 原实现 w.Dispatch(w.Destroy) 是 0xc0000005 崩溃源（审查记录在案）：Destroy 在 Run 的消息循环里
+	// 整窗销毁，WebView2 组件句柄竞争释放。改发 WM_CLOSE 走正常关闭流程 → Run() 干净返回 → 进程自然退出。
+	_ = w.Bind("ccFaxClose", func() {
+		if h := w.Window(); h != nil {
+			windowCmd(uintptr(h), "close") // platform_windows.go: PostMessageW(hwnd, WM_CLOSE, 0, 0)
+		}
+	})
+	w.Navigate("http://" + ln.Addr().String() + "/#fax")
+	w.Run()
+	return 0
+}
 
 // runCoreHeadless 在本进程内启动代理核心并阻塞（headless 后台模式）。
 // 这是"代理本体"：GUI 的 start 会 spawn 本模式作为子进程。
@@ -107,6 +187,11 @@ func main() {
 		os.Exit(runPluginMode())
 	}
 
+	// 注水专线独立浮窗：主界面点「☌ 注水检测」拉起的子进程（独立窗口，主窗关闭不影响）。
+	if *flagFax {
+		os.Exit(runFaxWindow())
+	}
+
 	// 无窗口后台模式：本进程内嵌代理核心常驻（由 GUI 的 Stop / taskkill 结束）。
 	// 注意：headless 是"代理本体"，不再 spawn 子进程；GUI 的 start 才是 spawn 方。
 	if *flagHeadless {
@@ -160,6 +245,7 @@ func main() {
 	})
 
 	app.bindAll(w)
+	bindFaxLauncher(w)
 	w.Navigate("http://" + ln.Addr().String() + "/")
 	w.Run()
 }

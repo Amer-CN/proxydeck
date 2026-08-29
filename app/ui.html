@@ -1402,6 +1402,15 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 }
 .fx-stamp.sug { color: #5557D2; border-color: #5557D2; background: color-mix(in srgb, #5557D2 5%, transparent); }
 [data-theme="dark"] .fx-stamp.sug { color: #9492F5; border-color: #9492F5; background: color-mix(in srgb, #9492F5 5%, transparent); }
+/* 第 10 轮 REPORT 判定章：颜色随 verdict.light（真实/注水/存疑/无基准），无报告=灰「未 检 测」 */
+.fx-stamp.v-green { color: #2E8B57; border-color: #2E8B57; background: color-mix(in srgb, #2E8B57 5%, transparent); }
+.fx-stamp.v-red { color: #B23A2E; border-color: #B23A2E; background: color-mix(in srgb, #B23A2E 5%, transparent); }
+.fx-stamp.v-yellow { color: #B8860B; border-color: #B8860B; background: color-mix(in srgb, #B8860B 5%, transparent); }
+.fx-stamp.v-grey { color: #8B8474; border-color: #8B8474; background: color-mix(in srgb, #8B8474 5%, transparent); }
+[data-theme="dark"] .fx-stamp.v-green { color: #55D695; border-color: #55D695; background: color-mix(in srgb, #55D695 5%, transparent); }
+[data-theme="dark"] .fx-stamp.v-red { color: #F06A5E; border-color: #F06A5E; background: color-mix(in srgb, #F06A5E 5%, transparent); }
+[data-theme="dark"] .fx-stamp.v-yellow { color: #F2C94C; border-color: #F2C94C; background: color-mix(in srgb, #F2C94C 5%, transparent); }
+[data-theme="dark"] .fx-stamp.v-grey { color: #9C9486; border-color: #9C9486; background: color-mix(in srgb, #9C9486 5%, transparent); }
 .fx-stamp-note { font-size: 11px; line-height: 1.5; color: var(--pp-fine); }
 
 /* ————— 正文横线信纸输入区（纸上墨色体系）————— */
@@ -1438,6 +1447,33 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 .fx-minfo p em { font-style: normal; flex: none; width: 52px; color: var(--pp-fine); }
 .fx-minfo p b { font-family: var(--pt-mono-ui); font-weight: 600; color: var(--pp-ink); font-variant-numeric: tabular-nums; }
 .fx-privacy { margin: 11px 0 0; font-size: 10.5px; line-height: 1.7; color: var(--pp-fine); }
+
+/* ————— 第 10 轮 REPORT 详细结果页（报表打满整张传真纸：墨色文字 + 横线网格语义）—————
+   内容全部是既有渲染函数的产出（renderWaterItems/Probes/Dist/waterRowHtml），
+   本节只把甲板式行样式在纸面作用域内改成「打印体」：去圆角边框、改细横线分隔。 */
+.fx.report-page .fx-body::before { display: none; }   /* 报表自带网格，正文信纸格线退出 */
+.fx.report-page .fx-input { display: none; }          /* 正文书写区在报表页不出现（占位交还报表） */
+.fx-report { padding: 0 2px; }
+.fx-report .fx-report-hint { font-size: 12px; line-height: 1.9; color: var(--pp-fine); padding: 2px 1px; }
+.fx-rsec { margin: 10px 0 0; }
+.fx-rsec-h {
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--pt-font-disp); font-size: 10.5px; font-weight: 700;
+  letter-spacing: .14em; color: var(--pp-ink); text-transform: uppercase;
+  border-bottom: 1px solid var(--pp-rule); padding: 0 1px 3px; margin: 0 0 4px;
+}
+.fx-rsec-h small { font-family: var(--pt-mono-ui); font-size: 8.5px; font-weight: 500;
+  letter-spacing: .12em; color: var(--pp-fine); }
+.fx-report .if-row {
+  border: 0; border-bottom: 1px dotted var(--pp-rule); border-radius: 0;
+  padding: 3px 1px; background: transparent; font-size: 11px; color: var(--pp-ink); gap: 8px;
+}
+.fx-report .if-row .m { min-width: 0; color: var(--pp-ink); font-size: 11px; }
+.fx-report .if-row .u { color: var(--pp-fine); font-size: 10px; max-width: none; white-space: normal; line-height: 1.45; }
+.fx-report .if-row .detail { margin-left: auto; max-width: 140px; color: var(--pp-ink); font-weight: 600; }
+.fx-report .if-row .led { flex: none; width: 7px; height: 7px; margin: auto 0; }
+.fx-report .acc-tag { font-size: 8.5px; letter-spacing: .3px; }
+.fx-report .if-empty { font-size: 10.5px; padding: 2px 1px; }
 
 /* ————— 回执 FaxReceiptView（纸色 #E1DCD6 暗于传真纸，层叠在传真纸前方；宽≈纸宽 80%）—————
    差异要点 6：回执用独立纸色变量（--fx-rcp-*），与传真纸 --pp-* 区分。 */
@@ -1657,13 +1693,25 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
   border-radius: 50%; background: var(--pt-sc-accent);
 }
 
-/* 第 8 轮：返回 = 标题栏红圆点（macOS 关窗位）——红点可点，悬停显 × 并提亮，黄/绿照旧装饰 */
-.fx-lights i:nth-child(1) { cursor: pointer; position: relative; }
-.fx-lights i:nth-child(1):hover { filter: brightness(1.15) saturate(1.1); }
+/* 第 10 轮：三灯全功能——红=关窗（ccFaxClose 优雅关闭）黄=最小化 绿=最大化/还原（经 ccWindowCmd 桥走 Win32）；
+   悬停反馈照主界面 #ptLedge 口径（提亮+放大），红灯 × / 黄灯 − / 绿灯 □ */
+.fx-lights i { cursor: pointer; position: relative;
+  transition: filter .12s ease, transform .12s ease; }
+.fx-lights i:hover { filter: brightness(1.18); transform: scale(1.12); }
 .fx-lights i:nth-child(1):hover::after {
   content: '×'; position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   font: 700 9px/1 var(--pt-font-ui); color: rgba(77, 0, 0, .75);
+}
+.fx-lights i:nth-child(2):hover::after {
+  content: '−'; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font: 700 9px/1 var(--pt-font-ui); color: rgba(77, 60, 0, .78);
+}
+.fx-lights i:nth-child(3):hover::after {
+  content: '□'; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font: 700 7px/1 var(--pt-font-ui); color: rgba(0, 77, 20, .78);
 }
 </style>
 <style>
@@ -2315,6 +2363,22 @@ body.pt-try { background: var(--pt-paper); }
   .fx-sc-unified { padding: 9px 11px; }
   .fx-sc-unified .sh-v { font-size: 11.5px; }
 }
+/* ————— 第 9 轮：注水专线独立浮窗（--fax 子进程，body.fax-standalone）—————
+   主壳（甲板等 body 直接子元素）整体隐藏，只留 #fxOverlay 一台机器；
+   覆盖层转静态定位；第 9 轮用户裁决：机器铺满窗口——零内边距零背板，
+   580 宽贴边（机器即窗口，与主界面「设备即窗口」同口径），台肩=拖拽区。 */
+body.fax-standalone > #ptStage,
+body.fax-standalone > #toasts,
+body.fax-standalone > #modalRoot,
+body.fax-standalone > #demoBadge { display: none; }
+body.fax-standalone > #fxOverlay { position: static; overflow: visible; padding: 0; }
+/* 第 10 轮：缩放后残余缝隙与窗底空白用纸色同名消除——视觉上无背板（用户上轮驳回的背板不复现） */
+body.fax-standalone > #fxOverlay { background: var(--pt-paper); }
+body.fax-standalone .fx-overlay-inner { width: 580px; }
+body.fax-standalone .fx-block { margin: 0; border-radius: 0; box-shadow: none; background: var(--pt-paper); }
+/* 台肩=拖拽把手（红点除外，灯有自己的点击语义）；与主界面 #ptLedge 同款走 ccWindowCmd('move') */
+body.fax-standalone .fx-shoulder { -webkit-app-region: drag; app-region: drag; }
+body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-drag; }
 
 /* 语言挡位读数（设置页） */
 .lang-row .pt-val { min-width: 64px; text-align: right; }
@@ -3114,8 +3178,8 @@ body.pt-try { background: var(--pt-paper); }
             <button type="button" class="fx-mode cur" role="radio" aria-checked="true" data-fx-mode="probe">
               <span class="band"><span class="en">PROBE</span><span class="zh">注水检测</span></span>
             </button>
-            <button type="button" class="fx-mode" role="radio" aria-checked="false" tabindex="-1" data-fx-mode="baseline">
-              <span class="band"><span class="en">BASELINE</span><span class="zh">基准比对</span></span>
+            <button type="button" class="fx-mode" role="radio" aria-checked="false" tabindex="-1" data-fx-mode="report">
+              <span class="band"><span class="en">REPORT</span><span class="zh">详细结果</span></span>
             </button>
           </div>
 
@@ -3197,10 +3261,10 @@ body.pt-try { background: var(--pt-paper); }
             </div>
             <div class="fx-lamp-wrap" aria-hidden="true"><i class="fx-lamp" data-fx-lamp></i><span class="fx-line-silk">LINE</span></div>
             <button type="button" class="fx-clear" data-fx-clear>
-              <span class="zh">清除</span><span class="en">CLEAR</span>
+              <span class="zh">复位</span><span class="en">RESET</span>
             </button>
             <button type="button" class="fx-send" data-fx-send>
-              <span class="zh">发送</span><span class="en">TRANSMIT</span>
+              <span class="zh">检测</span><span class="en">CHECK</span>
             </button>
           </div>
         </section>
@@ -5388,6 +5452,8 @@ var PT_I18N = {
      传真机待命态 ready（无 tab/无黑屏壳）；渠道/模型在纸上选，机载 TRANSMIT 开跑；「← 返回」/ Esc 关层回设置甲板。
      鼓轮路径仍进旧 water 甲板（见 loadWaterPage），其「检测」按钮照旧弹传真机页并自动开跑（见 bindWaterBtn）。 */
   function enterWaterPage() {
+    /* 第 9 轮：有桥 → 拉起注水专线独立浮窗（--fax 子进程）；无桥浏览器预览 → 旧整屏覆盖层兜底 */
+    if (typeof window.ccOpenFax === 'function') { ccOpenFax(); return; }
     openFaxOverlay();
   }
   /* 进入 water 模式时的数据刷新（模式切换回调驱动，鼓轮 / 方向键 / 甲板按钮三个入口共用）：
@@ -5539,6 +5605,8 @@ var PT_I18N = {
        全部由 wtFax 引擎接管（见下），本函数只负责进页 + 转发 + 防重入。 */
     btn.onclick = function () {
       if (wtFax && wtFax.busy()) return;      /* 传真机相位锁：传送/打印/撕纸/报错缓冲中防重入 */
+      /* 第 9 轮：有桥 → 拉起注水专线独立浮窗（动线在浮窗内走）；无桥浏览器预览 → 旧整屏覆盖层兜底 */
+      if (typeof window.ccOpenFax === 'function') { ccOpenFax(); return; }
       openFaxOverlay();                        /* 第 3 轮：整屏传真机页（注水甲板入口仍自动开跑） */
       wtFax.run();                             /* 自动开跑（相位 1 校验不过则 LCD 报错回待命） */
     };
@@ -5592,7 +5660,11 @@ var PT_I18N = {
      TRANSMIT 发真实 POST /water-probe check（与动画并行，r6 等待结构），3.2s 官方段走完而响应未回
      → 等待态（LCD 传送中‥‥ 不显示假百分比 + 走纸音每 4-6s 一声渐弱 + 纸停全进位）；
      响应到 → 叮 → 回执真实数据；等待中失败 → LCD 报错 + 纸复位回待命可重试。
-     !HAS_BRIDGE（浏览器直开 DEMO）走 8s mock；渠道/模型纸面下拉与甲板 wtChannel/wtModel 双向镜像。 */
+     !HAS_BRIDGE（浏览器直开 DEMO）走 8s mock；渠道/模型纸面下拉与甲板 wtChannel/wtModel 双向镜像。
+     第 10 轮：REPORT/详细结果 页数据源——每次 check 成功（真实或 DEMO mock）时存整个响应对象
+     （{report, probes, probe_compare, dist, dist_similarity, canary}），报表四块由既有渲染函数产出。 */
+  var waterLastReport = null;
+
   var wtFax = (function () {
     var root = $('wtFax');
     if (!root) return { run: function () {}, busy: function () { return false; } };
@@ -5658,6 +5730,12 @@ var PT_I18N = {
       }
     }
     function fxShow(p) {
+      /* 第 10 轮：REPORT 页 LCD 显「详细结果 · REPORT」（只读页，无相位动线） */
+      if (fxMode === 'report' && p === 'ready') {
+        if (fxStateZh) fxStateZh.textContent = '详细结果';
+        if (fxStateEn) fxStateEn.textContent = 'REPORT';
+        return;
+      }
       if (fxStateZh) fxStateZh.textContent = ST_ZH[p] || '';
       if (fxStateEn) fxStateEn.textContent = fxEnLine(p);
     }
@@ -5676,14 +5754,19 @@ var PT_I18N = {
       fxShow(p);
       var busy = FX_BUSY_PHASES.indexOf(p) >= 0;
       if (busy) fxPrintRestore();                    /* 纸进机器时信息必须完整 */
-      if (fxSendBtn) fxSendBtn.disabled = busy;
-      if (fxClearBtn) fxClearBtn.disabled = busy;
-      if (fxTrigger) fxTrigger.disabled = busy;
-      fxModeBtns.forEach(function (b) { b.disabled = busy; });
-      if (fxText) fxText.disabled = busy;
-      if (fxChSel) fxChSel.disabled = busy;
-      if (fxModelSel) fxModelSel.disabled = busy;
+      fxLocks(busy);
       if (fxReceipt) fxReceipt.setAttribute('aria-hidden', p === 'sent' || p === 'printed' ? 'false' : 'true');
+    }
+    /* 第 10 轮：机件锁定（busy 相位 / REPORT 只读页）。控制台（复位/检测）在两态下都禁用
+       （复用 busy 禁用机制）；纸面书写/下拉与扳机在 REPORT 页同样只读，模式键保持可切回 PROBE。 */
+    function fxLocks(busy) {
+      if (fxSendBtn) fxSendBtn.disabled = busy || fxMode === 'report';
+      if (fxClearBtn) fxClearBtn.disabled = busy || fxMode === 'report';
+      if (fxTrigger) fxTrigger.disabled = busy || fxMode === 'report';
+      if (fxText) fxText.disabled = busy || fxMode === 'report';
+      if (fxChSel) fxChSel.disabled = busy || fxMode === 'report';
+      if (fxModelSel) fxModelSel.disabled = busy || fxMode === 'report';
+      fxModeBtns.forEach(function (b) { b.disabled = busy; });   /* 模式键只受相位锁（REPORT 页也要能切回 PROBE） */
     }
 
     /* LCD 计数 = 管道探针项数（与纸面「探针 N 项」同源 FX_PROBES；input 监听机制保留照旧） */
@@ -5693,9 +5776,24 @@ var PT_I18N = {
     if (fxText) fxText.addEventListener('input', fxCountUpdate);
 
     function fxPaintStamp() {
-      var probe = fxMode === 'probe';
-      if (fxStampEl) fxStampEl.classList.toggle('sug', !probe);
-      if (fxStampText) fxStampText.textContent = probe ? '注 水 检 测' : '基 准 比 对';
+      /* 第 10 轮：PROBE 章=「注 水 检 测」（主色）；REPORT 章=有报告时随 verdict.light
+         （真实/注水/存疑/无基准，颜色按 light），无报告=灰「未 检 测」 */
+      if (!fxStampEl || !fxStampText) return;
+      ['sug', 'v-green', 'v-red', 'v-yellow', 'v-grey'].forEach(function (c) { fxStampEl.classList.remove(c); });
+      if (fxMode === 'probe') {
+        fxStampText.textContent = '注 水 检 测';
+        return;
+      }
+      var rep = waterLastReport;
+      if (!rep || !rep.report) {
+        fxStampText.textContent = '未 检 测';
+        fxStampEl.classList.add('v-grey');
+        return;
+      }
+      var light = (rep.report.verdict && rep.report.verdict.light) || 'grey';
+      fxStampText.textContent = (FX_VERDICT_ZH[light] || '无 基 准').split('').join(' ');
+      fxStampEl.classList.add(light === 'green' ? 'v-green' : light === 'red' ? 'v-red'
+        : light === 'yellow' ? 'v-yellow' : 'v-grey');
     }
     fxModeBtns.forEach(function (k) {
       k.addEventListener('click', function () {
@@ -5709,6 +5807,7 @@ var PT_I18N = {
           b.tabIndex = on ? 0 : -1;
         });
         fxPaintStamp();
+        fxRenderPage();                            /* 第 10 轮：REPORT 页填充 / PROBE 页还原 */
         /* 盖章动画：scale 1.6→1 + opacity 0→1 spring 下落叩击（REDUCED 跳过） */
         if (fxStampEl && !REDUCED) {
           fxStampEl.classList.remove('stamping');
@@ -5718,6 +5817,79 @@ var PT_I18N = {
         playFile('tick-fs626659', 1);              /* 官方切换类别播键音 */
       });
     });
+
+    /* ———— 第 10 轮 REPORT 详细结果页 ————
+       PROBE（注水检测）页 = 现状全保留；REPORT（详细结果）页 = 只读整场报表：
+       .fx-body 换成报表容器（检测项/管道探针/分布指纹/金丝雀四块，复用既有渲染函数），
+       .fx-minfo 换报告摘要（对象/判定/相似度/账号，时间入摘要行），LCD/章节/控制台锁定随动。
+       未测试（waterLastReport 为空）时 .fx-body 只显示提示行、minfo 显「等待首测」。
+       DOM 形状不动：textarea 节点移出 .fx-body 暂存（引用保留），回 PROBE 原样放回。 */
+    var fxReportBox = null;
+    function fxReportHtml() {
+      var rep = waterLastReport, r = rep && rep.report;
+      if (!r) return '<div class="fx-report"><p class="fx-report-hint">先在「注水检测」页发送检测，这里才会出完整报表</p></div>';
+      var itemsHtml = renderWaterItems(r.items);
+      var probesHtml = renderWaterProbes(rep.probes, rep.probe_compare);
+      var distHtml = renderWaterDist(rep.dist, rep.dist_similarity);
+      var canaryHtml = rep.canary ? waterRowHtml(rep.canary) : '<div class="if-empty">// 无金丝雀样本</div>';
+      return '<div class="fx-report">' +
+        '<div class="fx-rsec"><p class="fx-rsec-h">① 检测项<small>ITEMS</small></p>' + itemsHtml + '</div>' +
+        '<div class="fx-rsec"><p class="fx-rsec-h">② 管道探针<small>PIPELINE PROBES</small></p>' + probesHtml + '</div>' +
+        '<div class="fx-rsec"><p class="fx-rsec-h">③ 分布指纹<small>DISTRIBUTION</small></p>' + distHtml + '</div>' +
+        '<div class="fx-rsec"><p class="fx-rsec-h">④ 金丝雀<small>CANARY</small></p>' + canaryHtml + '</div>' +
+        '</div>';
+    }
+    function fxReportMinfo() {
+      var box = q('.fx-minfo'), bt = q('.fx-minfo .bt');
+      if (!box) return;
+      var rows = box.querySelectorAll('p');   /* rows[0]=.bt 标题行，rows[1..4]=四行字段 */
+      var field = function (i, label, val) {
+        var p = rows[i + 1];
+        if (!p) return;
+        var em = p.querySelector('em'), b = p.querySelector('b');
+        if (em) em.textContent = label;
+        if (b) b.textContent = val;
+      };
+      var rep = waterLastReport, r = rep && rep.report;
+      if (!r) {
+        if (bt) bt.textContent = '等待首测 · NO TEST';
+        field(0, '对象', '—'); field(1, '判定', '等待首测'); field(2, '相似度', '—'); field(3, '账号', '—');
+        return;
+      }
+      var v = r.verdict || {};
+      var verdictZh = { green: '真实', red: '注水', yellow: '存疑', grey: '无基准' }[v.light || 'grey'] || '无基准';
+      if (bt) bt.textContent = '报告摘要 · ' + String(r.at || '').slice(5, 16);
+      field(0, '对象', (r.channel || '—') + ' · ' + (r.model || '—'));
+      field(1, '判定', verdictZh);
+      field(2, '相似度', v.score ? v.score + '%' : '—');
+      field(3, '账号', r.account || '—');
+    }
+    function fxRenderPage() {
+      fx.classList.toggle('report-page', fxMode === 'report');
+      fxLocks(fxPhase !== 'ready');
+      fxShow(fxPhase);
+      if (fxMode !== 'report') { fxReportLeave(); return; }
+      /* 进入 REPORT 页：textarea 移出 .fx-body 暂存（fxText 引用保留，回 PROBE 原样放回），报表容器进占 */
+      var body = q('.fx-body');
+      if (body && fxText && fxText.parentNode === body) {
+        if (!fxReportBox) { fxReportBox = document.createElement('div'); fxReportBox.className = 'fx-report'; }
+        body.replaceChild(fxReportBox, fxText);
+      }
+      if (fxReportBox) fxReportBox.innerHTML = fxReportHtml();
+      fxReportMinfo();
+    }
+    function fxReportLeave() {
+      var body = q('.fx-body');
+      if (body && fxText && fxReportBox && fxReportBox.parentNode === body) body.replaceChild(fxText, fxReportBox);
+      if (fx) {
+        fxPaint();                                    /* 还原 渠道/模型/探针 读数 */
+        var bt = q('.fx-minfo .bt');
+        if (bt) bt.textContent = '随附检测对象 · PROBE TARGET';
+        var ems = q('.fx-minfo').querySelectorAll('p em');
+        ['渠道', '模型', '基准', '探针'].forEach(function (L, i) { if (ems[i]) ems[i].textContent = L; });
+      }
+      fxPrintMinfo();                                 /* PROBE 页 minfo 重打 */
+    }
 
     /* 扳机开关：机器信息框显隐（只切可见性，不塌高度；CSS 见 .fx-minfo-clip）。
        配平模型：开态基准（input 自然高 / 纸满高）只在【首次满文字】时记录一次。
@@ -5941,14 +6113,16 @@ var PT_I18N = {
         /* DEMO：约 8s 后返回绿「真实」91% 假报告（裸 setTimeout：响应定时器不可入 fxSfxTimers，
            否则 3.2s 收尾的 fxSfxClear 会把它清掉，等待态永不结束）。mockReport 造的是与后端
            同形的完整响应，fxSettle 同 fetch 分支一样取 .report */
-        setTimeout(function () { fxSettle(null, mockReport(channel, model).report, gen); }, REDUCED ? 100 : 8000);
+        var rep0 = mockReport(channel, model);
+        waterLastReport = rep0;   /* 第 10 轮：DEMO check 成功同样存整响应（REPORT 页数据源） */
+        setTimeout(function () { fxSettle(null, rep0.report, gen); }, REDUCED ? 100 : 8000);
         return;
       }
       fetch("http://127.0.0.1:8788/water-probe", {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'check', channel: channel, model: model })
       }).then(function (r) { return r.json(); }).then(function (d) {
-        if (d && d.ok && d.report) fxSettle(null, d.report, gen);
+        if (d && d.ok && d.report) { waterLastReport = d; fxSettle(null, d.report, gen); }   /* 第 10 轮：存整响应 */
         else fxSettle({ msg: (d && d.msg) || '未知错误' }, undefined, gen);
       }).catch(function (e) { fxSettle({ msg: String(e) }, undefined, gen); });
     }
@@ -6194,12 +6368,43 @@ var PT_I18N = {
     fxOverlayShown = false;
     o.hidden = true;
   }
-  /* 返回 = 标题栏左上红圆点（macOS 关窗位）：点红点关层回原甲板（Esc 同效） */
-  var fxCloseDot = document.querySelector('#wtFax .fx-lights i');
-  if (fxCloseDot) {
-    fxCloseDot.title = '返回';
-    fxCloseDot.addEventListener('click', closeFaxOverlay);
+  /* 第 10 轮：标题栏三灯全功能——红=关窗（ccFaxClose → PostMessage WM_CLOSE 优雅退出浮窗进程）、
+   黄=最小化（ccWindowCmd('min') → SC_MINIMIZE）、绿=最大化/还原（ccWindowCmd('max') → 系统级切换）。
+   主窗 overlay 后备路径（无桥浏览器预览）红点仍关层，黄/绿无窗口语义时静默。 */
+  var fxLights = document.querySelectorAll('#wtFax .fx-lights i');
+  if (fxLights[0]) {
+    fxLights[0].title = '关闭';
+    fxLights[0].addEventListener('click', function () {
+      if (typeof window.ccFaxClose === 'function') ccFaxClose();
+      else closeFaxOverlay();
+    });
   }
+  if (fxLights[1]) {
+    fxLights[1].title = '最小化';
+    fxLights[1].addEventListener('click', function () {
+      if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('min');
+    });
+  }
+  if (fxLights[2]) {
+    fxLights[2].title = '最大化';
+    fxLights[2].addEventListener('click', function () {
+      if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('max');
+    });
+  }
+  /* 第 9 轮：台肩=拖拽把手（独立浮窗无原生标题栏）。与主界面 #ptLedge 同款：
+     左键按下（灯区除外）→ ccWindowCmd('move') 进系统拖拽移动循环；
+     app-region:drag CSS 在新 WebView2 运行时优先生效（事件不达页面），
+     旧运行时走此 JS 回退——双保险。 */
+  (function initFaxLedge() {
+    var ledge = document.querySelector('#wtFax .fx-shoulder');
+    if (!ledge || ledge.dataset.ledgeBound) return;
+    ledge.dataset.ledgeBound = '1';
+    ledge.addEventListener('pointerdown', function (ev) {
+      if (ev.button !== 0) return;
+      if (ev.target.closest('.fx-lights')) return;   /* 红点有自己的点击语义 */
+      if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('move');   /* 直呼桥（windowCmd 在主脚本闭包内，浮窗脚本块够不着） */
+    });
+  })();
 
   // 注水检测 / 媒体转路由是常驻外壳子页面：一次性绑定在初始化做，进入模式时刷数据。
   // 注水检测属主动低频操作，不进 3 秒轮询（被动观测随下面这组 /accounts 轮询顺带更新）。
@@ -7590,7 +7795,9 @@ var PT_I18N = {
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !e.target.matches('input, textarea')) {
         hideModelTip();
-        if (fxOverlayShown) { closeFaxOverlay(); return; }   /* 传真机子页：Esc 关层回原甲板（设置 / 注水） */
+        if (fxOverlayShown) {
+          if (location.hash === '#fax' && typeof window.ccFaxClose === 'function') { ccFaxClose(); return; }   /* 独立浮窗：Esc=关窗 */
+          closeFaxOverlay(); return; }   /* 传真机子页：Esc 关层回原甲板（设置 / 注水） */
         if (document.querySelector('.modal-mask')) { closeModal(); return; }
         if (curMode === 'water' || curMode === 'media') { PTApp.selectMode('set'); return; }
         if (curMode !== 'cmd') PTApp.selectMode('cmd');
@@ -7809,8 +8016,36 @@ var PT_I18N = {
     });
   }, 1000);
 
+  /* 第 10 轮：fax 浮窗 zoom 适配——浮窗与主界面同为 540×760，机器整体轻微缩放贴宽。
+     zoom = min(1, innerWidth/580, innerHeight/natH) 作用在 .fx-block（Chromium 布局缩放，比 transform 清晰）；
+     natH = 未缩放自然高（首次加载时量测，之后固定）；窗口 resize 时重算。
+     540 宽下 zoom≈0.93，机器贴满窗宽；缩放后残余缝隙由 #fxOverlay 纸色背景同色消除（见 fax-standalone CSS）。 */
+  var fxZoomNatH = 0;
+  function fitFaxZoom() {
+    var blk = document.getElementById('wtFax');
+    if (!blk) return;
+    if (!fxZoomNatH) {
+      blk.style.zoom = '';
+      fxZoomNatH = blk.offsetHeight || 784;
+    }
+    var z = Math.min(1, innerWidth / 580, innerHeight / fxZoomNatH);
+    blk.style.zoom = z;
+  }
+
   /* ================= 启动 ================= */
   function boot() {
+    /* 第 9 轮：#fax 独立模式（--fax 浮窗子进程）：隐藏主壳只留传真机；
+       HAS_BRIDGE 已为 true（bindAll 挂全）→ 真数据模式自动生效，demoBadge 不出现 */
+    if (location.hash === '#fax') {
+      document.body.classList.add('fax-standalone');
+      var fxO = $('fxOverlay');
+      if (fxO) fxO.hidden = false;
+      /* 纸面渠道/模型镜像依赖 fxOverlayShown=true，paint 触发渠道拉取（8788 真数据回填纸面） */
+      fxOverlayShown = true;
+      if (wtFax && wtFax.paint) wtFax.paint();
+      fitFaxZoom();
+      window.addEventListener('resize', fitFaxZoom);
+    }
     bindStatic();
     buildAllOdo();
     if (!HAS_BRIDGE) $('demoBadge').style.display = 'block';

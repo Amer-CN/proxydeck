@@ -157,3 +157,34 @@ func fatalBox(msg string) {
 	const MB_OK_ICONWARNING = 0x30
 	p.Call(0, uintptr(unsafe.Pointer(t)), uintptr(unsafe.Pointer(c)), MB_OK_ICONWARNING)
 }
+
+// findFaxPopup 返回注水专线浮窗句柄（按窗口标题精确匹配；无则 0）。
+func findFaxPopup() uintptr {
+	user32 := syscall.NewLazyDLL("user32.dll")
+	title, _ := syscall.UTF16PtrFromString("注水专线 · WATER PROBE FX-01")
+	h, _, _ := user32.NewProc("FindWindowW").Call(0, uintptr(unsafe.Pointer(title)))
+	return h
+}
+
+// foregroundWindow 还原并置前（最小化的浮窗被再次召唤时先还原再置顶）。
+func foregroundWindow(hwnd uintptr) {
+	user32 := syscall.NewLazyDLL("user32.dll")
+	const SW_RESTORE = 9
+	user32.NewProc("ShowWindow").Call(hwnd, SW_RESTORE)
+	user32.NewProc("SetForegroundWindow").Call(hwnd)
+}
+
+// faxPopupMutexGuard 子进程侧单实例保险：同名互斥体已存在 = 已有浮窗，
+// 找到它置前然后本进程自退（覆盖两个入口几乎同时点击的竞态窗口）。
+func faxPopupMutexGuard() bool {
+	user32 := syscall.NewLazyDLL("kernel32.dll")
+	name, _ := syscall.UTF16PtrFromString("Local\\ProxyDeck-FaxWindow")
+	_, _, err := user32.NewProc("CreateMutexW").Call(0, 0, uintptr(unsafe.Pointer(name)))
+	if err == syscall.ERROR_ALREADY_EXISTS {
+		if h := findFaxPopup(); h != 0 {
+			foregroundWindow(h)
+		}
+		return false
+	}
+	return true
+}
