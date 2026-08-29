@@ -1367,7 +1367,19 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 .fx-email::placeholder { color: var(--pp-fine); }
 .fx-email:focus { border-bottom-color: var(--pt-accent); }
 .fx-email:disabled { opacity: .6; }
-
+/* ————— 纸面往来表单字段（第 8 轮：渠道/模型在纸上选，口径同传真单在纸上填邮箱 .fx-email；第 6 轮现成样式复用）————— */
+.fx-p-meta p.fx-p-field { align-items: baseline; }
+.fx-p-field .fx-p-sel {
+  flex: 1 1 auto; min-width: 0; margin-left: 5px; box-sizing: border-box; height: 16px; padding: 0;
+  appearance: none; -webkit-appearance: none; border: 0;
+  border-bottom: 1px dotted var(--pp-rule);
+  outline: none; background: transparent; border-radius: 0;
+  font: 400 11.5px/16px var(--pt-mono-ui); color: var(--pp-ink);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+  text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
+}
+.fx-p-field .fx-p-sel:focus { border-bottom-color: var(--pt-accent); }
+.fx-p-field .fx-p-sel:disabled { opacity: .6; }
 /* ————— 类别印章（.pp-stamp + 逆向 0.5° 微旋转）————— */
 .fx-stamp-row { margin-top: 12px; display: flex; align-items: center; gap: 14px; }
 .fx-stamp {
@@ -1636,58 +1648,8 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
   .fx-caret { animation: none; }
 }
 
-/* ————— @720px 缩档（官网 media 查询对应参数，传真机零件同步缩一档）————— */
-@media (max-width: 720px) {
-  .fx-block { border-radius: 12px; }               /* = pt-chassis（壳已统一，断点同步） */
-  .fx-lcd { height: 65.7px; }
-  .fx-st-zh { font-size: 18px; }
-  .fx-st-en { font-size: 9px; margin-top: 2px; }
-  .fx-count { font-size: 15.5px; }
-  .fx-count-cap { font-size: 9.5px; margin-top: 3px; }
-  .fx-feed { margin: 13px 0 7px; }
-  .fx-feed .fl-lb { font-size: 9px; }
-  .fx-feed-cap { height: 14px; }
-  .fx-cage { margin-top: -14px; padding: 0 8px 30px; }   /* 底 30 与主规则一致（底板加长量） */
-  .fx-holes { width: 15px; background-size: 15px 22px;
-    background-image: radial-gradient(circle at 50% 50%, var(--pp-hole) 0 2.1px, transparent 2.3px); }
-  .fx-light-catch { left: 15px; right: 15px; height: 6px; }
-  .fx-sheet { margin: 0 15px; padding: 11px 9px 10px; }
-  .fx-brand { font-size: 9.5px; letter-spacing: .05em; }
-  .fx-no { font-size: 8.5px; }
-  .fx-p-meta { grid-template-columns: 1fr 1fr; gap: 2px 10px; margin-top: 6px; }
-  .fx-p-meta p { font-size: 8.5px; }
-  .fx-p-meta p b { margin-left: 6px; }
-  .fx-email { height: 13px; font-size: 8.5px; line-height: 13px; }
-  .fx-stamp-row { margin: 10px 0 2px; gap: 11px; }
-  .fx-stamp { font-size: 9.5px; letter-spacing: .16em; padding: 3px 7px 3px 10px; border-width: 1.5px; }
-  .fx-stamp-note { font-size: 8px; }
-  .fx-body { margin-top: 8px; }
-  .fx-body::before { background: repeating-linear-gradient(180deg, transparent 0 19px, var(--pp-rule) 19px 20px); }
-  .fx-input { min-height: 80px; font-size: 9.5px; line-height: 20px; }   /* 行高=横线周期 20px（防穿字）；80=20×4 整行 */
-  .fx-minfo-clip { margin-top: 9px; }
-  .fx-minfo { padding: 7px 9px 6px; }
-  .fx-minfo .bt { font-size: 8px; margin-bottom: 2px; letter-spacing: .06em; }
-  .fx-minfo p { font-size: 8.5px; padding: .5px 0; gap: 6px; }
-  .fx-minfo p em { width: 34px; }
-  .fx-privacy { margin-top: 7px; font-size: 8px; line-height: 1.55; }
-  .fx-receipt .body { margin: 0 15px; padding: 10px 33px 12px; }   /* 窄屏同步官方 10% 边距（326px×10%≈33px） */
-  .fx-receipt .ttl { font-size: 10.5px; letter-spacing: .2em; }
-  .fx-receipt .sub { font-size: 7px; }
-  .fx-receipt dl div { font-size: 8px; }
-  .fx-receipt .thanks { font-size: 8.5px; }
-  .fx-receipt .tear-hint { font-size: 7px; }
-  .fx-receipt .teeth { height: 10px; margin: -1px 15px 0; }   /* 窄屏 margin 跟 body 同步 15px（否则两侧超宽） */
-  .fx-controls { flex-wrap: wrap; gap: 9px; padding: 9px 0 8px 2px; }   /* margin-top 交给主规则（接 cage 底板） */
-  .fx-attach-copy b { font-size: 9.5px; }
-  .fx-attach-copy span { font-size: 9px; line-height: 1.45; }
-  .fx-ramp { height: 11px; }
-}
-
-/* 窄屏：页面壳与传真机区块收边 */
-@media (max-width: 639px) {
-  .pt-page-head { padding: 20px 16px 0; }
-}
-
+/* ————— 720px 缩档已删：传真机只存在于 fxOverlay 弹窗内，弹窗永远按原版全尺寸排版，
+   窗口装不下就滚动，绝不压缩版式（第 8 轮用户实测窄窗被压缩为 540×644 的教训）————— */
 
 .fx-mode { position: relative; }
 .fx-mode.cur::after {                /* 官方选中键右上角红点 */
@@ -1695,6 +1657,14 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
   border-radius: 50%; background: var(--pt-sc-accent);
 }
 
+/* 第 8 轮：返回 = 标题栏红圆点（macOS 关窗位）——红点可点，悬停显 × 并提亮，黄/绿照旧装饰 */
+.fx-lights i:nth-child(1) { cursor: pointer; position: relative; }
+.fx-lights i:nth-child(1):hover { filter: brightness(1.15) saturate(1.1); }
+.fx-lights i:nth-child(1):hover::after {
+  content: '×'; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font: 700 9px/1 var(--pt-font-ui); color: rgba(77, 0, 0, .75);
+}
 </style>
 <style>
 /* ============================================================
@@ -2309,6 +2279,43 @@ body.pt-try { background: var(--pt-paper); }
 .sc-unified .run-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sc-unified .run-name { font-size: 11.5px; color: var(--pt-sc-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* ———— 注水检测传真机 FX-01 独立子页面（第 3 轮驳回修正：整屏覆盖层，非内嵌） ————
+   机制选择：全屏覆盖层（同 NOTICE/wideModal 的 z-80 遮罩），不用 selectMode + data-deck——
+   传真机是"无按键甲板"，selectMode 分支会在 paint() 里给 .pt-track 写 --i: TRACK_IDX['fax']=undefined，
+   破坏传送带位计算；且加 mode 会动 MODES 链 / 鼓轮，导航面不许变大。第 3 轮：设置甲板「☌ 注水检测」
+   = 直接整屏打开本页（fixed 全屏不透明，完全盖住 tab 键 / 上屏 / 甲板）；注水甲板「检测」按钮亦弹本页并自动开跑。 */
+.fx-overlay {
+  position: fixed; inset: 0; z-index: 80;
+  background: var(--pt-bg);            /* 第 3 轮：全屏不透明，完全盖住 tab 键 / 上屏 / 甲板 */
+  display: flex; justify-content: center; align-items: flex-start;
+  overflow: auto; padding: 22px 16px 36px;   /* 双向滚动：窗口装不下机器（580×784+边距）就滚，不压缩版式 */
+}
+.fx-overlay[hidden] { display: none; }
+.fx-overlay-inner { width: 640px; flex: none; margin: auto; }   /* 固定 640：机器永远原版全尺寸（窄窗出滚动条） */
+/* 传真机子页上屏口径：一条 run-line + 4 个读数（渠道/模型/结论/单号），不做多余装饰 */
+.fx-sc-unified {
+  display: flex; flex-direction: column; gap: 9px;
+  margin: 0 0 12px; padding: 11px 14px;
+  border-radius: 10px;
+  background: var(--pt-sc-paper);
+  box-shadow: 0 1px 0 var(--pt-hi-55), inset 0 0 0 1px var(--pt-sc-rim);
+}
+.fx-sc-unified .run-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fx-sc-unified .run-name { font-size: 11.5px; color: var(--pt-sc-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-sc-unified .sh-rows { flex: none; gap: 4px 16px; }
+.fx-sc-unified .sh-k { font-size: 9.5px; letter-spacing: 1.2px; }
+.fx-sc-unified .sh-v { font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fx-sc-unified .sh-v.ok { color: var(--pt-sc-green); }
+.fx-sc-unified .sh-v.warn { color: #F2A61B; }
+.fx-sc-unified .sh-v.crit { color: var(--pt-sc-accent); }
+.fx-sc-unified .fx-back { margin-left: auto; flex: none; color: var(--pt-sc-ink); }
+.fx-sc-unified .fx-back:hover { color: var(--pt-sc-accent); }
+@media (max-width: 720px) {
+  .fx-overlay { padding: 14px 10px 28px; }
+  .fx-sc-unified { padding: 9px 11px; }
+  .fx-sc-unified .sh-v { font-size: 11.5px; }
+}
+
 /* 语言挡位读数（设置页） */
 .lang-row .pt-val { min-width: 64px; text-align: right; }
 
@@ -2459,7 +2466,7 @@ body.pt-try { background: var(--pt-paper); }
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.6.3</span>
+                    <span class="v ver" id="etchVer">v3.6.4</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -2880,13 +2887,13 @@ body.pt-try { background: var(--pt-paper); }
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.6.3">v3.6.3</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.6.4">v3.6.4</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.6.3</div>
+                    <div class="s" id="buildNo">v3.6.4</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.6.3</span>
+                  <span class="pt-val" id="verChip">v3.6.4</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -3060,9 +3067,6 @@ body.pt-try { background: var(--pt-paper); }
                 </div>
                 <div class="pt-div"></div>
 
-                <div class="pt-subhead"><span class="pt-silk sm">检测报告 · REPORT</span></div>
-                <div class="if-list" id="wtReport"><div class="if-empty">// 选渠道和模型，点「检测」出报告</div></div>
-
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm">检测历史 · HISTORY</span></div>
                 <div class="if-list" id="wtHistory"><div class="if-empty">// 读取中…</div></div>
 
@@ -3076,6 +3080,130 @@ body.pt-try { background: var(--pt-paper); }
 
           <p class="pt-word" aria-hidden="true">PROXYDECK</p>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="fxOverlay" class="fx-overlay" hidden>
+    <!-- 第 8 轮：返回 = 机器标题栏左上红圆点（macOS 关窗位，见 fxCloseDot 接线），不再设机器外按钮 -->
+    <div class="fx-overlay-inner">
+      <div class="fx-block" id="wtFax">
+        <!-- 第 7 轮：机器 = 原版 pomme-ui #feedback-fx 逐字复刻（内容文本用原版中文 zh 默认态硬编码，
+             不接 PT_I18N）；minfo 四行值用本 app 真实值（UI_CUR / Windows / 机型 / 当前语言） -->
+        <section class="fx" data-fx data-fx-phase="ready" data-fx-attach="on">
+          <!-- 标题栏=macOS 惯例：左三灯、右标题（同一行，所有者定） -->
+          <div class="fx-shoulder">
+            <span class="fx-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="fx-linetag">注水专线 WATER PROBE FX-01</span>
+          </div>
+
+          <!-- LCD 状态条 FaxScreenView：圆角 10、#272522→#282623 微噪黑、上边 1px 亮线 -->
+          <div class="fx-lcd">
+            <div class="fx-lcd-left">
+              <p class="fx-st-line"><span class="fx-st-zh" data-fx-state-zh>待命</span><i class="fx-caret" aria-hidden="true"></i></p>
+              <p class="fx-st-sub"><span class="fx-st-en" data-fx-state-en>READY</span></p>
+            </div>
+            <div class="fx-lcd-right">
+              <p class="fx-count" data-fx-count>0008 项</p>
+              <p class="fx-count-cap">探针 · PROBES</p>
+            </div>
+          </div>
+
+          <!-- 模式键 categoryKeys：官版=键帽内两行文字（上英文大写、下中文），选中键右上角红点 -->
+          <div class="fx-modes" role="radiogroup" aria-label="类别">
+            <button type="button" class="fx-mode cur" role="radio" aria-checked="true" data-fx-mode="probe">
+              <span class="band"><span class="en">PROBE</span><span class="zh">注水检测</span></span>
+            </button>
+            <button type="button" class="fx-mode" role="radio" aria-checked="false" tabindex="-1" data-fx-mode="baseline">
+              <span class="band"><span class="en">BASELINE</span><span class="zh">基准比对</span></span>
+            </button>
+          </div>
+
+          <!-- 进纸口标注行（23px 刻字行） -->
+          <div class="fx-feed" aria-hidden="true"><span class="fl-lb">进纸口 · DOCUMENT FEED</span><span class="fl-rule"></span></div>
+          <div class="fx-slot" aria-hidden="true"></div>
+          <div class="fx-feed-cap" aria-hidden="true"></div>
+
+          <!-- 传真纸 + 回执（纸被吞入进纸口，回执从同一口吐出） -->
+          <div class="fx-cage">
+            <div class="fx-paper" data-fx-paper>
+              <i class="fx-holes l" aria-hidden="true"></i><i class="fx-holes r" aria-hidden="true"></i>
+              <i class="fx-light-catch" aria-hidden="true"></i>
+              <div class="fx-sheet">
+                <div class="fx-p-head">
+                  <span class="fx-brand">PROXYDECK · 注水探针单</span>
+                  <span class="fx-no" data-fx-no>NO.0881</span>
+                </div>
+                <div class="fx-p-meta">
+                  <p class="fx-p-field"><em>渠道</em><select class="fx-p-sel" data-fx-chsel title="检测哪个渠道的模型" aria-label="检测渠道"></select></p>
+                  <p><em>日期</em><b data-fx-date>2026-08-22</b></p>
+                  <p class="fx-p-field"><em>模型</em><select class="fx-p-sel" data-fx-msel title="要检测的模型" aria-label="要检测的模型"></select></p>
+                  <p><em>探针</em><b data-fx-pprobe>8 项</b></p>
+                </div>
+                <div class="fx-stamp-row">
+                  <span class="fx-stamp" data-fx-stamp aria-hidden="true"><span data-fx-stamp-text>注 水 检 测</span></span>
+                  <span class="fx-stamp-note">类别由上方模式键决定</span>
+                </div>
+                <div class="fx-body">
+                  <textarea class="fx-input" data-fx-text rows="5" maxlength="2000" placeholder="检测期间由机器自动记录管道探针读数，无需手写。" aria-label="探针读数记录"></textarea>
+                </div>
+                <div class="fx-minfo-clip">
+                  <div class="fx-minfo">
+                    <p class="bt">随附检测对象 · PROBE TARGET</p>
+                    <p><em>渠道</em><b data-fx-mch>—</b></p>
+                    <p><em>模型</em><b data-fx-mmodel>—</b></p>
+                    <p><em>基准</em><b>官方</b></p>
+                    <p><em>探针</em><b data-fx-mprobe>8 项</b></p>
+                  </div>
+                </div>
+                <p class="fx-privacy">随附送出的只有所选渠道、模型与官方基准比对所需信息，此外不含姓名、账户、设备标识、日志、截图或剪贴板内容。检测完成后报告只记录判定与相似度等结论，凭回执单号可随时复测复核；未送出的选择与草稿不会离开这台电脑，已送出的记录也可在甲板历史里随时翻看。</p>
+              </div>
+            </div>
+
+            <!-- 回执 FaxReceiptView：纸色暗于传真纸，层叠在传真纸前方；左端撕纸豁口 + 底边锯齿 -->
+            <div class="fx-receipt" data-fx-receipt aria-hidden="true">
+              <div class="body">
+                <p class="ttl">传 送 回 执</p>
+                <p class="sub" aria-hidden="true">TRANSMISSION REPORT</p>
+                <div class="rule"></div>
+                <dl>
+                  <div><dt>日期</dt><dd data-fx-r-date>--</dd></div>
+                  <div><dt>检测对象</dt><dd data-fx-r-target>--</dd></div>
+                  <div><dt>账号</dt><dd data-fx-r-account>--</dd></div>
+                  <div><dt>判定</dt><dd data-fx-r-verdict>--</dd></div>
+                  <div><dt>相似度</dt><dd data-fx-r-score>--</dd></div>
+                  <div><dt>用时</dt><dd data-fx-r-time>00'00</dd></div>
+                  <div><dt>结果</dt><dd data-fx-r-result>--</dd></div>
+                  <div><dt>单号</dt><dd data-fx-r-ref>W-0000</dd></div>
+                </dl>
+                <div class="rule"></div>
+                <p class="thanks">谢谢。每一张我们都会读。</p>
+                <p class="tear-hint">点回执撕下 · 机器回到待命</p>
+              </div>
+              <div class="teeth" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <!-- 底控台面 FaxDeckView：扳机开关 + 文案 | LINE 灯 + CLEAR + TRANSMIT -->
+          <div class="fx-controls">
+            <div class="fx-attach">
+              <!-- 开关整只复制主面板 .pt-sw（含 I/O 符号层），仅挂 fx 逻辑钩子 -->
+              <button type="button" class="pt-sw fx-trigger" role="switch" aria-checked="true" data-fx-attach-sw
+                      aria-label="随附检测对象"><span class="i"></span><span class="o"></span><span class="k"></span></button>
+              <div class="fx-attach-copy">
+                <b>随附检测对象</b>
+                <span>渠道、模型、官方基准、探针数，所见即所发</span>
+              </div>
+            </div>
+            <div class="fx-lamp-wrap" aria-hidden="true"><i class="fx-lamp" data-fx-lamp></i><span class="fx-line-silk">LINE</span></div>
+            <button type="button" class="fx-clear" data-fx-clear>
+              <span class="zh">清除</span><span class="en">CLEAR</span>
+            </button>
+            <button type="button" class="fx-send" data-fx-send>
+              <span class="zh">发送</span><span class="en">TRANSMIT</span>
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   </div>
@@ -4164,6 +4292,12 @@ var PT_I18N = {
     windowCmd: windowCmd
   };
 
+  /* 传真机等业务作用域音效桥接：playFile 定义在本引擎 IIFE 内，业务层（另一 IIFE）引用不到；
+     此处仅做一次导出（行为不变），供注水传真机按简报口径「直接用现有 playFile(name, gain)」。 */
+  window.playFile = playFile;
+  /* 同上：REDUCED（prefers-reduced-motion）为引擎 IIFE 内变量，传真机相位机要按它跳长动画 */
+  window.REDUCED = REDUCED;
+
   /* ══════════════════ 启动 ══════════════════ */
   paint();
   applyCjk();
@@ -5235,8 +5369,11 @@ var PT_I18N = {
     setScReadout('wtScPassive', evs.length ? evs.length + ' 次' : '0 次', evs.length ? 'crit' : 'ok');
     var box = $('wtPassive');
     if (!box) return;
-    if (!evs.length) { box.innerHTML = '<div class="if-empty">// 无模型名不符事件</div>'; return; }
-    box.innerHTML = evs.slice(-8).reverse().map(function (e) {
+    if (!evs.length) {
+      box.innerHTML = '<div class="if-empty">// 无模型名不符事件</div>';
+      return;
+    }
+    var pvHtml = evs.slice(-8).reverse().map(function (e) {
       return '<div class="if-row">' +
         '<span class="led crit"></span>' +
         '<span class="m">' + escHtml(e.model || '') + '</span>' +
@@ -5245,11 +5382,13 @@ var PT_I18N = {
         '<span class="t">' + escHtml(String(e.at || '').slice(5, 16)) + '</span>' +
         '</div>';
     }).join('');
+    box.innerHTML = pvHtml;
   }
-  /* 注水检测 = 外壳子页面模式：上屏看结论与关键读数，甲板做选择 + 看报告/历史/被动观测。
-     返回 = 按 TUANJIE 键（或甲板「← 返回」/ Esc）。 */
+  /* 注水检测（第 3 轮驳回修正·最终轮）：设置甲板「☌ 注水检测」= 直接整屏打开传真机页（不再进旧注水甲板）。
+     传真机待命态 ready（无 tab/无黑屏壳）；渠道/模型在纸上选，机载 TRANSMIT 开跑；「← 返回」/ Esc 关层回设置甲板。
+     鼓轮路径仍进旧 water 甲板（见 loadWaterPage），其「检测」按钮照旧弹传真机页并自动开跑（见 bindWaterBtn）。 */
   function enterWaterPage() {
-    PTApp.selectMode('water');
+    openFaxOverlay();
   }
   /* 进入 water 模式时的数据刷新（模式切换回调驱动，鼓轮 / 方向键 / 甲板按钮三个入口共用）：
      渠道列表有缓存就不重拉——重拉会重写下拉，把用户选中的渠道冲回默认项 */
@@ -5273,8 +5412,16 @@ var PT_I18N = {
     fillWaterModels();
     renderChannelKeyInput(chs);
     renderWaterScreen();
+    /* 第 8 轮：甲板渠道/模型数据到位即镜像进传真机纸面下拉（仅覆盖层打开时；minfo 值随动） */
+    if (fxOverlayShown && wtFax && wtFax.paint) wtFax.paint();
   }
   function loadWaterChannels(force) {
+    /* 浏览器直开（DEMO，无 8788）：给一份可选的模拟渠道+模型列表，让传真机全动线可跑 */
+    if (!HAS_BRIDGE) {
+      waterChans = [{ id: 'tuanjie', name: 'tuanjie', ok: true, models: DEMO_MODELS }];
+      paintWaterChannels(waterChans);
+      return;
+    }
     if (!force && waterChans) { paintWaterChannels(waterChans); return; }
     fetch("http://127.0.0.1:8788/water-probe?channels=1").then(function (r) { return r.json(); }).then(function (d) {
       waterChans = d.channels || [];
@@ -5360,9 +5507,7 @@ var PT_I18N = {
   }
   /* 分布指纹卡：相似度百分比+判定档+众数/均值统计 */
   function renderWaterDist(dist, sim) {
-    var box = $('wtDist');
-    if (!box) return;
-    if (!dist) { box.innerHTML = '<div class="if-empty">// 本次未采样分布</div>'; return; }
+    if (!dist) return '<div class="if-empty">// 本次未采样分布</div>';
     var rows = '';
     if (sim) {
       rows += '<div class="if-row"><span class="m">分布相似度</span>' +
@@ -5376,105 +5521,32 @@ var PT_I18N = {
         '<span class="u">均值 ' + (dist.stats.mean || 0) + ' · 中位 ' + (dist.stats.median || 0) + ' · 标准差 ' + (dist.stats.std_dev || 0) + '</span>' +
         '<span class="u">众数 ' + (dist.stats.mode || 0) + '（×' + (dist.stats.mode_count || 0) + '）</span></div>';
     }
-    box.innerHTML = rows || '<div class="if-empty">// 分布数据为空</div>';
+    return rows || '<div class="if-empty">// 分布数据为空</div>';
   }
   function renderWaterProbes(probes, cmps) {
-    var box = $('wtProbes');
-    if (!box) return;
-    if (!probes || !probes.length) { box.innerHTML = '<div class="if-empty">// 未跑探针</div>'; return; }
+    if (!probes || !probes.length) return '<div class="if-empty">// 未跑探针</div>';
     var idx = {};
     (cmps || []).forEach(function (c) { idx[c.name] = c; });
-    box.innerHTML = probes.map(function (p) { return probeRowHtml(p, idx[p.name]); }).join('');
+    return probes.map(function (p) { return probeRowHtml(p, idx[p.name]); }).join('');
   }
   // 一键检测（check）：自动跑探针 / 比对官方基准 / 出报告；历史随动刷新
   function bindWaterBtn() {
     var btn = $('wtRunBtn');
     if (!btn) return;
     var chSel = $('wtChannel'), mSel = $('wtModel');
-    if (chSel) chSel.onchange = function () { fillWaterModels(); renderChannelKeyInput(waterChans || []); };
-    if (mSel) mSel.onchange = syncWaterVerdict;
-    btn.onclick = async function () {
-      var model = (($('wtModel') && $('wtModel').value) || "").trim();
-      var channel = (($('wtChannel') && $('wtChannel').value) || "tuanjie");
-      if (!model) { toast('err', '注水检测', '请先选渠道和模型'); btn.disabled = false; return; }
-      btn.disabled = true; btn.textContent = "检测中…";
-      PTApp.dot('wtRun', true, false, '检测中');
-      var box = $('wtReport');
-      if (box) box.innerHTML = '<div class="if-empty">// 检测中（跑管道探针 + 分布采样 + 金丝雀答题，约 1-2 分钟）…</div>';
-      try {
-        var r = await (await fetch("http://127.0.0.1:8788/water-probe", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "check", channel: channel, model: model })
-        })).json();
-        if (r.ok && r.report) {
-          renderWaterCheck(r);
-        } else {
-          if (box) box.innerHTML = '<div class="if-empty">// 检测失败：' + escHtml((r && r.msg) || "未知错误") + '</div>';
-          PTApp.dot('wtRun', false, false, '失败');
-        }
-      } catch (e) {
-        if (box) box.innerHTML = '<div class="if-empty">// 检测失败：无法连接团结插件（未启动？请先拉动拉杆）</div>';
-        toast('err', '注水检测', '团结插件未启动，无法检测');
-        PTApp.dot('wtRun', false, false, '失败');
-      }
-      btn.disabled = false; btn.textContent = "检测";
-      loadWaterHistory();
-    };
-  }
-  /* check 报告渲染：大结论卡（大图标 + 人话结论 + 分数 + 元信息）+ 「查看详情」折叠详情区 */
-  function renderWaterCheck(r) {
-    var rep = r.report || {};
-    var v = rep.verdict || {};
-    var light = v.light || 'grey';
-    var icon = rep.first_time ? '🆕' : (light === 'green' ? '✅' : light === 'yellow' ? '⚠️' : '❌');
-    var colorMap = { green: '#3ecf8e', yellow: '#ffb300', red: '#ff5f5f', grey: '#8a8f98' };
-    var c = colorMap[light] || '#8a8f98';
-    var reason = v.reason || '检测完成';
-    var score = v.score ? '<span class="pt-val" style="color:' + c + '">相似度 ' + v.score + '%</span>' : '';
-    PTApp.dot('wtRun', true, false, v.score ? v.score + '%' : '');
-    var meta = escHtml((rep.channel || 'tuanjie') + ' 渠道 · ' + (rep.model || '') + ' · 账号 ' + (rep.account || '—') + ' · ' + (rep.at || '') + (rep.first_time ? ' · 首次检测' : ''));
-    var box = $('wtReport');
-    if (!box) return;
-    box.innerHTML = '<div class="if-list" style="max-height:none">' +
-      '<div class="if-row" style="align-items:center">' +
-      '<span style="font-size:34px;margin-right:12px">' + icon + '</span>' +
-      '<span style="font-size:20px;font-weight:700;color:' + c + '">' + escHtml(reason) + '</span>' +
-      score + '</div>' +
-      '<div class="if-row" style="align-items:center">' +
-      '<span class="u">' + meta + '</span>' +
-      '<button type="button" class="ibtn2" id="wtDetailToggle">查看详情</button></div>' +
-      '<div id="wtDetail" style="display:none;margin-top:10px">' +
-      '<div class="wt-sub">检测项 · ITEMS</div>' +
-      '<div class="if-list" id="wtItems"></div>' +
-      '<div class="wt-sub">管道探针 · PIPELINE PROBES</div>' +
-      '<div class="if-list" id="wtProbes"></div>' +
-      '<div class="wt-sub">分布指纹 · DISTRIBUTION</div>' +
-      '<div class="if-list" id="wtDist"></div>' +
-      '<div class="wt-sub">金丝雀探针 · CANARY</div>' +
-      '<div class="if-list" id="wtResults"></div>' +
-      '</div></div>';
-    /* 折叠区内容：items 表 + 原有三块专业证据（复用既有渲染函数） */
-    renderWaterItems(rep.items);
-    renderWaterProbes(r.probes, r.probe_compare);
-    renderWaterDist(r.dist, r.dist_similarity);
-    var cr = $('wtResults');
-    if (r.canary) cr.innerHTML = waterRowHtml(r.canary);
-    else cr.innerHTML = '<div class="if-empty">// 本次未跑金丝雀答题</div>';
-    /* 「查看详情」：简单 display toggle（wideModal 动态 DOM，不引组件） */
-    var tg = $('wtDetailToggle');
-    if (tg) tg.onclick = function () {
-      var d = $('wtDetail');
-      var open = d && d.style.display !== 'none';
-      if (d) d.style.display = open ? 'none' : '';
-      tg.textContent = open ? '查看详情' : '收起详情';
+    /* 点「检测」= 进入传真机子页（整屏覆盖层）并自动开跑：动画与真实 POST /water-probe check
+       并行（零假等待头）。携带当前渠道/模型选择；未选模型/成功回执/失败复位/撕纸换单
+       全部由 wtFax 引擎接管（见下），本函数只负责进页 + 转发 + 防重入。 */
+    btn.onclick = function () {
+      if (wtFax && wtFax.busy()) return;      /* 传真机相位锁：传送/打印/撕纸/报错缓冲中防重入 */
+      openFaxOverlay();                        /* 第 3 轮：整屏传真机页（注水甲板入口仍自动开跑） */
+      wtFax.run();                             /* 自动开跑（相位 1 校验不过则 LCD 报错回待命） */
     };
   }
   /* items 表：检测项 / 结果图标 / 人话说明 */
   function renderWaterItems(items) {
-    var box = $('wtItems');
-    if (!box) return;
-    if (!items || !items.length) { box.innerHTML = '<div class="if-empty">// 无检测项</div>'; return; }
-    box.innerHTML = items.map(function (it) {
+    if (!items || !items.length) return '<div class="if-empty">// 无检测项</div>';
+    return items.map(function (it) {
       var cls = it.result === '✔' ? 'pass' : it.result === '✖' ? 'fail' : 'warn';
       return '<div class="if-row">' +
         '<span class="m">' + escHtml(it.name) + '</span>' +
@@ -5487,16 +5559,21 @@ var PT_I18N = {
   var waterHist = [];
   async function loadWaterHistory() {
     var box = $('wtHistory');
-    try {
-      var d = await (await fetch("http://127.0.0.1:8788/water-probe?history=1")).json();
-      waterHist = d.history || [];
-    } catch (e) { return; /* 代理未启动：保持上次显示 */ }
+    if (HAS_BRIDGE) {
+      try {
+        var d = await (await fetch("http://127.0.0.1:8788/water-probe?history=1")).json();
+        waterHist = d.history || [];
+      } catch (e) { return; /* 代理未启动：保持上次显示 */ }
+    }
+    /* 浏览器直开（DEMO）：历史用会话内存（wtFax mock 结果已 push 进来），上屏结论照常同步 */
     syncWaterVerdict();
-    if (!box) return;
     var h = waterHist;
-    if (!h.length) { box.innerHTML = '<div class="if-empty">// 暂无检测记录（内存保留最近 20 条，重启 8788 清空）</div>'; return; }
+    if (!h.length) {
+      if (box) box.innerHTML = '<div class="if-empty">// 暂无检测记录（内存保留最近 20 条，重启 8788 清空）</div>';
+      return;
+    }
     var colorMap = { green: '#3ecf8e', yellow: '#ffb300', red: '#ff5f5f' };
-    box.innerHTML = h.slice(-10).reverse().map(function (x) {
+    var histHtml = h.slice(-10).reverse().map(function (x) {
       var led = x.verdict_light === 'green' ? 'ok' : x.verdict_light === 'red' ? 'crit' : 'warn';
       var c = colorMap[x.verdict_light] || '#8a8f98';
       return '<div class="if-row">' +
@@ -5507,7 +5584,623 @@ var PT_I18N = {
         (x.verdict_score ? '<span class="u" style="color:' + c + '">' + x.verdict_score + '%</span>' : '') +
         '</div>';
     }).join('');
+    if (box) box.innerHTML = histHtml;
   }
+
+  /* ══════════════════ 传真机 FX-01（第 8 轮：纯复刻底版接注水检测后端，结构冻结只换内容） ══════════════════
+     官方时间轴/音效编排/相位机不动（摘机650→拨号950→接通750→传送3200→叮→回执1300）；
+     TRANSMIT 发真实 POST /water-probe check（与动画并行，r6 等待结构），3.2s 官方段走完而响应未回
+     → 等待态（LCD 传送中‥‥ 不显示假百分比 + 走纸音每 4-6s 一声渐弱 + 纸停全进位）；
+     响应到 → 叮 → 回执真实数据；等待中失败 → LCD 报错 + 纸复位回待命可重试。
+     !HAS_BRIDGE（浏览器直开 DEMO）走 8s mock；渠道/模型纸面下拉与甲板 wtChannel/wtModel 双向镜像。 */
+  var wtFax = (function () {
+    var root = $('wtFax');
+    if (!root) return { run: function () {}, busy: function () { return false; } };
+    var fx = root.querySelector('.fx');
+    var q = function (sel) { return root.querySelector(sel); };
+    var fxStateZh = q('[data-fx-state-zh]');
+    var fxStateEn = q('[data-fx-state-en]');
+    var fxCountEl = q('[data-fx-count]');
+    var fxText = q('[data-fx-text]');
+    var fxChSel = q('[data-fx-chsel]');
+    var fxModelSel = q('[data-fx-msel]');
+    var fxNo = q('[data-fx-no]');
+    var fxDateEl = q('[data-fx-date]');
+    var fxPaper = q('[data-fx-paper]');
+    var fxStampEl = q('[data-fx-stamp]');
+    var fxStampText = q('[data-fx-stamp-text]');
+    var fxMlang = q('[data-fx-mlang]');
+    var fxReceipt = q('[data-fx-receipt]');
+    var fxSendBtn = q('[data-fx-send]');
+    var fxClearBtn = q('[data-fx-clear]');
+    var fxTrigger = q('[data-fx-attach-sw]');
+    var fxModeBtns = Array.prototype.slice.call(root.querySelectorAll('.fx-mode'));
+
+    var fxPhase = 'ready';
+    var fxSerial = 881;                 /* 纸面单号，每完成一次传送 +1（原版从 NO.0881 起） */
+    var fxMode = 'probe';
+    var fxT0 = 0;                       /* 发送起点（回执「用时」用） */
+    var fxLastCh = '', fxLastM = '';    /* 本次检测的渠道/模型（回执/历史用） */
+    var fxSentStamp = '';               /* 检测时刻（回执「日期」用） */
+    var FX_WEEK_ZH = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    var FX_BUSY_PHASES = ['offhook', 'dialing', 'connecting', 'sending', 'sent', 'printed', 'tearing', 'loading', 'busy'];
+    var FX_PROBES = 8;                  /* 管道探针 8 项（后端 RunPipelineProbes：tokenizer×4/错误×2/finish×2） */
+    var FX_VERDICT_ZH = { green: '真实', red: '注水', yellow: '存疑', grey: '无基准' };
+
+    /* LCD 状态中文（原版 i18n zh 默认值硬编码；末两位为第 8 轮注水口径） */
+    var ST_ZH = { ready: '待命', offhook: '摘机', dialing: '拨号中 ‥‥', connecting: '已接通',
+      sending: '传送中 · 第 1 页', sent: '已送达', printed: '回执已打印', tearing: '撕下回执',
+      loading: '换纸中', busy: '占线，稍后再试', nomodel: '未选模型', fail: '传输失败 · 团结插件未启动?' };
+
+    function fxPad(n, w) { var s = String(n); while (s.length < w) s = '0' + s; return s; }
+    function fxNow() {
+      var d = new Date();
+      return {
+        date: d.getFullYear() + '-' + fxPad(d.getMonth() + 1, 2) + '-' + fxPad(d.getDate(), 2),
+        stamp: fxPad(d.getMonth() + 1, 2) + '-' + fxPad(d.getDate(), 2) + ' ' + fxPad(d.getHours(), 2) + ':' + fxPad(d.getMinutes(), 2),
+        week: FX_WEEK_ZH[d.getDay()]
+      };
+    }
+    /* LCD 右下小行读数（机器刻字，不翻译） */
+    function fxEnLine(p) {
+      var n = fxNow();
+      switch (p) {
+        case 'ready': return 'READY · ' + n.stamp + ' ' + n.week;
+        case 'offhook': return 'OFF HOOK';
+        case 'dialing': return 'DIALING · POMME-TOYS';
+        case 'connecting': return 'CONNECT · 14.4K';
+        case 'sending': return 'SENDING · P.01 · ' + (fx._pct || 10) + '%';
+        case 'sent': return 'TRANSMISSION OK';
+        case 'printed': return 'TEAR OFF · NO.' + fxPad(fxSerial, 4);
+        case 'tearing': return 'TEAR OFF · NO.' + fxPad(fxSerial, 4);
+        case 'loading': return 'LOADING · NO.' + fxPad(fxSerial, 4);
+        default: return '';
+      }
+    }
+    function fxShow(p) {
+      if (fxStateZh) fxStateZh.textContent = ST_ZH[p] || '';
+      if (fxStateEn) fxStateEn.textContent = fxEnLine(p);
+    }
+    var fxSfxTimers = [];                 /* 音效循环集中登记，相位切换统一清（防多轮抢播） */
+    var fxSfxHold = false;                /* 主动编排链中豁免清理（fxSetPhase 会误杀刚排的下一步音） */
+    function fxSfxClear() {
+      fxSfxTimers.forEach(function (t) { clearInterval(t); clearTimeout(t); });
+      fxSfxTimers = [];
+    }
+    function fxSfxIv(fn, ms) { var iv = setInterval(fn, ms); fxSfxTimers.push(iv); return iv; }
+    function fxSfxTo(fn, ms) { var to = setTimeout(fn, ms); fxSfxTimers.push(to); return to; }
+    function fxSetPhase(p) {
+      if (p !== fxPhase && !fxSfxHold) fxSfxClear();  /* 相位切换清音（主动编排链 fxSfxHold 时不误杀） */
+      fxPhase = p;
+      fx.setAttribute('data-fx-phase', p);
+      fxShow(p);
+      var busy = FX_BUSY_PHASES.indexOf(p) >= 0;
+      if (busy) fxPrintRestore();                    /* 纸进机器时信息必须完整 */
+      if (fxSendBtn) fxSendBtn.disabled = busy;
+      if (fxClearBtn) fxClearBtn.disabled = busy;
+      if (fxTrigger) fxTrigger.disabled = busy;
+      fxModeBtns.forEach(function (b) { b.disabled = busy; });
+      if (fxText) fxText.disabled = busy;
+      if (fxChSel) fxChSel.disabled = busy;
+      if (fxModelSel) fxModelSel.disabled = busy;
+      if (fxReceipt) fxReceipt.setAttribute('aria-hidden', p === 'sent' || p === 'printed' ? 'false' : 'true');
+    }
+
+    /* LCD 计数 = 管道探针项数（与纸面「探针 N 项」同源 FX_PROBES；input 监听机制保留照旧） */
+    function fxCountUpdate() {
+      if (fxCountEl) fxCountEl.textContent = fxPad(FX_PROBES, 4) + ' 项';
+    }
+    if (fxText) fxText.addEventListener('input', fxCountUpdate);
+
+    function fxPaintStamp() {
+      var probe = fxMode === 'probe';
+      if (fxStampEl) fxStampEl.classList.toggle('sug', !probe);
+      if (fxStampText) fxStampText.textContent = probe ? '注 水 检 测' : '基 准 比 对';
+    }
+    fxModeBtns.forEach(function (k) {
+      k.addEventListener('click', function () {
+        if (fxPhase !== 'ready') return;
+        if (fxMode === k.dataset.fxMode) return;   /* 同键重复点击不重盖 */
+        fxMode = k.dataset.fxMode;
+        fxModeBtns.forEach(function (b) {
+          var on = b === k;
+          b.classList.toggle('cur', on);
+          b.setAttribute('aria-checked', on ? 'true' : 'false');
+          b.tabIndex = on ? 0 : -1;
+        });
+        fxPaintStamp();
+        /* 盖章动画：scale 1.6→1 + opacity 0→1 spring 下落叩击（REDUCED 跳过） */
+        if (fxStampEl && !REDUCED) {
+          fxStampEl.classList.remove('stamping');
+          void fxStampEl.offsetWidth;              /* 重排触发：连续切换也重放动画 */
+          fxStampEl.classList.add('stamping');
+        }
+        playFile('tick-fs626659', 1);              /* 官方切换类别播键音 */
+      });
+    });
+
+    /* 扳机开关：机器信息框显隐（只切可见性，不塌高度；CSS 见 .fx-minfo-clip）。
+       配平模型：开态基准（input 自然高 / 纸满高）只在【首次满文字】时记录一次。
+       关 = 脱流框 → input 回基准高 → 量纸面缺口 → 补高缺口。
+       开 = input 回基准高 → 打字机重打（钉子保证 minfo 满高）。 */
+    var fxOnBase = null;                 /* { inputH, paperH } 开态基准，一次定格 */
+    function fxOnBaseReady() {
+      if (fxOnBase) return true;
+      var input = q('.fx-input'), paper = q('.fx-paper');
+      if (!input || !paper) return false;
+      if (!fxMinfoFullOK()) return false;   /* 未打完时 minfo 内容矮，基准会污染 */
+      input.style.height = '';
+      fxOnBase = { inputH: input.getBoundingClientRect().height,
+                   paperH: paper.getBoundingClientRect().height };
+      return true;
+    }
+    function fxOffBalance() {
+      /* off 态：input 先回开态基准高，再按纸面缺口补高 */
+      var input = q('.fx-input'), paper = q('.fx-paper');
+      if (!fxOnBase || !input || !paper) return;
+      input.style.height = fxOnBase.inputH + 'px';
+      var d = fxOnBase.paperH - paper.getBoundingClientRect().height;
+      if (Math.abs(d) > 0.5) input.style.height = (fxOnBase.inputH + d) + 'px';
+    }
+    if (fxTrigger) {
+      fxTrigger.addEventListener('click', function () {
+        if (fxPhase !== 'ready') return;
+        var on = fxTrigger.getAttribute('aria-checked') !== 'true';
+        fxPrintUnpin();                             /* 先无条件撤钉 */
+        fxTrigger.setAttribute('aria-checked', on ? 'true' : 'false');
+        if (!on) {
+          fxPrintRestore();                         /* 恢复满文字再量基准 */
+          fxOnBaseReady();
+          fx.setAttribute('data-fx-attach', 'off');
+          fxOffBalance();
+        } else {
+          fx.setAttribute('data-fx-attach', 'on');
+          var input = q('.fx-input');
+          if (input && fxOnBase) input.style.height = fxOnBase.inputH + 'px';
+          fxPrintMinfo();                           /* 打完时 done() 会记基准 */
+        }
+      });
+    }
+
+    /* 机器信息打字机：显示时逐字打印，伴随 fax-print 噼里啪啦（打印机风格）。
+       打印期间用满高 min-height 钉住，全程高度不变 */
+    var fxPrintTk = 0;
+    var fxMinfoFullH = null;             /* 满高首次量测缓存（布局无关） */
+    var fxMinfoNodesSnap = null;         /* 节点快照：发现失活节点立即重建 */
+    function fxMinfoNodes() {
+      if (fxMinfoNodesSnap && fxMinfoNodesSnap.some(function (n) { return !n.isConnected; })) {
+        fxMinfoNodesSnap = null;                     /* 有死节点：重建 */
+      }
+      if (!fxMinfoNodesSnap) {
+        var out = [], w = document.createTreeWalker(q('.fx-minfo'), NodeFilter.SHOW_TEXT, null), n;
+        while ((n = w.nextNode())) if (n.nodeValue.trim()) out.push(n);
+        fxMinfoNodesSnap = out;
+      }
+      return fxMinfoNodesSnap;
+    }
+    function fxPrintUnpin() {
+      var box = q('.fx-minfo');
+      if (box) box.style.minHeight = '';
+    }
+    function fxPrintRestore() {
+      fxPrintTk++;                                   /* 取消进行中的打印 */
+      fxMinfoNodes().forEach(function (node) { if (node.__fxFull != null) node.nodeValue = node.__fxFull; });
+      fxPrintUnpin();
+    }
+    /* 打字机是否满文字（= 没有进行中的打印）：只有此时纸高才可作为基准 */
+    function fxMinfoFullOK() {
+      var nodes = fxMinfoNodes();
+      for (var k = 0; k < nodes.length; k++) {
+        var v = nodes[k].nodeValue, f = nodes[k].__fxFull;
+        if (f != null && v !== f) return false;
+      }
+      return true;
+    }
+    function fxPrintMinfo() {
+      var box = q('.fx-minfo');
+      var nodes = fxMinfoNodes();
+      if (!box || !nodes.length) return;
+      if (fx.getAttribute('data-fx-attach') === 'off') return;   /* 关态不重打（原版同径） */
+      fxPrintRestore();                            /* 先恢复满文，再从头重打（值变后快照自动重建） */
+      fxPrintTk++;
+      var tk = fxPrintTk;
+      /* 满高只信首次载入的量测：clip 脱流期间 shrink-to-fit 会量出假值 */
+      if (fxMinfoFullH == null) fxMinfoFullH = box.offsetHeight;
+      box.style.minHeight = fxMinfoFullH + 'px';
+      nodes.forEach(function (node) { node.__fxFull = node.nodeValue; node.nodeValue = ''; });
+      var done = function () {
+        if (tk !== fxPrintTk) return;
+        fxPrintUnpin();
+        fxOnBaseReady();                           /* 满文字时刻：可记/校准开态基准 */
+      };
+      if (REDUCED) { nodes.forEach(function (node) { node.nodeValue = node.__fxFull; }); fxPrintUnpin(); return; }
+      var i = 0, j = 0;
+      /* 逐字打字（视觉每字 10ms/行间 16ms）：每 5 字一声 fax-print */
+      var tick = 0;
+      (function step() {
+        if (tk !== fxPrintTk) return;              /* 已被取消/替换 */
+        var node = nodes[i];
+        if (!node) { done(); return; }             /* 打完 */
+        node.nodeValue = node.__fxFull.slice(0, ++j);
+        if (++tick % 5 === 0) playFile('fax-print-' + (1 + Math.floor(Math.random() * 3)), 0.5);
+        if (j >= node.__fxFull.length) { i++; j = 0; setTimeout(step, 16); }   /* 换行进给 */
+        else setTimeout(step, 10);
+      })();
+    }
+
+    /* ———— 渠道/模型纸面下拉 ⇆ 甲板 wtChannel/wtModel 双向镜像（甲板下拉为选项唯一来源）———— */
+    var deckCh = $('wtChannel'), deckM = $('wtModel');
+    function fxOpts(sel) {
+      return Array.prototype.map.call(sel.options, function (o) { return o.value + '|' + o.text; }).join('\n');
+    }
+    function fxSyncSel() {
+      if (!deckCh || !deckM || !fxChSel || !fxModelSel) return;
+      if (fxOpts(fxChSel) !== fxOpts(deckCh)) fxChSel.innerHTML = deckCh.innerHTML;
+      if (fxChSel.value !== deckCh.value) fxChSel.value = deckCh.value;
+      if (fxOpts(fxModelSel) !== fxOpts(deckM)) fxModelSel.innerHTML = deckM.innerHTML;
+      if (fxModelSel.value !== deckM.value) fxModelSel.value = deckM.value;
+    }
+    /* minfo 四行值 = 渠道/模型/基准·官方/探针 N 项（渠道模型实时取当前选择） */
+    function fxPaint() {
+      /* 渠道从未拉过（甲板下拉还空着）才触发：桥接异步/DEMO 同步；回来后 paintWaterChannels 会再镜像。
+         插件未启动的兜底单 tuanjie 项上屏后甲板非空，不再重拉（防失败循环）。 */
+      if (!waterChans && deckCh && !deckCh.options.length) loadWaterChannels();
+      fxSyncSel();
+      if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
+      if (fxDateEl) fxDateEl.textContent = fxNow().date;
+      var mch = q('[data-fx-mch]'), mm = q('[data-fx-mmodel]'), mp = q('[data-fx-mprobe]'), pp = q('[data-fx-pprobe]');
+      if (mch) mch.textContent = (fxChSel && fxChSel.value) || '—';
+      if (mm) mm.textContent = (fxModelSel && fxModelSel.value) || '—';
+      if (mp) mp.textContent = FX_PROBES + ' 项';
+      if (pp) pp.textContent = FX_PROBES + ' 项';
+      fxMinfoNodesSnap = null;                     /* 值已换：强制重建打字机快照 */
+    }
+    if (fxChSel) fxChSel.addEventListener('change', function () {
+      if (deckCh) deckCh.value = fxChSel.value;
+      fillWaterModels();                           /* 甲板模型列表随新渠道重建（既有函数） */
+      fxSyncSel();
+      fxPaint();
+      fxPrintMinfo();                              /* 值变重打（既有打字机机制） */
+    });
+    if (fxModelSel) fxModelSel.addEventListener('change', function () {
+      if (deckM) deckM.value = fxModelSel.value;
+      fxPaint();
+      fxPrintMinfo();
+    });
+    if (deckCh) deckCh.addEventListener('change', function () { fillWaterModels(); fxSyncSel(); fxPaint(); });
+    if (deckM) deckM.addEventListener('change', function () { fxSyncSel(); fxPaint(); });
+
+    /* 回执真实数据（dt 标签已在 HTML 换注水口径，dd 填 check 报告真实值） */
+    function fxFillReceipt(rep) {
+      var v = (rep && rep.verdict) || {};
+      var light = v.light || 'grey';
+      var set = function (sel, t) { var el = q(sel); if (el) el.textContent = t; };
+      set('[data-fx-r-date]', fxSentStamp || fxNow().stamp);
+      set('[data-fx-r-target]', ((rep && rep.channel) || fxLastCh || '—') + ' · ' + ((rep && rep.model) || fxLastM || '—'));
+      set('[data-fx-r-account]', (rep && rep.account) || '—');
+      set('[data-fx-r-verdict]', FX_VERDICT_ZH[light] || '—');
+      set('[data-fx-r-score]', v.score ? v.score + '%' : '—');
+      var sec = Math.max(0, Math.round((performance.now() - fxT0) / 1000));
+      set('[data-fx-r-time]', fxPad(Math.floor(sec / 60), 2) + "'" + fxPad(sec % 60, 2));
+      set('[data-fx-r-result]', v.reason || '检测完成');
+      set('[data-fx-r-ref]', 'W-' + fxPad(fxSerial, 4));
+    }
+    /* 会话历史入队（与 loadWaterHistory 的 waterHist 同构；桥接模式后端已入历史，此处同步上屏读数用） */
+    function fxHistPush(rep) {
+      var v = (rep && rep.verdict) || {};
+      var at = (rep && rep.at) || '';
+      if (!at) {
+        var d = new Date();
+        at = d.getFullYear() + '-' + fxPad(d.getMonth() + 1, 2) + '-' + fxPad(d.getDate(), 2) + ' ' +
+          fxPad(d.getHours(), 2) + ':' + fxPad(d.getMinutes(), 2) + ':' + fxPad(d.getSeconds(), 2);
+      }
+      waterHist.push({ channel: (rep && rep.channel) || fxLastCh, model: (rep && rep.model) || fxLastM,
+        account: (rep && rep.account) || '—', at: at,
+        verdict_light: v.light || 'grey', verdict_score: v.score || 0 });
+    }
+    /* DEMO mock（!HAS_BRIDGE）：形状与后端 handleWaterCheck 响应一致，约 8s 返回绿「真实」91% */
+    function mockReport(channel, model) {
+      var d = new Date();
+      return {
+        ok: true, action: 'check',
+        report: {
+          model: model, channel: channel, account: 'demo-account',
+          at: d.getFullYear() + '-' + fxPad(d.getMonth() + 1, 2) + '-' + fxPad(d.getDate(), 2) + ' ' +
+            fxPad(d.getHours(), 2) + ':' + fxPad(d.getMinutes(), 2) + ':' + fxPad(d.getSeconds(), 2),
+          verdict: { light: 'green', score: 91, reason: '模型一致，未发现注水' },
+          items: [
+            { name: '漂移检测', result: '✔', detail: '指纹漂移 1.2%（阈值 <5%）' },
+            { name: '管道连通', result: '✔', detail: FX_PROBES + ' 项管道探针全部连通' },
+            { name: '基准比对', result: '✔', detail: '与官方基准分布相似度 91%' }
+          ],
+          first_time: false
+        },
+        probes: [], probe_compare: [], dist: null, dist_similarity: null,
+        canary: { user_id: 'demo', model: model, base_tokens: 128, prompt_tokens: 121, drift_pct: 1.2,
+          answers: { repeat: true, math: true, knowledge: true } }
+      };
+    }
+
+    /* ———— 第 8 轮注水接线：真实 POST /water-probe check 与官方动画并行（r6 等待结构）————
+       官方 3.2s 传送段照播不等网络；走完而响应未回 → 等待态（LCD 传送中‥‥ + 走纸音渐弱 + 纸停全进位）；
+       响应到点（无论先后）→ 叮 → 回执真实数据；等待中失败 → LCD 报错 + 纸复位回待命可重试。 */
+    var fxPending = null;                 /* { done, err, rep } 响应投递箱（每次发送重建） */
+    var fxWaitOn = false;                 /* 等待态标记（响应到点立即收尾，不等下一声走纸音） */
+    var fxGen = 0;                        /* 发送代际号：上一次发送的迟到响应不得污染新一轮 */
+    function fxSettle(err, rep, gen) {
+      if (!fxPending || fxPending.done || (gen !== undefined && gen !== fxGen)) return;
+      fxPending.done = true; fxPending.err = err || null; fxPending.rep = rep || null;
+      if (fxPhase === 'sending' && fxWaitOn) {
+        fxWaitOn = false;
+        fxSfxClear();
+        if (fxPending.err) fxFailFlow(); else fxFinishSend(fxPending.rep);
+      }
+    }
+    function fxDoCheck(channel, model, gen) {
+      if (!HAS_BRIDGE) {
+        /* DEMO：约 8s 后返回绿「真实」91% 假报告（裸 setTimeout：响应定时器不可入 fxSfxTimers，
+           否则 3.2s 收尾的 fxSfxClear 会把它清掉，等待态永不结束）。mockReport 造的是与后端
+           同形的完整响应，fxSettle 同 fetch 分支一样取 .report */
+        setTimeout(function () { fxSettle(null, mockReport(channel, model).report, gen); }, REDUCED ? 100 : 8000);
+        return;
+      }
+      fetch("http://127.0.0.1:8788/water-probe", {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'check', channel: channel, model: model })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d && d.ok && d.report) fxSettle(null, d.report, gen);
+        else fxSettle({ msg: (d && d.msg) || '未知错误' }, undefined, gen);
+      }).catch(function (e) { fxSettle({ msg: String(e) }, undefined, gen); });
+    }
+    /* 等待态：纸停在全进位（-118%），走纸音每 4-6s 一声渐弱 */
+    function fxEnterWait() {
+      fxWaitOn = true;
+      if (fxStateZh) fxStateZh.textContent = '传送中 ‥‥';   /* 等待态不显示假百分比 */
+      if (fxStateEn) fxStateEn.textContent = 'SENDING';
+      var step = 0;
+      (function tick() {
+        if (fxPhase !== 'sending' || !fxWaitOn) return;
+        playFile('fax-feed-' + (1 + step % 3), Math.max(0.15, 0.4 - step * 0.05));
+        step++;
+        fxSfxTo(tick, 4000 + Math.floor(Math.random() * 2000));
+      })();
+    }
+    /* 等待中失败：LCD 报错 + fax-error + 纸复位回待命可重试 */
+    function fxFailFlow() {
+      fxSfxClear();
+      if (fxPaper) fxPaper.style.transform = 'translateY(0)';
+      fxSetPhase('ready');
+      if (fxStateZh) fxStateZh.textContent = ST_ZH.fail;
+      if (fxStateEn) fxStateEn.textContent = 'TRANSMIT FAILED';
+      playFile('fax-error');
+      setTimeout(function () { if (fxPhase === 'ready') fxShow('ready'); }, 1500);
+    }
+    /* 收尾链（官方常量不动）：叮 → 回执滑入 1300ms → printed 停 1150 收尾；由 sendDone 或 fxSettle 触发 */
+    function fxFinishSend(rep) {
+      var printStep = 0;             /* 官方 print-1/2/3 轮换计数（回执段） */
+      fxSfxHold = true;            /* 编排链开始：相位切换不再清后续排定的音 */
+      fxFillReceipt(rep);
+      fxHistPush(rep);
+      fxSetPhase('sent');
+      playFile('fax-ding', 1);   /* 已送达：叮一声 */
+      /* 官方回执段 print 循环：print-1→2→3 轮换，与回执滑入同刻起、落位同刻停 */
+      playFile('fax-print-' + (1 + printStep++ % 3), 1);   /* 首声立即（与叮同刻） */
+      fxSfxIv(function () {
+        if (fxPhase !== 'sent' && fxPhase !== 'printed') return;   /* 撕纸抢跑：静默停 */
+        playFile('fax-print-' + (1 + printStep++ % 3), 1);
+      }, 120);
+      fxSfxTo(function () {
+        if (fxPhase !== 'sent' && fxPhase !== 'printed') return;
+        fxSetPhase('printed');
+        fxSfxTo(function () {
+          if (fxPhase !== 'sent' && fxPhase !== 'printed') return;
+          fxSfxClear();
+          fxSfxHold = false;        /* 编排链结束：恢复正常相位清音 */
+          playFile('fax-ding', 1);   /* 收尾：叮+落定 */
+          setTimeout(function () { playFile('fax-offhook', 1); }, 200);
+        }, REDUCED ? 0 : 1150);
+      }, REDUCED ? 0 : 1300);   /* 滑入 1300ms（官方 Duration，sent→printed 连续一条） */
+    }
+
+    function fxSend() {
+      if (fxPhase !== 'ready') return;
+      playFile('tick-fs626659', 1);   /* 键行音（官方：TRANSMIT 点击有键音） */
+      var model = (fxModelSel && fxModelSel.value) || '';
+      if (!model) {
+        /* 未选模型：报错 + fax-error，停留待命不发 */
+        playFile('fax-error');
+        if (fxStateZh) fxStateZh.textContent = ST_ZH.nomodel;
+        setTimeout(function () { if (fxPhase === 'ready') fxShow('ready'); }, 1500);
+        return;
+      }
+      var channel = (fxChSel && fxChSel.value) || 'tuanjie';
+      fxLastCh = channel; fxLastM = model;
+      fxT0 = performance.now();
+      fxSentStamp = fxNow().stamp;    /* 检测时刻（回执「日期」用） */
+      fxGen += 1;                     /* 新一轮发送：旧响应作废 */
+      fxPending = { done: false, err: null, rep: null };
+      fxWaitOn = false;
+      fx._pct = 10;
+      /* 官方线性时间轴（音画交叉验证）：摘机650→拨号950（六音160ms）→接通750→传送（假进度 10%→100%，3.2s） */
+      fxSetPhase('offhook');
+      playFile('fax-offhook');
+      fxDoCheck(channel, model, fxGen);   /* 真实请求即发（与动画并行；官方节奏不被网络改写） */
+      setTimeout(function () {
+        fxSetPhase('dialing');
+        playFile('fax-dial-1', 1);   /* 官方：dial-1 立即 1 声 */
+        /* 官方拨号序列：dial-2→6 组成完整六音，间隔 160ms */
+        for (var di = 2; di <= 6; di++) {
+          (function (n) {
+            fxSfxTo(function () {
+              if (fxPhase === 'dialing') playFile('fax-dial-' + n, 1);
+            }, REDUCED ? 0 : 160 * (n - 1));
+          })(di);
+        }
+        setTimeout(function () {
+          fxSetPhase('connecting');
+          playFile('fax-carrier', 1);   /* 载波握手音 0.70s 播一次 */
+          setTimeout(function () {
+            fxSetPhase('sending');
+            playFile('fax-send-key');
+            var p0 = performance.now();
+            var feedStep = 0;             /* 官方 feed-1/2/3 轮换计数 */
+            if (fxPaper) { fxPaper.classList.remove('up'); fxPaper.style.transform = ''; }
+            /* 主时钟=进度百分比：10%→100%，纸位移/滚轮声/LCD 全部由 k 驱动（3.2s 传送）；
+               k=1（100%）时由循环自己收尾——纸全进/声渐停/切送达同刻发生 */
+            var sendDone = function () {
+              if (fxPhase !== 'sending') return;
+              fx._pct = 100;
+              if (fxStateEn) fxStateEn.textContent = fxEnLine('sending');
+              fxSfxClear();                     /* 最后一步声已响，收尾即静 */
+              if (fxPending && fxPending.done) {          /* 响应先回：直接收尾，不进等待态 */
+                fxPending.err ? fxFailFlow() : fxFinishSend(fxPending.rep);
+                return;
+              }
+              fxEnterWait();                    /* 官方段走完响应未回：进等待态（纸停全进位） */
+            };
+            fxSfxTo(function tick() {
+              if (fxPhase !== 'sending') { fxSfxClear(); return; }
+              var k = Math.min(1, (performance.now() - p0) / 3200);
+              var paper = q('.fx-paper');
+              if (paper) paper.style.transform = 'translateY(' + (-118 * k).toFixed(2) + '%)';
+              fx._pct = Math.round(10 + k * 90);            /* 10% → 100% */
+              if (fxStateEn) fxStateEn.textContent = fxEnLine('sending');
+              if (k >= 1) { sendDone(); return; }           /* 100%=纸全进=切送达 */
+              /* 官方传送段走纸音：feed-1→2→3 轮换，每步 1 声——与纸位移同一时钟 */
+              playFile('fax-feed-' + (1 + feedStep % 3), 0.55 - k * 0.25);
+              feedStep++;
+              fxSfxTo(tick, k > 0.7 ? 107 + (k - 0.7) * 500 : 107);   /* 末段渐稀 */
+            }, 107);
+          }, REDUCED ? 0 : 750);   /* 接通 750ms */
+        }, REDUCED ? 0 : 950);   /* 拨号 950ms */
+      }, REDUCED ? 0 : 650);     /* 摘机 650ms */
+    }
+
+    function fxTear() {
+      if (fxPhase !== 'printed') return;
+      fxSetPhase('tearing');
+      /* 撕断段官方真相：3 强峰 270ms 内（间隔 170/100） */
+      playFile('fax-tear', 1);                                  /* 第 1 峰：立即 */
+      fxSfxTo(function () { if (fxPhase === 'tearing') playFile('fax-tear', 1); }, 170);   /* 第 2 峰 */
+      fxSfxTo(function () { if (fxPhase === 'tearing') playFile('fax-tear', .9); }, 270);  /* 第 3 峰 */
+      /* 掉落段：load 音轨 mod-3 轮换 */
+      fxSfxTo(function () {
+        if (fxPhase !== 'tearing') return;
+        var dropStep = 0;
+        playFile('fax-load-' + (1 + dropStep++ % 3), 1);
+        fxSfxIv(function () {
+          if (fxPhase !== 'tearing') { fxSfxClear(); return; }
+          playFile('fax-load-' + (1 + dropStep++ % 3), 1);
+        }, 120);                 /* 官方掉落摩擦间隔 */
+      }, 420);                   /* 撕断动画 420ms 后掉落开始 */
+      setTimeout(function () {
+        /* 换纸段：吞纸声=feed-1/2/3 复用；换单 serial+1 回待命（零网络） */
+        fxSerial += 1;
+        if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
+        if (fxDateEl) fxDateEl.textContent = fxNow().date;
+        if (fxText) fxText.value = '';
+        fxCountUpdate();
+        loadWaterHistory();          /* 撕纸换单同刻：刷新甲板历史 + 上屏结论（syncWaterVerdict 在其内） */
+        fxSetPhase('loading');
+        var swallowStep = 0;           /* 换纸段独立 mod-3 计数 */
+        playFile('fax-feed-' + (1 + swallowStep++ % 3), 1);   /* 吞纸首声立即 */
+        fxSfxIv(function () {
+          if (fxPhase !== 'loading') { fxSfxClear(); return; }
+          playFile('fax-feed-' + (1 + swallowStep++ % 3), 1);
+        }, 107);               /* 吞纸段与官方步进同钟（吞纸 1100ms） */
+        setTimeout(function () {
+          fxSfxClear();          /* 吞纸结束：停 feed 循环 */
+          /* 新纸步进降下：从 -118% 每 107ms 一步匀速回 0，打印声伴纸同响 */
+          var fresh0 = performance.now();
+          var freshStep = 0;
+          playFile('fax-print-' + (1 + freshStep++ % 3), 0.5);   /* 打印首声与纸出同刻 */
+          fxSfxIv(function () {
+            if (fxPhase !== 'loading') { fxSfxClear(); return; }
+            playFile('fax-print-' + (1 + freshStep++ % 3), 0.5);
+          }, 100);
+          fxSfxTo(function down() {
+            if (fxPhase !== 'loading') { fxSfxClear(); return; }
+            var kk = Math.min(1, (performance.now() - fresh0) / 2000);
+            if (fxPaper) fxPaper.style.transform = 'translateY(' + (-118 * (1 - kk)).toFixed(2) + '%)';
+            if (kk >= 1) return;         /* 终值由 ready 切换统一归零 */
+            fxSfxTo(down, 107);
+          }, 107);
+          fxSfxTo(function () {
+            fxSfxClear();          /* 纸落位即停打印声 */
+            if (fxPaper) fxPaper.style.transform = 'translateY(0)';   /* 强制归零：防末帧残余压标题 */
+            fxSetPhase('ready');
+            /* 新纸不重打机器信息：吞纸时 fxPrintRestore 已恢复完整文字（原版同径） */
+          }, REDUCED ? 0 : 2000);   /* 新纸打印段 */
+        }, REDUCED ? 0 : 1100);   /* 换纸吞纸 */
+      }, REDUCED ? 0 : 1350);       /* 撕断 420 + 掉落 900 ≈ 官方点击→换纸间隔 */
+    }
+
+    /* CLEAR：点按清纸；长按 1.5 秒演示占线 */
+    var fxClearTimer = null, fxClearLong = false;
+    if (fxClearBtn) {
+      fxClearBtn.addEventListener('pointerdown', function () {
+        if (fxPhase !== 'ready') return;
+        fxClearLong = false;
+        fxClearTimer = setTimeout(function () {
+          fxClearLong = true;
+          fxSetPhase('busy');
+          playFile('fax-error');
+          setTimeout(function () { if (fxPhase === 'busy') fxSetPhase('ready'); }, 1500);
+        }, 1500);
+      });
+      var fxClearUp = function () { if (fxClearTimer) { clearTimeout(fxClearTimer); fxClearTimer = null; } };
+      fxClearBtn.addEventListener('pointerup', fxClearUp);
+      fxClearBtn.addEventListener('pointerleave', fxClearUp);
+      fxClearBtn.addEventListener('click', function () {
+        if (fxClearLong) { fxClearLong = false; return; }
+        if (fxPhase !== 'ready') return;
+        playFile('tick-fs626659', 1);
+        if (fxText) fxText.value = '';
+        fxCountUpdate();
+      });
+    }
+
+    if (fxSendBtn) fxSendBtn.addEventListener('click', fxSend);
+    if (fxReceipt) fxReceipt.addEventListener('click', fxTear);
+
+    if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
+    if (fxDateEl) fxDateEl.textContent = fxNow().date;
+    fxPaintStamp();
+    fxCountUpdate();
+    fxSetPhase('ready');
+    /* 打字机不在脚本装载时打（此时 UI_CUR/语言尚未赋值，且覆盖层隐藏）——
+       openFaxOverlay() 会先 fxPaint() 填真实值再 printMinfo() */
+
+    return { run: fxSend, paint: fxPaint, printMinfo: fxPrintMinfo, busy: function () { return fxPhase !== 'ready'; } };
+  })();
+
+  /* ═══════════════ 传真机独立子页面：整屏覆盖层开关（第 8 轮：结构冻结接注水后端，整页=一台机器+返回键） ═══════════════
+     设置甲板「☌ 注水检测」/ 注水甲板「检测」= 整屏打开传真机页；「← 返回」/ Esc 关层回原甲板（设置 / 注水）。
+     第 8 轮：第 7 轮纯复刻底版上只换内容，TRANSMIT 接真实 POST /water-probe check（官方时间轴不动），
+     纸面渠道/模型下拉与甲板 wtChannel/wtModel 双向镜像；覆盖层不动模式键/鼓轮/传送带（导航面不变大）。 */
+  var fxOverlayShown = false;
+  function openFaxOverlay() {
+    var o = $('fxOverlay');
+    if (!o || fxOverlayShown) return;
+    fxOverlayShown = true;
+    o.hidden = false;
+    /* 第 7 轮纯复刻：整页=一台机器，无档案/无读数条；进入即打字机打印机器信息（REDUCED 整块满文） */
+    if (wtFax && wtFax.paint) wtFax.paint();
+    if (wtFax && wtFax.printMinfo) wtFax.printMinfo();
+  }
+  function closeFaxOverlay() {
+    var o = $('fxOverlay');
+    if (!o || !fxOverlayShown) return;
+    fxOverlayShown = false;
+    o.hidden = true;
+  }
+  /* 返回 = 标题栏左上红圆点（macOS 关窗位）：点红点关层回原甲板（Esc 同效） */
+  var fxCloseDot = document.querySelector('#wtFax .fx-lights i');
+  if (fxCloseDot) {
+    fxCloseDot.title = '返回';
+    fxCloseDot.addEventListener('click', closeFaxOverlay);
+  }
+
   // 注水检测 / 媒体转路由是常驻外壳子页面：一次性绑定在初始化做，进入模式时刷数据。
   // 注水检测属主动低频操作，不进 3 秒轮询（被动观测随下面这组 /accounts 轮询顺带更新）。
   // 3 秒轮询（进行中面板要跟手；矩阵子页面开着时一并刷新它的进行中徽章；
@@ -6485,6 +7178,25 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.6.4', date: '2026-08-29', groups: [
+      { label: '🚀 新功能', items: [
+        '注水检测独立传真机页（FX-01）：设置/注水甲板一键进入整页弹窗，原版 pomme-ui 传真机逐字复刻（580×784 结构冻结、全动线时间轴对齐官方、窄窗滚动不压缩），标题栏红圆点=返回',
+        '真检测接线：纸面渠道/模型下拉与甲板双向镜像，发送即全流程检测（前 3.2 秒官方时间轴照播、等待态不显假百分比），回执回填真实判定/相似度/账号/用时，失败可重试，撕纸刷新甲板历史',
+        '新增 docs/fidelity-audit.md 忠实度判定说明书' ] } ] },
+    { v: 'v3.6.3', date: '2026-08-29', groups: [
+      { label: '🚀 新功能', items: [
+        'B.AI 甲板模型矩阵上线：8891 新增 GUI 专用 /model/matrix（复用注水渠道共享配置里的 B.AI key，带 Authorization 打上游 /v1/models，上游 data 原样透传），甲板按厂商分组显示全部真实模型；裸名（无 provider 前缀）分组走兜底拆分——取分隔符前导段去尾数，hy3→HY3、qwen3.8-27b→QWEN，新厂商上架不必改表',
+        '拉杆刷新，官方增删自动跟随：拉杆点火与「↻ 刷新」各强制实时拉一次，3 秒轮询只吃进程内缓存——官网零轮询铁律延伸到 B.AI（实测 18 分钟内上游 44→42，mimo-v2.5 / mimo-v2.5-pro 下架，代码零改动即跟上）',
+        '缓存语义：失败负缓存 60 秒（期内不重试）、刷新失败保留旧数据不清空、并发冷启动单飞（8 个并发只打上游 1 次）；无 key 显示 NO KEY +「未配置 B.AI 密钥（注水检测页填入）」，失败显示 ERR +「上游拉取失败 · 60 秒内不重试」，不再退化成 401 空白；副行改显「缓存于 HH:MM」' ] },
+      { label: '🐛 Bug 修复', items: [
+        'B.AI 甲板三处境外泄漏收口：/v1/models 无 key 纯透传必 401（模型矩阵因此从来没出过数据）、loadPluginMeta 每 3 秒把 /model/info、loadPluginStats 每 3 秒把 /v1/stats 打到 api.b.ai（上游没有这两个端点，Cloudflare 一律 403）——三处全部改为不再出网，/v1/models 透传语义逐字节不变',
+        'fetchOnRun 闩锁漏清：原先由 tj/cb 分支各自清，B.AI 无积分分支会漏清，一旦拉杆刷新就退化成 3 秒强刷打官网；改为 refreshPluginView 顶部一次性消费',
+        '删除从未被任何 JS 绘制过的 baiFree 死灯（「免费」角标是静态 CSS 徽章，保留）；baStModelsSub 占位文案「实时拉取」改「拉杆刷新」' ] } ] },
+    { v: 'v3.6.2', date: '2026-08-28', groups: [
+      { label: '🚀 新功能', items: [
+        'K3 节奏器改造为 429 兜底：上游 KIMI-K3 限流口径 2026-08 已改（429 体不再含 used/cap，改为 Sliding window TPM limit exceeded for model_group=KIMI-K3… 多带 Retry-After: 60 头；原 cap=200000 滑窗记账前提失效），改造为纯响应式 429 兜底：删本地 cap/主动排队，改按上游 Retry-After 等待后原样重发（缺省 60s，恰为一个窗口），单请求总预算 30 分钟，预算内客户端永不看到 429',
+        '账号池路径接入兜底：原 429 兜底只挂在单账号路径，账号池下 K3 流量实际不受保护；本次把兜底循环搬到账号池路径（与 402 换号、瞬态重试并列），双路径统一语义',
+        'GUI 同步：「K3 节奏」开关文案/i18n 七语改为「K3 429 兜底」，去掉已无意义的窗口用量展示；「等待中 N」表示当前被兜底接管的进行中请求数' ] } ] },
     { v: 'v3.6.1', date: '2026-08-28', groups: [
       { label: '🚀 新功能', items: [
         '疑似官方判定变更告警：上游 401 命中「请升级 / x-codely-signature」（官方明示签名被判无效）即时告警；换 cli_api_key 后仍连续 401≥3 次亦告警——团结视图顶部红色警示条提示「检查官方 CLI 更新」，附命中信号与发生时间，可关闭，恢复 200 自动解除；/health 暴露 judgment_alert / judgment_signal / judgment_since 供脚本监测' ] },
@@ -6878,6 +7590,7 @@ var PT_I18N = {
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !e.target.matches('input, textarea')) {
         hideModelTip();
+        if (fxOverlayShown) { closeFaxOverlay(); return; }   /* 传真机子页：Esc 关层回原甲板（设置 / 注水） */
         if (document.querySelector('.modal-mask')) { closeModal(); return; }
         if (curMode === 'water' || curMode === 'media') { PTApp.selectMode('set'); return; }
         if (curMode !== 'cmd') PTApp.selectMode('cmd');
@@ -6999,7 +7712,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.6.3';
+  var UI_CUR = 'v3.6.4';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
