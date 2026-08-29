@@ -91,11 +91,15 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - 协议层无 tools 字段，**只能对话，不能作为子智能体**（UI 顶栏已标警示）
 - Notion 限流史：曾因高频测试触发限流，冷却 48h 后恢复；试探一次就会重置倒计时
 
-### b.ai —— 已移除（2026-08-19，用户明确要求）
-- 曾做成插件后整个拆除（commit 9fd9bf9）。原因：其 "deepseek-v4-flash" 实测为
-  2025 上半年的 DeepSeek 推理系模型换皮（知识截止 2025H1，不知道 2025-12 的 V4），
-  且 CF WAF 滚动封锁长请求（1010），不适合 Agent
-- 若用户再提起 b.ai：提醒以上结论，别建议重新接入
+### B.AI / b.ai（8891）——已重新接入（v3.5.0），但保留当年实测结论
+- **现状**：`internal/bai`，COMMAND 键副页，Go 栈透明转发 `https://api.b.ai`；
+  模型矩阵走 GUI 专用旁路 `/model/matrix`（详见 `docs/bai-model-matrix-design.md`）
+- **当年实测结论（2026-08-19 曾据此整个拆除，commit 9fd9bf9；结论本身未被推翻）**：
+  其 "deepseek-v4-flash" 实测为 2025 上半年的 DeepSeek 推理系模型换皮（知识截止 2025H1，
+  不知道 2025-12 的 V4），且 CF WAF 滚动封锁长请求（1010）——**这一路不适合当主力 Agent 后端**
+- 上游 `/v1/models` 实测只给 `id/object/created/owned_by/supported_endpoint_types`，
+  `created` 恒为占位值、无任何价格或免费字段；`/model/info`、`/key/info` 等元数据路径一律 403
+  （网关只放行推理路径）。**别指望从接口自动判定模型是否免费**
 
 ## 已踩的坑（改代码前必读）
 

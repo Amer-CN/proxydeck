@@ -2406,8 +2406,7 @@ body.pt-try { background: var(--pt-paper); }
                   </div>
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
-                    <span class="pt-dot" data-dot="baiFree"><span>免费</span><b></b></span>
-                    <span class="pt-dot warn" data-dot="baiProxy" title="B.AI 上游在境外：本机必须挂代理/梯子才能连通，免费不等于可直接用"><span>需代理</span><b></b></span>
+                    <span class="pt-dot warn" data-dot="baiProxy" title="B.AI 上游在境外：本机必须挂代理/梯子才能连通"><span>需代理</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -2782,7 +2781,7 @@ body.pt-try { background: var(--pt-paper); }
                   <button type="button" class="ibtn2" id="baRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
                 <div class="pt-grid">
                   <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
-                    <span class="rv" id="baStModels">—</span><span class="rs" id="baStModelsSub">实时拉取</span></div>
+                    <span class="rv" id="baStModels">—</span><span class="rs" id="baStModelsSub">拉杆刷新</span></div>
                   <div class="pt-readout"><span class="rk" data-i18n="app.rk.health">健康检查</span>
                     <span class="rv" id="baStHealth">—<span class="u">ms</span></span><span class="rs" id="baStHealthSub">本地回环</span></div>
                 </div>
@@ -5520,7 +5519,7 @@ var PT_I18N = {
 
   var PLUGIN_VENDOR_COLORS = { glm: '#ff6b9d', kimi: '#b06bff', deepseek: '#4d8dff', minimax: '#ffb300',
     hy3: '#00ffa3', codely: '#00d4ff', auto: '#7c9dff', claude: '#ff9d6b', openai: '#6bff9d',
-    gemini: '#6bd9ff', xai: '#d9ff6b' };
+    gemini: '#6bd9ff', xai: '#d9ff6b', qwen: '#00d4ff', mimo: '#ff7a45' };
   function pluginVendorOf(id) {
     var s = (id.split('/')[0] || '').toLowerCase();
     var m = s.match(/^(glm|kimi|deepseek|minimax|hy3|codely|auto)/);
@@ -5530,7 +5529,9 @@ var PT_I18N = {
     if (/^gpt/.test(s)) return 'openai';
     if (/^gemini/.test(s)) return 'gemini';
     if (/^(grok|spacexai)/.test(s)) return 'xai';
-    return s;
+    /* 无 vendor 前缀的裸名（B.AI 全是这种）：取分隔符前的前导段并去尾数，
+       否则 "mimo-v2.5" 整串变成组名 MIMO-V2.5 */
+    return s.split(/[-._]/)[0].replace(/\d+$/, '') || s;
   }
 
   /* ---------------- 消耗 TOP 条形图（COMMAND 官网/本地 + 插件积分/token） ---------------- */
@@ -5883,7 +5884,11 @@ var PT_I18N = {
     if (p && p.lastErr) plog(V, 'err', p.lastErr);
 
     if (running) {
-      loadPluginModels(V);
+      /* 拉杆点火那一次是唯一允许打官网的时机，矩阵与积分共用这一个闩锁；
+         在这里一次性消费（原先由 tj/cb 分支各自清，bai 无积分分支会漏清→轮询反复强制刷新） */
+      var justIgnited = !!V.fetchOnRun;
+      V.fetchOnRun = false;
+      loadPluginModels(V, justIgnited);
       loadPluginMeta(V);
       loadPluginStats(V, mode);
       loadPluginLog(V);
@@ -5921,12 +5926,12 @@ var PT_I18N = {
           } catch (e) {}
         })();
         /* 积分只在拉杆启动后拉一次；GUI 打开/重进只画缓存，之后靠「↻ 刷新」手动拉（官网 429 保护） */
-        if (V.fetchOnRun) { V.fetchOnRun = false; loadTuanjieQuota(V, false); }
+        if (justIgnited) loadTuanjieQuota(V, false);
         else renderTuanjieQuotaCache(V);
       }
       if (mode === 'cb') {
         /* WorkBuddy 积分同规矩：拉杆启动后拉一次 + 手动刷新，轮询不打官网 */
-        if (V.fetchOnRun) { V.fetchOnRun = false; loadCodebuddyQuota(V, false); }
+        if (justIgnited) loadCodebuddyQuota(V, false);
         else renderCodebuddyQuotaCache(V);
       }
     } else {
@@ -5987,15 +5992,29 @@ var PT_I18N = {
     });
   }
 
-  async function loadPluginModels(V) {
+  async function loadPluginModels(V, refresh) {
+    /* B.AI 走 /model/matrix：服务端拿渠道配置的 key 拉上游并缓存。
+       /v1/models 是纯透传，GUI 没有 key → 只会拿到上游 401，矩阵永远空。 */
+    var isMatrix = V.mode === 'bai';
     try {
-      var url = 'http://127.0.0.1:' + V.port + '/v1/models';
+      var url = 'http://127.0.0.1:' + V.port + (isMatrix ? '/model/matrix' : '/v1/models');
       if (V.mode === 'tj') url += '?full=true';
+      else if (isMatrix && refresh) url += '?refresh=1';
       var r = await fetch(url);
       var d = await r.json();
       var ids = (d.data || []).map(function (m) { return m.id; });
       var mcEl = $(V.pfx + 'ModelCount'), mlBox = $(V.pfx + 'ModelList');
       if (!mcEl || !mlBox) return;
+      if (isMatrix && d.ok === false) {
+        var noKey = d.err === 'need_key';
+        mcEl.textContent = noKey ? 'NO KEY' : 'ERR';
+        mlBox.innerHTML = '<div class="pt-models-empty">// ' + (noKey
+          ? '未配置 B.AI 密钥（注水检测页填入）'
+          : '上游拉取失败 · 60 秒内不重试，可点右上「↻ 刷新」') + '</div>';
+        pSet(V, 'StModels', '—'); pSet(V, 'StModelsSub', '—');
+        V.lastModels = null; /* 失败不记去重键，下次轮询还能自愈 */
+        return;
+      }
       if (!ids.length) {
         mcEl.textContent = '0 MODELS';
         mlBox.innerHTML = '<div class="pt-models-empty">// 后端暂无可调用模型（预算超限？）</div>';
@@ -6005,11 +6024,16 @@ var PT_I18N = {
       }
       var key = ids.join('\u0001');
       var firstLoad = !V.lastModels;
-      if (V.lastModels && V.lastModels === key) return;
+      if (V.lastModels && V.lastModels === key) {
+        /* 集合未变也要刷时间戳，否则刚重新拉过却还挂着旧的「缓存于 …」=撒谎 */
+        if (isMatrix) pSet(V, 'StModelsSub', '缓存于 ' + fmtTime((d.fetched_at || 0) * 1000));
+        return;
+      }
       V.lastModels = key;
       mcEl.textContent = ids.length + ' MODELS';
       pSet(V, 'StModels', ids.length);
-      pSet(V, 'StModelsSub', ids.length + ' 个真实可用');
+      pSet(V, 'StModelsSub', isMatrix ? '缓存于 ' + fmtTime((d.fetched_at || 0) * 1000)
+        : ids.length + ' 个真实可用');
       /* cb 上屏「模型探测」灯：动态探测完成即亮，b 显示 N 个 */
       if (V.mode === 'cb') PTApp.dot('cbProbe', true, false, ids.length + ' 个');
       var groups = {};
@@ -6025,6 +6049,9 @@ var PT_I18N = {
   }
 
   async function loadPluginMeta(V) {
+    /* bai 没有 /model/info，这个路径会被透传代理原样打到 api.b.ai ——
+       3 秒一轮的轮询等于持续对境外无意义请求（同刚修掉的 /v1/models 空打） */
+    if (V.mode === 'bai') return;
     try {
       var r = await fetch('http://127.0.0.1:' + V.port + '/model/info');
       var list = await r.json();
@@ -6077,7 +6104,8 @@ var PT_I18N = {
        轮询不再重复打官网；其余插件用本地 token 统计 */
     try {
       var entries = null, bmode = 'tokens';
-      if (V.id !== 'tuanjie') {
+      /* bai 也排除：本地无 /v1/stats，会被透传打到 api.b.ai（境外空请求），且 ba 甲板无消耗条 */
+      if (V.id !== 'tuanjie' && V.id !== 'bai') {
         var ds = await (await fetch('http://127.0.0.1:' + V.port + '/v1/stats')).json();
         var models = ds.models || {};
         entries = Object.keys(models).map(function (name) {
@@ -6907,7 +6935,12 @@ var PT_I18N = {
          团结/WorkBuddy 强制实时拉一次积分，B.AI/Comate 无积分卡只刷视图 */
       var rf = $(V.pfx + 'Refresh');
       if (rf) rf.onclick = async function () {
-        if (mode === 'bai' || mode === 'comate') { refreshPluginView(mode); plog(V, 'sys', '手动刷新'); return; }
+        if (mode === 'bai' || mode === 'comate') {
+          /* B.AI 的「↻ 刷新」与拉杆点火同权：复用同一个闩锁去强制刷一次模型矩阵，
+             否则改走缓存端点之后这颗按钮按下去不会有任何变化 */
+          if (mode === 'bai') V.fetchOnRun = true;
+          refreshPluginView(mode); plog(V, 'sys', '手动刷新'); return;
+        }
         if (V.phase !== 'running') { toast('info', '刷新', '插件未启动，无法刷新积分'); return; }
         rf.disabled = true;
         var old = rf.textContent;

@@ -26,6 +26,7 @@ type Server struct {
 	ln        net.Listener
 	srv       *http.Server
 	startedAt time.Time
+	matrix    matrixState // 模型矩阵缓存（GUI 专用，见 models.go）
 }
 
 // NewServer 创建服务。
@@ -59,7 +60,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start 在 host:port 上监听（阻塞）。
-// /v1/models 及一切其余路径 ReverseProxy 到 https://api.b.ai。
+// /health 与 /model/matrix（GUI 甲板用的带缓存旁路，见 models.go）由本服务自己应答，
+// 其余路径——含 /v1/models——一律 ReverseProxy 到 https://api.b.ai，透传语义不变。
 // Director 必须把 req.Host 改为 api.b.ai（Cloudflare 对不认识的主机名直接 403）；
 // FlushInterval 50ms 保证 SSE 流式及时刷新。
 func (s *Server) Start(host, port string) error {
@@ -84,6 +86,7 @@ func (s *Server) Start(host, port string) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/model/matrix", s.handleModelMatrix) // GUI 甲板专用；/v1/models 仍是纯透传
 	mux.Handle("/v1/models", proxy)
 	mux.Handle("/v1/chat/completions", adaptQuirks(proxy))
 	mux.Handle("/v1/", proxy)
