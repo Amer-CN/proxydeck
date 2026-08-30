@@ -133,19 +133,71 @@ func windowCmd(hwnd uintptr, cmd string) {
 		const SC_MINIMIZE = 0xF020
 		user32.NewProc("PostMessageW").Call(hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0)
 	case "max":
+		// 第 17 轮：frameless 窗上 WM_SYSCOMMAND/SC_MAXIMIZE 语义异常（三灯真机失灵成因之一），
+		// 改 ShowWindow 直控：SW_MAXIMIZE(3) 最大化 / SW_RESTORE(9) 还原，IsZoomed 判定切替。
 		z, _, _ := user32.NewProc("IsZoomed").Call(hwnd)
-		const WM_SYSCOMMAND = 0x112
 		if z != 0 {
-			const SC_RESTORE = 0xF120
-			user32.NewProc("PostMessageW").Call(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0)
+			const SW_RESTORE = 9
+			user32.NewProc("ShowWindow").Call(hwnd, SW_RESTORE)
 		} else {
-			const SC_MAXIMIZE = 0xF030
-			user32.NewProc("PostMessageW").Call(hwnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0)
+			const SW_MAXIMIZE = 3
+			user32.NewProc("ShowWindow").Call(hwnd, SW_MAXIMIZE)
 		}
 	case "close":
 		const WM_CLOSE = 0x10
 		user32.NewProc("PostMessageW").Call(hwnd, WM_CLOSE, 0, 0)
 	}
+}
+
+// faxUser32 / faxPrevWndProc / faxWndProcCallback 浮窗子类化专用包级状态：
+// Go 回调必须存包级变量防 GC（SetWindowLongPtrW 挂进系统后 Windows 长期持有该指针，
+// 回调被 GC 回收 = 下一条消息即崩）；faxPrevWndProc 存原 WndProc 供 CallWindowProc 回链。
+var (
+	faxUser32          = syscall.NewLazyDLL("user32.dll")
+	faxPrevWndProc     uintptr
+	faxWndProcCallback = syscall.NewCallback(faxFullClientWndProc)
+)
+
+// faxFullClientWndProc 浮窗子类化 WndProc：只拦 WM_NCCALCSIZE(0x0083) 且 wParam=1 时
+// 返回 0（整个窗口=客户区，无保留边框），其余消息原样 CallWindowProc 回原链。
+// 回调内不做任何重活（在 UI 消息循环里执行）。
+func faxFullClientWndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+	const WM_NCCALCSIZE = 0x0083
+	if msg == WM_NCCALCSIZE && wParam != 0 {
+		return 0
+	}
+	r, _, _ := faxUser32.NewProc("CallWindowProcW").Call(
+		faxPrevWndProc, hwnd, uintptr(msg), wParam, lParam)
+	return r
+}
+
+// framelessFullClient 子类化窗口 WndProc（GWL_WNDPROC），吃掉 setFrameless 后 DWM 仍保留的
+// ~8px 不可见边框（窗口物理 596×823 vs 内容 580×784 的根因）：WM_NCCALCSIZE(wParam=1)
+// 返回 0 → 客户区铺满全窗。重复调用安全（已子类化即返回，防回调链自环）；
+// 浮窗进程短命，不做卸载。只挂浮窗，主窗不调此函数。
+func framelessFullClient(hwnd uintptr) {
+	defer func() { _ = recover() }()
+	const GWL_WNDPROC = ^uintptr(3) // -4
+	cur, _, _ := faxUser32.NewProc("GetWindowLongPtrW").Call(hwnd, GWL_WNDPROC)
+	if cur == 0 || cur == faxWndProcCallback {
+		return
+	}
+	faxPrevWndProc = cur
+	faxUser32.NewProc("SetWindowLongPtrW").Call(hwnd, GWL_WNDPROC, faxWndProcCallback)
+}
+
+// setClientSize 在 framelessFullClient 生效后把窗口外廓直接钉到目标尺寸：
+// webview 的 SetSize 内部按 WS_OVERLAPPEDWINDOW 的标题栏 metrics 外扩
+// （请求 580×784 → 外廓实得 596×823，实测在案），子类化吃掉保留边框后
+// 必须用 SetWindowPos 直接定外廓，客户区才会恰好等于 580×784
+// （WM_NCCALCSIZE 返回 0 → client=window）。须在子类化之后调用。
+func setClientSize(hwnd uintptr, w, h int) {
+	defer func() { _ = recover() }()
+	const SWP_NOMOVE = 0x2
+	const SWP_NOZORDER = 0x4
+	const SWP_NOACTIVATE = 0x10
+	faxUser32.NewProc("SetWindowPos").Call(hwnd, 0, 0, 0,
+		uintptr(w), uintptr(h), SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE)
 }
 
 // fatalBox 弹出原生消息框（用于 WebView2 运行时缺失等启动期致命错误）。

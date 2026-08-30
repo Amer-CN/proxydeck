@@ -104,12 +104,25 @@ func runFaxWindow() int {
 	w.SetSize(580, 784, webview.HintNone)
 	if hwnd := w.Window(); hwnd != nil {
 		setFrameless(uintptr(hwnd))
+		framelessFullClient(uintptr(hwnd)) // 第 17 轮：吃掉 DWM 保留边框，客户区铺满全窗
+		setClientSize(uintptr(hwnd), 580, 784) // SetSize 被库按标题栏 metrics 外扩成 596×823（实测在案），此处直钉回 580×784
 		setWindowIcon(uintptr(hwnd))
 	}
 	w.Dispatch(func() {
 		if hwnd := w.Window(); hwnd != nil {
 			setFrameless(uintptr(hwnd))
+			framelessFullClient(uintptr(hwnd)) // 第 17 轮：吃掉 DWM 保留边框，客户区铺满全窗
+			setClientSize(uintptr(hwnd), 580, 784) // 二次保险：同上
 			setWindowIcon(uintptr(hwnd))
+		}
+	})
+	// 三灯专用直绑桥（第 17 轮）：浮窗三灯与台肩拖拽直呼 ccFaxWin → windowCmd
+	// （红=close / 黄=min / 绿=max），不再依赖 bindAll 的 ccWindowCmd——SC_MAXIMIZE 在
+	// frameless 窗语义异常、继承桥挂载与 #fax 页加载时序不可控，真机三灯全失灵。
+	// bindAll 原样保留（主窗三灯仍走 ccWindowCmd）。
+	_ = w.Bind("ccFaxWin", func(cmd string) {
+		if h := w.Window(); h != nil {
+			windowCmd(uintptr(h), cmd)
 		}
 	})
 

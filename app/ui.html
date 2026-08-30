@@ -2937,6 +2937,8 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <div class="pt-grid">
                   <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
                     <span class="rv" id="qoderStModels">—</span><span class="rs" id="qoderStModelsSub">实时拉取</span></div>
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.points">积分</span>
+                    <span class="rv" id="qoderStCredits">—</span><span class="rs" id="qoderStCreditsSub">积分</span></div>
                   <div class="pt-readout"><span class="rk" data-i18n="app.rk.health">健康检查</span>
                     <span class="rv" id="qoderStHealth">—<span class="u">ms</span></span><span class="rs" id="qoderStHealthSub">本地回环</span></div>
                 </div>
@@ -6584,7 +6586,8 @@ var PT_I18N = {
     o.hidden = true;
   }
   /* 第 10 轮：标题栏三灯全功能——红=关窗（ccFaxClose → PostMessage WM_CLOSE 优雅退出浮窗进程）、
-   黄=最小化（ccWindowCmd('min') → SC_MINIMIZE）、绿=最大化/还原（ccWindowCmd('max') → 系统级切换）。
+   黄=最小化、绿=最大化/还原。第 17 轮：改走浮窗专用直绑桥 ccFaxWin（ccFaxWin → windowCmd，
+   绑定先于页面加载，无时序竞态）；ccWindowCmd（继承桥）仅作回退。
    主窗 overlay 后备路径（无桥浏览器预览）红点仍关层，黄/绿无窗口语义时静默。 */
   var fxLights = document.querySelectorAll('#wtFax .fx-lights i');
   if (fxLights[0]) {
@@ -6597,19 +6600,21 @@ var PT_I18N = {
   if (fxLights[1]) {
     fxLights[1].title = '最小化';
     fxLights[1].addEventListener('click', function () {
-      if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('min');
+      if (typeof window.ccFaxWin === 'function') window.ccFaxWin('min');
+      else if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('min');
     });
   }
   if (fxLights[2]) {
     fxLights[2].title = '最大化';
     fxLights[2].addEventListener('click', function () {
-      if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('max');
+      if (typeof window.ccFaxWin === 'function') window.ccFaxWin('max');
+      else if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('max');
     });
   }
   /* 第 9 轮：台肩=拖拽把手（独立浮窗无原生标题栏）。与主界面 #ptLedge 同款：
-     左键按下（灯区除外）→ ccWindowCmd('move') 进系统拖拽移动循环；
-     app-region:drag CSS 在新 WebView2 运行时优先生效（事件不达页面），
-     旧运行时走此 JS 回退——双保险。 */
+     左键按下（灯区除外）→ 桥进系统拖拽移动循环；第 17 轮改 ccFaxWin('move') 优先、
+     ccWindowCmd('move') 回退。app-region:drag CSS 在新 WebView2 运行时优先生效
+     （事件不达页面），旧运行时走此 JS 回退——双保险。 */
   (function initFaxLedge() {
     var ledge = document.querySelector('#wtFax .fx-shoulder');
     if (!ledge || ledge.dataset.ledgeBound) return;
@@ -6617,7 +6622,8 @@ var PT_I18N = {
     ledge.addEventListener('pointerdown', function (ev) {
       if (ev.button !== 0) return;
       if (ev.target.closest('.fx-lights')) return;   /* 红点有自己的点击语义 */
-      if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('move');   /* 直呼桥（windowCmd 在主脚本闭包内，浮窗脚本块够不着） */
+      if (typeof window.ccFaxWin === 'function') window.ccFaxWin('move');            /* 浮窗专用直绑桥（第 17 轮） */
+      else if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('move'); /* 回退：继承桥 */
     });
   })();
 
@@ -7061,7 +7067,7 @@ var PT_I18N = {
       if (ml) ml.innerHTML = '<div class="pt-models-empty">// 启动插件后自动拉取</div>';
       pSet(V, 'StModels', '—');
       pSet(V, 'StHealth', '—');
-      ['StBudget', 'StSpent', 'StLeft', 'StReset', 'StTopModel', 'StPoints'].forEach(function (k) {
+      ['StBudget', 'StSpent', 'StLeft', 'StReset', 'StTopModel', 'StPoints', 'StCredits', 'StCreditsSub'].forEach(function (k) {
         pSet(V, k, '—');
       });
       var bw = $(V.pfx + 'Bars');
@@ -7229,6 +7235,18 @@ var PT_I18N = {
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
       }
       if (V.id === 'tuanjie') updateJudgeBanner(h);
+      /* Qoder 代理侧积分账本：configured 显示剩余（基线−total_credits 扣减），未设显示「未设」；
+         sub 显示本次进程已耗（worker result total_credits 合计）。点击卡片可设基线。 */
+      if (V.mode === 'qoder' && h.credits) {
+        if (h.credits.configured) {
+          var rem = Math.round((Number(h.credits.remaining) || 0) * 10) / 10;
+          pSet(V, 'StCredits', rem % 1 ? rem.toFixed(1) : String(rem));
+        } else {
+          pSet(V, 'StCredits', '未设');
+        }
+        var sp = Math.round((Number(h.credits.spentThisSession) || 0) * 100) / 100;
+        pSet(V, 'StCreditsSub', '本次已耗 ' + (sp % 1 ? sp.toFixed(2) : String(sp)));
+      }
     } catch (e) {}
     /* 团结/WorkBuddy 积分卡都不轮询——拉杆启动拉一次 + 手动刷新，轮询只留本地（官网 429 保护） */
     /* 消耗 TOP：团结由 loadTuanjieQuota（启动/手动刷新）渲染积分口径，
@@ -8085,6 +8103,24 @@ var PT_I18N = {
       var el = $(id);
       if (el) el.onclick = function () { copyText(el.textContent, 'Base URL'); };
     });
+    /* Qoder 积分卡：点击设基线——从客户端「我的用量」读一次剩余积分填入，
+       POST /credits/set 写代理侧账本（~/.qoder-cli-credits.json），之后由轮询扣减刷新 */
+    var qcr = $('qoderStCredits');
+    if (qcr) qcr.onclick = async function () {
+      var V = PV.qoder;
+      var v = window.prompt('输入 Qoder 当前剩余积分（客户端「我的用量」查看后填入）：', '');
+      if (v === null) return;
+      var n = parseFloat(String(v).trim());
+      if (!isFinite(n) || n < 0) { plog(V, 'err', '积分基线设置失败: 请输入非负数字'); return; }
+      try {
+        var d = await (await fetch('http://127.0.0.1:' + V.port + '/credits/set', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ remaining: n })
+        })).json();
+        if (d && d.ok) plog(V, 'ok', '积分基线已设为 ' + n + '（剩余将随请求自动扣减）');
+        else plog(V, 'err', '积分基线设置失败: ' + ((d && d.error) || '未知'));
+      } catch (e) { plog(V, 'err', '积分基线设置失败: ' + (e && e.message || e)); }
+    };
     ['tj', 'cb', 'bai', 'comate', 'qoder'].forEach(function (mode) {
       var V = PV[mode];
       var clr = $(V.pfx + 'ClearLog');
