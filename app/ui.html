@@ -1468,6 +1468,23 @@ body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar { wid
 body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-thumb { background: var(--pp-rule); border-radius: 2px; }
 body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-track { background: transparent; }
 .fx-report { padding: 0 2px; }
+/* ————— 第 13 轮：检测参数卡（PROBE 页书写区只读化，占满剩余高） —————
+   textarea 保留 DOM 但隐藏（结构冻结）；参数卡吃满 .fx-body 剩余高，与 REPORT 报表页等高。
+   第 14 轮表格化：行间虚线分隔（同传真单字段点线口径）、值列可换行不截断、标签定宽对齐。 */
+#wtFax .fx-input { display: none; }
+.fx-paramcard { flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; justify-content: flex-start;
+  padding: 4px 2px; box-sizing: border-box; }
+.fx-pc-row { display: flex; align-items: baseline; gap: 10px;
+  padding: 6px 2px; border-bottom: 1px dotted var(--pp-rule);
+  font-size: 13px; line-height: 1.55; color: var(--pp-ink); }
+.fx-pc-row em { font-style: normal; flex: none; width: 72px; font-size: 12px; font-weight: 700; color: var(--pp-ink); }
+.fx-pc-row b { flex: 1 1 auto; min-width: 0; font-family: var(--pt-mono-ui); font-weight: 600;
+  color: var(--pp-ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.fx-pc-stage b { color: var(--pt-accent); }
+.fx-pc-note { margin: 8px 2px 0; font-size: 11px; line-height: 1.5; color: var(--pp-fine); }
+/* 第 13 轮：REPORT 历史块行距（fxHistoryRowsHtml 行模板沿用甲板 if-row 尺寸体系） */
+.fx.report-page .fx-rsec .if-row { font-size: 13px; line-height: 1.6; }
 /* 第 11 轮 C：报表重排版——基准 ≥13px、数据行行高 ≥1.6、标题行加大加粗、正文深墨
    （--pp-ink 原值；标签中灰提对比），判定/相似度等关键值 14-15px 加粗。 */
 .fx-report .fx-report-hint { font-size: 13px; line-height: 1.9; color: var(--pp-fine); padding: 4px 1px; }
@@ -1859,7 +1876,7 @@ body.pt-try { background: var(--pt-paper); }
 .pt-log-line.warn .lv { color: var(--pt-sc-ink); }
 .pt-log-line.ok .lm, .pt-log-line.err .lm { color: var(--pt-sc-ink2); }
 
-/* ———— K3 429 兜底挡位 ———— */
+/* ———— K3 限流护航挡位 ———— */
 .pt-gear.k3 .stops span { font-size: 8.5px; }
 
 /* ———— 工作空间自绘下拉（Notion）———— */
@@ -2242,6 +2259,7 @@ body.pt-try { background: var(--pt-paper); }
 .pt-sc-body .sh-v.crit { color: var(--pt-sc-accent); }
 .pt-drum i:nth-child(7) { --y: 6; } /* B.AI/媒体路由/注水检测接在绕接格与 COMMAND 真格之后（B.AI 紧挨真格） */
 .pt-drum i:nth-child(8) { --y: 7; } /* 无物理键的副页也要在 Mode 鼓轮上有一格 */
+.pt-drum i:nth-child(9) { --y: 8; } /* Qoder 第六平台接在 WORKBUDDY 之后（同一颗键的副页相邻格） */
 
 /* 外部账号刷新指示：/providers 冷启动要现查订阅与用量，给一条呼吸提示而不是空白等待 */
 .pv-busy { margin-left: 10px; font-family: var(--pt-font-ui); font-size: 11px; font-weight: 500;
@@ -2420,8 +2438,7 @@ body.fax-standalone .fx-cage .fx-sheet { display: flex; flex-direction: column; 
 body.fax-standalone .fx-cage .fx-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin-top: 8px; }
 body.fax-standalone .fx-cage .fx-body .fx-input { height: auto; flex: 1 1 auto; min-height: 0; }
 body.fax-standalone .fx-cage .fx-minfo-clip { flex: none; }
-/* 报表页纸笼底板收敛（报表不吃纸笼渐变底色，底板止于键行上方观感保留） */
-body.fax-standalone .fx.report-page .fx-cage { padding-bottom: 16px; }
+/* 报表页纸笼底板与 PROBE 页同值（第 13 轮：两页纸等高——覆盖差 14px 就是纸高差源头） */
 /* 控制台在 fax 浮窗里去掉下拉吃 fx padding-bottom 的 -16px（卡已拉满高，键行区自身贴底）；
    同时 .fx 底 padding 清零——按钮下缘贴窗底（下边距=左右边距=0，对照原版按钮贴底口径） */
 body.fax-standalone .fx-controls { margin-bottom: 0; }
@@ -2468,6 +2485,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <i data-mode="comate"><span>COMATE</span></i>
                   <i data-mode="tj"><span>TUANJIE</span></i>
                   <i data-mode="cb"><span>WORKBUDDY</span></i>
+                  <i data-mode="qoder"><span>QODER</span></i>
                   <i data-mode="set"><span>设置</span></i>
                   <i data-mode="cmd"><span>COMMAND</span></i>
                   <i data-mode="bai"><span>B.AI</span></i>
@@ -2509,7 +2527,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   </div>
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
-                    <span class="pt-dot" data-dot="tjK3"><span data-i18n="app.dot.k3">K3 兜底</span><b></b></span>
+                    <span class="pt-dot" data-dot="tjK3"><span data-i18n="app.dot.k3">K3 护航</span><b></b></span>
                     <span class="pt-dot" data-dot="tjMatrix"><span>账号矩阵</span><b></b></span>
                   </div>
                 </div>
@@ -2567,6 +2585,20 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
               </div>
 
+              <!-- Qoder 屏体 -->
+              <div class="pt-sc-body qoder" data-body="qoder">
+                <div class="sc-unified">
+                  <div class="run-line">
+                    <span class="pt-dot grn" data-dot="qoderRun"><span class="run-name">QODER · 8785</span><b></b></span>
+                  </div>
+                  <div class="pt-system-readout">
+                    <span class="pt-silk">Uptime</span>
+                    <div class="pt-odo pt-sc" data-odo="qoderUptime">0:00:00</div>
+                  </div>
+                  <div class="pt-sc-sep"></div>
+                </div>
+              </div>
+
               <!-- 设置 屏体 -->
               <div class="pt-sc-body set" data-body="set">
                 <div class="pt-gen-cluster">
@@ -2580,7 +2612,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.6.4</span>
+                    <span class="v ver" id="etchVer">v3.6.5</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -2634,7 +2666,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
           <div class="pt-keys" role="radiogroup" aria-label="甲板">
             <button type="button" class="pt-key" role="radio" data-mode="cmd" aria-checked="true"><span class="dual-key"><b>COMMAND</b><i>⇄ B.AI</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="tj" aria-checked="false" tabindex="-1"><span class="dual-key"><b>TUANJIE</b><i>⇄ COMATE</i></span></button>
-            <button type="button" class="pt-key" role="radio" data-mode="cb" aria-checked="false" tabindex="-1"><span>WORKBUDDY</span></button>
+            <button type="button" class="pt-key" role="radio" data-mode="cb" aria-checked="false" tabindex="-1"><span class="dual-key"><b>WORKBUDDY</b><i>⇄ QODER</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="set" aria-checked="false" tabindex="-1"><span>设置</span></button>
           </div>
 
@@ -2762,19 +2794,19 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <div class="pt-subhead"><span class="pt-silk sm">实时动态 · Activity</span></div>
                 <div class="act-list" id="tjActivity"><div class="if-empty">// 请求完成后动态显示</div></div>
 
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.k3">K3 429 兜底 · Retry</span></div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.k3">K3 限流护航 · Guard</span></div>
                 <div class="pt-row">
                   <div class="pt-rowline">
-                    <div class="pt-label"><div class="t" data-i18n="app.k3">KIMI-K3 429 兜底</div></div>
+                    <div class="pt-label"><div class="t" data-i18n="app.k3">KIMI-K3 限流护航</div></div>
                     <span class="pt-val" data-val="tjK3">—</span>
                   </div>
                   <div class="pt-gear k3" style="--s:0;--c:2" data-gear="tjK3" data-count="2"
                        role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="1"
-                       aria-label="KIMI-K3 429 兜底">
+                       aria-label="KIMI-K3 限流护航">
                     <div class="stops"><span class="cur">关</span><span>开</span></div>
                     <div class="pt-rail"><i></i><i></i><span class="k"></span></div>
                   </div>
-                  <p class="pt-notice">开启后 8788 在 KIMI 429 时按上游 Retry-After 自动等待重发（缺省 60s），总预算 30 分钟；关闭时 429 直接透传。等待中 <b data-val="tjK3Pend"></b></p>
+                  <p class="pt-notice">开启后 8788 在 KIMI 撞限流时先自动换号重试，全池撞墙再按上游 Retry-After 排队等待（缺省 60s，总预算 30 分钟）；关闭时 429 直接透传。等待中 <b data-val="tjK3Pend"></b></p>
                 </div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">积分统计 · Credits</span>
@@ -2866,6 +2898,54 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
                   <button type="button" class="ibtn2" id="cbClearLog" data-i18n="app.btn.clear">清空</button></div>
                 <div class="pt-log" id="cbLog"></div>
+               </div></div>
+              </div>
+
+              <!-- —————— Qoder 甲板（WORKBUDDY 键副页：双击进入） —————— -->
+              <div class="pt-deck" data-deck="qoder">
+               <div class="pt-deck-scroll"><div class="inner">
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.ignite">点火拉杆</div>
+                    <div class="s" data-i18n="app.s.qoderLever">拉杆点火，托管 Qoder 智能体引擎（8785）· 拉回熄火</div>
+                  </div>
+                </div></div>
+                <button type="button" class="pt-activation" data-ignite="qoderRun" data-lever-mode="activate"
+                        aria-label="点火拉杆">
+                  <span class="rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                  <span class="legend">IGNITE</span>
+                  <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
+                </button>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.baseUrl">BASE URL</div>
+                    <div class="s" data-i18n="app.s.copy">点击复制</div>
+                  </div>
+                  <span class="pt-val click" id="qoderEndpoint">http://127.0.0.1:8785/v1</span>
+                </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label"><div class="t">协议适配</div></div>
+                  <span class="pt-val">官方 agent SDK worker · OpenAI 兼容</span>
+                </div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
+                  <button type="button" class="ibtn2" id="qoderRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
+                <div class="pt-grid">
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
+                    <span class="rv" id="qoderStModels">—</span><span class="rs" id="qoderStModelsSub">实时拉取</span></div>
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.health">健康检查</span>
+                    <span class="rv" id="qoderStHealth">—<span class="u">ms</span></span><span class="rs" id="qoderStHealthSub">本地回环</span></div>
+                </div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.models">模型矩阵 · Models</span>
+                  <span class="pt-val" id="qoderModelCount">OFFLINE</span></div>
+                <div id="qoderModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
+                  <button type="button" class="ibtn2" id="qoderClearLog" data-i18n="app.btn.clear">清空</button></div>
+                <div class="pt-log" id="qoderLog"></div>
                </div></div>
               </div>
 
@@ -3001,13 +3081,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.6.4">v3.6.4</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.6.5">v3.6.5</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.6.4</div>
+                    <div class="s" id="buildNo">v3.6.5</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.6.4</span>
+                  <span class="pt-val" id="verChip">v3.6.5</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -3259,7 +3339,17 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <span class="fx-stamp-note">类别由上方模式键决定</span>
                 </div>
                 <div class="fx-body">
-                  <textarea class="fx-input" data-fx-text rows="5" maxlength="2000" placeholder="检测期间由机器自动记录管道探针读数，无需手写。" aria-label="探针读数记录"></textarea>
+                  <textarea class="fx-input" data-fx-text rows="5" maxlength="2000" placeholder="" readonly aria-label="检测参数卡（只读）"></textarea>
+                  <div class="fx-paramcard">
+                    <div class="fx-pc-row"><em>检测对象</em><b data-pc-target>— · —</b></div>
+                    <div class="fx-pc-row"><em>基准库</em><b>官方 baseline</b></div>
+                    <div class="fx-pc-row"><em>探针</em><b data-pc-probes>8 项</b></div>
+                    <div class="fx-pc-row"><em>金丝雀</em><b>3 题</b></div>
+                    <div class="fx-pc-row"><em>检测模式</em><b>全流程</b></div>
+                    <div class="fx-pc-row"><em>预估耗时</em><b>约 1-2 分钟</b></div>
+                    <div class="fx-pc-row fx-pc-stage"><em>当前阶段</em><b data-pc-stage>待机 · 等待发送</b></div>
+                    <div class="fx-pc-note">检测期间由机器自动记录管道探针读数，无需手写。</div>
+                  </div>
                 </div>
                 <div class="fx-minfo-clip">
                   <div class="fx-minfo">
@@ -3816,19 +3906,20 @@ var PT_I18N = {
 
   /* ══════════════════ 3. 状态与模式 ══════════════════ */
   var st = { mode: 'cmd', soundSet: 1 };
-  var MODES = ['cmd', 'tj', 'comate', 'cb', 'bai', 'set', 'media', 'water'];
-  /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；tj 的副页是 COMATE） */
-  var ALT_MODE = { cmd: 'bai', bai: 'cmd', tj: 'comate', comate: 'tj' };
+  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'media', 'water'];
+  /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；tj 的副页是 COMATE；cb 的副页是 Qoder） */
+  var ALT_MODE = { cmd: 'bai', bai: 'cmd', tj: 'comate', comate: 'tj', cb: 'qoder', qoder: 'cb' };
   /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
-  var ALT_LABEL = { cmd: 'B.AI', tj: 'COMATE' };
-  /* 鼓轮 8 格 DOM [comate,tj,cb,set,cmd,bai,media,water]；居中格 = children[--i]（CSS 按 --y−--i 定位，
-     cell 的 --y 与 children 序号一致）。cmd 居中用尾格 idx4；COMATE 占首格 idx0——与 TUANJIE idx1 相邻，
-     同一颗键的两张脸切换只滚 1 格（同 COMMAND→B.AI 滚 1 格的既有韵律）；子页顺序 设置→媒体→注水 */
-  var DRUM_IDX = { comate: 0, tj: 1, cb: 2, set: 3, cmd: 4, bai: 5, media: 6, water: 7 };
-  /* 实体键面子记忆：COMMAND/TUANJIE 各有两张脸（COMMAND/B.AI、TUANJIE/COMATE）。在哪张脸上离开，
-     键帽就保持那张脸的名字，从别的页再按它也回到那张脸（点 TUANJIE 再回来
+  var ALT_LABEL = { cmd: 'B.AI', tj: 'COMATE', cb: 'QODER' };
+  /* 鼓轮 9 格 DOM [comate,tj,cb,qoder,set,cmd,bai,media,water]；居中格 = children[--i]（CSS 按 --y−--i 定位，
+     cell 的 --y 与 children 序号一致）。cmd 居中用 idx5；COMATE 占首格 idx0——与 TUANJIE idx1 相邻，
+     同一颗键的两张脸切换只滚 1 格（同 COMMAND→B.AI 滚 1 格的既有韵律）；Qoder 占 idx3 与 cb 副页相邻；
+     子页顺序 设置→媒体→注水 */
+  var DRUM_IDX = { comate: 0, tj: 1, cb: 2, qoder: 3, set: 4, cmd: 5, bai: 6, media: 7, water: 8 };
+  /* 实体键面子记忆：COMMAND/TUANJIE/WORKBUDDY 各有两张脸（COMMAND/B.AI、TUANJIE/COMATE、WORKBUDDY/QODER）。
+     在哪张脸上离开，键帽就保持那张脸的名字，从别的页再按它也回到那张脸（点 TUANJIE 再回来
      不能落回 COMMAND ——「从什么界面离开，就保持什么界面」） */
-  var keyFace = { cmd: 'cmd', tj: 'tj' };
+  var keyFace = { cmd: 'cmd', tj: 'tj', cb: 'cb' };
   function faceOf(keyMode) { return keyFace[keyMode] || keyMode; }
   function noteFace(m) {
     Object.keys(ALT_MODE).forEach(function (h) {
@@ -3836,9 +3927,9 @@ var PT_I18N = {
       if (m === h || m === ALT_MODE[h]) keyFace[h] = m;
     });
   }
-  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, bai: 3, set: 4, comate: 5, media: 6, water: 7 };
-  /* 上屏 Wheel 音量条只亮着五个主页可见；set/water/media 里它挡住屏体右侧读数 */
-  var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate'];
+  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, comate: 6, media: 7, water: 8 };
+  /* 上屏 Wheel 音量条只亮着六个主页可见；set/water/media 里它挡住屏体右侧读数 */
+  var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate', 'qoder'];
   /* lx（灵犀+设置）与 no 共用第 4 颗键：已停在 no 时再点该键进 lx（双职责），
      鼓轮/传送带各自有独立位；键盘方向键沿 MODES 全链可达。 */
   var modeListeners = [];
@@ -5741,6 +5832,8 @@ var PT_I18N = {
     var fxPhase = 'ready';
     var fxSerial = 881;                 /* 纸面单号，每完成一次传送 +1（原版从 NO.0881 起） */
     var fxMode = 'probe';
+    var fxAttachOn = true;              /* 第 13 轮：PROBE 页扳机状态（随附检测对象显隐） */
+    var fxHistoryOn = false;            /* 第 13 轮：REPORT 页扳机状态（随附历史记录显隐），两态独立记忆 */
     var fxT0 = 0;                       /* 发送起点（回执「用时」用） */
     var fxLastCh = '', fxLastM = '';    /* 本次检测的渠道/模型（回执/历史用） */
     var fxSentStamp = '';               /* 检测时刻（回执「日期」用） */
@@ -5806,6 +5899,12 @@ var PT_I18N = {
       if (busy) fxPrintRestore();                    /* 纸进机器时信息必须完整 */
       fxLocks(busy);
       if (fxReceipt) fxReceipt.setAttribute('aria-hidden', p === 'sent' || p === 'printed' ? 'false' : 'true');
+      /* 第 13 轮：参数卡「当前阶段」行随相位实时变 */
+      var stageMap = { ready: (waterLastReport ? '已完成 · 详见详细结果页' : '待机 · 等待发送'),
+        offhook: '连接渠道…', dialing: '定位账号…', connecting: '基准就绪…', sending: '探针采样中…',
+        sent: '判定出炉…', printed: '回执已打印 · 撕下归档', tearing: '归档中…', loading: '换单中…', busy: '线路占用…' };
+      var pcStage = document.querySelector('#wtFax [data-pc-stage]');
+      if (pcStage) pcStage.textContent = stageMap[p] || p;
     }
     /* 第 10 轮：机件锁定（busy 相位 / REPORT 只读页）。控制台（复位/检测）在两态下都禁用
        （复用 busy 禁用机制）；纸面书写/下拉与扳机在 REPORT 页同样只读，模式键保持可切回 PROBE。 */
@@ -5880,7 +5979,11 @@ var PT_I18N = {
     var fxReportBox = null;
     function fxReportHtml() {
       var rep = waterLastReport, r = rep && rep.report;
-      if (!r) return '<div class="fx-report"><p class="fx-report-hint">先在「注水检测」页发送检测，这里才会出完整报表</p></div>';
+      if (!r) {
+        var empty = '<div class="fx-report"><p class="fx-report-hint">先在「注水检测」页发送检测，这里才会出完整报表</p></div>';
+        if (fxHistoryOn) empty += '<div class="fx-rsec"><p class="fx-rsec-h">⑤ 检测历史<small>HISTORY</small></p>' + fxHistoryRowsHtml() + '</div>';
+        return empty;
+      }
       var itemsHtml = renderWaterItems(r.items);
       var probesHtml = renderWaterProbes(rep.probes, rep.probe_compare);
       var distHtml = renderWaterDist(rep.dist, rep.dist_similarity);
@@ -5890,7 +5993,24 @@ var PT_I18N = {
         '<div class="fx-rsec"><p class="fx-rsec-h">② 管道探针<small>PIPELINE PROBES</small></p>' + probesHtml + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">③ 分布指纹<small>DISTRIBUTION</small></p>' + distHtml + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">④ 金丝雀<small>CANARY</small></p>' + canaryHtml + '</div>' +
+        (fxHistoryOn ? '<div class="fx-rsec"><p class="fx-rsec-h">⑤ 检测历史<small>HISTORY</small></p>' + fxHistoryRowsHtml() + '</div>' : '') +
         '</div>';
+    }
+    /* 第 13 轮：检测历史块（REPORT 扳机「随附历史记录」）——复用甲板历史行模板（waterHist 会话数据） */
+    function fxHistoryRowsHtml() {
+      if (!waterHist.length) return '<div class="if-empty">// 暂无检测记录</div>';
+      var colorMap = { green: '#3ecf8e', yellow: '#ffb300', red: '#ff5f5f' };
+      return waterHist.slice(-10).reverse().map(function (x) {
+        var led = x.verdict_light === 'green' ? 'ok' : x.verdict_light === 'red' ? 'crit' : 'warn';
+        var c = colorMap[x.verdict_light] || '#8a8f98';
+        return '<div class="if-row">' +
+          '<span class="led ' + led + '"></span>' +
+          '<span class="t">' + (x.at || '').slice(5, 16) + '</span>' +
+          '<span class="m">' + (x.channel || 'tuanjie') + ' · ' + (x.model || '') + '</span>' +
+          '<span class="u">账号 ' + (x.account || '—') + '</span>' +
+          (x.verdict_score ? '<span class="u" style="color:' + c + '">' + x.verdict_score + '%</span>' : '') +
+          '</div>';
+      }).join('');
     }
     function fxReportMinfo() {
       var box = q('.fx-minfo'), bt = q('.fx-minfo .bt');
@@ -5921,6 +6041,17 @@ var PT_I18N = {
       fx.classList.toggle('report-page', fxMode === 'report');
       fxLocks(fxPhase !== 'ready');
       fxShow(fxPhase);
+      /* 第 13 轮：扳机标签随页切换（随附检测对象 ⇄ 随附历史记录），aria 状态两态各自记忆 */
+      var attB = q('.fx-attach-copy b'), attS = q('.fx-attach-copy span');
+      if (fxMode === 'report') {
+        if (attB) attB.textContent = '随附历史记录';
+        if (attS) attS.textContent = '检测历史 · 共 ' + waterHist.length + ' 次记录——随报告归档';
+        fxTrigger.setAttribute('aria-checked', fxHistoryOn ? 'true' : 'false');
+      } else {
+        if (attB) attB.textContent = '随附检测对象';
+        if (attS) attS.textContent = '渠道、模型、官方基准、探针数，所见即所发';
+        fxTrigger.setAttribute('aria-checked', fxAttachOn ? 'true' : 'false');
+      }
       if (fxMode !== 'report') { fxReportLeave(); return; }
       /* 进入 REPORT 页：textarea 移出 .fx-body 暂存（fxText 引用保留，回 PROBE 原样放回），报表容器进占 */
       var body = q('.fx-body');
@@ -5970,7 +6101,16 @@ var PT_I18N = {
     if (fxTrigger) {
       fxTrigger.addEventListener('click', function () {
         if (fxPhase !== 'ready') return;
+        /* 第 13 轮：扳机双语义——REPORT 页 = 随附历史记录（报表追加/移除历史块）；
+           PROBE 页 = 随附检测对象（原版显隐+配平，浮窗跳过配平走纯显隐） */
+        if (fxMode === 'report') {
+          fxHistoryOn = !fxHistoryOn;
+          fxTrigger.setAttribute('aria-checked', fxHistoryOn ? 'true' : 'false');
+          fxRenderPage();                           /* 报表重渲染（历史块随 fxHistoryOn 进出） */
+          return;
+        }
         var on = fxTrigger.getAttribute('aria-checked') !== 'true';
+        fxAttachOn = on;
         fxPrintUnpin();                             /* 先无条件撤钉 */
         fxTrigger.setAttribute('aria-checked', on ? 'true' : 'false');
         /* 第 12 轮：独立浮窗（fax-standalone）下不跑配平——纸面高度由 flex 拉满链接管，
@@ -6083,6 +6223,11 @@ var PT_I18N = {
       if (mm) mm.textContent = (fxModelSel && fxModelSel.value) || '—';
       if (mp) mp.textContent = FX_PROBES + ' 项';
       if (pp) pp.textContent = FX_PROBES + ' 项';
+      /* 第 13 轮：参数卡同步（检测对象/探针数） */
+      var pcT = document.querySelector('#wtFax [data-pc-target]');
+      if (pcT) pcT.textContent = ((fxChSel && fxChSel.value) || '—') + ' · ' + ((fxModelSel && fxModelSel.value) || '—');
+      var pcP = document.querySelector('#wtFax [data-pc-probes]');
+      if (pcP) pcP.textContent = FX_PROBES + ' 项';
       fxMinfoNodesSnap = null;                     /* 值已换：强制重建打字机快照 */
     }
     if (fxChSel) fxChSel.addEventListener('change', function () {
@@ -6593,7 +6738,8 @@ var PT_I18N = {
     tj: { id: 'tuanjie', port: 8788, pfx: 'tj', mode: 'tj', uptime: null, phase: 'idle' },
     cb: { id: 'codebuddy', port: 8787, pfx: 'cb', mode: 'cb', uptime: null, phase: 'idle' },
     bai: { id: 'bai', port: 8891, pfx: 'ba', mode: 'bai', uptime: null, phase: 'idle' },
-    comate: { id: 'comate', port: 8786, pfx: 'comate', mode: 'comate', uptime: null, phase: 'idle' }
+    comate: { id: 'comate', port: 8786, pfx: 'comate', mode: 'comate', uptime: null, phase: 'idle' },
+    qoder: { id: 'qoder', port: 8785, pfx: 'qoder', mode: 'qoder', uptime: null, phase: 'idle' }
   };
   function pSet(V, id, val) { var el = $(V.pfx + id); if (el) el.textContent = val; }
 
@@ -7240,7 +7386,7 @@ var PT_I18N = {
     }
   }
 
-  /* ================= 团结 K3 429 兜底 ================= */
+  /* ================= 团结 K3 限流护航 ================= */
   var tjK3Busy = false;
   function renderTuanjiePacing(st) {
     var on = !!st.enabled;
@@ -7270,10 +7416,10 @@ var PT_I18N = {
           body: JSON.stringify({ enabled: i === 1 })
         })).json();
         renderTuanjiePacing(r);
-        plog(V, r.enabled ? 'ok' : 'sys', r.enabled ? 'KIMI-K3 429 兜底已开启：按 Retry-After 自动重发' : 'KIMI-K3 429 兜底已关闭：429 直接透传');
+        plog(V, r.enabled ? 'ok' : 'sys', r.enabled ? 'KIMI-K3 限流护航已开启：撞限流自动换号，全池撞墙再排队' : 'KIMI-K3 限流护航已关闭：429 直接透传');
         return true;
       } catch (e) {
-        plog(V, 'err', '429 兜底切换失败（插件未启动？）');
+        plog(V, 'err', '限流护航切换失败（插件未启动？）');
         return false;
       } finally { tjK3Busy = false; }
     })();
@@ -7293,7 +7439,7 @@ var PT_I18N = {
     'app.usage':     { zh: '消耗统计', 'zh-hant': '消耗統計', en: 'Usage', de: 'Verbrauch', ja: '使用量', fr: 'Usage', es: 'Uso' },
     'app.latency':     { zh: '测延迟', 'zh-hant': '測延遲', en: 'Latency', de: 'Latenz', ja: 'レイテンシ', fr: 'Latence', es: 'Latencia' },
     'app.log':     { zh: '运行日志', 'zh-hant': '運行日誌', en: 'Log', de: 'Protokoll', ja: 'ログ', fr: 'Journal', es: 'Registro' },
-    'app.k3':     { zh: 'K3 429 兜底', 'zh-hant': 'K3 429 兜底', en: 'K3 429 Retry', de: 'K3-429-Retry', ja: 'K3 429リトライ', fr: 'Retry 429 K3', es: 'Reintento 429 K3' },
+    'app.k3':     { zh: 'K3 限流护航', 'zh-hant': 'K3 限流護航', en: 'K3 Rate Guard', de: 'K3-Rate-Guard', ja: 'K3レートガード', fr: 'Garde K3', es: 'Guardia K3' },
     'app.credits':     { zh: '积分', 'zh-hant': '積分', en: 'Credits', de: 'Guthaben', ja: 'クレジット', fr: 'Crédits', es: 'Créditos' },
     'app.quota':     { zh: '额度', 'zh-hant': '額度', en: 'Quota', de: 'Kontingent', ja: 'クォータ', fr: 'Quota', es: 'Cuota' },
     'app.update':     { zh: '更新', 'zh-hant': '更新', en: 'Update', de: 'Update', ja: 'アップデート', fr: 'Mise à jour', es: 'Actualización' },
@@ -7310,6 +7456,7 @@ var PT_I18N = {
     'app.s.cbLever':     { zh: '拉到底点火（8787）· 拉回熄火 · 模型探测首次约 20 秒', 'zh-hant': '拉到底點火（8787）· 拉回熄火 · 模型探測首次約 20 秒', en: 'Pull fully to ignite (8787) · Pull back to stop · Probe ~20s first run', de: 'Ganz ziehen (8787) · Zurück zum Stop · Erste Suche ~20 s', ja: '右端まで引いて点火（8787）・初回検出約20秒', fr: 'Tirer à fond (8787) · Détection ~20 s au début', es: 'Tira al fondo (8787) · Detección ~20 s la primera vez' },
     'app.s.baiLever':     { zh: '拉到底点火（8891）· 拉回熄火 · Go 栈直连 api.b.ai', 'zh-hant': '拉到底點火（8891）· 拉回熄火 · Go 棧直連 api.b.ai', en: 'Pull to ignite (8891) · Back to stop · Go stack to api.b.ai', de: 'Ziehen zum Starten (8891) · Zurück zum Stoppen · Go-Stack zu api.b.ai', ja: '引いて起動（8891）· 戻して停止 · Goスタックで api.b.ai へ', fr: 'Tirer pour démarrer (8891) · Retour pour arrêter · Pile Go vers api.b.ai', es: 'Tira para encender (8891) · Vuelve para apagar · Pila Go a api.b.ai' },
     'app.s.comateLever':     { zh: '拉杆点火，托管 Comate 智能体引擎（8786）· 拉回熄火', 'zh-hant': '拉桿點火，託管 Comate 智能體引擎（8786）· 拉回熄火', en: 'Pull to ignite, hosting the Comate agent engine (8786) · Pull back to stop', de: 'Ziehen zum Start, hostet die Comate-Engine (8786) · Zurück zum Stoppen', ja: '引いて点火、Comate エージェントエンジンをホスト（8786）· 戻して停止', fr: 'Tirer pour démarrer, héberge le moteur Comate (8786) · Retour pour arrêter', es: 'Tira para encender, aloja el motor de Comate (8786) · Vuelve para apagar' },
+    'app.s.qoderLever':      { zh: '拉杆点火，托管 Qoder 智能体引擎（8785）· 拉回熄火', 'zh-hant': '拉桿點火，託管 Qoder 智能體引擎（8785）· 拉回熄火', en: 'Pull to ignite, hosting the Qoder agent engine (8785) · Pull back to stop', de: 'Ziehen zum Start, hostet die Qoder-Engine (8785) · Zurück zum Stoppen', ja: '引いて点火、Qoder エージェントエンジンをホスト（8785）· 戻して停止', fr: 'Tirer pour démarrer, héberge le moteur Qoder (8785) · Retour pour arrêter', es: 'Tira para encender, aloja el motor de Qoder (8785) · Vuelve para apagar' },
     'app.s.copy':     { zh: '点击复制', 'zh-hant': '點擊複製', en: 'Click to copy', de: 'Klicken zum Kopieren', ja: 'クリックでコピー', fr: 'Cliquer pour copier', es: 'Clic para copiar' },
     'app.s.autostart':     { zh: '登录 Windows 后无窗口自动点火（软件统一，非按代理单独）。', 'zh-hant': '登錄 Windows 後無窗口自動點火（軟件統一，非按代理單獨）。', en: 'Auto-ignite headless after Windows sign-in (app-wide).', de: 'Nach Anmeldung automatisch headless starten (app-weit).', ja: 'Windowsログイン後に自動点火（アプリ全体）。', fr: 'Démarrage auto sans fenêtre après connexion (global).', es: 'Arranque automático sin ventana al iniciar Windows (global).' },
     'app.s.sound':     { zh: '操作每个控件时的轻微咔哒声——开关、挡位、按键与拨杆。', 'zh-hant': '操作每個控件時的輕微咔噠聲——開關、擋位、按鍵與撥杆。', en: 'Slight clicks on every control — switches, gears, keys, levers.', de: 'Leises Klicken bei jeder Bedienung.', ja: '各コントロール操作時の軽いカチッ音。', fr: 'Légers clics sur chaque contrôle.', es: 'Suaves clics en cada control.' },
@@ -7346,7 +7493,7 @@ var PT_I18N = {
     'app.rk.status':     { zh: '状态', 'zh-hant': '狀態', en: 'Status', de: 'Status', ja: '状態', fr: 'Statut', es: 'Estado' },
     'app.dot.latency':     { zh: '链路延迟', 'zh-hant': '鏈路延遲', en: 'Latency', de: 'Latenz', ja: 'レイテンシ', fr: 'Latence', es: 'Latencia' },
     'app.dot.autostart':     { zh: '开机自启', 'zh-hant': '開機自啟', en: 'Autostart', de: 'Autostart', ja: '自動起動', fr: 'Démarrage auto', es: 'Autoarranque' },
-    'app.dot.k3':     { zh: 'K3 兜底', 'zh-hant': 'K3 兜底', en: 'K3 Retry', de: 'K3-Retry', ja: 'K3リトライ', fr: 'Retry K3', es: 'Retry K3' },
+    'app.dot.k3':     { zh: 'K3 护航', 'zh-hant': 'K3 護航', en: 'K3 Guard', de: 'K3-Guard', ja: 'K3ガード', fr: 'Garde K3', es: 'Guardia K3' },
     'app.dot.sound':     { zh: '界面音效', 'zh-hant': '界面音效', en: 'UI Sounds', de: 'UI-Sounds', ja: 'UIサウンド', fr: 'Sons UI', es: 'Sonidos UI' },
     'app.dot.lang':     { zh: '语言', 'zh-hant': '語言', en: 'Language', de: 'Sprache', ja: '言語', fr: 'Langue', es: 'Idioma' },
     'app.changelog': { zh: '更新日志', 'zh-hant': '更新日誌', en: 'Changelog', de: 'Änderungen', ja: '更新履歴', fr: 'Journal', es: 'Novedades' },
@@ -7449,6 +7596,10 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.6.5', date: '2026-08-30', groups: [
+      { label: '🐛 Bug 修复', items: [
+        '注水检测指纹抗抖动：管道探针「a」单字符归一化基准从单次采样改为 3 次采样取中位数——上游隐藏模板按请求抖动（deepseek 系双变体随机路由/按天平移）曾把整批指纹随机平移制造假漂移；「a」三次全失败时如实标 unstable（“无法归一化”），不再拿原始 token 数污染基准库',
+        '注水检测红灯误报降级：一键检测仅 tokenizer 系探针不匹配、分布形状相似度 cosine≥0.9、金丝雀全对时，从「红灯·注水嫌疑」降为「黄灯·疑似模板漂移」（建议复测而非判注水）；错误文本/finish_reason 类不匹配不参与降级（逐字符指纹，变了就是真异常）' ] } ] },
     { v: 'v3.6.4', date: '2026-08-29', groups: [
       { label: '🚀 新功能', items: [
         '注水检测独立传真机页（FX-01）：设置/注水甲板一键进入整页弹窗，原版 pomme-ui 传真机逐字复刻（580×784 结构冻结、全动线时间轴对齐官方、窄窗滚动不压缩），标题栏红圆点=返回',
@@ -7908,20 +8059,20 @@ var PT_I18N = {
     try { var saved = localStorage.getItem('latProxy'); if (saved) $('latProxy').value = saved; } catch (e) {}
 
     /* —— 插件启停 —— */
-    ['tj', 'cb', 'bai', 'comate'].forEach(bindPluginToggle);
-    ['tjEndpoint', 'cbEndpoint', 'baEndpoint', 'comateEndpoint'].forEach(function (id) {
+    ['tj', 'cb', 'bai', 'comate', 'qoder'].forEach(bindPluginToggle);
+    ['tjEndpoint', 'cbEndpoint', 'baEndpoint', 'comateEndpoint', 'qoderEndpoint'].forEach(function (id) {
       var el = $(id);
       if (el) el.onclick = function () { copyText(el.textContent, 'Base URL'); };
     });
-    ['tj', 'cb', 'bai', 'comate'].forEach(function (mode) {
+    ['tj', 'cb', 'bai', 'comate', 'qoder'].forEach(function (mode) {
       var V = PV[mode];
       var clr = $(V.pfx + 'ClearLog');
       if (clr) clr.onclick = function () { $(V.pfx + 'Log').innerHTML = ''; plog(V, 'sys', '日志已清空'); };
       /* 积分刷新按钮统一在这里绑（tjRefresh/cbRefresh）：
-         团结/WorkBuddy 强制实时拉一次积分，B.AI/Comate 无积分卡只刷视图 */
+         团结/WorkBuddy 强制实时拉一次积分，B.AI/Comate/Qoder 无积分卡只刷视图 */
       var rf = $(V.pfx + 'Refresh');
       if (rf) rf.onclick = async function () {
-        if (mode === 'bai' || mode === 'comate') {
+        if (mode === 'bai' || mode === 'comate' || mode === 'qoder') {
           /* B.AI 的「↻ 刷新」与拉杆点火同权：复用同一个闩锁去强制刷一次模型矩阵，
              否则改走缓存端点之后这颗按钮按下去不会有任何变化 */
           if (mode === 'bai') V.fetchOnRun = true;
@@ -7985,7 +8136,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.6.4';
+  var UI_CUR = 'v3.6.5';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
@@ -8086,33 +8237,19 @@ var PT_I18N = {
      zoom = min(1, innerWidth/580, innerHeight/natH) 作用在 .fx-block（Chromium 布局缩放，比 transform 清晰）；
      natH = 未缩放自然高（首次加载时量测，之后固定）；窗口 resize 时重算。
      540 宽下 zoom≈0.93，机器贴满窗宽；缩放后残余缝隙由 #fxOverlay 纸色背景同色消除（见 fax-standalone CSS）。 */
-  var fxZoomNatH = 0;
+    /* fxZoomNatH 已废弃（第 14 轮）：恒定设计尺寸取代动态量测 */
   function fitFaxZoom() {
-    /* zoom 落在包装容器上：Chromium zoom 是布局缩放，inner 的 580 宽随 z 收缩到窗宽，
-       卡片 margin auto 居中；zoom 若打在卡片上，inner 仍 580 会溢出出横向滚动条（上轮实测教训） */
-    var blk = document.getElementById('wtFax');
-    var inner = blk ? blk.parentElement : null;
+    /* 第 14 轮：恒定设计尺寸直接算 zoom——不再动态量测自然高（量测会被异步内容/字体加载污染：
+       实测 fxZoomNatH 量到 897 而非 777，zoom 掉到 0.847，两侧各 24px 背板回潮）。
+       inner 布局 580×800（设计外廓）× zoom → 视觉恰好填满窗口，宽高都显式钉死，无滚动条无背板。
+       卡片在 inner 内 margin auto 居中；窗口 resize 时重算。 */
+    var inner = document.querySelector('.fx-overlay-inner');
     if (!inner) return;
-    if (!fxZoomNatH) {
-      inner.style.zoom = '';
-      /* 第 11 轮 A：量「原版全尺寸自然高」。fax-standalone 盒链（cage/paper/sheet/input flex 拉满）
-         会把书写区拉到吃满剩余高 → inner 量出来比原版高。量测瞬间把纸面书写区临时钉回
-         CSS 固定高（height 100px = 原版 .fx-input 声明），inner 撤 height:auto 回内容高，
-         量完全部还原。机器随后按此基准 zoom 贴窗，高度锁定原版口径。 */
-      var input = document.querySelector('.fx-cage .fx-input');
-      var prevInputH = input ? input.style.height : null;
-      if (input) input.style.height = '100px';
-      inner.style.height = '';
-      fxZoomNatH = inner.offsetHeight || 784;
-      if (input) input.style.height = prevInputH;
-    }
-    /* 机器按未缩放自然高（含纸笼 30px 底垫）整只缩放贴窗（zoom≈0.93 @540×760）。
-       第 11 轮 A/B 修正：zoom 下 height:100% 参照未缩放窗高（760），inner 实际只该占 760/z≈816
-       布局 px——100% 会给到 827（滚动条宽掺入）反而撑出页面纵向滚动。
-       故 zoom 后由 JS 把 inner 钉到精确布局高 innerHeight/z，卡片 100% 链稳定拉满窗。 */
-    var z = Math.min(1, innerWidth / 580, innerHeight / fxZoomNatH);
+    var FX_DESIGN_W = 580, FX_DESIGN_H = 800;
+    var z = Math.min(1, innerWidth / FX_DESIGN_W, innerHeight / FX_DESIGN_H);
     inner.style.zoom = z;
-    inner.style.height = (innerHeight / z) + 'px';
+    inner.style.width = FX_DESIGN_W + 'px';
+    inner.style.height = FX_DESIGN_H + 'px';
   }
 
   /* ================= 启动 ================= */
@@ -8172,7 +8309,7 @@ var PT_I18N = {
   }
 
   function buildAllOdo() {
-    ['uptime', 'tjUptime', 'cbUptime', 'baiUptime'].forEach(function (k) {
+    ['uptime', 'tjUptime', 'cbUptime', 'baiUptime', 'qoderUptime'].forEach(function (k) {
       var el = document.querySelector('[data-odo="' + k + '"]');
       if (el) { PTApp.buildOdo(el, fmtUptime(0)); el.dataset.text = fmtUptime(0); }
     });
