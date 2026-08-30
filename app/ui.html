@@ -1358,8 +1358,8 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 .fx-brand { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: var(--pp-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fx-no { margin-left: auto; font-family: var(--pt-mono-ui); font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: var(--pp-fine); font-variant-numeric: tabular-nums; }
 .fx-p-meta { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 22px; }
-.fx-p-meta p { margin: 0; font-size: 12px; color: var(--pp-fine); letter-spacing: 0.03em; display: flex; align-items: baseline; gap: 4px; padding: 0; min-width: 0; }
-.fx-p-meta p em { font-style: normal; flex: none; color: var(--pp-fine); }
+.fx-p-meta p { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--pp-ink); letter-spacing: 0.03em; display: flex; align-items: baseline; gap: 4px; padding: 0; min-width: 0; }
+.fx-p-meta p em { font-style: normal; flex: none; color: var(--pp-ink); }
 .fx-p-meta p b { margin-left: 5px; font-family: var(--pt-mono-ui); font-weight: 600; color: var(--pp-ink); font-variant-numeric: tabular-nums; min-width: 0; }
 .fx-email { flex: 1 1 auto; min-width: 0; box-sizing: border-box; height: 17px; padding: 0;
   appearance: none; border: 0; border-bottom: 1px dotted var(--pp-rule); outline: none; background: transparent;
@@ -1374,7 +1374,7 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
   appearance: none; -webkit-appearance: none; border: 0;
   border-bottom: 1px dotted var(--pp-rule);
   outline: none; background: transparent; border-radius: 0;
-  font: 400 12.5px/22px var(--pt-mono-ui); color: var(--pp-ink);
+  font: 600 13px/22px var(--pt-mono-ui); color: var(--pp-ink);
   font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
   text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
 }
@@ -1442,9 +1442,9 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
    隐藏不做淡出；开态回流的瞬间位置正确，保留淡入 */
 .fx[data-fx-attach="off"] .fx-minfo-clip { opacity: 0; visibility: hidden; transition: none; position: absolute; }
 .fx-minfo { overflow: hidden; min-height: 0; border: 1px dashed var(--pp-rule); border-radius: 8px; padding: 10px 13px 9px; }
-.fx-minfo .bt { margin: 0 0 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-fine); }
-.fx-minfo p { margin: 0; display: flex; align-items: baseline; gap: 11px; font-size: 12.5px; color: var(--pp-ink); padding: 2px 0; }
-.fx-minfo p em { font-style: normal; flex: none; width: 52px; color: var(--pp-fine); }
+.fx-minfo .bt { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-ink); }
+.fx-minfo p { margin: 0; display: flex; align-items: baseline; gap: 11px; font-size: 13px; color: var(--pp-ink); padding: 2px 0; }
+.fx-minfo p em { font-style: normal; flex: none; width: 52px; font-weight: 600; color: var(--pp-ink); }
 .fx-minfo p b { font-family: var(--pt-mono-ui); font-weight: 600; color: var(--pp-ink); font-variant-numeric: tabular-nums; }
 .fx-privacy { margin: 11px 0 0; font-size: 10.5px; line-height: 1.7; color: var(--pp-fine); }
 
@@ -1550,7 +1550,7 @@ body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-track
 .fx-receipt .sub { margin: 4px 0 0; font-family: var(--pt-mono-ui); font-size: 8.5px; font-weight: 500; letter-spacing: 0.22em; text-indent: 0.22em; color: var(--pp-fine); text-transform: uppercase; }  /* 官方：细字重、大字距 */
 .fx-receipt .rule { margin: 11px auto; width: 86%; border-top: 1px dashed #CFCFC5; }  /* 官方：浅灰虚线 #CCC 系 */
 .fx-receipt dl { margin: 0; display: inline-block; text-align: left; width: 100%; }   /* 官方：字段区占满内容区（边距即 body padding 的 10%） */
-.fx-receipt dl div { display: flex; align-items: baseline; font-size: 11px; line-height: 1.75; color: var(--pp-ink); padding: 0; }   /* 官方：中等字号+统一深墨 */  /* 官方：行距宽松（1.8）、墨色 #444-#555 */
+.fx-receipt dl div { display: flex; align-items: baseline; font-size: 12px; line-height: 1.75; color: var(--pp-ink); padding: 0; }   /* 第 12 轮：12px+深墨（低清屏可读性） */
 .fx-receipt dt { flex: none; width: 3.2em; color: var(--pp-ink); }   /* 官方：标签与值同深墨（低清下仍清晰的关键） */
 .fx-receipt dd { margin: 0; flex: 1; text-align: right; font-family: var(--pt-mono-ui); font-weight: 400; font-variant-numeric: tabular-nums; color: var(--pp-ink); }   /* 官方：常规字重、统一深墨 */  /* 官方：值右对齐到统一右缘 */
 .fx-receipt [data-fx-r-result] { color: var(--fx-rcp-ok); }   /* 结果行「OK · 已送达」绿色强调 */
@@ -2412,6 +2412,10 @@ body.fax-standalone .fx { height: auto; flex: 1 1 auto; min-height: 0; }
 body.fax-standalone .fx-cage { flex: 1; min-height: 0; }   /* 纸区弹性吃满剩余高（缩档由 B 的滚动接管） */
 body.fax-standalone .fx-cage { display: flex; flex-direction: column; }   /* 第 11 轮 B：纸作为 flex 子项吃满笼内高 */
 body.fax-standalone .fx-cage .fx-paper { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+/* 纸本体也要 flex:1——flex 链任何一环吃不到剩余高，末端 overflow 容器就拿不到高度上限，
+   报表就裁不动（第 12 轮修「详细结果滚不动」） */
+body.fax-standalone .fx-cage .fx-paper { flex: 1 1 auto; }
+body.fax-standalone .fx-cage .fx-paper .fx-sheet { flex: 1 1 auto; }
 body.fax-standalone .fx-cage .fx-sheet { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 body.fax-standalone .fx-cage .fx-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin-top: 8px; }
 body.fax-standalone .fx-cage .fx-body .fx-input { height: auto; flex: 1 1 auto; min-height: 0; }
@@ -5807,8 +5811,11 @@ var PT_I18N = {
        （复用 busy 禁用机制）；纸面书写/下拉与扳机在 REPORT 页同样只读，模式键保持可切回 PROBE。 */
     function fxLocks(busy) {
       if (fxSendBtn) fxSendBtn.disabled = busy || fxMode === 'report';
-      if (fxClearBtn) fxClearBtn.disabled = busy || fxMode === 'report';
-      if (fxTrigger) fxTrigger.disabled = busy || fxMode === 'report';
+      /* 第 12 轮：复位在 REPORT 页放行——清结果是复位的主场景（检测键仍禁） */
+      if (fxClearBtn) fxClearBtn.disabled = busy;
+      /* 第 12 轮：扳机不禁于 REPORT 页——minfo 在报表页有内容（报告摘要），开关是正当需求；
+         只在 busy 相位（检测/走纸进行中）锁定 */
+      if (fxTrigger) fxTrigger.disabled = busy;
       if (fxText) fxText.disabled = busy || fxMode === 'report';
       if (fxChSel) fxChSel.disabled = busy || fxMode === 'report';
       if (fxModelSel) fxModelSel.disabled = busy || fxMode === 'report';
@@ -5966,15 +5973,20 @@ var PT_I18N = {
         var on = fxTrigger.getAttribute('aria-checked') !== 'true';
         fxPrintUnpin();                             /* 先无条件撤钉 */
         fxTrigger.setAttribute('aria-checked', on ? 'true' : 'false');
+        /* 第 12 轮：独立浮窗（fax-standalone）下不跑配平——纸面高度由 flex 拉满链接管，
+           原版配平（input 补高/回基准）会在弹性布局里反向挤压纸面（用户实测「关扳机纸变矮」）。
+           浮窗里扳机语义 = 纯显隐机器信息块。 */
+        var standalone = document.body.classList.contains('fax-standalone');
         if (!on) {
           fxPrintRestore();                         /* 恢复满文字再量基准 */
-          fxOnBaseReady();
+          if (!standalone) { fxOnBaseReady(); fxOffBalance(); }
           fx.setAttribute('data-fx-attach', 'off');
-          fxOffBalance();
         } else {
           fx.setAttribute('data-fx-attach', 'on');
-          var input = q('.fx-input');
-          if (input && fxOnBase) input.style.height = fxOnBase.inputH + 'px';
+          if (!standalone) {
+            var input = q('.fx-input');
+            if (input && fxOnBase) input.style.height = fxOnBase.inputH + 'px';
+          }
           fxPrintMinfo();                           /* 打完时 done() 会记基准 */
         }
       });
@@ -6377,6 +6389,14 @@ var PT_I18N = {
         playFile('tick-fs626659', 1);
         if (fxText) fxText.value = '';
         fxCountUpdate();
+        /* 第 12 轮：复位 = 清本次检测结果回未测态——回执藏回、单号回起始、REPORT 数据清空。
+           在 REPORT 页也放行（清结果的主场景）；纸面配平/盖章随 fxSetPhase 统一走 */
+        waterLastReport = null;
+        fxSerial = 881;
+        if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
+        if (fxReceipt) fxReceipt.setAttribute('aria-hidden', 'true');
+        fxPaintStamp();
+        if (typeof fxRenderPage === 'function') fxRenderPage();   /* REPORT 在场时立即回空态提示 */
       });
     }
 
