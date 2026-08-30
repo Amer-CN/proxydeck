@@ -1483,6 +1483,11 @@ body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-track
   color: var(--pp-ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .fx-pc-stage b { color: var(--pt-accent); }
 .fx-pc-note { margin: 8px 2px 0; font-size: 11px; line-height: 1.5; color: var(--pp-fine); }
+/* 第 15 轮：参数卡细滚动条（与报表同款 4px，内容偶尔超高时不出粗黑框） */
+.fx-paramcard::-webkit-scrollbar { width: 4px; }
+.fx-paramcard::-webkit-scrollbar-thumb { background: var(--pp-rule); border-radius: 2px; }
+.fx-paramcard::-webkit-scrollbar-track { background: transparent; }
+.fx-paramcard { overscroll-behavior: contain; }
 /* 第 13 轮：REPORT 历史块行距（fxHistoryRowsHtml 行模板沿用甲板 if-row 尺寸体系） */
 .fx.report-page .fx-rsec .if-row { font-size: 13px; line-height: 1.6; }
 /* 第 11 轮 C：报表重排版——基准 ≥13px、数据行行高 ≥1.6、标题行加大加粗、正文深墨
@@ -6717,7 +6722,12 @@ var PT_I18N = {
       groups[v].forEach(function (id) {
         var c = document.createElement('span');
         c.className = 'pt-chip';
-        c.textContent = fullId ? id : id.split('/').pop();
+        var shown = id;
+        if (fullId && V && V.modelNameMap && V.modelNameMap[id]) {
+          shown = V.modelNameMap[id]; /* 界面名做文本，可用名进 title */
+          c.title = id;
+        }
+        c.textContent = fullId ? shown : id.split('/').pop();
         c.onclick = function () {
           copyText(id, '模型名');
           var wrap = c.closest('.pt-chips');
@@ -7147,7 +7157,18 @@ var PT_I18N = {
       /* cb 上屏「模型探测」灯：动态探测完成即亮，b 显示 N 个 */
       if (V.mode === 'cb') PTApp.dot('cbProbe', true, false, ids.length + ' 个');
       var groups = {};
-      ids.forEach(function (id) { var v = pluginVendorOf(id); (groups[v] = groups[v] || []).push(id); });
+      /* nameMap: 有 display_name 且与 id 不同的条目（Qoder qmodel_38max→Qwen3.8-Max）：
+         chip 显示界面名、复制仍复制可用名（id）；tj/cb/bai 无 display_name 或两者相同，行为不变。
+         厂家分组同样优先按 display_name 认（Qoder 的内部代号 qmodel_38max/gfmodel 无厂家前缀，
+         按 id 分组会一人一组；按显示名分 Qwen/GLM/DeepSeek 才成组） */
+      V.modelNameMap = {};
+      (d.data || []).forEach(function (m) {
+        if (m.display_name && m.display_name !== m.id) V.modelNameMap[m.id] = m.display_name;
+      });
+      ids.forEach(function (id) {
+        var v = pluginVendorOf(V.modelNameMap[id] || id);
+        (groups[v] = groups[v] || []).push(id);
+      });
       renderModelChips(mlBox, groups, PLUGIN_VENDOR_COLORS, true, V);
       if (firstLoad) plog(V, 'net', '模型矩阵已装载 · ' + ids.length + ' 个模型');
     } catch (e) {
@@ -8239,17 +8260,17 @@ var PT_I18N = {
      540 宽下 zoom≈0.93，机器贴满窗宽；缩放后残余缝隙由 #fxOverlay 纸色背景同色消除（见 fax-standalone CSS）。 */
     /* fxZoomNatH 已废弃（第 14 轮）：恒定设计尺寸取代动态量测 */
   function fitFaxZoom() {
-    /* 第 14 轮：恒定设计尺寸直接算 zoom——不再动态量测自然高（量测会被异步内容/字体加载污染：
-       实测 fxZoomNatH 量到 897 而非 777，zoom 掉到 0.847，两侧各 24px 背板回潮）。
-       inner 布局 580×800（设计外廓）× zoom → 视觉恰好填满窗口，宽高都显式钉死，无滚动条无背板。
-       卡片在 inner 内 margin auto 居中；窗口 resize 时重算。 */
+    /* 第 15 轮（终结跷跷板）：zoom 只由宽度决定（540/580≈0.931）——左右边距死锁为零；
+       高度 = 窗口高/zoom 反推（760/0.931≈816 布局 px），纵向余缺全部交给弹性链
+       （cage/paper flex 吸收，REPORT 报表内部滚动）——下边距同样贴合，不再此消彼长。
+       （第 14 轮的固定设计高 800 在 760 窗里留 15px 纸色空带 = 用户看到的下边距变宽） */
     var inner = document.querySelector('.fx-overlay-inner');
     if (!inner) return;
-    var FX_DESIGN_W = 580, FX_DESIGN_H = 800;
-    var z = Math.min(1, innerWidth / FX_DESIGN_W, innerHeight / FX_DESIGN_H);
+    var FX_DESIGN_W = 580;
+    var z = Math.min(1, innerWidth / FX_DESIGN_W);
     inner.style.zoom = z;
     inner.style.width = FX_DESIGN_W + 'px';
-    inner.style.height = FX_DESIGN_H + 'px';
+    inner.style.height = (innerHeight / z) + 'px';
   }
 
   /* ================= 启动 ================= */
