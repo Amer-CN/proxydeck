@@ -1476,8 +1476,8 @@ body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-track
   display: flex; flex-direction: column; justify-content: flex-start;
   padding: 4px 2px; box-sizing: border-box; }
 .fx-pc-row { display: flex; align-items: baseline; gap: 10px;
-  padding: 6px 2px; border-bottom: 1px dotted var(--pp-rule);
-  font-size: 13px; line-height: 1.55; color: var(--pp-ink); }
+  padding: 4px 2px 10px; border-bottom: 1px dotted var(--pp-rule);   /* 下留 10px：字写在线上方，线不穿字 */
+  font-size: 13px; line-height: 1.45; color: var(--pp-ink); }
 .fx-pc-row em { font-style: normal; flex: none; width: 72px; font-size: 12px; font-weight: 700; color: var(--pp-ink); }
 .fx-pc-row b { flex: 1 1 auto; min-width: 0; font-family: var(--pt-mono-ui); font-weight: 600;
   color: var(--pp-ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -2420,13 +2420,10 @@ body.fax-standalone > #demoBadge { display: none; }
 body.fax-standalone > #fxOverlay { position: static; overflow: visible; padding: 0; }
 /* 第 10 轮：缩放后残余缝隙与窗底空白用纸色同名消除——视觉上无背板（用户上轮驳回的背板不复现） */
 body.fax-standalone > #fxOverlay { background: var(--pt-paper); }
-body.fax-standalone .fx-overlay-inner { width: 580px; }
+body.fax-standalone .fx-overlay-inner { width: 580px; height: 784px; }
 body.fax-standalone .fx-block { margin: 0 auto; border-radius: 0; box-shadow: none; background: var(--pt-paper); }
-/* 第 11 轮 A：浮窗内卡片拉满窗高（zoom 后 540 宽贴边）——inner 定高，机器 flex 撑满，
-   控制台贴到卡底=按钮贴窗底（对照原版按钮贴底口径：下缘到窗底距离≈左右边距）。 */
-body.fax-standalone > #fxOverlay { display: flex; }
-/* inner 高度不写 100%（zoom 下 100% 参照未缩放窗高会膨胀出页面滚动条），
-   由 fitFaxZoom 按 innerHeight/z 精确钉值（JS 侧第 11 轮 A/B 修正） */
+/* 第 16 轮（去 zoom 定稿）：浮窗=机器原生外廓 580×784 1:1 渲染（比主界面宽 40px），
+   inner 定高 784 由 CSS 直接管，不再有 fitFaxZoom——文字 1:1 原生渲染，虚线归位、字不发糊。 */
 body.fax-standalone .fx-overlay-inner { margin: 0 auto; }
 body.fax-standalone .fx-block { width: 100%; height: 100%; }
 /* fx 用 flex 拉满卡高（不用 height:100%——margin-top -9 会让 height:100% 底部差 9px 布局 px）：
@@ -5690,6 +5687,8 @@ var PT_I18N = {
       ? models.map(function (m) { return '<option value="' + escHtml(m) + '">' + escHtml(m) + '</option>'; }).join('')
       : '<option value="">（该渠道无模型列表）</option>';
     renderWaterScreen();
+    /* 第 13 轮：渠道列表/模型异步就位后同步参数卡（否则卡上「检测对象」停在 — · —） */
+    if (wtFax && wtFax.paint) wtFax.paint();
   }
   /* 上屏信息区（一）：当前检测对象——渠道连通情况直接标色，不用回甲板查状态 */
   function renderWaterScreen() {
@@ -6724,12 +6723,13 @@ var PT_I18N = {
         c.className = 'pt-chip';
         var shown = id;
         if (fullId && V && V.modelNameMap && V.modelNameMap[id]) {
-          shown = V.modelNameMap[id]; /* 界面名做文本，可用名进 title */
-          c.title = id;
+          shown = V.modelNameMap[id]; /* 界面名做文本；复制也复制界面名——
+             后端 resolveModel 双向匹配，界面名与代号同样可填 */
+          c.title = id; /* 悬停提示内部代号，仅供排查 */
         }
         c.textContent = fullId ? shown : id.split('/').pop();
         c.onclick = function () {
-          copyText(id, '模型名');
+          copyText(shown, '模型名');
           var wrap = c.closest('.pt-chips');
           if (wrap) wrap.querySelectorAll('.pt-chip.copied').forEach(function (x) { x.classList.remove('copied'); });
           c.classList.add('copied');
@@ -8258,20 +8258,9 @@ var PT_I18N = {
      zoom = min(1, innerWidth/580, innerHeight/natH) 作用在 .fx-block（Chromium 布局缩放，比 transform 清晰）；
      natH = 未缩放自然高（首次加载时量测，之后固定）；窗口 resize 时重算。
      540 宽下 zoom≈0.93，机器贴满窗宽；缩放后残余缝隙由 #fxOverlay 纸色背景同色消除（见 fax-standalone CSS）。 */
-    /* fxZoomNatH 已废弃（第 14 轮）：恒定设计尺寸取代动态量测 */
-  function fitFaxZoom() {
-    /* 第 15 轮（终结跷跷板）：zoom 只由宽度决定（540/580≈0.931）——左右边距死锁为零；
-       高度 = 窗口高/zoom 反推（760/0.931≈816 布局 px），纵向余缺全部交给弹性链
-       （cage/paper flex 吸收，REPORT 报表内部滚动）——下边距同样贴合，不再此消彼长。
-       （第 14 轮的固定设计高 800 在 760 窗里留 15px 纸色空带 = 用户看到的下边距变宽） */
-    var inner = document.querySelector('.fx-overlay-inner');
-    if (!inner) return;
-    var FX_DESIGN_W = 580;
-    var z = Math.min(1, innerWidth / FX_DESIGN_W);
-    inner.style.zoom = z;
-    inner.style.width = FX_DESIGN_W + 'px';
-    inner.style.height = (innerHeight / z) + 'px';
-  }
+    /* 第 14-15 轮反复验证后的最终裁决：浮窗彻底放弃 CSS zoom——非整数缩放把文字光栅化
+       拉糊（ClearType 失效）、虚线落在半像素上（线穿字）。浮窗按机器原生外廓 580×784
+       1:1 开窗（比主界面宽 40px，换文字原生清晰），窗口固定不可缩放，无任何缩放代码。 */
 
   /* ================= 启动 ================= */
   function boot() {
@@ -8284,8 +8273,7 @@ var PT_I18N = {
       /* 纸面渠道/模型镜像依赖 fxOverlayShown=true，paint 触发渠道拉取（8788 真数据回填纸面） */
       fxOverlayShown = true;
       if (wtFax && wtFax.paint) wtFax.paint();
-      fitFaxZoom();
-      window.addEventListener('resize', fitFaxZoom);
+      /* 第 16 轮：fitFaxZoom 已随 zoom 一并废除——浮窗 580×784 由 CSS 定死，1:1 原生渲染 */
     }
     bindStatic();
     buildAllOdo();

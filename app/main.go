@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	appVersion  = "v3.6.4"
+	appVersion  = "v3.6.5"
 	coreVersion = "v1.2.0"
 	appTitle    = "ProxyDeck · 多平台代理控制台"
 )
@@ -99,8 +99,9 @@ func runFaxWindow() int {
 	w.SetTitle("注水专线 · WATER PROBE FX-01")
 	// 设备即窗口（与主窗同款）：去原生标题栏与系统边框——机器自带的标题栏（三灯 + 专线铭牌）就是窗框，
 	// 红圆点即关窗；原生壳再包一层 = 双重画框（第 9 轮用户实测驳回）。
-	// 540×760 = 与主界面同尺寸（第 10 轮用户裁决）；机器整体轻微缩放贴宽由前端 zoom 承担（见 ui.html fitFaxZoom）。
-	w.SetSize(540, 760, webview.HintNone)
+	// 580×784 = 机器原生外廓（第 14 轮裁决：浮窗不用 CSS zoom——zoom 缩放渲染毁文字清晰度，
+	// 1:1 原生渲染才是可读性的根）。
+	w.SetSize(580, 784, webview.HintNone)
 	if hwnd := w.Window(); hwnd != nil {
 		setFrameless(uintptr(hwnd))
 		setWindowIcon(uintptr(hwnd))
@@ -183,7 +184,7 @@ func main() {
 	app := newApp(*flagHost, *flagPort, *flagAPIKey)
 
 	// 插件子模式（团结 / CodeBuddy / B.AI / Comate）：实现见 plugin_modes.go
-	if *flagPluginTuanjie || *flagPluginCodebuddy || *flagPluginBai || *flagPluginComate {
+	if *flagPluginTuanjie || *flagPluginCodebuddy || *flagPluginBai || *flagPluginComate || *flagPluginQoder {
 		os.Exit(runPluginMode())
 	}
 
