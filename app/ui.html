@@ -2570,7 +2570,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="comateZulu" title="托管 Comate zulu serve 会话引擎（内部 8792）"><span>zulu 托管</span><b></b></span>
-                    <span class="pt-dot warn" data-dot="comateFree" title="Comate 为免费托管：上游对免费档有限速，忙时变慢属正常"><span>免费限速</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -4063,6 +4062,8 @@ var PT_I18N = {
     paint();
     play('modeChange');
     modeListeners.forEach(function (f) { try { f(m); } catch (e) {} });
+    /* 第 30 轮：键面翻面后蓝灯跟随当前面（noteFace 改了 on-alt → 灯须重算） */
+    if (typeof window.refreshKeyLights === 'function') window.refreshKeyLights();
   }
   $$('.pt-key[data-mode]').forEach(function (k) {
     k.addEventListener('click', function () {
@@ -7144,11 +7145,6 @@ var PT_I18N = {
     /* tj 屏健康检查灯已改「账号矩阵」（数据在 loadTuanjieAccounts/renderTuanjieMatrix）；
        cb 屏可用模型灯已改「模型探测」（loadPluginModels 写）+「脱敏防护」（常亮） */
     if (V.mode === 'cb') PTApp.dot('cbMask', true, false, '开启');
-    /* comate 屏灯：zulu 托管随相位；免费限速运行时常亮（免费档上游限速是常态） */
-    if (V.mode === 'comate') {
-      PTApp.dot('comateZulu', p === 'running', p === 'starting', p === 'starting' ? '托管中' : '');
-      PTApp.dot('comateFree', p === 'running', false, p === 'running' ? '限速中' : '');
-    }
     /* bai 屏灯：限时免费运行时常亮（平台免费档属性）；需代理为静态琥珀徽章不在此画 */
     if (V.mode === 'bai') PTApp.dot('baiFree', p === 'running', false, '');
     /* 插件启停改变"运行态"——键角蓝灯（refreshKeyLights）随相位重刷 */
@@ -7167,11 +7163,12 @@ var PT_I18N = {
     $$('.pt-key[data-mode]').forEach(function (k) {
       var keyMode = k.dataset.mode;
       var selected = k.getAttribute('aria-checked') === 'true';
-      /* 第 25 轮用户裁决「严格主页面」：键的蓝灯只看该键主页面服务（cmd=55990 核心、
-         tj=8788、cb=8787）——副页服务（B.AI/COMATE/QODER）不点亮主键；
-         副页运行态看各自副页的屏灯（那里指示独立）。 */
-      var V = PV[keyMode];
-      var on = keyMode === 'cmd'
+      /* 第 30 轮（用户裁决）：蓝灯跟随键面当前页——键面显 COMATE 就看 comate，
+         显 PROBE/注水检测就看 tuanjie。面由 on-alt 类标（faceAlt 切换处已刷灯）。 */
+      var isAlt = k.classList.contains('on-alt');
+      var face = isAlt && ALT_MODE[keyMode] ? ALT_MODE[keyMode] : keyMode;
+      var V = PV[face];
+      var on = face === 'cmd'
         ? (live ? live.core === true : (S.phase === 'running' || S.phase === 'external'))
         : (live ? !!(V && live[V.id] === true) : !!(V && V.phase === 'running'));
       k.classList.toggle('key-live', !selected && on);
@@ -7189,6 +7186,7 @@ var PT_I18N = {
     }
     paintKeyLights(null);                       /* 无桥回退：状态机相位点灯 */
   }
+  PTApp.refreshKeyLights = refreshKeyLights;   /* 第 30 轮：键面翻面后引擎侧调用 */
   setInterval(refreshKeyLights, 2500);
   PTApp.onModeChange(function () { refreshKeyLights(); });
 
