@@ -1416,6 +1416,9 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 [data-theme="dark"] .fx-stamp.v-red { color: #F06A5E; border-color: #F06A5E; background: color-mix(in srgb, #F06A5E 5%, transparent); }
 [data-theme="dark"] .fx-stamp.v-yellow { color: #F2C94C; border-color: #F2C94C; background: color-mix(in srgb, #F2C94C 5%, transparent); }
 [data-theme="dark"] .fx-stamp.v-grey { color: #9C9486; border-color: #9C9486; background: color-mix(in srgb, #9C9486 5%, transparent); }
+/* 第 29 轮：回执「判定」与 REPORT 摘要「判定」诚实降级红显（与 .fx-stamp.v-red 同色系） */
+.fx-receipt dd.fx-contradict, .fx-minfo b.fx-contradict { color: #B23A2E; font-weight: 700; }
+[data-theme="dark"] .fx-receipt dd.fx-contradict, [data-theme="dark"] .fx-minfo b.fx-contradict { color: #F06A5E; }
 .fx-stamp-note { font-size: 11px; line-height: 1.5; color: var(--pp-fine); }
 
 /* ————— 正文横线信纸输入区（纸上墨色体系）————— */
@@ -1747,25 +1750,10 @@ body.fax-standalone .fx.report-page .fx-lamp-wrap { margin-left: auto; }
 }
 
 /* 第 10 轮：三灯全功能——红=关窗（ccFaxClose 优雅关闭）黄=最小化 绿=最大化/还原（经 ccWindowCmd 桥走 Win32）；
-   悬停反馈照主界面 #ptLedge 口径（提亮+放大），红灯 × / 黄灯 − / 绿灯 □ */
+   悬停反馈照主界面 #ptLedge 口径（提亮+放大，纯色圆点无符号——第 29 轮用户裁决撤 ×/−/□） */
 .fx-lights i { cursor: pointer; position: relative;
   transition: filter .12s ease, transform .12s ease; }
 .fx-lights i:hover { filter: brightness(1.18); transform: scale(1.12); }
-.fx-lights i:nth-child(1):hover::after {
-  content: '×'; position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font: 700 9px/1 var(--pt-font-ui); color: rgba(77, 0, 0, .75);
-}
-.fx-lights i:nth-child(2):hover::after {
-  content: '−'; position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font: 700 9px/1 var(--pt-font-ui); color: rgba(77, 60, 0, .78);
-}
-.fx-lights i:nth-child(3):hover::after {
-  content: '□'; position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font: 700 7px/1 var(--pt-font-ui); color: rgba(0, 77, 20, .78);
-}
 </style>
 <style>
 /* ============================================================
@@ -2448,6 +2436,9 @@ body.fax-standalone .fx-cage { flex: 1 1 0; min-height: 0; display: flex; flex-d
 body.fax-standalone .fx-cage .fx-paper { display: flex; flex-direction: column; min-height: 0; flex: 1 1 0; overflow: hidden; }
 body.fax-standalone .fx-cage .fx-paper .fx-sheet { flex: 1 1 0; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 body.fax-standalone .fx-cage .fx-sheet > * { flex: none; }   /* 单面固定行不参与伸缩 */
+/* 第 29 轮：REPORT 模式下 .fx-report 是 .fx-body 唯一的弹性吸收者，
+   必须压过上一行的一刀切 flex:none（否则报表拿不到高度上限，滚不动） */
+body.fax-standalone .fx.report-page .fx-cage .fx-body .fx-report { flex: 1 1 0; }
 body.fax-standalone .fx-cage .fx-body { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; margin-top: 8px; }
 body.fax-standalone .fx-cage .fx-body .fx-input { height: auto; flex: 1 1 0; min-height: 0; }
 body.fax-standalone .fx.report-page .fx-cage .fx-body .fx-report { flex: 1 1 0; }
@@ -5861,6 +5852,20 @@ var PT_I18N = {
     var FX_PROBES = 8;                  /* 管道探针 8 项（后端 RunPipelineProbes：tokenizer×4/错误×2/finish×2） */
     var FX_VERDICT_ZH = { green: '真实', red: '注水', yellow: '存疑', grey: '无基准' };
 
+    /* 第 29 轮：判定同源出口——回执「判定」、REPORT 章、REPORT 摘要「判定」一律取本函数。
+       后端聚合 verdict 如实透传（不前端篡改）；但聚合与 items 矛盾（判绿而 items ≥2 ✖）
+       时按证据降级显示「与证据矛盾」（红显）——诚实优先，不给与证据相反的绿回执。
+       rep 兼容两种入参形态：整响应（waterLastReport，取 .report）或裸 report（fxSettle 链）。 */
+    function fxHonestVerdict(rep) {
+      var r = (rep && rep.report) || rep || {};
+      var v = r.verdict || {};
+      var light = v.light || 'grey';
+      var fails = 0;
+      (r.items || []).forEach(function (it) { if (it && it.result === '✖') fails++; });
+      if (light === 'green' && fails >= 2) return { light: 'red', zh: '与证据矛盾', honest: true };
+      return { light: light, zh: FX_VERDICT_ZH[light] || '无基准', honest: false };
+    }
+
     /* LCD 状态中文（原版 i18n zh 默认值硬编码；末两位为第 8 轮注水口径） */
     var ST_ZH = { ready: '待命', offhook: '摘机', dialing: '拨号中 ‥‥', connecting: '已接通',
       sending: '传送中 · 第 1 页', sent: '已送达', printed: '回执已打印', tearing: '撕下回执',
@@ -5924,7 +5929,7 @@ var PT_I18N = {
        （复用 busy 禁用机制）；纸面书写/下拉与扳机在 REPORT 页同样只读，模式键保持可切回 PROBE。 */
     function fxLocks(busy) {
       if (fxSendBtn) fxSendBtn.disabled = busy || fxMode === 'report';
-      /* 第 12 轮：复位在 REPORT 页放行——清结果是复位的主场景（检测键仍禁） */
+      /* 第 12 轮：复位（第 29 轮起=换纸）在 REPORT 页放行——换纸是复位的主场景（检测键仍禁） */
       if (fxClearBtn) fxClearBtn.disabled = busy;
       /* 第 12 轮：扳机不禁于 REPORT 页——minfo 在报表页有内容（报告摘要），开关是正当需求；
          只在 busy 相位（检测/走纸进行中）锁定 */
@@ -5956,24 +5961,29 @@ var PT_I18N = {
         fxStampEl.classList.add('v-grey');
         return;
       }
-      var light = (rep.report.verdict && rep.report.verdict.light) || 'grey';
-      fxStampText.textContent = (FX_VERDICT_ZH[light] || '无 基 准').split('').join(' ');
-      fxStampEl.classList.add(light === 'green' ? 'v-green' : light === 'red' ? 'v-red'
-        : light === 'yellow' ? 'v-yellow' : 'v-grey');
+      /* 第 29 轮：章随 fxHonestVerdict（与回执/摘要判定同源），矛盾时章红显「与证据矛盾」 */
+      var hv = fxHonestVerdict(rep);
+      fxStampText.textContent = hv.zh.split('').join(' ');
+      fxStampEl.classList.add(hv.light === 'green' ? 'v-green' : hv.light === 'red' ? 'v-red'
+        : hv.light === 'yellow' ? 'v-yellow' : 'v-grey');
+    }
+    /* 第 29 轮：模式切换提为函数——模式键、撕纸自动进 REPORT、复位换纸回 PROBE 三路共用 */
+    function fxSwitchMode(m) {
+      fxMode = m;
+      fxModeBtns.forEach(function (b) {
+        var on = b.dataset.fxMode === m;
+        b.classList.toggle('cur', on);
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.tabIndex = on ? 0 : -1;
+      });
+      fxPaintStamp();
+      fxRenderPage();                              /* REPORT 页填充 / PROBE 页还原 */
     }
     fxModeBtns.forEach(function (k) {
       k.addEventListener('click', function () {
         if (fxPhase !== 'ready') return;
         if (fxMode === k.dataset.fxMode) return;   /* 同键重复点击不重盖 */
-        fxMode = k.dataset.fxMode;
-        fxModeBtns.forEach(function (b) {
-          var on = b === k;
-          b.classList.toggle('cur', on);
-          b.setAttribute('aria-checked', on ? 'true' : 'false');
-          b.tabIndex = on ? 0 : -1;
-        });
-        fxPaintStamp();
-        fxRenderPage();                            /* 第 10 轮：REPORT 页填充 / PROBE 页还原 */
+        fxSwitchMode(k.dataset.fxMode);
         /* 盖章动画：scale 1.6→1 + opacity 0→1 spring 下落叩击（REDUCED 跳过） */
         if (fxStampEl && !REDUCED) {
           fxStampEl.classList.remove('stamping');
@@ -6046,10 +6056,13 @@ var PT_I18N = {
         return;
       }
       var v = r.verdict || {};
-      var verdictZh = { green: '真实', red: '注水', yellow: '存疑', grey: '无基准' }[v.light || 'grey'] || '无基准';
+      /* 第 29 轮：摘要「判定」与回执「判定」强制同源（fxHonestVerdict），矛盾时同步红显 */
+      var hv = fxHonestVerdict(rep);
       if (bt) bt.textContent = '报告摘要 · ' + String(r.at || '').slice(5, 16);
       field(0, '对象', (r.channel || '—') + ' · ' + (r.model || '—'));
-      field(1, '判定', verdictZh);
+      field(1, '判定', hv.zh);
+      var vb = rows[2] && rows[2].querySelector('b');
+      if (vb) vb.classList.toggle('fx-contradict', !!hv.honest);
       field(2, '相似度', v.score ? v.score + '%' : '—');
       field(3, '账号', r.account || '—');
     }
@@ -6251,12 +6264,14 @@ var PT_I18N = {
     /* 回执真实数据（dt 标签已在 HTML 换注水口径，dd 填 check 报告真实值） */
     function fxFillReceipt(rep) {
       var v = (rep && rep.verdict) || {};
-      var light = v.light || 'grey';
       var set = function (sel, t) { var el = q(sel); if (el) el.textContent = t; };
       set('[data-fx-r-date]', fxSentStamp || fxNow().stamp);
       set('[data-fx-r-target]', ((rep && rep.channel) || fxLastCh || '—') + ' · ' + ((rep && rep.model) || fxLastM || '—'));
       set('[data-fx-r-account]', (rep && rep.account) || '—');
-      set('[data-fx-r-verdict]', FX_VERDICT_ZH[light] || '—');
+      /* 第 29 轮：回执「判定」走 fxHonestVerdict（与 REPORT 摘要/章同源）；与 items 矛盾时红显 */
+      var hv = fxHonestVerdict(rep);
+      var vEl = q('[data-fx-r-verdict]');
+      if (vEl) { vEl.textContent = hv.zh; vEl.classList.toggle('fx-contradict', !!hv.honest); }
       set('[data-fx-r-score]', v.score ? v.score + '%' : '—');
       var sec = Math.max(0, Math.round((performance.now() - fxT0) / 1000));
       set('[data-fx-r-time]', fxPad(Math.floor(sec / 60), 2) + "'" + fxPad(sec % 60, 2));
@@ -6456,14 +6471,14 @@ var PT_I18N = {
       }, REDUCED ? 0 : 650);     /* 摘机 650ms */
     }
 
-    function fxTear() {
-      if (fxPhase !== 'printed') return;
+    /* 撕断+掉落段（第 29 轮从 fxTear 提取：复位「换纸」复用）——撕断段官方真相：
+       3 强峰 270ms 内（间隔 170/100），420ms 起掉落（load 音轨 mod-3 轮换），
+       1350ms（官方点击→换纸间隔）调 onTorn 进换纸段 */
+    function fxTearOff(onTorn) {
       fxSetPhase('tearing');
-      /* 撕断段官方真相：3 强峰 270ms 内（间隔 170/100） */
       playFile('fax-tear', 1);                                  /* 第 1 峰：立即 */
       fxSfxTo(function () { if (fxPhase === 'tearing') playFile('fax-tear', 1); }, 170);   /* 第 2 峰 */
       fxSfxTo(function () { if (fxPhase === 'tearing') playFile('fax-tear', .9); }, 270);  /* 第 3 峰 */
-      /* 掉落段：load 音轨 mod-3 轮换 */
       fxSfxTo(function () {
         if (fxPhase !== 'tearing') return;
         var dropStep = 0;
@@ -6473,46 +6488,59 @@ var PT_I18N = {
           playFile('fax-load-' + (1 + dropStep++ % 3), 1);
         }, 120);                 /* 官方掉落摩擦间隔 */
       }, 420);                   /* 撕断动画 420ms 后掉落开始 */
+      setTimeout(function () { if (fxPhase === 'tearing') onTorn(); }, REDUCED ? 0 : 1350);
+    }
+    /* 换纸段（第 29 轮从 fxTear 提取：复位换纸复用）——吞纸声=feed-1/2/3 复用；
+       换单 serial+1，吞纸 1100 → 新单降下 2000 → ready 落定；afterReady 落定后回调 */
+    function fxFeedSheet(afterReady) {
+      fxSerial += 1;
+      if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
+      if (fxDateEl) fxDateEl.textContent = fxNow().date;
+      if (fxText) fxText.value = '';
+      fxCountUpdate();
+      loadWaterHistory();          /* 换单同刻：刷新甲板历史 + 上屏结论（syncWaterVerdict 在其内） */
+      fxSetPhase('loading');
+      var swallowStep = 0;           /* 换纸段独立 mod-3 计数 */
+      playFile('fax-feed-' + (1 + swallowStep++ % 3), 1);   /* 吞纸首声立即 */
+      fxSfxIv(function () {
+        if (fxPhase !== 'loading') { fxSfxClear(); return; }
+        playFile('fax-feed-' + (1 + swallowStep++ % 3), 1);
+      }, 107);               /* 吞纸段与官方步进同钟（吞纸 1100ms） */
       setTimeout(function () {
-        /* 换纸段：吞纸声=feed-1/2/3 复用；换单 serial+1 回待命（零网络） */
-        fxSerial += 1;
-        if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
-        if (fxDateEl) fxDateEl.textContent = fxNow().date;
-        if (fxText) fxText.value = '';
-        fxCountUpdate();
-        loadWaterHistory();          /* 撕纸换单同刻：刷新甲板历史 + 上屏结论（syncWaterVerdict 在其内） */
-        fxSetPhase('loading');
-        var swallowStep = 0;           /* 换纸段独立 mod-3 计数 */
-        playFile('fax-feed-' + (1 + swallowStep++ % 3), 1);   /* 吞纸首声立即 */
+        fxSfxClear();          /* 吞纸结束：停 feed 循环 */
+        /* 新纸步进降下：从 -118% 每 107ms 一步匀速回 0，打印声伴纸同响 */
+        var fresh0 = performance.now();
+        var freshStep = 0;
+        playFile('fax-print-' + (1 + freshStep++ % 3), 0.5);   /* 打印首声与纸出同刻 */
         fxSfxIv(function () {
           if (fxPhase !== 'loading') { fxSfxClear(); return; }
-          playFile('fax-feed-' + (1 + swallowStep++ % 3), 1);
-        }, 107);               /* 吞纸段与官方步进同钟（吞纸 1100ms） */
-        setTimeout(function () {
-          fxSfxClear();          /* 吞纸结束：停 feed 循环 */
-          /* 新纸步进降下：从 -118% 每 107ms 一步匀速回 0，打印声伴纸同响 */
-          var fresh0 = performance.now();
-          var freshStep = 0;
-          playFile('fax-print-' + (1 + freshStep++ % 3), 0.5);   /* 打印首声与纸出同刻 */
-          fxSfxIv(function () {
-            if (fxPhase !== 'loading') { fxSfxClear(); return; }
-            playFile('fax-print-' + (1 + freshStep++ % 3), 0.5);
-          }, 100);
-          fxSfxTo(function down() {
-            if (fxPhase !== 'loading') { fxSfxClear(); return; }
-            var kk = Math.min(1, (performance.now() - fresh0) / 2000);
-            if (fxPaper) fxPaper.style.transform = 'translateY(' + (-118 * (1 - kk)).toFixed(2) + '%)';
-            if (kk >= 1) return;         /* 终值由 ready 切换统一归零 */
-            fxSfxTo(down, 107);
-          }, 107);
-          fxSfxTo(function () {
-            fxSfxClear();          /* 纸落位即停打印声 */
-            if (fxPaper) fxPaper.style.transform = 'translateY(0)';   /* 强制归零：防末帧残余压标题 */
-            fxSetPhase('ready');
-            /* 新纸不重打机器信息：吞纸时 fxPrintRestore 已恢复完整文字（原版同径） */
-          }, REDUCED ? 0 : 2000);   /* 新纸打印段 */
-        }, REDUCED ? 0 : 1100);   /* 换纸吞纸 */
-      }, REDUCED ? 0 : 1350);       /* 撕断 420 + 掉落 900 ≈ 官方点击→换纸间隔 */
+          playFile('fax-print-' + (1 + freshStep++ % 3), 0.5);
+        }, 100);
+        fxSfxTo(function down() {
+          if (fxPhase !== 'loading') { fxSfxClear(); return; }
+          var kk = Math.min(1, (performance.now() - fresh0) / 2000);
+          if (fxPaper) fxPaper.style.transform = 'translateY(' + (-118 * (1 - kk)).toFixed(2) + '%)';
+          if (kk >= 1) return;         /* 终值由 ready 切换统一归零 */
+          fxSfxTo(down, 107);
+        }, 107);
+        fxSfxTo(function () {
+          fxSfxClear();          /* 纸落位即停打印声 */
+          if (fxPaper) fxPaper.style.transform = 'translateY(0)';   /* 强制归零：防末帧残余压标题 */
+          fxSetPhase('ready');
+          /* 新纸不重打机器信息：吞纸时 fxPrintRestore 已恢复完整文字（原版同径） */
+          if (afterReady) afterReady();
+        }, REDUCED ? 0 : 2000);   /* 新纸打印段 */
+      }, REDUCED ? 0 : 1100);   /* 换纸吞纸 */
+    }
+    function fxTear() {
+      if (fxPhase !== 'printed') return;
+      fxTearOff(function () {
+        fxFeedSheet(function () {
+          /* 第 29 轮：撕纸完成自动进 REPORT 详细结果页——撕掉的回执是「摘要」，
+             详细报告在 REPORT 页等用户细读（LCD 显「详细结果 · REPORT」）；模式键可切回 PROBE */
+          if (waterLastReport && waterLastReport.report) fxSwitchMode('report');
+        });
+      });
     }
 
     /* CLEAR：点按清纸；长按 1.5 秒演示占线 */
@@ -6535,16 +6563,17 @@ var PT_I18N = {
         if (fxClearLong) { fxClearLong = false; return; }
         if (fxPhase !== 'ready') return;
         playFile('tick-fs626659', 1);
-        if (fxText) fxText.value = '';
-        fxCountUpdate();
-        /* 第 12 轮：复位 = 清本次检测结果回未测态——回执藏回、单号回起始、REPORT 数据清空。
-           在 REPORT 页也放行（清结果的主场景）；纸面配平/盖章随 fxSetPhase 统一走 */
-        waterLastReport = null;
-        fxSerial = 881;
-        if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
+        /* 第 29 轮：复位=换纸——撕掉旧回执（若有）→ 新单降下 → 单号+1 → LCD 回「待命」，
+           与原版传真机换单一致；按钮文字不变。原「清结果回未测态」并入换纸流程
+           （换纸=新单=旧结果作废）：回执藏回、REPORT 数据清空、章回「注水检测」。
+           旧结果在场 → 全段撕纸/换单动画；无旧结果 → 直接换纸（新单降下）。
+           PROBE/REPORT 两页 ready 相位均可触发；REPORT 页触发先回 PROBE 操作台。 */
+        var hadReceipt = !!(waterLastReport && waterLastReport.report);
+        waterLastReport = null;                       /* 旧结果作废 */
         if (fxReceipt) fxReceipt.setAttribute('aria-hidden', 'true');
-        fxPaintStamp();
-        if (typeof fxRenderPage === 'function') fxRenderPage();   /* REPORT 在场时立即回空态提示 */
+        if (fxMode !== 'probe') fxSwitchMode('probe');
+        if (hadReceipt) fxTearOff(function () { fxFeedSheet(); });
+        else fxFeedSheet();
       });
     }
 
