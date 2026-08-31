@@ -1375,11 +1375,11 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 /* ————— 纸面往来表单字段（第 8 轮：渠道/模型在纸上选，口径同传真单在纸上填邮箱 .fx-email；第 6 轮现成样式复用）————— */
 .fx-p-meta p.fx-p-field { align-items: baseline; }
 .fx-p-field .fx-p-sel {
-  flex: 1 1 auto; min-width: 0; margin-left: 5px; box-sizing: border-box; height: 22px; padding: 0;
+  flex: 1 1 auto; min-width: 40px; margin-left: 5px; box-sizing: border-box; height: 22px; padding: 0;
   appearance: none; -webkit-appearance: none; border: 0;
   border-bottom: 1px dotted var(--pp-rule);
   outline: none; background: transparent; border-radius: 0;
-  font: 600 13px/22px var(--pt-mono-ui); color: var(--pp-ink);
+  font: 600 13px/22px var(--pt-mono-ui); color: var(--pp-ink) !important;
   font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
   text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
 }
@@ -2573,7 +2573,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="comateZulu" title="托管 Comate zulu serve 会话引擎（内部 8792）"><span>zulu 托管</span><b></b></span>
-                    <span class="pt-dot warn" data-dot="comateFree" title="Comate 为免费托管：上游对免费档有限速，忙时变慢属正常"><span>免费限速</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -2627,7 +2626,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.7.0</span>
+                    <span class="v ver" id="etchVer">v3.7.1</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3098,13 +3097,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.7.0">v3.7.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.7.1">v3.7.1</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.7.0</div>
+                    <div class="s" id="buildNo">v3.7.1</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.7.0</span>
+                  <span class="pt-val" id="verChip">v3.7.1</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -7162,11 +7161,6 @@ var PT_I18N = {
     /* tj 屏健康检查灯已改「账号矩阵」（数据在 loadTuanjieAccounts/renderTuanjieMatrix）；
        cb 屏可用模型灯已改「模型探测」（loadPluginModels 写）+「脱敏防护」（常亮） */
     if (V.mode === 'cb') PTApp.dot('cbMask', true, false, '开启');
-    /* comate 屏灯：zulu 托管随相位；免费限速运行时常亮（免费档上游限速是常态） */
-    if (V.mode === 'comate') {
-      PTApp.dot('comateZulu', p === 'running', p === 'starting', p === 'starting' ? '托管中' : '');
-      PTApp.dot('comateFree', p === 'running', false, p === 'running' ? '限速中' : '');
-    }
     /* bai 屏灯：限时免费运行时常亮（平台免费档属性）；需代理为静态琥珀徽章不在此画 */
     if (V.mode === 'bai') PTApp.dot('baiFree', p === 'running', false, '');
     /* 插件启停改变"运行态"——键角蓝灯（refreshKeyLights）随相位重刷 */
@@ -7762,6 +7756,14 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.7.1', date: '2026-08-31', groups: [
+      { label: '🚀 新功能', items: [
+        '注水检测六渠道：新增 Comate、Qoder，下拉标·强/·弱',
+        '基准口径诚实化：官方链路/首测锚定按渠道区分',
+        'B.ai 密钥输入行修复（need_key 字段名不匹配从不显示）' ] },
+      { label: '🐛 Bug 修复', items: [
+        '修回执判绿但详细结果有✖的矛盾（金丝雀错答现在参与判定）',
+        '修每次检测结果波动（短探针加容差抗上游模板抖动）' ] } ] },
     { v: 'v3.7.0', date: '2026-08-31', groups: [
       { label: '🚀 新功能', items: [
         '注水检测独立浮窗：单独窗口，关主窗仍在，重复点击只置前不再多开',
@@ -8351,7 +8353,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.7.0';
+  var UI_CUR = 'v3.7.1';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
