@@ -2573,6 +2573,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="comateZulu" title="托管 Comate zulu serve 会话引擎（内部 8792）"><span>zulu 托管</span><b></b></span>
+                    <span class="pt-dot warn" data-dot="comateFree" title="Comate 为免费托管：上游对免费档有限速，忙时变慢属正常"><span>免费限速</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -5627,10 +5628,9 @@ var PT_I18N = {
     if (!chSel) return;
     chs = chs || [];
     chSel.innerHTML = chs.length ? chs.map(function (c) {
-      /* 第 32 轮：下拉附 strong 标记后缀（·强=官方链路 / ·弱=首测锚定弱判）；DEMO 单项无 strong 字段视作官方链路 */
-      var strong = c.strong !== false;
-      return '<option value="' + escHtml(c.id) + '">' + escHtml(c.name || c.id) + (strong ? '·强' : '·弱') + (c.ok ? '' : '（不通）') + '</option>';
-    }).join('') : '<option value="tuanjie">tuanjie·强</option>';
+      /* 第 34 轮：撤 strong 后缀（用户裁决——渠道名后不要·强/·弱字样；强弱信息走纸面基准字段） */
+      return '<option value="' + escHtml(c.id) + '">' + escHtml(c.name || c.id) + (c.ok ? '' : '（不通）') + '</option>';
+    }).join('') : '<option value="tuanjie">tuanjie</option>';
     fillWaterModels();
     renderChannelKeyInput(chs);
     renderWaterScreen();
@@ -7161,6 +7161,11 @@ var PT_I18N = {
     /* tj 屏健康检查灯已改「账号矩阵」（数据在 loadTuanjieAccounts/renderTuanjieMatrix）；
        cb 屏可用模型灯已改「模型探测」（loadPluginModels 写）+「脱敏防护」（常亮） */
     if (V.mode === 'cb') PTApp.dot('cbMask', true, false, '开启');
+    /* comate 屏灯：zulu 托管随相位；免费限速运行时常亮（免费档上游限速是常态） */
+    if (V.mode === 'comate') {
+      PTApp.dot('comateZulu', p === 'running', p === 'starting', p === 'starting' ? '托管中' : '');
+      PTApp.dot('comateFree', p === 'running', false, p === 'running' ? '限速中' : '');
+    }
     /* bai 屏灯：限时免费运行时常亮（平台免费档属性）；需代理为静态琥珀徽章不在此画 */
     if (V.mode === 'bai') PTApp.dot('baiFree', p === 'running', false, '');
     /* 插件启停改变"运行态"——键角蓝灯（refreshKeyLights）随相位重刷 */
