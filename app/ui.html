@@ -1460,9 +1460,9 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
    内容全部是既有渲染函数的产出（renderWaterItems/Probes/Dist/waterRowHtml），
    本节只把甲板式行样式在纸面作用域内改成「打印体」：去圆角边框、改细横线分隔。 */
 .fx.report-page .fx-body::before { display: none; }   /* 报表自带网格，正文信纸格线退出 */
-/* 第 16 轮用户实测裁决：独立浮窗下信纸格线全面退役——格线糊在纸面不随内容滚，
-   与参数卡/报表自己的行线叠加成「线穿字」双重线系；行线统一交给各自的行样式 */
-body.fax-standalone .fx-body::before { display: none; }
+/* 第 16 轮格线全面退役 → 第 31 轮用户实测裁决回收：PROBE 页正文区只剩空纸面，
+   恢复信纸横线找回书写感；格线只在 REPORT 页退役（报表自带行线，1462 行同款） */
+body.fax-standalone .fx.report-page .fx-body::before { display: none; }
 .fx.report-page .fx-input { display: none; }          /* 正文书写区在报表页不出现（占位交还报表） */
 /* 第 11 轮 B：报表容器吃满纸剩余高、纵向可滚（内容超窗不截断，四块证据可滚到末块）。
    fax 浮窗报表页盒子链：cage(上节 flex:1/minH:0) → paper/sheet 有限高 flex column →
@@ -1471,9 +1471,12 @@ body.fax-standalone .fx.report-page .fx-body { position: relative; }   /* 盒链
 body.fax-standalone .fx.report-page .fx-body .fx-report {
   flex: 1 1 auto; min-height: 0; box-sizing: border-box;
   overflow-y: auto; overscroll-behavior: contain;
+  touch-action: pan-y;            /* 第 31 轮滚轮修复：WebView2 手势合成放行纵向滚轮 */
   padding: 0 8px 10px 2px;        /* 右侧让出 4px 细滚动条位 */
 }
-body.fax-standalone .fx.report-page .fx-minfo-clip { flex: none; }
+/* 第 31 轮：REPORT 页摘要框撤除（判定/相似度回执上已有、报表节里也有，重复遮挡撤掉）；
+   fxReportMinfo() 保留——回 PROBE 时 minfo 照常显示检测对象 */
+body.fax-standalone .fx.report-page .fx-minfo-clip { display: none; }
 /* 细滚动条：4px、纸色轨道（不喧宾夺主） */
 body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar { width: 4px; }
 body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-thumb { background: var(--pp-rule); border-radius: 2px; }
@@ -6087,7 +6090,7 @@ var PT_I18N = {
         body.replaceChild(fxReportBox, fxText);
       }
       if (fxReportBox) fxReportBox.innerHTML = fxReportHtml();
-      fxReportMinfo();
+      /* 第 31 轮：REPORT 页摘要框已 display:none，进入时不再重写 minfo（fxReportMinfo 保留备用） */
     }
     function fxReportLeave() {
       var body = q('.fx-body');
