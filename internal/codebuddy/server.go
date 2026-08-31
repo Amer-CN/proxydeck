@@ -226,13 +226,21 @@ func (s *Server) saveStats() {
 
 // ============ 模型列表（动态探测，后端无模型列表端点） ============
 
-// modelCandidates 已知候选池（探测后只返回真实可用的）。
+// modelCandidates 已知候选池（探测后只返回真实可用的）。上游无模型列表
+// 端点（2026-08-28 实测 /models、/v1/models、/v2/models 均 404），名单外
+// 模型永远不会进矩阵。
+// 名单对齐官方客户端模型列表（2026-08-30 用户实测截图）：Hy4 preview 免费档
+// 与付费档同 id；客户端「Kimi-K2.7-Code」即 id kimi-k2.7（kimi-k2.7-code
+// 实测 400 11102 不存在）；glm-5.0 / glm-4.7 已被上游下线（400）。不在官方
+// 列表的历史候选（kimi-k2.5 / deepseek-v3.2 系 / minimax-m2.7 等）部分仍
+// 可用，但按官方口径不进矩阵。
 var modelCandidates = []string{
-	"glm-5.3", "glm-5.2", "glm-5.1", "glm-5v-turbo",
-	"kimi-k3", "kimi-k2.7", "kimi-k2.6", "kimi-k2.5",
-	"deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v3.2",
-	"minimax-m3-pay", "minimax-m3", "hy3-preview-agent", "hy3", "hy3-preview",
 	"auto",
+	"hy4-preview", "hy3",
+	"glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5v-turbo",
+	"minimax-m3",
+	"kimi-k3", "kimi-k2.7", "kimi-k2.6",
+	"deepseek-v4-flash", "deepseek-v4-pro",
 }
 
 // Models 返回真实可用模型（并行最小请求探测，1h 缓存）。

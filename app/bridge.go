@@ -405,6 +405,32 @@ func (a *app) bindAll(w webview.WebView) {
 		b, _ := json.Marshal(a.state())
 		return string(b)
 	})
+	// ccLiveSnapshot 并发实探核心与五插件端口健康，返回键角蓝灯用的 live 表
+	//（第 25 轮用户裁决：探活下沉 Go 侧——UI 不自发网络请求感知服务，那是管理进程的职责）。
+	// 55990 核心走 /health，五插件复用 pluginHealthURL；单端口失败即 false，不报错。
+	// goroutine 并发探 6 端口，总耗时 ≈ 最慢一个端口的探测时间（~毫秒级）。
+	_ = w.Bind("ccLiveSnapshot", func() string {
+		targets := []struct{ name, url string }{{"core", a.healthURL()}}
+		for _, d := range pluginDefs {
+			targets = append(targets, struct{ name, url string }{d.ID, a.pluginHealthURL(d)})
+		}
+		var mu sync.Mutex
+		live := make(map[string]bool, len(targets))
+		var wg sync.WaitGroup
+		for _, t := range targets {
+			wg.Add(1)
+			go func(name, u string) {
+				defer wg.Done()
+				ok := httpOK(u)
+				mu.Lock()
+				live[name] = ok
+				mu.Unlock()
+			}(t.name, t.url)
+		}
+		wg.Wait()
+		b, _ := json.Marshal(map[string]any{"ok": true, "live": live})
+		return string(b)
+	})
 	_ = w.Bind("ccStart", func(key string) string {
 		msg, err := a.start(strings.TrimSpace(key))
 		if err != nil {

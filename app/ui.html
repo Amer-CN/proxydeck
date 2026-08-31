@@ -629,6 +629,11 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
   background: var(--pt-accent); box-shadow: 0 0 4px rgba(232, 72, 63, .55);
 }
 
+/* 键角蓝灯 = 运行态（未选中，但这颗键名下任一页面的插件在跑）；选中永远红灯 */
+.pt-key.key-live::after {
+  background: #4d8dff; box-shadow: 0 0 4px rgba(77, 141, 255, .6);
+}
+
 .pt-transport { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 
 .pt-track {
@@ -1175,7 +1180,7 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 /* ————— 台肩 bezelRow（42px：奶油底 + 左红绿灯 + 标题，底部 2px 暗线 #7D7875）————— */
 /* 与主面板 pt-ledge 同款窗饰（同一个软件的同一层壳） */
 .fx-lights { position: absolute; left: 20px; top: 12.5px; display: flex; gap: 8px;   /* = .pt-lights */
-  pointer-events: none; }
+  pointer-events: auto; }   /* 第 21 轮：三灯可点击（原版纯装饰 pointer-events:none，接窗口控制后必须放开） */
 .fx-lights i { width: 12px; height: 12px; border-radius: 50%;        /* = .pt-lights i */
   box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .12); }
 .fx-lights i:nth-child(1) { background: #FF5F57; }   /* = .pt-lights 红 */
@@ -1452,6 +1457,9 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
    内容全部是既有渲染函数的产出（renderWaterItems/Probes/Dist/waterRowHtml），
    本节只把甲板式行样式在纸面作用域内改成「打印体」：去圆角边框、改细横线分隔。 */
 .fx.report-page .fx-body::before { display: none; }   /* 报表自带网格，正文信纸格线退出 */
+/* 第 16 轮用户实测裁决：独立浮窗下信纸格线全面退役——格线糊在纸面不随内容滚，
+   与参数卡/报表自己的行线叠加成「线穿字」双重线系；行线统一交给各自的行样式 */
+body.fax-standalone .fx-body::before { display: none; }
 .fx.report-page .fx-input { display: none; }          /* 正文书写区在报表页不出现（占位交还报表） */
 /* 第 11 轮 B：报表容器吃满纸剩余高、纵向可滚（内容超窗不截断，四块证据可滚到末块）。
    fax 浮窗报表页盒子链：cage(上节 flex:1/minH:0) → paper/sheet 有限高 flex column →
@@ -1468,26 +1476,15 @@ body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar { wid
 body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-thumb { background: var(--pp-rule); border-radius: 2px; }
 body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-track { background: transparent; }
 .fx-report { padding: 0 2px; }
-/* ————— 第 13 轮：检测参数卡（PROBE 页书写区只读化，占满剩余高） —————
-   textarea 保留 DOM 但隐藏（结构冻结）；参数卡吃满 .fx-body 剩余高，与 REPORT 报表页等高。
-   第 14 轮表格化：行间虚线分隔（同传真单字段点线口径）、值列可换行不截断、标签定宽对齐。 */
+/* ————— 第 20 轮：REPORT 页扳机退役 —————
+   详细结果页 = 纯阅读的打印文档（报告头 + 四节证据 + 历史归档常驻节），零交互元素；
+   扳机（随附历史记录）及其文案隐藏，LINE 灯右移保持控制台构图（左空右键，同原版重心）。 */
+body.fax-standalone .fx.report-page .fx-attach { display: none; }
+body.fax-standalone .fx.report-page .fx-lamp-wrap { margin-left: auto; }
+/* ————— 第 27 轮：参数卡撤除（用户裁决：结果页属多余占位） —————
+   textarea 保留 DOM 但隐藏（结构冻结）；参数展示由纸面字段/摘要块承担，
+   .fx-body 在 PROBE 待命态为空区（回执态整稿淡出由第 26 轮规则接管）。 */
 #wtFax .fx-input { display: none; }
-.fx-paramcard { flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  display: flex; flex-direction: column; justify-content: flex-start;
-  padding: 4px 2px; box-sizing: border-box; }
-.fx-pc-row { display: flex; align-items: baseline; gap: 10px;
-  padding: 4px 2px 10px; border-bottom: 1px dotted var(--pp-rule);   /* 下留 10px：字写在线上方，线不穿字 */
-  font-size: 13px; line-height: 1.45; color: var(--pp-ink); }
-.fx-pc-row em { font-style: normal; flex: none; width: 72px; font-size: 12px; font-weight: 700; color: var(--pp-ink); }
-.fx-pc-row b { flex: 1 1 auto; min-width: 0; font-family: var(--pt-mono-ui); font-weight: 600;
-  color: var(--pp-ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.fx-pc-stage b { color: var(--pt-accent); }
-.fx-pc-note { margin: 8px 2px 0; font-size: 11px; line-height: 1.5; color: var(--pp-fine); }
-/* 第 15 轮：参数卡细滚动条（与报表同款 4px，内容偶尔超高时不出粗黑框） */
-.fx-paramcard::-webkit-scrollbar { width: 4px; }
-.fx-paramcard::-webkit-scrollbar-thumb { background: var(--pp-rule); border-radius: 2px; }
-.fx-paramcard::-webkit-scrollbar-track { background: transparent; }
-.fx-paramcard { overscroll-behavior: contain; }
 /* 第 13 轮：REPORT 历史块行距（fxHistoryRowsHtml 行模板沿用甲板 if-row 尺寸体系） */
 .fx.report-page .fx-rsec .if-row { font-size: 13px; line-height: 1.6; }
 /* 第 11 轮 C：报表重排版——基准 ≥13px、数据行行高 ≥1.6、标题行加大加粗、正文深墨
@@ -1522,6 +1519,17 @@ body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-track
 
 /* ————— 回执 FaxReceiptView（纸色 #E1DCD6 暗于传真纸，层叠在传真纸前方；宽≈纸宽 80%）—————
    差异要点 6：回执用独立纸色变量（--fx-rcp-*），与传真纸 --pp-* 区分。 */
+/* ————— 第 26 轮：回执打印态，原稿让位 —————
+   用户裁决「三块拥挤」：sent/printed/tearing 时传真单内容（表头/字段/章行/正文区/摘要/隐私行）
+   整块淡出——真传真机此时原稿已进机器，回执才是主角；撕纸换新纸后（ready）内容随新纸回来。
+   纸框（纸色/齿孔/阴影）保留，视觉是"纸仍在位、字进机器了"。 */
+.fx[data-fx-phase="sent"] .fx-sheet,
+.fx[data-fx-phase="printed"] .fx-sheet,
+.fx[data-fx-phase="tearing"] .fx-sheet,
+.fx[data-fx-phase="loading"] .fx-sheet {
+  opacity: 0; transition: opacity 400ms ease;
+}
+.fx-sheet { transition: opacity 300ms ease; }
 .fx-receipt {
   position: absolute; top: 0; left: 50%; width: 80%; z-index: 3;
   transform: translate(-50%, -103%); opacity: 0; pointer-events: none;
@@ -1724,7 +1732,7 @@ body.fax-standalone .fx.report-page .fx-body .fx-report::-webkit-scrollbar-track
 
 /* 减动效：走纸/撕纸动画跳过，状态直达 */
 @media (prefers-reduced-motion: reduce) {
-  .fx-paper, .fx-receipt, .fx-minfo-clip { transition: none; }
+  .fx-paper, .fx-receipt, .fx-minfo-clip, .fx-sheet { transition: none; }
   .fx[data-fx-phase="tearing"] .fx-receipt { animation: none; opacity: 0; }
   .fx-caret { animation: none; }
 }
@@ -1780,11 +1788,12 @@ body.pt-try { background: var(--pt-paper); }
 .pt-key .dual-key { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.15; }
 .pt-key .dual-key b { font-weight: 600; font-size: 10px; letter-spacing: 1.5px; }
 .pt-key .dual-key i { font-style: normal; font-size: 9px; letter-spacing: 1px; opacity: .72; margin-top: 2px; }
-.pt-key[aria-checked="true"] .dual-key i { opacity: .85; }
-/* 副页态（双击翻页后）：键保持按压，状态灯转蓝 + 键名换成副页名（JS 同步 textContent） */
-.pt-key.on-alt::after {
-  background: #4d8dff; box-shadow: 0 0 4px rgba(77, 141, 255, .6);
-}
+/* 双职责键选中态：主行（<b>）恒为当前选中页 → 深墨；副行（<i>）= 另一页 → 浅色。
+   键面跟随选择，故选中键的 <b> 必是选中页名；未选中键两行皆浅 */
+.pt-key[aria-checked="true"] .dual-key b { color: var(--pt-ink); }
+.pt-key[aria-checked="true"] .dual-key i { opacity: .5; }
+/* 副页态（双击翻页后）：键保持按压 + 键名换成副页名（JS 同步 textContent）；
+   角灯不再跟随键面——红灯=选中、蓝灯=运行（refreshKeyLights），见 .key-live */
 
 /* ———— 代理状态点 ———— */
 .pt-dot.ext::before { background: #C08AFF; box-shadow: 0 0 5px rgba(192,138,255,.6); }
@@ -2428,25 +2437,29 @@ body.fax-standalone .fx-overlay-inner { margin: 0 auto; }
 body.fax-standalone .fx-block { width: 100%; height: 100%; }
 /* fx 用 flex 拉满卡高（不用 height:100%——margin-top -9 会让 height:100% 底部差 9px 布局 px）：
    grow 吃满剩余空间，负 margin 顶边的 9px 由 grow 补齐，fx 底缘=卡底缘=窗底 */
-body.fax-standalone .fx { height: auto; flex: 1 1 auto; min-height: 0; }
-body.fax-standalone .fx-cage { flex: 1; min-height: 0; }   /* 纸区弹性吃满剩余高（缩档由 B 的滚动接管） */
-body.fax-standalone .fx-cage { display: flex; flex-direction: column; }   /* 第 11 轮 B：纸作为 flex 子项吃满笼内高 */
-body.fax-standalone .fx-cage .fx-paper { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow: hidden; }
-/* 纸本体也要 flex:1——flex 链任何一环吃不到剩余高，末端 overflow 容器就拿不到高度上限，
-   报表就裁不动（第 12 轮修「详细结果滚不动」） */
-body.fax-standalone .fx-cage .fx-paper { flex: 1 1 auto; }
-body.fax-standalone .fx-cage .fx-paper .fx-sheet { flex: 1 1 auto; }
-body.fax-standalone .fx-cage .fx-sheet { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-body.fax-standalone .fx-cage .fx-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin-top: 8px; }
-body.fax-standalone .fx-cage .fx-body .fx-input { height: auto; flex: 1 1 auto; min-height: 0; }
+/* ————— 第 19 轮：弹性链基准归零（终结「内容变高→全页压缩变形」）—————
+   病根：链上 paper/sheet/body/report/paramcard 全是 flex-basis:auto——内容高度参与基准分配，
+   历史块一开，基准总和超容器，flex-shrink 按比例压所有兄弟行（纸头/字段/章/摘要全变形）。
+   修法：吸收环全部 flex:1 1 0（基准 0=纯剩余空间分配，与内容无关）；
+   单面内固定行（纸头/字段/章/minfo/privacy）显式 flex:none（永不参与伸缩）。
+   效果：REPORT 历史块开关、内容增减——外框每一寸恒定，报表只内部滚动。 */
+body.fax-standalone .fx { height: auto; flex: 1 1 0; min-height: 0; }
+body.fax-standalone .fx-cage { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+body.fax-standalone .fx-cage .fx-paper { display: flex; flex-direction: column; min-height: 0; flex: 1 1 0; overflow: hidden; }
+body.fax-standalone .fx-cage .fx-paper .fx-sheet { flex: 1 1 0; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+body.fax-standalone .fx-cage .fx-sheet > * { flex: none; }   /* 单面固定行不参与伸缩 */
+body.fax-standalone .fx-cage .fx-body { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; margin-top: 8px; }
+body.fax-standalone .fx-cage .fx-body .fx-input { height: auto; flex: 1 1 0; min-height: 0; }
+body.fax-standalone .fx.report-page .fx-cage .fx-body .fx-report { flex: 1 1 0; }
 body.fax-standalone .fx-cage .fx-minfo-clip { flex: none; }
 /* 报表页纸笼底板与 PROBE 页同值（第 13 轮：两页纸等高——覆盖差 14px 就是纸高差源头） */
 /* 控制台在 fax 浮窗里去掉下拉吃 fx padding-bottom 的 -16px（卡已拉满高，键行区自身贴底）；
    同时 .fx 底 padding 清零——按钮下缘贴窗底（下边距=左右边距=0，对照原版按钮贴底口径） */
 body.fax-standalone .fx-controls { margin-bottom: 0; }
 body.fax-standalone .fx { padding-bottom: 0; }
-/* 台肩=拖拽把手（红点除外，灯有自己的点击语义）；与主界面 #ptLedge 同款走 ccWindowCmd('move') */
-body.fax-standalone .fx-shoulder { -webkit-app-region: drag; app-region: drag; }
+/* 台肩=拖拽把手（红点除外，灯有自己的点击语义）；与主界面 #ptLedge 同款走 ccWindowCmd('move')。
+   第 21 轮：WebView2 的 app-region:drag 会把灯区指针吞掉（实测 pointer-events:none）——
+   浮窗拖拽只走 JS pointerdown（initFaxLedge），CSS drag 弃用，三灯恢复可点击 */
 body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-drag; }
 
 /* 语言挡位读数（设置页） */
@@ -2547,6 +2560,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   </div>
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
+                    <span class="pt-dot" data-dot="baiFree"><span>限时免费</span><b></b></span>
                     <span class="pt-dot warn" data-dot="baiProxy" title="B.AI 上游在境外：本机必须挂代理/梯子才能连通"><span>需代理</span><b></b></span>
                   </div>
                 </div>
@@ -2565,6 +2579,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="comateZulu" title="托管 Comate zulu serve 会话引擎（内部 8792）"><span>zulu 托管</span><b></b></span>
+                    <span class="pt-dot warn" data-dot="comateFree" title="Comate 为免费托管：上游对免费档有限速，忙时变慢属正常"><span>免费限速</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -2598,6 +2613,10 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <div class="pt-odo pt-sc" data-odo="qoderUptime">0:00:00</div>
                   </div>
                   <div class="pt-sc-sep"></div>
+                  <div class="pt-dots">
+                    <span class="pt-dot" data-dot="qoderCredits"><span>积分消耗</span><b></b></span>
+                    <span class="pt-dot" data-dot="qoderQuota"><span>额度状态</span><b></b></span>
+                  </div>
                 </div>
               </div>
 
@@ -2621,7 +2640,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <span class="pt-silk sm" data-i18n="try.gen.selfTestTitle">自检</span>
                   <span class="pt-self-test-lamps" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
                   <span class="pt-self-test-needle" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-                  <span class="pt-self-test-copy" data-i18n="try.gen.selfTestDetail">正在与授权服务器核验此激活码。</span>
+                  <span class="pt-self-test-copy" data-i18n="try.gen.selfTestDetail">正在点火自检：核验各代理服务与端口。</span>
                 </div>
               </div>
 
@@ -3340,20 +3359,12 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
                 <div class="fx-stamp-row">
                   <span class="fx-stamp" data-fx-stamp aria-hidden="true"><span data-fx-stamp-text>注 水 检 测</span></span>
-                  <span class="fx-stamp-note">类别由上方模式键决定</span>
+                  <span class="fx-stamp-note">检测页固定章 · 详细结果页显判定</span>
                 </div>
                 <div class="fx-body">
                   <textarea class="fx-input" data-fx-text rows="5" maxlength="2000" placeholder="" readonly aria-label="检测参数卡（只读）"></textarea>
-                  <div class="fx-paramcard">
-                    <div class="fx-pc-row"><em>检测对象</em><b data-pc-target>— · —</b></div>
-                    <div class="fx-pc-row"><em>基准库</em><b>官方 baseline</b></div>
-                    <div class="fx-pc-row"><em>探针</em><b data-pc-probes>8 项</b></div>
-                    <div class="fx-pc-row"><em>金丝雀</em><b>3 题</b></div>
-                    <div class="fx-pc-row"><em>检测模式</em><b>全流程</b></div>
-                    <div class="fx-pc-row"><em>预估耗时</em><b>约 1-2 分钟</b></div>
-                    <div class="fx-pc-row fx-pc-stage"><em>当前阶段</em><b data-pc-stage>待机 · 等待发送</b></div>
-                    <div class="fx-pc-note">检测期间由机器自动记录管道探针读数，无需手写。</div>
-                  </div>
+                  <!-- 第 27 轮：参数卡撤除（用户裁决——检测前参数预览在结果页属多余占位，
+                       REPORT 页=纯报告：提示行+证据节；PROBE 页由纸面字段/摘要承担参数展示） -->
                 </div>
                 <div class="fx-minfo-clip">
                   <div class="fx-minfo">
@@ -3499,7 +3510,7 @@ var PT_I18N = {
   "try.gen.soundT": { zh: "界面音效", en: "Interface sounds" },
   "try.gen.langSystemTitle": { zh: "跟随系统", en: "Follow System" },
   "try.gen.selfTestTitle": { zh: "自检", en: "Self-test" },
-  "try.gen.selfTestDetail": { zh: "正在与授权服务器核验此激活码。", en: "Checking this licence with the activation server." },
+  "try.gen.selfTestDetail": { zh: "正在点火自检：核验各代理服务与端口。", en: "Ignition self-test: verifying proxy services & ports." },
   "try.win.shakeS": { zh: "摇动某个窗口，隐藏其余所有可见窗口。", en: "Shake a window to hide every other visible window." },
   "try.win.dockMinT": { zh: "点击 Dock 图标最小化", en: "Minimize on Dock click" },
   "try.win.dockMinS": { zh: "再次点击当前 App 的 Dock 图标时最小化其窗口。", en: "Click the active app's Dock icon again to minimize its windows." },
@@ -3605,7 +3616,7 @@ var PT_I18N = {
   "fx.emailPh": { zh: "匿名（选填邮箱，可收回复）", en: "Anonymous (optional email for replies)" },
   "fx.stampBug": { zh: "错 误 报 告", en: "BUG REPORT" },
   "fx.stampSug": { zh: "功 能 建 议", en: "SUGGESTION" },
-  "fx.stampNote": { zh: "类别由上方模式键决定", en: "Type is set by the mode keys above" },
+  "fx.stampNote": { zh: "检测页固定章 · 详细结果页显判定", en: "Fixed on probe page · verdict on report page" },
   "fx.placeholder": { zh: "说明发生了什么，以及你原本预期的样子。", en: "Say what happened, and what you expected instead." },   /* 官方原文（二进制 0x211fe0 直读） */
   "fx.aria": { zh: "反馈内容", en: "Feedback text" },
   "fx.minfo": { zh: "随附机器信息", en: "Machine info" },
@@ -4506,6 +4517,9 @@ var PT_I18N = {
   window.playFile = playFile;
   /* 同上：REDUCED（prefers-reduced-motion）为引擎 IIFE 内变量，传真机相位机要按它跳长动画 */
   window.REDUCED = REDUCED;
+  /* 同上：ALT_MODE（主键→副页映射）为引擎 IIFE 内变量，业务层 refreshKeyLights
+     （键角蓝灯要照主键的副页相位点亮）需要读它——不导出会 ReferenceError */
+  window.ALT_MODE = ALT_MODE;
 
   /* ══════════════════ 启动 ══════════════════ */
   paint();
@@ -5839,7 +5853,6 @@ var PT_I18N = {
     var fxSerial = 881;                 /* 纸面单号，每完成一次传送 +1（原版从 NO.0881 起） */
     var fxMode = 'probe';
     var fxAttachOn = true;              /* 第 13 轮：PROBE 页扳机状态（随附检测对象显隐） */
-    var fxHistoryOn = false;            /* 第 13 轮：REPORT 页扳机状态（随附历史记录显隐），两态独立记忆 */
     var fxT0 = 0;                       /* 发送起点（回执「用时」用） */
     var fxLastCh = '', fxLastM = '';    /* 本次检测的渠道/模型（回执/历史用） */
     var fxSentStamp = '';               /* 检测时刻（回执「日期」用） */
@@ -5905,12 +5918,7 @@ var PT_I18N = {
       if (busy) fxPrintRestore();                    /* 纸进机器时信息必须完整 */
       fxLocks(busy);
       if (fxReceipt) fxReceipt.setAttribute('aria-hidden', p === 'sent' || p === 'printed' ? 'false' : 'true');
-      /* 第 13 轮：参数卡「当前阶段」行随相位实时变 */
-      var stageMap = { ready: (waterLastReport ? '已完成 · 详见详细结果页' : '待机 · 等待发送'),
-        offhook: '连接渠道…', dialing: '定位账号…', connecting: '基准就绪…', sending: '探针采样中…',
-        sent: '判定出炉…', printed: '回执已打印 · 撕下归档', tearing: '归档中…', loading: '换单中…', busy: '线路占用…' };
-      var pcStage = document.querySelector('#wtFax [data-pc-stage]');
-      if (pcStage) pcStage.textContent = stageMap[p] || p;
+      /* 第 27 轮：参数卡已撤（DOM 移除），阶段文案更新随之退役；LCD 相位文案由 fxShow 承担 */
     }
     /* 第 10 轮：机件锁定（busy 相位 / REPORT 只读页）。控制台（复位/检测）在两态下都禁用
        （复用 busy 禁用机制）；纸面书写/下拉与扳机在 REPORT 页同样只读，模式键保持可切回 PROBE。 */
@@ -5985,10 +5993,12 @@ var PT_I18N = {
     var fxReportBox = null;
     function fxReportHtml() {
       var rep = waterLastReport, r = rep && rep.report;
+      /* 第 20 轮：历史归档节常驻（有记录就显示，不再挂扳机开关） */
+      var histSec = waterHist.length
+        ? '<div class="fx-rsec"><p class="fx-rsec-h">⑤ 检测历史<small>HISTORY</small></p>' + fxHistoryRowsHtml() + '</div>'
+        : '';
       if (!r) {
-        var empty = '<div class="fx-report"><p class="fx-report-hint">先在「注水检测」页发送检测，这里才会出完整报表</p></div>';
-        if (fxHistoryOn) empty += '<div class="fx-rsec"><p class="fx-rsec-h">⑤ 检测历史<small>HISTORY</small></p>' + fxHistoryRowsHtml() + '</div>';
-        return empty;
+        return '<div class="fx-report"><p class="fx-report-hint">先在「注水检测」页发送检测，这里才会出完整报表</p></div>' + histSec;
       }
       var itemsHtml = renderWaterItems(r.items);
       var probesHtml = renderWaterProbes(rep.probes, rep.probe_compare);
@@ -5999,7 +6009,7 @@ var PT_I18N = {
         '<div class="fx-rsec"><p class="fx-rsec-h">② 管道探针<small>PIPELINE PROBES</small></p>' + probesHtml + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">③ 分布指纹<small>DISTRIBUTION</small></p>' + distHtml + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">④ 金丝雀<small>CANARY</small></p>' + canaryHtml + '</div>' +
-        (fxHistoryOn ? '<div class="fx-rsec"><p class="fx-rsec-h">⑤ 检测历史<small>HISTORY</small></p>' + fxHistoryRowsHtml() + '</div>' : '') +
+        histSec +
         '</div>';
     }
     /* 第 13 轮：检测历史块（REPORT 扳机「随附历史记录」）——复用甲板历史行模板（waterHist 会话数据） */
@@ -6047,13 +6057,10 @@ var PT_I18N = {
       fx.classList.toggle('report-page', fxMode === 'report');
       fxLocks(fxPhase !== 'ready');
       fxShow(fxPhase);
-      /* 第 13 轮：扳机标签随页切换（随附检测对象 ⇄ 随附历史记录），aria 状态两态各自记忆 */
+      /* 第 20 轮：REPORT 页扳机整体隐藏（无交互语义，历史归档节常驻）；
+         回 PROBE 时恢复「随附检测对象」文案与状态 */
       var attB = q('.fx-attach-copy b'), attS = q('.fx-attach-copy span');
-      if (fxMode === 'report') {
-        if (attB) attB.textContent = '随附历史记录';
-        if (attS) attS.textContent = '检测历史 · 共 ' + waterHist.length + ' 次记录——随报告归档';
-        fxTrigger.setAttribute('aria-checked', fxHistoryOn ? 'true' : 'false');
-      } else {
+      if (fxMode !== 'report') {
         if (attB) attB.textContent = '随附检测对象';
         if (attS) attS.textContent = '渠道、模型、官方基准、探针数，所见即所发';
         fxTrigger.setAttribute('aria-checked', fxAttachOn ? 'true' : 'false');
@@ -6107,14 +6114,9 @@ var PT_I18N = {
     if (fxTrigger) {
       fxTrigger.addEventListener('click', function () {
         if (fxPhase !== 'ready') return;
-        /* 第 13 轮：扳机双语义——REPORT 页 = 随附历史记录（报表追加/移除历史块）；
+        /* 第 20 轮：REPORT 页扳机已隐藏（历史归档节常驻报表）——点击无语义，防御性忽略；
            PROBE 页 = 随附检测对象（原版显隐+配平，浮窗跳过配平走纯显隐） */
-        if (fxMode === 'report') {
-          fxHistoryOn = !fxHistoryOn;
-          fxTrigger.setAttribute('aria-checked', fxHistoryOn ? 'true' : 'false');
-          fxRenderPage();                           /* 报表重渲染（历史块随 fxHistoryOn 进出） */
-          return;
-        }
+        if (fxMode === 'report') return;
         var on = fxTrigger.getAttribute('aria-checked') !== 'true';
         fxAttachOn = on;
         fxPrintUnpin();                             /* 先无条件撤钉 */
@@ -6229,11 +6231,6 @@ var PT_I18N = {
       if (mm) mm.textContent = (fxModelSel && fxModelSel.value) || '—';
       if (mp) mp.textContent = FX_PROBES + ' 项';
       if (pp) pp.textContent = FX_PROBES + ' 项';
-      /* 第 13 轮：参数卡同步（检测对象/探针数） */
-      var pcT = document.querySelector('#wtFax [data-pc-target]');
-      if (pcT) pcT.textContent = ((fxChSel && fxChSel.value) || '—') + ' · ' + ((fxModelSel && fxModelSel.value) || '—');
-      var pcP = document.querySelector('#wtFax [data-pc-probes]');
-      if (pcP) pcP.textContent = FX_PROBES + ' 项';
       fxMinfoNodesSnap = null;                     /* 值已换：强制重建打字机快照 */
     }
     if (fxChSel) fxChSel.addEventListener('change', function () {
@@ -6593,7 +6590,10 @@ var PT_I18N = {
   if (fxLights[0]) {
     fxLights[0].title = '关闭';
     fxLights[0].addEventListener('click', function () {
+      /* 第 21 轮：三重关闭——真浮窗桥缺失（注入时序竞态）时 window.close() 在 webview 里
+         同样走 WM_CLOSE 优雅退出（不能落 closeFaxOverlay：那只关覆盖层，浮窗里会剩空白窗） */
       if (typeof window.ccFaxClose === 'function') ccFaxClose();
+      else if (location.hash === '#fax') window.close();
       else closeFaxOverlay();
     });
   }
@@ -6611,10 +6611,10 @@ var PT_I18N = {
       else if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('max');
     });
   }
-  /* 第 9 轮：台肩=拖拽把手（独立浮窗无原生标题栏）。与主界面 #ptLedge 同款：
-     左键按下（灯区除外）→ 桥进系统拖拽移动循环；第 17 轮改 ccFaxWin('move') 优先、
-     ccWindowCmd('move') 回退。app-region:drag CSS 在新 WebView2 运行时优先生效
-     （事件不达页面），旧运行时走此 JS 回退——双保险。 */
+  /* 第 9 轮：台肩=拖拽把手（独立浮窗无原生标题栏）。左键按下（灯区除外）→ 桥进系统拖拽
+     移动循环；第 17 轮改 ccFaxWin('move') 优先、ccWindowCmd('move') 回退。
+     第 21 轮：CSS app-region:drag 弃用（WebView2 下它把三灯指针吞成 pointer-events:none，
+     红灯点不了）——拖拽全权由此 JS 路径承担。 */
   (function initFaxLedge() {
     var ledge = document.querySelector('#wtFax .fx-shoulder');
     if (!ledge || ledge.dataset.ledgeBound) return;
@@ -6772,6 +6772,7 @@ var PT_I18N = {
     PTApp.sw('core', coreOn);
     PTApp.sw('autostart', S.autostart);
     PTApp.sw('launchLogin', S.autostart);
+    refreshKeyLights();
   }
   function paintCmdOdo() {
     var txt = fmtUptime(S.uptime);
@@ -7018,6 +7019,14 @@ var PT_I18N = {
       loadPluginMeta(V);
       loadPluginStats(V, mode);
       loadPluginLog(V);
+      if (mode === 'qoder' && justIgnited) {
+        /* 点火拉一次官方额度（套餐+专属包），之后只显示缓存——
+           平时轮询绝不碰官方接口，想手动更新点「↻ 刷新」 */
+        (async function () {
+          try { await fetch('http://127.0.0.1:' + V.port + '/health?refresh=1'); } catch (e) {}
+          loadPluginStats(V, mode);
+        })();
+      }
       if (mode === 'tj') {
         loadTuanjiePacing();
         /* 积分面板账号选择器 */
@@ -7060,6 +7069,18 @@ var PT_I18N = {
         if (justIgnited) loadCodebuddyQuota(V, false);
         else renderCodebuddyQuotaCache(V);
       }
+      if (mode === 'qoder') {
+        /* 屏体双灯：积分消耗（账本累计，服务端逐请求下发口径）+ 额度状态（配额错误检测）。
+           剩余量在官方 WASM 签名墙后，代理侧拿不到——不放假数字。 */
+        (async function () {
+          try {
+            var h = await (await fetch('http://127.0.0.1:' + V.port + '/health')).json();
+            var c = h.credits || {};
+            PTApp.dot('qoderCredits', running, false, '累计 ' + (c.spent || 0));
+            PTApp.dot('qoderQuota', running && !c.quotaExceeded, false, c.quotaExceeded ? '额度耗尽' : '正常');
+          } catch (e) {}
+        })();
+      }
     } else {
       var mc = $(V.pfx + 'ModelCount');
       if (mc) mc.textContent = 'OFFLINE';
@@ -7077,6 +7098,7 @@ var PT_I18N = {
       V.quotaLoaded = false; V.fetchOnRun = false; /* 停止后重置——下次拉杆启动时重新拉一次积分 */
       V.healthMs = null; /* cb/ba 甲板「本地回环」读数同步回「不通」 */
       if (V.mode === 'cb') PTApp.dot('cbProbe', false, false, ''); /* 模型探测灯随停堆熄灭 */
+      if (V.mode === 'qoder') { PTApp.dot('qoderCredits', false, false, ''); PTApp.dot('qoderQuota', false, false, ''); }
     }
   }
 
@@ -7093,7 +7115,53 @@ var PT_I18N = {
     /* tj 屏健康检查灯已改「账号矩阵」（数据在 loadTuanjieAccounts/renderTuanjieMatrix）；
        cb 屏可用模型灯已改「模型探测」（loadPluginModels 写）+「脱敏防护」（常亮） */
     if (V.mode === 'cb') PTApp.dot('cbMask', true, false, '开启');
+    /* comate 屏灯：zulu 托管随相位；免费限速运行时常亮（免费档上游限速是常态） */
+    if (V.mode === 'comate') {
+      PTApp.dot('comateZulu', p === 'running', p === 'starting', p === 'starting' ? '托管中' : '');
+      PTApp.dot('comateFree', p === 'running', false, p === 'running' ? '限速中' : '');
+    }
+    /* bai 屏灯：限时免费运行时常亮（平台免费档属性）；需代理为静态琥珀徽章不在此画 */
+    if (V.mode === 'bai') PTApp.dot('baiFree', p === 'running', false, '');
+    /* 插件启停改变"运行态"——键角蓝灯（refreshKeyLights）随相位重刷 */
+    refreshKeyLights();
   }
+
+  /* 键角灯：红灯=选中（CSS 按 aria-checked），蓝灯=未选中但这颗键名下
+     任一页面的插件在跑；两者皆无灭灯。cmd 主代理与各插件相位变化、
+     模式切换三个时机都会调本函数重刷。 */
+  /* 第 25 轮（用户裁决）：探活下沉 Go 侧——UI 不自发网络请求感知服务，点灯判据来自
+     桥 ccLiveSnapshot（Go 并发实探 55990 核心 + 五插件端口，单端口失败即 false），
+     cmd=core、其余按插件名取 live 表。桥失败（GUI 启动瞬间极少数）静默沿用上次快照
+     不刷灯；无桥（浏览器预览）回退旧状态机 S.phase / PV.phase。点灯周期仅此一处。 */
+  var lastLive = null;
+  function paintKeyLights(live) {
+    $$('.pt-key[data-mode]').forEach(function (k) {
+      var keyMode = k.dataset.mode;
+      var selected = k.getAttribute('aria-checked') === 'true';
+      /* 第 25 轮用户裁决「严格主页面」：键的蓝灯只看该键主页面服务（cmd=55990 核心、
+         tj=8788、cb=8787）——副页服务（B.AI/COMATE/QODER）不点亮主键；
+         副页运行态看各自副页的屏灯（那里指示独立）。 */
+      var V = PV[keyMode];
+      var on = keyMode === 'cmd'
+        ? (live ? live.core === true : (S.phase === 'running' || S.phase === 'external'))
+        : (live ? !!(V && live[V.id] === true) : !!(V && V.phase === 'running'));
+      k.classList.toggle('key-live', !selected && on);
+    });
+  }
+  async function refreshKeyLights() {
+    if (typeof window.ccLiveSnapshot === 'function') {
+      try {
+        var raw = await window.ccLiveSnapshot();
+        var r = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (r && r.ok && r.live) { lastLive = r.live; paintKeyLights(lastLive); return; }
+      } catch (e) { /* 桥失败静默：不报错 */ }
+      if (lastLive) paintKeyLights(lastLive);   /* 上次快照兜底 */
+      return;                                   /* 尚无快照（启动瞬间）：本轮不刷灯 */
+    }
+    paintKeyLights(null);                       /* 无桥回退：状态机相位点灯 */
+  }
+  setInterval(refreshKeyLights, 2500);
+  PTApp.onModeChange(function () { refreshKeyLights(); });
 
   function bindPluginToggle(mode) {
     var V = PV[mode];
@@ -7235,17 +7303,27 @@ var PT_I18N = {
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
       }
       if (V.id === 'tuanjie') updateJudgeBanner(h);
-      /* Qoder 代理侧积分账本：configured 显示剩余（基线−total_credits 扣减），未设显示「未设」；
-         sub 显示本次进程已耗（worker result total_credits 合计）。点击卡片可设基线。 */
+      /* Qoder 积分：官方实时额度（openapi.qoder.com.cn）——只在点「↻ 刷新」时
+         访问一次官方接口（插件侧缓存长期有效，轮询绝不打官方）。
+         主数字 = 套餐剩余 + 可用专属包剩余；副行 = 明细与累计已耗。
+         quotaExceeded（配额报错或官方 isQuotaExceeded）→ 卡片变红。 */
       if (V.mode === 'qoder' && h.credits) {
-        if (h.credits.configured) {
-          var rem = Math.round((Number(h.credits.remaining) || 0) * 10) / 10;
-          pSet(V, 'StCredits', rem % 1 ? rem.toFixed(1) : String(rem));
+        var rt = h.credits.realtime;
+        if (rt) {
+          var tot = Math.round((Number(rt.totalRemaining) || 0) * 10) / 10;
+          pSet(V, 'StCredits', String(tot));
+          var p = rt.plan || {}, pr = Math.round((Number(p.remaining) || 0) * 10) / 10;
+          var pk = Math.round((Number(rt.packagesRemaining) || 0) * 10) / 10;
+          var sp3 = Math.round((Number(h.credits.spent) || 0) * 100) / 100;
+          pSet(V, 'StCreditsSub', h.credits.quotaExceeded
+            ? '额度不足 · 配额报错'
+            : '套餐剩 ' + pr + ' · 专属包剩 ' + pk + ' · 累计已耗 ' + sp3);
         } else {
-          pSet(V, 'StCredits', '未设');
+          pSet(V, 'StCredits', h.credits.quotaExceeded ? '额度不足' : '—');
+          pSet(V, 'StCreditsSub', h.credits.quotaExceeded ? '配额报错' : '点 ↻ 拉取额度 · 已耗 ' + (h.credits.spent || 0));
         }
-        var sp = Math.round((Number(h.credits.spentThisSession) || 0) * 100) / 100;
-        pSet(V, 'StCreditsSub', '本次已耗 ' + (sp % 1 ? sp.toFixed(2) : String(sp)));
+        var crEl = $('qoderStCredits');
+        if (crEl) crEl.style.color = h.credits.quotaExceeded ? 'var(--danger, #c0392b)' : '';
       }
     } catch (e) {}
     /* 团结/WorkBuddy 积分卡都不轮询——拉杆启动拉一次 + 手动刷新，轮询只留本地（官网 429 保护） */
@@ -7635,10 +7713,18 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
-    { v: 'v3.6.5', date: '2026-08-30', groups: [
+    { v: 'v3.6.5', date: '2026-08-31', groups: [
+      { label: '🚀 新功能', items: [
+        'Qoder 第六平台甲板上线：阿里 Qoder CN 的 13 个模型（Qwen3.8/GLM-5.3/DeepSeek-V4/Kimi-K2.7/MiniMax-M3 全系，名称与客户端界面一致）反代为本地 OpenAI 兼容接口 8785——传输层为官方 worker 进程（jobToken 宿主鉴权，WASM 签名/HTTPDNS 自包含，服务端视角纯官方流量），WORKBUDDY 键副页切换',
+        '全工具放行 + 多轮 agent：撤单轮限制与工具拒绝，worker 以官方 bypassPermissions 同语义完整执行（读/写/命令，实测建文件落盘）；工作目录自动跟随客户端会话（从系统提示提取 Working directory，ZCode 在哪个项目 agent 就在哪个项目干活，QODER_CWD 可钉死）；单任务超时放宽 600 秒',
+        'Qoder 积分实时显示：直连官方 openapi.qoder.com.cn/api/v2/quota/usage（CN 域名，Bearer 明文鉴权），甲板显示套餐剩余+可用专属包+总剩余；点火拉一次 + 「↻ 刷新」手动现拉，平时零轮询零官方访问；配额报错自动变红报警',
+        '模型目录维护：内部代号与界面名双向匹配（Qwen3.8-Max/qmodel_38max 都认）；模型矩阵按厂家分组、点击复制界面名',
+        'Comate 甲板同步增强：积分实时显示（直连 CN 域名额度接口，套餐+专属包口径）、工作目录跟随（与 Qoder 同款机制）、复制界面名' ] },
       { label: '🐛 Bug 修复', items: [
         '注水检测指纹抗抖动：管道探针「a」单字符归一化基准从单次采样改为 3 次采样取中位数——上游隐藏模板按请求抖动（deepseek 系双变体随机路由/按天平移）曾把整批指纹随机平移制造假漂移；「a」三次全失败时如实标 unstable（“无法归一化”），不再拿原始 token 数污染基准库',
-        '注水检测红灯误报降级：一键检测仅 tokenizer 系探针不匹配、分布形状相似度 cosine≥0.9、金丝雀全对时，从「红灯·注水嫌疑」降为「黄灯·疑似模板漂移」（建议复测而非判注水）；错误文本/finish_reason 类不匹配不参与降级（逐字符指纹，变了就是真异常）' ] } ] },
+        '注水检测红灯误报降级：一键检测仅 tokenizer 系探针不匹配、分布形状相似度 cosine≥0.9、金丝雀全对时，从「红灯·注水嫌疑」降为「黄灯·疑似模板漂移」（建议复测而非判注水）；错误文本/finish_reason 类不匹配不参与降级（逐字符指纹，变了就是真异常）',
+        '键角蓝灯 ReferenceError 根修：ALT_MODE 为 pomme 引擎 IIFE 私有变量，业务层 refreshKeyLights 跨 IIFE 引用必报 ALT_MODE is not defined（每次相位变化触发）——按 playFile/REDUCED 同款口径导出至 window',
+        'Comate 复制名修正：模型矩阵点击复制从内部代号改为界面名（后端双向匹配，两者皆可填）；积分刷新按钮接 refresh=1 旁路缓存现拉官方额度' ] } ] },
     { v: 'v3.6.4', date: '2026-08-29', groups: [
       { label: '🚀 新功能', items: [
         '注水检测独立传真机页（FX-01）：设置/注水甲板一键进入整页弹窗，原版 pomme-ui 传真机逐字复刻（580×784 结构冻结、全动线时间轴对齐官方、窄窗滚动不压缩），标题栏红圆点=返回',
@@ -8103,23 +8189,21 @@ var PT_I18N = {
       var el = $(id);
       if (el) el.onclick = function () { copyText(el.textContent, 'Base URL'); };
     });
-    /* Qoder 积分卡：点击设基线——从客户端「我的用量」读一次剩余积分填入，
-       POST /credits/set 写代理侧账本（~/.qoder-cli-credits.json），之后由轮询扣减刷新 */
+    /* Qoder 积分卡：点击清零累计消耗（对完账后从头计数）。
+       口径说明：只显示「累计已耗」（服务端逐请求下发的 total_credits 累计），
+       不显示「剩余」——多桶计费无法代理侧还原，宁缺勿错。 */
     var qcr = $('qoderStCredits');
     if (qcr) qcr.onclick = async function () {
       var V = PV.qoder;
-      var v = window.prompt('输入 Qoder 当前剩余积分（客户端「我的用量」查看后填入）：', '');
-      if (v === null) return;
-      var n = parseFloat(String(v).trim());
-      if (!isFinite(n) || n < 0) { plog(V, 'err', '积分基线设置失败: 请输入非负数字'); return; }
+      if (!window.confirm('清零 Qoder 累计消耗计数？（不影响 Qoder 官方账户）')) return;
       try {
         var d = await (await fetch('http://127.0.0.1:' + V.port + '/credits/set', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ remaining: n })
+          body: JSON.stringify({ spent: 0 })
         })).json();
-        if (d && d.ok) plog(V, 'ok', '积分基线已设为 ' + n + '（剩余将随请求自动扣减）');
-        else plog(V, 'err', '积分基线设置失败: ' + ((d && d.error) || '未知'));
-      } catch (e) { plog(V, 'err', '积分基线设置失败: ' + (e && e.message || e)); }
+        if (d && d.ok) plog(V, 'ok', '积分累计已清零（后续请求重新累计）');
+        else plog(V, 'err', '积分清零失败: ' + ((d && d.error) || '未知'));
+      } catch (e) { plog(V, 'err', '积分清零失败: ' + (e && e.message || e)); }
     };
     ['tj', 'cb', 'bai', 'comate', 'qoder'].forEach(function (mode) {
       var V = PV[mode];
@@ -8129,11 +8213,23 @@ var PT_I18N = {
          团结/WorkBuddy 强制实时拉一次积分，B.AI/Comate/Qoder 无积分卡只刷视图 */
       var rf = $(V.pfx + 'Refresh');
       if (rf) rf.onclick = async function () {
-        if (mode === 'bai' || mode === 'comate' || mode === 'qoder') {
+        if (mode === 'bai' || mode === 'comate') {
           /* B.AI 的「↻ 刷新」与拉杆点火同权：复用同一个闩锁去强制刷一次模型矩阵，
              否则改走缓存端点之后这颗按钮按下去不会有任何变化 */
           if (mode === 'bai') V.fetchOnRun = true;
           refreshPluginView(mode); plog(V, 'sys', '手动刷新'); return;
+        }
+        if (mode === 'qoder') {
+          /* Qoder 积分刷新：/health?refresh=1 让插件旁路 60s 额度缓存现拉
+             openapi（套餐+专属包实时数），再刷视图渲染出来 */
+          rf.disabled = true;
+          var oldQ = rf.textContent;
+          rf.textContent = '刷新中…';
+          plog(V, 'sys', '手动刷新积分（现拉官方额度）');
+          try { await fetch('http://127.0.0.1:' + V.port + '/health?refresh=1'); } catch (e) {}
+          refreshPluginView(mode);
+          rf.disabled = false; rf.textContent = oldQ;
+          return;
         }
         if (V.phase !== 'running') { toast('info', '刷新', '插件未启动，无法刷新积分'); return; }
         rf.disabled = true;

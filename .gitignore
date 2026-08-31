@@ -26,3 +26,8 @@ tuanjie-baselines.json
 CODELY.md
 tuanjie-device-id.txt
 tuanjie-water-channels.json
+
+# 热替换换装残留（运行中 exe 改名腾位，重启插件后可删）
+ProxyDeck.exe.*
+ProxyDeck.exe~
+ProxyDeck-hotfix.exe

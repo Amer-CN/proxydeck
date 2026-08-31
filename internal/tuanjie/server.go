@@ -2,6 +2,7 @@ package tuanjie
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +27,8 @@ type Server struct {
 	ln     net.Listener
 	mu     sync.Mutex
 	srv    *http.Server
+
+	lifeCancel context.CancelFunc // Start 起的后台循环（402 自动恢复轮询）在 Stop 时取消
 
 	startedAt time.Time // 运行时长展示
 	statsMu   sync.Mutex
@@ -132,6 +135,14 @@ func (s *Server) Start(host, port string) error {
 	// 「媒体转路由」就会卡在那一下上。放这里而不是 NewServer，避免测试构造服务时打网络。
 	go s.providers.Infos()
 
+	// 402 自动恢复轮询：后台每分钟复查到点的 5h 窗口，额度已回自动清标记重新入池。
+	// 放 Start（同上）避免测试直接构造 Server 时起后台循环；Stop 时 cancel 退出。
+	lifeCtx, lifeCancel := context.WithCancel(context.Background())
+	s.mu.Lock()
+	s.lifeCancel = lifeCancel
+	s.mu.Unlock()
+	go s.pool.ResumeBudgetLoop(lifeCtx, s.queryQuotaForResume)
+
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
 	if err != nil {
 		return fmt.Errorf("端口 %s 被占用: %w", port, err)
@@ -153,6 +164,74 @@ func (s *Server) Stop() {
 	if s.srv != nil {
 		_ = s.srv.Close()
 	}
+	if s.lifeCancel != nil {
+		s.lifeCancel()
+	}
+}
+
+// queryQuotaForResume 供 ResumeBudgetLoop 复查账号额度：按 userID 取账号 token
+// （本地账号实时读登录态），查官网积分快照并解析 5h 窗口剩余与重置时刻。
+// 账号不存在 / 取 token 失败返回 ok=false（上层按查询失败顺延 5 分钟）。
+func (s *Server) queryQuotaForResume(userID string) (remaining float64, nextReset time.Time, ok bool) {
+	acc := s.pool.Get(userID)
+	if acc == nil {
+		return 0, time.Time{}, false
+	}
+	token, err := acc.effectiveAccessToken()
+	if err != nil || token == "" {
+		return 0, time.Time{}, false
+	}
+	return parseQuota5h(s.client.FetchQuotaFor(context.Background(), token))
+}
+
+// parseQuota5h 从官网积分快照解析套餐 5h 窗口（402 标记与自动恢复复查共用）：
+// remaining 取 usage_5h 窗口剩余，窗口仍耗尽（<=0）时用 EffectiveRemaining 判断
+// 是否月窗耗尽（综合剩余>0 = 额度其实已回）；resetAt 按 usage_5h.PeriodEnd →
+// NextBoundaryAt → now+5h 三级兜底解析；查询失败（Source=none）返回 ok=false。
+func parseQuota5h(q *Quota) (remaining float64, nextReset time.Time, ok bool) {
+	if q == nil || q.Source == "none" {
+		return 0, time.Time{}, false
+	}
+	remaining = q.Plan.EffectiveRemaining
+	for _, w := range q.Plan.Windows {
+		if w.Type != "usage_5h" {
+			continue
+		}
+		remaining = w.Remaining
+		if remaining <= 0 {
+			remaining = q.Plan.EffectiveRemaining
+		}
+		break
+	}
+	for _, w := range q.Plan.Windows {
+		if w.Type == "usage_5h" {
+			nextReset = parseWindowEnd(w.PeriodEnd)
+			break
+		}
+	}
+	if nextReset.IsZero() {
+		nextReset = parseWindowEnd(q.Plan.NextBoundaryAt)
+	}
+	if nextReset.IsZero() {
+		nextReset = time.Now().Add(5 * time.Hour)
+	}
+	return remaining, nextReset, true
+}
+
+// parseWindowEnd 解析官网窗口结束时刻（UTC 字符串）：RFC3339 优先，失败试
+// "2006-01-02 15:04:05"（无时区标记按 UTC）；空串/解析失败返回零值。
+func parseWindowEnd(s string) time.Time {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
+	}
+	if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+		return t
+	}
+	return time.Time{}
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -753,7 +832,18 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		defer resp.Body.Close()
 		// 402 配额耗尽：禁用该账号并换下一个重试（学群友）
 		if resp.StatusCode == http.StatusPaymentRequired {
-			s.pool.MarkBudgetExceeded(poolUID)
+			// 异步查官网额度拿 5h 窗口重置时刻再标记（402 同步路径零延迟）；
+			// origUID/origToken 先捕获——下方换号会覆盖 poolUID/token，goroutine
+			// 直接闭包引用会与之竞争。查询失败给零值 resetAt = 不参与自动恢复，
+			// 退化为原行为。
+			origUID, origToken := poolUID, token
+			go func() {
+				_, resetAt, ok := parseQuota5h(s.client.FetchQuotaFor(context.Background(), origToken))
+				if !ok {
+					resetAt = time.Time{}
+				}
+				s.pool.MarkBudgetExceededAt(origUID, resetAt)
+			}()
 			s.activity.Add("error", "账号 "+poolUID+" 配额用尽，自动禁用", model, poolUID, 0, 0, 402)
 			log.Printf("[tuanjie] account=%s 402 budget_exceeded 已禁用，切换下一账号", poolUID)
 			if nAcc, nTok := s.pool.PickWithToken(model); nAcc != nil && nAcc.UserID != poolUID {
@@ -790,8 +880,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			defer resp.Body.Close()
 			poolErrBody = nil
 		}
-		// 429 兜底：pacing 开启时代为等待自动重发（同 token/会话），30 分钟
-		// 总预算，超限后透传最后一次原始错误（现有非 200 透传分支）。
+		// 429 兜底：pacing 开启时两层兜底——第一层换池里其他可用账号即时
+		// 重发；全池撞墙或无号可换才按 Retry-After 等待原号重发（30 分钟
+		// 总预算，超限后透传最后一次原始错误，见下方非 200 透传分支）。
 		pacingDeadline := time.Time{}
 		if pacing {
 			pacingDeadline = time.Now().Add(pacingMaxWait)
@@ -801,6 +892,21 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		for pacing && resp != nil && resp.StatusCode == http.StatusTooManyRequests && time.Now().Before(pacingDeadline) {
 			poolErrBody, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 			resp.Body.Close()
+			// 第一层：换号即时试（每轮只试一个候选；PickWithToken 按负载/
+			// 轮询选号，多轮 429 自然轮遍池里其他可用号，返回同号=没得换）
+			if nAcc, nTok := s.pool.PickWithToken(model); nAcc != nil && nAcc.UserID != poolUID {
+				log.Printf("[tuanjie] pacing pool model=%s account=%s status=429 即时换号 %s 重试", model, poolUID, nAcc.UserID)
+				poolUID = nAcc.UserID
+				token = nTok
+				resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, nTok, sess)
+				if err != nil {
+					writeJSON(w, map[string]any{"error": map[string]any{"message": "上游转发失败: " + err.Error(), "type": "server_error"}})
+					return
+				}
+				defer resp.Body.Close()
+				continue // 新号 200 → 出循环；仍 429 → 下轮先试再下一个号
+			}
+			// 第二层：全池撞墙或无号可换，按上游 Retry-After 等待原号重发
 			wait := RetryWait(resp.Header.Get("Retry-After"))
 			if end := time.Now().Add(wait); end.After(pacingDeadline) {
 				wait = time.Until(pacingDeadline)
@@ -1310,9 +1416,10 @@ func (s *Server) handleVideoQuery(w http.ResponseWriter, r *http.Request) {
 
 // usageScanner 流式 SSE 行扫描：拼行、解析 data: 行里的 usage，命中即入账。
 type usageScanner struct {
-	model string
-	buf   string
-	srv   *Server
+	model     string
+	buf       string
+	srv       *Server
+	errLogged bool
 }
 
 func newUsageScanner(model string, srv *Server) *usageScanner {
@@ -1337,8 +1444,18 @@ func (u *usageScanner) feed(chunk []byte) {
 				CompletionTokens int64 `json:"completion_tokens"`
 				TotalTokens      int64 `json:"total_tokens"`
 			} `json:"usage"`
+			Error json.RawMessage `json:"error"`
 		}
-		if json.Unmarshal([]byte(strings.TrimSpace(line[5:])), &chunk) == nil && chunk.Usage != nil {
+		if json.Unmarshal([]byte(strings.TrimSpace(line[5:])), &chunk) != nil {
+			continue
+		}
+		// 上游可能先回 200 再把自身异常塞进流里（HTTP 层记成 status=200，
+		// pool chat 日志与调用方看到的错误码就此脱节），只记一次防上游重发刷屏。
+		if len(chunk.Error) > 0 && string(chunk.Error) != "null" && !u.errLogged {
+			u.errLogged = true
+			log.Printf("[tuanjie] 流内错误 model=%s %s", u.model, truncate(string(chunk.Error), 300))
+		}
+		if chunk.Usage != nil {
 			u.srv.addStat(u.model, chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens, chunk.Usage.TotalTokens)
 		}
 	}

@@ -597,6 +597,28 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 		log.Printf("[tuanjie] check canary 失败 channel=%s model=%s", channel, model)
 	}
 
+	// 指纹误报降级（2026-08-30 codely-basic 案例）：上游多变体随机路由/模板
+	// 按天平移会让 tokenizer 指纹整批漂移，但分词器本身没换（当时原始 token
+	// 逐位一致已证）——仅 tokenizer 系探针不匹配、分布形状仍高度相似、金丝雀
+	// 全对时，判"疑似模板漂移"（黄灯复测）而非"注水嫌疑"（红灯）。
+	if verdict.Light == "red" && canary != nil && canary.Pass && sim.Cosine >= 0.9 {
+		tokMis, otherMis := 0, 0
+		for _, c := range cmps {
+			if c.Status == "ok" && !c.Match {
+				if strings.HasPrefix(c.Name, "tokenizer_") {
+					tokMis++
+				} else {
+					otherMis++
+				}
+			}
+		}
+		if tokMis > 0 && otherMis == 0 {
+			verdict.Light, verdict.Label = "yellow", "疑似模板漂移"
+			verdict.Reason = "仅 " + itoa(tokMis) + " 项 tokenizer 指纹漂移，但分布形状相似度 " +
+				formatPct(sim.Cosine*100) + "、金丝雀全对——更像上游模板变动，建议复测而非判注水"
+		}
+	}
+
 	at := time.Now().Format("2006-01-02 15:04:05")
 	report := map[string]any{
 		"model":      model,

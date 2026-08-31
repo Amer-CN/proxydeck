@@ -1,3 +1,20 @@
+## v3.6.5 · Qoder 第六平台甲板 · 注水检测指纹抗抖动
+
+### 🚀 新功能
+
+- **Qoder 第六平台甲板上线**：阿里 Qoder CN 的 13 个模型（Qwen3.8/GLM-5.3/DeepSeek-V4/Kimi-K2.7/MiniMax-M3 全系，名称与客户端界面一致）反代为本地 OpenAI 兼容接口 8785——传输层为官方 worker 进程（jobToken 宿主鉴权，WASM 签名/HTTPDNS 自包含，服务端视角纯官方流量），WORKBUDDY 键副页切换
+- **全工具放行 + 多轮 agent**：撤单轮限制与工具拒绝，worker 以官方 bypassPermissions 同语义完整执行（读/写/命令，实测建文件落盘）；**工作目录自动跟随客户端会话**（从系统提示提取 Working directory，ZCode 在哪个项目 agent 就在哪个项目干活，`QODER_CWD` 可钉死）；单任务超时放宽 600 秒
+- **Qoder 积分实时显示**：直连官方 `openapi.qoder.com.cn/api/v2/quota/usage`（CN 域名，Bearer 明文鉴权），甲板显示套餐剩余+可用专属包+总剩余；点火拉一次 + 「↻ 刷新」手动现拉，**平时零轮询零官方访问**；配额报错自动变红报警
+- **模型目录维护**：内部代号与界面名双向匹配（`Qwen3.8-Max`/`qmodel_38max` 都认）；模型矩阵按厂家分组、点击复制界面名
+- **Comate 甲板同步增强**：积分实时显示（直连 CN 域名额度接口，套餐+专属包口径）、工作目录跟随（与 Qoder 同款机制）、复制界面名
+
+### 🐛 Bug 修复
+
+- **注水检测指纹抗抖动**：管道探针「a」单字符归一化基准从单次采样改为 3 次采样取中位数——上游隐藏模板按请求抖动（deepseek 系双变体随机路由/按天平移）曾把整批指纹随机平移制造假漂移；「a」三次全失败时如实标 unstable（“无法归一化”），不再拿原始 token 数污染基准库
+- **注水检测红灯误报降级**：一键检测仅 tokenizer 系探针不匹配、分布形状相似度 cosine≥0.9、金丝雀全对时，从「红灯·注水嫌疑」降为「黄灯·疑似模板漂移」（建议复测而非判注水）；错误文本/finish_reason 类不匹配不参与降级（逐字符指纹，变了就是真异常）
+- **键角蓝灯 ReferenceError 根修**：`ALT_MODE` 为 pomme 引擎 IIFE 私有变量，业务层 `refreshKeyLights` 跨 IIFE 引用必报 `ALT_MODE is not defined`（每次相位变化触发）——按 `playFile`/`REDUCED` 同款口径导出至 window
+- **Comate 复制名修正**：模型矩阵点击复制从内部代号改为界面名（后端双向匹配，两者皆可填）；积分刷新按钮接 `refresh=1` 旁路缓存现拉官方额度
+
 ## v3.6.4 · 注水检测传真机 FX-01
 
 ### 🚀 新功能

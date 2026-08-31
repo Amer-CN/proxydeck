@@ -45,6 +45,11 @@ var pluginDefs = []pluginDef{
 		Native: "comate",
 		Port:   8786, Health: "/health",
 	},
+	{
+		ID: "qoder", Name: "Qoder",
+		Native: "qoder",
+		Port:   8785, Health: "/health",
+	},
 }
 
 type pluginState struct {

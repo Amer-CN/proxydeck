@@ -10,6 +10,7 @@ import (
 	"github.com/Amer-CN/proxydeck/internal/bai"
 	"github.com/Amer-CN/proxydeck/internal/codebuddy"
 	"github.com/Amer-CN/proxydeck/internal/comate"
+	"github.com/Amer-CN/proxydeck/internal/qoder"
 	"github.com/Amer-CN/proxydeck/internal/tuanjie"
 )
 
@@ -19,6 +20,7 @@ var (
 	flagDesensitize       = flag.Bool("desensitize", false, "CodeBuddy 插件：对 system/developer/tools 做零宽脱敏，缓解腾讯审核误拦")
 	flagPluginBai         = flag.Bool("plugin-bai", false, "B.AI 插件服务模式（本地转发到 api.b.ai，OpenAI 兼容）")
 	flagPluginComate      = flag.Bool("plugin-comate", false, "Comate 插件服务模式（托管 zulu serve，本地 OpenAI 兼容 8786）")
+	flagPluginQoder       = flag.Bool("plugin-qoder", false, "Qoder 插件服务模式（托管官方 agent SDK worker，本地 OpenAI 兼容 8785）")
 )
 
 // runPluginMode 处理 --plugin-tuanjie / --plugin-codebuddy / --plugin-bai / --plugin-comate
@@ -71,6 +73,18 @@ func runPluginMode() int {
 		log.Printf("comate-plugin: starting on %s:%s (zulu serve transport)", *flagHost, *flagPort)
 		if err := srv.Start(*flagHost, *flagPort); err != nil {
 			_ = os.WriteFile(filepath.Join(exeDir(), "comate-plugin-error.log"),
+				[]byte(err.Error()), 0o600)
+			os.Exit(1)
+		}
+		select {}
+	}
+
+	// Qoder 插件服务模式：每请求 spawn 官方 agent SDK worker 子进程，本地 OpenAI 兼容（8785）。
+	if *flagPluginQoder {
+		srv := qoder.NewServer()
+		log.Printf("qoder-plugin: starting on %s:%s (official worker transport)", *flagHost, *flagPort)
+		if err := srv.Start(*flagHost, *flagPort); err != nil {
+			_ = os.WriteFile(filepath.Join(exeDir(), "qoder-plugin-error.log"),
 				[]byte(err.Error()), 0o600)
 			os.Exit(1)
 		}

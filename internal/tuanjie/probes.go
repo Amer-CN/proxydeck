@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -177,9 +178,22 @@ func scrubErrorText(s string) string {
 func RunPipelineProbes(ctx context.Context, target *probeTarget, model string) []probeResult {
 	var out []probeResult
 
-	// "a" 单字符基准（所有 tokenizer 探针的归一化底座）
-	_, aTok, _, _, _, _ := probeCall(ctx, target, model,
-		[]map[string]any{{"role": "user", "content": "a"}}, nil)
+	// "a" 单字符基准（所有 tokenizer 探针的归一化底座）。采 3 次取中位数：
+	// 上游隐藏模板会按请求抖动（多变体随机路由/按天漂移），单次采样会让
+	// 整批指纹随机平移、制造假漂移（2026-08-30 codely-basic 误报红灯即此因）。
+	var aSamples []int
+	for i := 0; i < 3; i++ {
+		_, aTok, _, _, _, aErr := probeCall(ctx, target, model,
+			[]map[string]any{{"role": "user", "content": "a"}}, nil)
+		if aErr == nil && aTok > 0 {
+			aSamples = append(aSamples, aTok)
+		}
+	}
+	aTok := 0
+	if len(aSamples) > 0 {
+		sort.Ints(aSamples)
+		aTok = aSamples[len(aSamples)/2]
+	}
 
 	for _, t := range tokenizerProbeTexts {
 		msgs := []map[string]any{{"role": "user", "content": t.Text}}
@@ -198,6 +212,11 @@ func RunPipelineProbes(ctx context.Context, target *probeTarget, model string) [
 				note, st = firstNonEmpty(te1, te2), "error"
 			}
 			out = append(out, probeResult{Name: t.Name, Status: st, Note: note})
+		case aTok <= 0:
+			// "a" 基准三次全失败但文本探针成功（罕见）：无法归一化，如实标
+			// unstable，绝不能把原始 token 数当归一化值入库（会污染基准库）
+			out = append(out, probeResult{Name: t.Name, Status: "unstable",
+				Note: "a 基准采样失败，无法归一化"})
 		case tok1 != tok2:
 			out = append(out, probeResult{Name: t.Name, Value: fmt.Sprintf("%d", tok1-aTok),
 				Status: "unstable", Note: fmt.Sprintf("双发不一致 %d vs %d（多主机路由？）", tok1, tok2)})

@@ -4,6 +4,7 @@
 package tuanjie
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"log"
@@ -16,17 +17,18 @@ import (
 
 // Account 是账号池里的一个团结账号。
 type Account struct {
-	UserID         string `json:"user_id"`
-	Username       string `json:"username,omitempty"`
-	OrgID          string `json:"org_id,omitempty"`
-	AccessToken    string `json:"access_token"`
-	Source         string `json:"source,omitempty"` // "pool"=入池账号（默认）；"local"=本地客户端（AccessToken 恒空，实时读 oauth_creds.json）
-	LastUsed       string `json:"last_used,omitempty"`
-	UseCount       int64  `json:"use_count,omitempty"`
-	Enabled        bool   `json:"enabled"`
-	HasGLM53       bool   `json:"has_glm53"`
-	BudgetExceeded bool     `json:"budget_exceeded"`
-	Models         []string `json:"models,omitempty"` // 该账号认领的模型列表（精确匹配）；空 = 兜底接所有未被认领的模型
+	UserID         string    `json:"user_id"`
+	Username       string    `json:"username,omitempty"`
+	OrgID          string    `json:"org_id,omitempty"`
+	AccessToken    string    `json:"access_token"`
+	Source         string    `json:"source,omitempty"` // "pool"=入池账号（默认）；"local"=本地客户端（AccessToken 恒空，实时读 oauth_creds.json）
+	LastUsed       string    `json:"last_used,omitempty"`
+	UseCount       int64     `json:"use_count,omitempty"`
+	Enabled        bool      `json:"enabled"`
+	HasGLM53       bool      `json:"has_glm53"`
+	BudgetExceeded bool      `json:"budget_exceeded"`
+	BudgetResetAt  time.Time `json:"budget_reset_at,omitempty"` // 402 时记录的 5h 窗口重置时刻（自动恢复用）
+	Models         []string  `json:"models,omitempty"`          // 该账号认领的模型列表（精确匹配）；空 = 兜底接所有未被认领的模型
 }
 
 // AccountStatus 是给前端的账号摘要（不含 token 本体）。
@@ -222,19 +224,98 @@ func (p *AccountPool) PickWithToken(model string) (*Account, string) {
 	return nil, ""
 }
 
-// MarkBudgetExceeded 标记账号 402 并持久化（选号自动绕过）。
-func (p *AccountPool) MarkBudgetExceeded(userID string) {
+// MarkBudgetExceededAt 标记 402 并记录预计重置时刻（resetAt 零值 = 未知，
+// 不参与自动恢复）。resetAt 通常取官网 5h 窗口 PeriodEnd，到点由
+// ResumeBudgetLoop 复查额度后决定是否自动清标记。
+func (p *AccountPool) MarkBudgetExceededAt(userID string, resetAt time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, a := range p.accounts {
 		if a.UserID == userID {
 			a.BudgetExceeded = true
+			a.BudgetResetAt = resetAt
 			if a.Source == "local" {
 				log.Printf("[tuanjie] 本地账号 %s 命中预算超额（BudgetExceeded=true 置 UI 标记，不物理删除）", userID)
 			}
 			p.saveLocked()
 			return
 		}
+	}
+}
+
+// MarkBudgetExceeded 标记账号 402 并持久化（选号自动绕过）。
+func (p *AccountPool) MarkBudgetExceeded(userID string) {
+	p.MarkBudgetExceededAt(userID, time.Time{})
+}
+
+// ResumeBudgetLoop 402 自动恢复轮询：每 1 分钟扫一遍池，找出 BudgetExceeded
+// 且预计重置时刻（BudgetResetAt，402 时按官网 5h 窗口 PeriodEnd 记录）已过的
+// 账号，经 queryQuota 复查官网额度——已回则清标记重新入池（月窗耗尽的误恢复
+// 由 remaining<=0 分支拦下：顺延到 nextReset 再查）；查询失败顺延 5 分钟重试。
+// queryQuota 由调用方注入（Server 提供 token 解析 + 官网查询）；锁内不调
+// queryQuota——先收集候选、解锁再查、再加锁写回。ctx.Done() 退出。
+func (p *AccountPool) ResumeBudgetLoop(ctx context.Context, queryQuota func(userID string) (remaining float64, nextReset time.Time, ok bool)) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			p.resumeScanOnce(queryQuota)
+		}
+	}
+}
+
+// resumeScanOnce ResumeBudgetLoop 的单轮扫描体（独立出来便于单测）。
+func (p *AccountPool) resumeScanOnce(queryQuota func(userID string) (remaining float64, nextReset time.Time, ok bool)) {
+	if queryQuota == nil {
+		return
+	}
+	now := time.Now()
+	p.mu.Lock()
+	var ids []string
+	for _, a := range p.accounts {
+		// 恢复只看 BudgetExceeded（不要求 Enabled）：手动停用的账号同样被复查，
+		// 但恢复只清标记，绝不把 Enabled 置回 true——是否入池仍由 Pick 的
+		// Enabled && !BudgetExceeded 过滤决定。
+		if a.BudgetExceeded && !a.BudgetResetAt.IsZero() && now.After(a.BudgetResetAt) {
+			ids = append(ids, a.UserID)
+		}
+	}
+	p.mu.Unlock()
+	for _, uid := range ids {
+		remaining, nextReset, ok := queryQuota(uid)
+		now := time.Now()
+		p.mu.Lock()
+		for _, a := range p.accounts {
+			if a.UserID != uid || !a.BudgetExceeded {
+				continue // 期间已被 Toggle 清标记：跳过
+			}
+			switch {
+			case ok && remaining > 0:
+				a.BudgetExceeded = false
+				a.BudgetResetAt = time.Time{}
+				p.saveLocked()
+				log.Printf("[tuanjie] 账号 %s 额度已恢复（5h 窗口重置），自动恢复轮询", uid)
+			case ok:
+				// remaining<=0：月窗耗尽等场景额度未回——顺延到下一个重置时刻继续等
+				if !nextReset.IsZero() {
+					a.BudgetResetAt = nextReset
+				}
+				if a.BudgetResetAt.IsZero() || !a.BudgetResetAt.After(now) {
+					a.BudgetResetAt = now.Add(5 * time.Minute) // 没拿到新时刻：+5min 防死循环快扫
+				}
+				p.saveLocked()
+				log.Printf("[tuanjie] 账号 %s 复查额度仍未恢复（剩余 %.1f），顺延至 %s 再查", uid, remaining, a.BudgetResetAt.Format("2006-01-02 15:04:05"))
+			default:
+				a.BudgetResetAt = now.Add(5 * time.Minute)
+				p.saveLocked()
+				log.Printf("[tuanjie] 账号 %s 复查额度查询失败，顺延 5 分钟重试", uid)
+			}
+			break
+		}
+		p.mu.Unlock()
 	}
 }
 
