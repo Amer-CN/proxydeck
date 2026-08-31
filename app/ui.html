@@ -3364,7 +3364,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <p class="bt">随附检测对象 · PROBE TARGET</p>
                     <p><em>渠道</em><b data-fx-mch>—</b></p>
                     <p><em>模型</em><b data-fx-mmodel>—</b></p>
-                    <p><em>基准</em><b>官方</b></p>
+                    <p><em>基准</em><b data-fx-mbase>官方链路</b></p>
                     <p><em>探针</em><b data-fx-mprobe>8 项</b></p>
                   </div>
                 </div>
@@ -5627,8 +5627,10 @@ var PT_I18N = {
     if (!chSel) return;
     chs = chs || [];
     chSel.innerHTML = chs.length ? chs.map(function (c) {
-      return '<option value="' + escHtml(c.id) + '">' + escHtml(c.name || c.id) + (c.ok ? '' : '（不通）') + '</option>';
-    }).join('') : '<option value="tuanjie">tuanjie</option>';
+      /* 第 32 轮：下拉附 strong 标记后缀（·强=官方链路 / ·弱=首测锚定弱判）；DEMO 单项无 strong 字段视作官方链路 */
+      var strong = c.strong !== false;
+      return '<option value="' + escHtml(c.id) + '">' + escHtml(c.name || c.id) + (strong ? '·强' : '·弱') + (c.ok ? '' : '（不通）') + '</option>';
+    }).join('') : '<option value="tuanjie">tuanjie·强</option>';
     fillWaterModels();
     renderChannelKeyInput(chs);
     renderWaterScreen();
@@ -6017,11 +6019,14 @@ var PT_I18N = {
       var itemsHtml = renderWaterItems(r.items);
       var probesHtml = renderWaterProbes(rep.probes, rep.probe_compare);
       var distHtml = renderWaterDist(rep.dist, rep.dist_similarity);
+      /* 第 32 轮：弱渠道（无官方链路）首次检测口径副注——基准为首测锚定，判定从弱 */
+      var repChDef = (waterChans || []).filter(function (c) { return c.id === (r.channel || ''); })[0];
+      var weakNote = (repChDef && repChDef.strong === false) ? '<div class="if-empty">// 首测锚定，判定从弱</div>' : '';
       var canaryHtml = rep.canary ? waterRowHtml(rep.canary) : '<div class="if-empty">// 无金丝雀样本</div>';
       return '<div class="fx-report">' +
         '<div class="fx-rsec"><p class="fx-rsec-h">① 检测项<small>ITEMS</small></p>' + itemsHtml + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">② 管道探针<small>PIPELINE PROBES</small></p>' + probesHtml + '</div>' +
-        '<div class="fx-rsec"><p class="fx-rsec-h">③ 分布指纹<small>DISTRIBUTION</small></p>' + distHtml + '</div>' +
+        '<div class="fx-rsec"><p class="fx-rsec-h">③ 分布指纹<small>DISTRIBUTION</small></p>' + distHtml + weakNote + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">④ 金丝雀<small>CANARY</small></p>' + canaryHtml + '</div>' +
         histSec +
         '</div>';
@@ -6248,6 +6253,14 @@ var PT_I18N = {
       if (mm) mm.textContent = (fxModelSel && fxModelSel.value) || '—';
       if (mp) mp.textContent = FX_PROBES + ' 项';
       if (pp) pp.textContent = FX_PROBES + ' 项';
+      /* 第 32 轮：基准口径诚实化——strong 渠道（tuanjie/comate/qoder）显「官方链路」，
+         弱渠道（command/workbuddy/bai）显「首测锚定」；渠道列表缺 strong 字段（DEMO 单项）视作官方链路 */
+      var mbase = q('[data-fx-mbase]');
+      if (mbase) {
+        var mbaseId = (fxChSel && fxChSel.value) || '';
+        var mbaseCh = (waterChans || []).filter(function (c) { return c.id === mbaseId; })[0];
+        mbase.textContent = mbaseCh && mbaseCh.strong === false ? '首测锚定' : '官方链路';
+      }
       fxMinfoNodesSnap = null;                     /* 值已换：强制重建打字机快照 */
     }
     if (fxChSel) fxChSel.addEventListener('change', function () {

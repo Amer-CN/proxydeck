@@ -120,9 +120,15 @@ type overallVerdict struct {
 // 平移（同轮 4 探针同时 ±8），±8 内视为同分词器（差值比对，非绝对相等）。
 const tokenizerDriftTolerance = 8
 
+// shortProbeTolerance 短字符探针（len≤4）允许的最大字符位差（±1）：上游模板
+// 微抖时 2/4 字符探针（错误文本/finish 系）单字符位漂移不再误报 mismatch；
+// 「a」单字符探针 v3.6.5 已做 3 次中位数，此处补齐其余短探针。数值型探针不受影响。
+const shortProbeTolerance = 1
+
 // probeValueMatch 探针值比对规则：tokenizer 系按差值（≤8 容差，隐藏模板
 // 平移不误报）；错误文本/finish_reason 系按相等性（报错原文与完停词是
-// 逐字符指纹）。
+// 逐字符指纹），len≤4 的等长短值允许 1 个字符位差（双方均为数值时不做
+// 短值容差，仍按严格相等）。
 func probeValueMatch(name, cur, base string) bool {
 	if strings.HasPrefix(name, "tokenizer_") {
 		ci, err1 := strconv.Atoi(cur)
@@ -135,7 +141,30 @@ func probeValueMatch(name, cur, base string) bool {
 			return d <= tokenizerDriftTolerance
 		}
 	}
-	return cur == base
+	if cur == base {
+		return true
+	}
+	// 短字符探针 ±1 容差：len≤4、等长且双方均非数值，允许 1 个字符位差
+	if len(cur) <= 4 && len(base) <= 4 && len(cur) == len(base) &&
+		!isNumericStr(cur) && !isNumericStr(base) {
+		diff := 0
+		for i := 0; i < len(cur); i++ {
+			if cur[i] != base[i] {
+				diff++
+				if diff > shortProbeTolerance {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// isNumericStr 字符串是否可解析为数字（数值型探针不做短值容差）。
+func isNumericStr(s string) bool {
+	_, err := strconv.Atoi(s)
+	return err == nil
 }
 
 // CompareToBaseline 当前探针集 + 分布 vs 基准：

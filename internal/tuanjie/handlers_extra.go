@@ -412,7 +412,7 @@ func (s *Server) waterHistory() []waterHistoryEntry {
 
 // handleWaterProbe 注水检测（action 字段分发）：
 //   - GET ?history=1：返回检测历史（最近 20 条）
-//   - GET ?channels=1：返回四渠道列表（含各渠道 models，3s 缓存）
+	//   - GET ?channels=1：返回六渠道列表（含各渠道 models，3s 缓存）
 //   - check（前端唯一入口）：一键全流程——有基准直接比对出报告；
 //     无基准自动采集官方基准后同渠道比对自检（报告标注首次检测）；
 //     channel 缺省 tuanjie，非 tuanjie 渠道探针直打该渠道本地端点
@@ -559,12 +559,12 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 		base = bl
 		verdict.Light = "grey"
 		verdict.Label = "首次"
-		verdict.Reason = plainVerdictReason("grey")
+		verdict.Reason = plainVerdictReason("grey", isStrongChannel(channel))
 	} else {
 		probes = RunPipelineProbes(r.Context(), target, model)
 		dist = collectDistSamples(r.Context(), target, model, samples)
 		cmps, sim, verdict = CompareToBaseline(base, probes, dist)
-		verdict.Reason = plainVerdictReason(verdict.Light)
+		verdict.Reason = plainVerdictReason(verdict.Light, isStrongChannel(channel))
 	}
 
 	// 上游 402 预算拦截检测：LiteLLM 团队预算受限（Max budget -1 异常）时
@@ -619,6 +619,10 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 		}
 	}
 
+	// 金丝雀错答回灌（第 32 轮）：探针/分布判 green 但金丝雀答错 ≥2 时降级
+	// （错答 ≥2 降 yellow、=3 降 red），只在 green 时降——本就 red/yellow 不动。
+	verdict = applyCanaryFeedback(verdict, channel, canary)
+
 	at := time.Now().Format("2006-01-02 15:04:05")
 	report := map[string]any{
 		"model":      model,
@@ -638,17 +642,52 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 }
 
 // plainVerdictReason 综合灯 → 一句话人话结论（专业词只进折叠详情）。
-func plainVerdictReason(light string) string {
+// 基准口径按渠道 strong 标记诚实化（第 32 轮）：strong 渠道=「官方链路基准」
+// （凭证链完整、指纹源自厂商），弱渠道=「首测锚定（无官方链路，弱判）」。
+func plainVerdictReason(light string, strong bool) string {
+	term := "官方链路基准"
+	if !strong {
+		term = "首测锚定（无官方链路，弱判）"
+	}
 	switch light {
 	case "green":
 		return "模型一致，未发现注水"
 	case "yellow":
 		return "有轻微偏差，建议复测"
 	case "red":
-		return "指纹与官方基准不符，疑似注水"
+		return "指纹与" + term + "不符，疑似注水"
 	default:
-		return "已自动采集官方基准并完成首次检测"
+		return "已自动采集" + term + "并完成首次检测"
 	}
+}
+
+// applyCanaryFeedback 金丝雀错答回灌（纯函数，可单测；第 32 轮裁决）：
+// 探针/分布判 green 但金丝雀答错 ≥2 的，此前直接绿灯放行（回执绿但
+// 「能力答题 ✖」证据矛盾的根因）。错答 ≥2 降 yellow、=3 降 red，reason
+// 补错答说明；只在 green 时降级（本就 red/yellow 不动——取更严者）。
+// 错答数只统计实际作答的题（tuanjie 走 ProbeAccount 不记 repeat 题的作答，
+// 缺题不算错答），文案分母 3 = 金丝雀题库总题数。
+func applyCanaryFeedback(v overallVerdict, channel string, canary *WaterProbeResult) overallVerdict {
+	if v.Light != "green" || canary == nil {
+		return v
+	}
+	wrong := 0
+	for _, q := range canaryQuestions {
+		if ok, answered := canary.Answers[q.ID]; answered && !ok {
+			wrong++
+		}
+	}
+	if wrong < 2 {
+		return v
+	}
+	if wrong >= 3 {
+		v.Light, v.Label = "red", "显著偏差"
+		v.Reason = plainVerdictReason("red", isStrongChannel(channel)) + "（金丝雀全错）"
+		return v
+	}
+	v.Light, v.Label = "yellow", "轻微偏差"
+	v.Reason = plainVerdictReason("yellow", isStrongChannel(channel)) + "（金丝雀错答 " + itoa(wrong) + "/3）"
+	return v
 }
 
 // waterReportItem 一个人话检测项（前端直接渲染）。

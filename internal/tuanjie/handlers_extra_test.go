@@ -37,8 +37,12 @@ func TestBuildWaterReportItemsFirstTime(t *testing.T) {
 	if items[3].Result != "🆕" {
 		t.Errorf("首次检测基准状态应为 🆕，得到 %q", items[3].Result)
 	}
-	if plainVerdictReason("grey") != "已自动采集官方基准并完成首次检测" {
-		t.Errorf("grey 灯文案不符：%s", plainVerdictReason("grey"))
+	/* 第 32 轮：plainVerdictReason 加 strong 维度（基准口径诚实化） */
+	if plainVerdictReason("grey", true) != "已自动采集官方链路基准并完成首次检测" {
+		t.Errorf("grey 灯文案（strong）不符：%s", plainVerdictReason("grey", true))
+	}
+	if plainVerdictReason("grey", false) != "已自动采集首测锚定（无官方链路，弱判）并完成首次检测" {
+		t.Errorf("grey 灯文案（弱渠道）不符：%s", plainVerdictReason("grey", false))
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 //   - command：本地 55990，Bearer=api-key.txt 内容（存在才带）
 //   - workbuddy：本地 8787，无鉴权头
 //   - bai：本地 8891，Bearer=渠道配置 key（tuanjie-water-channels.json）
+//   - comate/qoder：zulu 引擎本地端点（8786/8785），无鉴权头
 type waterChannelDef struct {
 	ID         string
 	Name       string
@@ -30,12 +31,22 @@ type waterChannelDef struct {
 	BearerFrom string // "" | "config" | "api-key.txt"
 }
 
-// waterChannels 内置四渠道（顺序即 channels 列表顺序）。
+// waterChannels 内置六渠道（顺序即 channels 列表顺序）。
 var waterChannels = []waterChannelDef{
 	{ID: "tuanjie", Name: "团结", Port: 8788},
 	{ID: "command", Name: "Command", Port: 55990, BaseURL: "http://127.0.0.1:55990", BearerFrom: "api-key.txt"},
 	{ID: "workbuddy", Name: "WorkBuddy", Port: 8787, BaseURL: "http://127.0.0.1:8787"},
 	{ID: "bai", Name: "B.ai", Port: 8891, BaseURL: "http://127.0.0.1:8891", BearerFrom: "config"},
+	{ID: "comate", Name: "Comate", Port: 8786, BaseURL: "http://127.0.0.1:8786"},
+	{ID: "qoder", Name: "Qoder", Port: 8785, BaseURL: "http://127.0.0.1:8785"},
+}
+
+// isStrongChannel 官方链路渠道判定（第 32 轮基准口径诚实化）：tuanjie 走账号池
+// 官方上游、comate/qoder 为厂商 zulu 引擎本地端点——凭证链完整、指纹源自厂商，
+// 基准口径=「官方链路基准」；其余渠道（command/workbuddy/bai）无官方链路，
+// 基准=「首测锚定（弱判）」。
+func isStrongChannel(id string) bool {
+	return id == "tuanjie" || id == "comate" || id == "qoder"
 }
 
 // channelInfo 渠道在 channels 列表里的呈现（GUI 双下拉数据源）。
@@ -44,6 +55,7 @@ type channelInfo struct {
 	Name    string   `json:"name"`
 	Port    int      `json:"port"`
 	OK      bool     `json:"ok"`
+	Strong  bool     `json:"strong"`             // 官方链路渠道（tuanjie/comate/qoder），其余=首测锚定（弱判）
 	NeedKey bool     `json:"need_key,omitempty"` // 该渠道需 key 且未配置（前端显示输入框）
 	Models  []string `json:"models,omitempty"`
 	Note    string   `json:"note,omitempty"`
@@ -128,7 +140,7 @@ var (
 	channelsCacheAt time.Time
 )
 
-// handleChannels GET /water-probe?channels=1：四渠道列表（含各自 models）。
+// handleChannels GET /water-probe?channels=1：六渠道列表（含各自 models）。
 func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 	channelsCacheMu.Lock()
 	fresh := time.Since(channelsCacheAt) < 3*time.Second && channelsCache != nil
@@ -151,7 +163,7 @@ func (s *Server) buildChannels(ctx context.Context) []channelInfo {
 	keys := LoadChannelKeys()
 	out := make([]channelInfo, 0, len(waterChannels))
 	for _, c := range waterChannels {
-		ci := channelInfo{ID: c.ID, Name: c.Name, Port: c.Port, OK: true, NeedKey: c.BearerFrom == "config" && keys[c.ID] == ""}
+		ci := channelInfo{ID: c.ID, Name: c.Name, Port: c.Port, OK: true, Strong: isStrongChannel(c.ID), NeedKey: c.BearerFrom == "config" && keys[c.ID] == ""}
 		models, note := s.fetchChannelModels(ctx, c, keys)
 		if note != "" {
 			ci.OK = false
