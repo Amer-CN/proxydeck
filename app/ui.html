@@ -2573,6 +2573,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="comateZulu" title="托管 Comate zulu serve 会话引擎（内部 8792）"><span>zulu 托管</span><b></b></span>
+                    <span class="pt-dot warn" data-dot="comateFree" title="Comate 为免费托管：上游对免费档有限速，忙时变慢属正常"><span>免费限速</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -5672,7 +5673,7 @@ var PT_I18N = {
     var ch = (chs || []).filter(function (c) { return c.id === cur; })[0];
     var row = $('wtKeyRow');
     if (!ch || !row) return;
-    if (ch.ok || !ch.needKey) { row.style.display = 'none'; return; }
+    if (ch.ok || !(ch.needKey || ch.need_key)) { row.style.display = 'none'; return; }   /* 第 33 轮：兼容后端 need_key（下划线）——旧代码读 needKey 导致密钥行从不显示 */
     row.style.display = '';
     var note = $('wtKeyNote');
     if (note) note.textContent = (ch.note || '该渠道需要 API key') + ' —— 填好保存即可';
@@ -7161,6 +7162,11 @@ var PT_I18N = {
     /* tj 屏健康检查灯已改「账号矩阵」（数据在 loadTuanjieAccounts/renderTuanjieMatrix）；
        cb 屏可用模型灯已改「模型探测」（loadPluginModels 写）+「脱敏防护」（常亮） */
     if (V.mode === 'cb') PTApp.dot('cbMask', true, false, '开启');
+    /* comate 屏灯：zulu 托管随相位；免费限速运行时常亮（免费档上游限速是常态） */
+    if (V.mode === 'comate') {
+      PTApp.dot('comateZulu', p === 'running', p === 'starting', p === 'starting' ? '托管中' : '');
+      PTApp.dot('comateFree', p === 'running', false, p === 'running' ? '限速中' : '');
+    }
     /* bai 屏灯：限时免费运行时常亮（平台免费档属性）；需代理为静态琥珀徽章不在此画 */
     if (V.mode === 'bai') PTApp.dot('baiFree', p === 'running', false, '');
     /* 插件启停改变"运行态"——键角蓝灯（refreshKeyLights）随相位重刷 */
