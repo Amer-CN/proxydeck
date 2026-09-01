@@ -1470,8 +1470,11 @@ body.fax-standalone .fx.report-page .fx-body::before { display: none; }
 body.fax-standalone .fx.report-page .fx-body { position: relative; overflow: hidden; }   /* 盒链其余项走上方通用 .fx-cage 规则；overflow 裁剪 fxReportFeed 滑落段（不越过字段/章行，从正文区上缘"出纸"） */
 body.fax-standalone .fx.report-page .fx-body .fx-report {
   flex: 1 1 auto; min-height: 0; box-sizing: border-box;
-  overflow-y: auto; overscroll-behavior: contain;
-  /* 第 37 轮：touch-action: pan-y 退役——WebView2 下它把鼠标滚轮合成成手势吞掉（滚轮失效根源） */
+  overflow-y: auto;
+  /* 第 37 轮：touch-action: pan-y 退役——WebView2 下它把鼠标滚轮合成成手势吞掉（滚轮失效根源）。
+     第 38 轮：overscroll-behavior: contain 同步退役——真机实测 fx-msg（无此属性）滚轮正常、
+     fx-report（有）失效，它是两滚动容器仅剩的差异；其唯一用途（防滚动链）在 body
+     overflow:hidden 下本就无处可链，零损失。另有 JS 自调谐滚轮兜底（initFaxWheelFix）。 */
   padding: 0 8px 10px 2px;        /* 右侧让出 4px 细滚动条位 */
 }
 /* 第 31 轮：REPORT 页摘要框撤除（判定/相似度回执上已有、报表节里也有，重复遮挡撤掉）；
@@ -6126,7 +6129,9 @@ var PT_I18N = {
         body.replaceChild(fxReportBox, fxText);
       }
       if (fxReportBox) fxReportBox.innerHTML = fxReportHtml();
-      fxReportFeed();                              /* 第 37 轮：报表容器随纸降下一次（回 PROBE 不做动画） */
+      /* 第 38 轮：忙相位（撕纸换纸链中切页）跳过滑落动画——纸本身在出纸，报表内容随纸走；
+         模式键点进 REPORT（ready 相位）才做容器滑落 */
+      if (FX_BUSY_PHASES.indexOf(fxPhase) < 0) fxReportFeed();   /* 第 37 轮：报表容器随纸降下一次（回 PROBE 不做动画） */
       /* 第 31 轮：REPORT 页摘要框已 display:none，进入时不再重写 minfo（fxReportMinfo 保留备用） */
     }
     /* 第 37 轮：REPORT 进页出纸动画——撕纸换纸后报表内容瞬现，不符传真机出纸真实感。
@@ -6615,11 +6620,12 @@ var PT_I18N = {
     function fxTear() {
       if (fxPhase !== 'printed') return;
       fxTearOff(function () {
-        fxFeedSheet(function () {
-          /* 第 29 轮：撕纸完成自动进 REPORT 详细结果页——撕掉的回执是「摘要」，
-             详细报告在 REPORT 页等用户细读（LCD 显「详细结果 · REPORT」）；模式键可切回 PROBE */
-          if (waterLastReport && waterLastReport.report) fxSwitchMode('report');
-        });
+        /* 第 38 轮：先切 REPORT 再换纸——降下的纸就是详细结果单（内容随纸出），
+           落位后不再二次动画（fxRenderPage 在忙相位跳过 fxReportFeed，纸本身就是出纸动画）。
+           第 29 轮：撕纸完成自动进 REPORT 详细结果页——撕掉的回执是「摘要」，
+           详细报告在 REPORT 页等用户细读（LCD 显「详细结果 · REPORT」）；模式键可切回 PROBE */
+        if (waterLastReport && waterLastReport.report) fxSwitchMode('report');
+        fxFeedSheet();
       });
     }
 
@@ -6732,6 +6738,35 @@ var PT_I18N = {
       if (typeof window.ccFaxWin === 'function') window.ccFaxWin('move');            /* 浮窗专用直绑桥（第 17 轮） */
       else if (typeof window.ccWindowCmd === 'function') window.ccWindowCmd('move'); /* 回退：继承桥 */
     });
+  })();
+
+  /* 第 38 轮：REPORT 页滚轮自调谐兜底——真机实测同一窗口里 PROBE 页 .fx-msg 滚轮正常、
+     REPORT 页 .fx-report 失效（CSS 逐项排查 touch-action/overscroll-behavior 后仍复现，
+     属部分 WebView2 运行时对 JS 深插滚动容器的滚轮派发缺陷）。策略：委托监听 .fx 根上的
+     wheel（fx-report 是动态创建/替换的节点，直接绑会丢）；首个事件放行原生滚动并在 120ms
+     后核对——原生真滚了（scrollTop 变化）则永远不动（零开销零双滚）；原生没滚且内容可滚
+     才接管手动 scrollTop（此后每次滚轮直接派发）。 */
+  (function initFaxWheelFix() {
+    var fxRoot = document.querySelector('#wtFax .fx[data-fx]');
+    if (!fxRoot || fxRoot.dataset.wheelFixBound) return;
+    fxRoot.dataset.wheelFixBound = '1';
+    var manual = false;
+    fxRoot.addEventListener('wheel', function (ev) {
+      var el = ev.target && ev.target.closest ? ev.target.closest('.fx-report') : null;
+      if (!el) return;
+      if (manual) {
+        if (el.scrollHeight <= el.clientHeight) return;   /* 无可滚（内容不满一屏）不劫持 */
+        if (ev.deltaY < 0 && el.scrollTop <= 0) return;   /* 顶/底边界放行，行为与原生一致 */
+        if (ev.deltaY > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight - 1) return;
+        el.scrollTop += ev.deltaY;
+        ev.preventDefault();
+        return;
+      }
+      var before = el.scrollTop;
+      setTimeout(function () {
+        if (el.isConnected && el.scrollTop === before && el.scrollHeight > el.clientHeight) manual = true;
+      }, 120);
+    }, { passive: false });
   })();
 
   // 注水检测 / 媒体转路由是常驻外壳子页面：一次性绑定在初始化做，进入模式时刷数据。
