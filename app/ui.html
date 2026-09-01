@@ -1602,16 +1602,16 @@ body.fax-standalone .fx.report-page .fx-lamp-wrap { margin-left: auto; }
   content: ''; position: absolute; left: 0; right: 0; top: 0; height: 11px; pointer-events: none;
   background: linear-gradient(180deg, rgba(40, 33, 24, .28), rgba(40, 33, 24, .08) 60%, rgba(40, 33, 24, 0));
 }
-.fx-receipt .ttl { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.5em; text-indent: 0.5em; line-height: 1.2; color: var(--pp-ink); }  /* 官方截图：字距宽松、居中（text-indent 补末字空隙） */
-.fx-receipt .sub { margin: 4px 0 0; font-family: var(--pt-mono-ui); font-size: 8.5px; font-weight: 500; letter-spacing: 0.22em; text-indent: 0.22em; color: var(--pp-fine); text-transform: uppercase; }  /* 官方：细字重、大字距 */
+.fx-receipt .ttl { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: 0.5em; text-indent: 0.5em; line-height: 1.2; color: var(--pp-ink); }  /* 官方截图：字距宽松、居中（text-indent 补末字空隙） */
+.fx-receipt .sub { margin: 4px 0 0; font-family: var(--pt-mono-ui); font-size: 9.5px; font-weight: 500; letter-spacing: 0.22em; text-indent: 0.22em; color: var(--pp-fine); text-transform: uppercase; }  /* 官方：细字重、大字距 */
 .fx-receipt .rule { margin: 11px auto; width: 86%; border-top: 1px dashed #CFCFC5; }  /* 官方：浅灰虚线 #CCC 系 */
 .fx-receipt dl { margin: 0; display: inline-block; text-align: left; width: 100%; }   /* 官方：字段区占满内容区（边距即 body padding 的 10%） */
-.fx-receipt dl div { display: flex; align-items: baseline; font-size: 12px; line-height: 1.75; color: var(--pp-ink); padding: 0; }   /* 第 12 轮：12px+深墨（低清屏可读性） */
-.fx-receipt dt { flex: none; width: 3.2em; color: var(--pp-ink); }   /* 官方：标签与值同深墨（低清下仍清晰的关键） */
+.fx-receipt dl div { display: flex; align-items: baseline; font-size: 14px; line-height: 1.75; color: var(--pp-ink); padding: 0; }   /* 第 12 轮：12px+深墨（低清屏可读性） */
+.fx-receipt dt { flex: none; width: 4.2em; color: var(--pp-ink); }   /* 官方：标签与值同深墨；第 41 轮 3.2→4.2em——「检测对象」四字在 14px 下折行 */
 .fx-receipt dd { margin: 0; flex: 1; text-align: right; font-family: var(--pt-mono-ui); font-weight: 400; font-variant-numeric: tabular-nums; color: var(--pp-ink); }   /* 官方：常规字重、统一深墨 */  /* 官方：值右对齐到统一右缘 */
 .fx-receipt [data-fx-r-result] { color: var(--fx-rcp-ok); }   /* 结果行「OK · 已送达」绿色强调 */
-.fx-receipt .thanks { margin: 4px 0 0; font-size: 10px; font-weight: 400; line-height: 1.5; color: #777776; }  /* 官方：感谢语中灰、常规字重 */
-.fx-receipt .tear-hint { margin: 3px 0 0; font-size: 8.5px; font-weight: 400; line-height: 1.5; color: #AAA9A0; }  /* 官方：提示行更小更淡 */
+.fx-receipt .thanks { margin: 4px 0 0; font-size: 12.5px; font-weight: 400; line-height: 1.5; color: #777776; }  /* 官方：感谢语中灰、常规字重 */
+.fx-receipt .tear-hint { margin: 3px 0 0; font-size: 10px; font-weight: 400; line-height: 1.5; color: #AAA9A0; }  /* 官方：提示行更小更淡 */
 .fx-receipt .teeth {               /* 底边锯齿（撕纸边）— 官方截图：等腰大三角、约 31 齿。
                                       实现：clip-path polygon 单元素精确三角（弃 linear-gradient
                                       拼合——45°渐变线在非正方形格画不出等腰、双渐变衔接有混色缝、
@@ -3416,7 +3416,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div><dt>单号</dt><dd data-fx-r-ref>W-0000</dd></div>
                 </dl>
                 <div class="rule"></div>
-                <p class="thanks">谢谢。每一张我们都会读。</p>
+                <p class="thanks">凭单号可随时复测复核。</p>
                 <p class="tear-hint">点回执撕下 · 机器回到待命</p>
               </div>
               <div class="teeth" aria-hidden="true"></div>
@@ -3674,7 +3674,7 @@ var PT_I18N = {
   "fx.catBug": { zh: "错误报告", en: "Bug report" },
   "fx.catSug": { zh: "功能建议", en: "Suggestion" },
   "fx.okDelivered": { zh: "OK · 已送达", en: "OK · delivered" },
-  "fx.thanks": { zh: "谢谢。每一张我们都会读。", en: "Thank you. We read every page." },
+  "fx.thanks": { zh: "凭单号可随时复测复核。", en: "Keep this ref no. to re-verify anytime." },
   "fx.tearHint": { zh: "点回执撕下 · 机器回到待命", en: "Click to tear off · back to standby" }
 };
 
