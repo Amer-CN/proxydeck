@@ -6633,7 +6633,10 @@ var PT_I18N = {
           /* 新纸不重打机器信息：吞纸时 fxPrintRestore 已恢复完整文字（原版同径） */
           if (afterReady) afterReady();
         }, REDUCED ? 0 : 2000);   /* 新纸打印段 */
-      }, REDUCED ? 0 : 1100);   /* 换纸吞纸 */
+      }, REDUCED ? 0 : 1100 + (eatOld && !REDUCED ? 400 : 0));   /* 换纸吞纸；第 42 轮：eatOld 加 400ms 空拍——
+         吞纸完成与出纸起点原为同帧 180° 掉头，且 REPORT 页复位在此帧堆叠单号/切页/键态等六处瞬变
+         （用户实测「很抢拍」）。空拍让旧纸吃完有一拍呼吸，身份切换随空拍末尾与出纸起点合成
+         同一个「新一拍」；撕纸路径纸本已在机内（吞纸段纯声音），保持 0 空拍不拖节奏 */
     }
     function fxTear() {
       if (fxPhase !== 'printed') return;
