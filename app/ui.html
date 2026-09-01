@@ -6037,12 +6037,20 @@ var PT_I18N = {
       var itemsHtml = renderWaterItems(r.items);
       var probesHtml = renderWaterProbes(rep.probes, rep.probe_compare);
       var distHtml = renderWaterDist(rep.dist, rep.dist_similarity);
+      /* 本次成本：后端 cost 字段（本次检测真实探针开销）；历史数据/本地兜底报告无 cost 时不渲染 */
+      var cost = rep.cost, costHtml = '';
+      if (cost && cost.requests > 0) {
+        costHtml = '<div class="if-empty">// 本次成本：' + Number(cost.requests).toLocaleString() +
+          ' 次请求 · 入 ' + Number(cost.prompt_tokens || 0).toLocaleString() +
+          ' tok · 出 ' + Number(cost.completion_tokens || 0).toLocaleString() +
+          ' tok · 用时 ' + Number(cost.elapsed || 0).toFixed(1) + ' 秒</div>';
+      }
       /* 第 32 轮：弱渠道（无官方链路）首次检测口径副注——基准为首测锚定，判定从弱 */
       var repChDef = (waterChans || []).filter(function (c) { return c.id === (r.channel || ''); })[0];
       var weakNote = (repChDef && repChDef.strong === false) ? '<div class="if-empty">// 首测锚定，判定从弱</div>' : '';
       var canaryHtml = rep.canary ? waterRowHtml(rep.canary) : '<div class="if-empty">// 无金丝雀样本</div>';
       return '<div class="fx-report">' +
-        '<div class="fx-rsec"><p class="fx-rsec-h">① 检测项<small>ITEMS</small></p>' + itemsHtml + '</div>' +
+        '<div class="fx-rsec"><p class="fx-rsec-h">① 检测项<small>ITEMS</small></p>' + itemsHtml + costHtml + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">② 管道探针<small>PIPELINE PROBES</small></p>' + probesHtml + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">③ 分布指纹<small>DISTRIBUTION</small></p>' + distHtml + weakNote + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">④ 金丝雀<small>CANARY</small></p>' + canaryHtml + '</div>' +

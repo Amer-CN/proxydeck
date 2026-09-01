@@ -14,8 +14,32 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+// 探针成本累加器：统计一次检测的真实开销（请求数 / token 数），
+// handleWaterCheck 入口 resetProbeCost 清零、出口 probeCostSnapshot 读数
+// 组装进响应 cost 字段。probeCall 每次调用 requests+1（请求失败也计），
+// 解析出 usage 后累加 prompt/completion。三计数用 atomic，并发检测会互相
+// 混计——当前检测均为单飞场景，可接受。
+var (
+	probeCostRequests      atomic.Int64
+	probeCostPromptTokens  atomic.Int64
+	probeCostCompletionTok atomic.Int64
+)
+
+// resetProbeCost 清零成本累加器（每次检测入口调用）。
+func resetProbeCost() {
+	probeCostRequests.Store(0)
+	probeCostPromptTokens.Store(0)
+	probeCostCompletionTok.Store(0)
+}
+
+// probeCostSnapshot 读取当前累加值（requests, prompt_tokens, completion_tokens）。
+func probeCostSnapshot() (requests, promptTokens, completionTokens int64) {
+	return probeCostRequests.Load(), probeCostPromptTokens.Load(), probeCostCompletionTok.Load()
+}
 
 // probeTimeout 单个探针请求超时（max_tokens 极小，正常秒级返回；慢渠道
 // workbuddy 实测单请求可达 90s+，2026-08-25 提到 120s 覆盖）。
@@ -81,6 +105,7 @@ type probeResult struct {
 // 请求打到哪、带什么头全部由 target 决定；返回
 // (promptTokens, completionTokens, finishReason, content, errorText, err)。
 func probeCall(ctx context.Context, target *probeTarget, model string, msgs []map[string]any, extra map[string]any) (promptTokens, completionTokens int, finish, content, errText string, err error) {
+	probeCostRequests.Add(1) // 成本统计：每次调用计一（失败也计）
 	// max_tokens 按模型自适应：思考型模型（deepseek/GLM-5.3 等会先出
 	// reasoning_content）8 个预算全烧在推理段、content 恒空——给 96 保
 	// content 出得来（GLM-5.3 采基准实测 96 出数率约 7/8）。非思考模型
@@ -143,6 +168,8 @@ func probeCall(ctx context.Context, target *probeTarget, model string, msgs []ma
 	}
 	promptTokens = rr.Usage.PromptTokens
 	completionTokens = rr.Usage.CompletionTokens
+	probeCostPromptTokens.Add(int64(promptTokens)) // 成本统计：usage 解析成功才累加
+	probeCostCompletionTok.Add(int64(completionTokens))
 	if len(rr.Choices) > 0 {
 		finish = rr.Choices[0].FinishReason
 		content = rr.Choices[0].Message.Content

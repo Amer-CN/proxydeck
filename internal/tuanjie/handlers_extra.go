@@ -503,6 +503,8 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 // score,reason}, items:[{name,result,detail}...], first_time}, probes,
 // probe_compare, dist, dist_similarity, canary}。
 func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channel, userID, model string, samples int) {
+	resetProbeCost() // 成本统计：本次检测入口清零（对应出口 probeCostSnapshot）
+	checkStart := time.Now()
 	account := userID
 	if account == "" {
 		account = "38261" // 单账号模式账号标识（与既有官方基准采集账号一致）
@@ -634,10 +636,19 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 		"first_time": firstTime,
 	}
 	s.pushWaterHistory(waterHistoryEntry{At: at, Channel: channel, Model: model, Account: account, Light: verdict.Light, Score: verdict.Score})
+	// 成本统计：本次检测探针开销 + 墙钟用时（elapsed 秒，一位小数）
+	reqs, promptTok, compTok := probeCostSnapshot()
+	elapsed := math.Round(time.Since(checkStart).Seconds()*10) / 10
 	writeJSON(w, map[string]any{
 		"ok": true, "action": "check", "report": report,
 		"probes": probes, "probe_compare": cmps,
 		"dist": dist, "dist_similarity": sim, "canary": canary,
+		"cost": map[string]any{
+			"requests":          reqs,
+			"prompt_tokens":     promptTok,
+			"completion_tokens": compTok,
+			"elapsed":           elapsed,
+		},
 	})
 }
 
