@@ -6579,14 +6579,11 @@ var PT_I18N = {
        换单 serial+1，吞纸 1100 → 新单降下 2000 → ready 落定；afterReady 落定后回调 */
     /* eatOld（第 39 轮，复位路径专用）：旧纸随吞纸声同步上行入机（0→-118%，与检测段
        纸张上行同款动线）——原先吞纸段只有声音没有动作，旧纸原地滞留到新纸降下才消失
-       （用户裁决：按复位旧纸必须立刻开始消失）。撕纸路径传缺省：纸已在 -118%，不重复上行。 */
-    function fxFeedSheet(afterReady, eatOld) {
-      fxSerial += 1;
-      if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
-      if (fxDateEl) fxDateEl.textContent = fxNow().date;
-      if (fxText) fxText.value = '';
-      fxCountUpdate();
-      loadWaterHistory();          /* 换单同刻：刷新甲板历史 + 上屏结论（syncWaterVerdict 在其内） */
+       （用户裁决：按复位旧纸必须立刻开始消失）。撕纸路径传缺省：纸已在 -118%，不重复上行。
+       backToProbe（第 40 轮，REPORT 页复位）：吞完旧纸才切回 PROBE——吞纸动画吃掉的必须是
+       用户刚才看到的那张纸（显示什么纸吞什么纸）；换单身份（单号/日期/草稿/历史）同样
+       延迟到吞纸完成那一刻，旧纸带着原单号原内容入机。 */
+    function fxFeedSheet(afterReady, eatOld, backToProbe) {
       fxSetPhase('loading');
       var swallowStep = 0;           /* 换纸段独立 mod-3 计数 */
       playFile('fax-feed-' + (1 + swallowStep++ % 3), 1);   /* 吞纸首声立即 */
@@ -6605,6 +6602,15 @@ var PT_I18N = {
       }
       setTimeout(function () {
         fxSfxClear();          /* 吞纸结束：停 feed 循环 */
+        /* 第 40 轮：换单身份在吞纸完成后才换（吞掉的是原样旧纸） */
+        fxSerial += 1;
+        if (fxNo) fxNo.textContent = 'NO.' + fxPad(fxSerial, 4);
+        if (fxDateEl) fxDateEl.textContent = fxNow().date;
+        if (backToProbe && fxMode !== 'probe') fxSwitchMode('probe');
+        if (fxText) fxText.value = '';
+        fxCountUpdate();
+        loadWaterHistory();        /* 换单同刻：刷新甲板历史 + 上屏结论（syncWaterVerdict 在其内） */
+        fxShow('loading');         /* LCD 刷新为新单号（降下段读数） */
         /* 新纸步进降下：从 -118% 每 107ms 一步匀速回 0，打印声伴纸同响 */
         var fresh0 = performance.now();
         var freshStep = 0;
@@ -6668,8 +6674,7 @@ var PT_I18N = {
            PROBE/REPORT 两页 ready 相位均可触发；REPORT 页触发先回 PROBE 操作台。 */
         waterLastReport = null;                       /* 旧结果作废 */
         if (fxReceipt) fxReceipt.setAttribute('aria-hidden', 'true');
-        if (fxMode !== 'probe') fxSwitchMode('probe');
-        fxFeedSheet(null, true);                      /* 第 39 轮：eatOld——旧纸随吞纸声立刻上行入机 */
+        fxFeedSheet(null, true, true);                /* 第 39/40 轮：旧纸立刻上行入机；吞完才切回 PROBE 换新单身份 */
       });
     }
 
