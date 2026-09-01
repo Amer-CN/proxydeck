@@ -2647,7 +2647,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.7.1</span>
+                    <span class="v ver" id="etchVer">v3.8.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3118,13 +3118,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.7.1">v3.7.1</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.8.0">v3.8.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.7.1</div>
+                    <div class="s" id="buildNo">v3.8.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.7.1</span>
+                  <span class="pt-val" id="verChip">v3.8.0</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -7877,6 +7877,17 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.8.0', date: '2026-09-02', groups: [
+      { label: '🚀 新功能', items: [
+        '检测页打出「本次检测方案」电文：探针/采样/金丝雀四步流程',
+        '详细结果新增「本次成本」行：N 次请求 · 入出 token · 用时' ] },
+      { label: '✨ 体验优化', items: [
+        '出纸全程带字；复位旧纸立刻上行入机，不再原地滞留',
+        '显示什么纸吞什么纸；吞纸与出纸之间加一拍呼吸',
+        '回执字号放大；结尾语改「凭单号可随时复测复核」' ] },
+      { label: '🐛 Bug 修复', items: [
+        '根治详细结果页滚轮失效（触摸属性吞滚轮+自调谐兜底）',
+        '修检测方案书漏进报告页、格线不随文字滚动' ] } ] },
     { v: 'v3.7.1', date: '2026-08-31', groups: [
       { label: '🚀 新功能', items: [
         '注水检测六渠道：新增 Comate、Qoder，下拉标·强/·弱',
@@ -8474,7 +8485,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.7.1';
+  var UI_CUR = 'v3.8.0';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
