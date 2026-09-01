@@ -1465,6 +1465,7 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
    恢复信纸横线找回书写感；格线只在 REPORT 页退役（报表自带行线，1462 行同款） */
 body.fax-standalone .fx.report-page .fx-body::before { display: none; }
 .fx.report-page .fx-input { display: none; }          /* 正文书写区在报表页不出现（占位交还报表） */
+.fx.report-page .fx-msg { display: none; }            /* 第 35 轮检测方案书只属于 PROBE 页（漏进报表页会顶没报告正文） */
 /* 第 11 轮 B：报表容器吃满纸剩余高、纵向可滚（内容超窗不截断，四块证据可滚到末块）。
    fax 浮窗报表页盒子链：cage(上节 flex:1/minH:0) → paper/sheet 有限高 flex column →
    body flex:1 → 报表区滚动。规则放在 .fx-report 基础样式同锚点之后，覆盖顺序天然正确。 */
