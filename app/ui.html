@@ -1494,9 +1494,13 @@ body.fax-standalone .fx.report-page .fx-lamp-wrap { margin-left: auto; }
 #wtFax .fx-input { display: none; }
 /* ————— 第 34 轮：电文正文（传真机上打出来的检测电报，替原版手写正文） ————— */
 .fx-msg { flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  padding: 2px 2px; font: 600 13px/1.55 var(--pt-mono-ui); color: var(--pp-ink);
+  padding: 2px 2px; font: 400 12.5px/25px var(--pt-mono-ui); color: var(--pp-ink);
   font-variant-numeric: tabular-nums; }
-.fx-msg p { margin: 0; padding: 1px 0; }
+.fx-msg p { margin: 0; }   /* 行高=25px 对齐格线周期，文字坐在线上 */
+/* 电文区细滚动条（与 REPORT 页同款 4px，系统粗条破坏纸面） */
+.fx-msg::-webkit-scrollbar { width: 4px; }
+.fx-msg::-webkit-scrollbar-thumb { background: var(--pp-rule); border-radius: 2px; }
+.fx-msg::-webkit-scrollbar-track { background: transparent; }
 #wtFax .fx-input { display: none; }   /* textarea 保留 DOM 但隐藏（电文正文取代手写区） */
 /* 第 13 轮：REPORT 历史块行距（fxHistoryRowsHtml 行模板沿用甲板 if-row 尺寸体系） */
 .fx.report-page .fx-rsec .if-row { font-size: 13px; line-height: 1.6; }
@@ -3364,11 +3368,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
                 <div class="fx-body">
                   <textarea class="fx-input" data-fx-text rows="5" maxlength="2000" placeholder="" readonly aria-label="检测参数卡（只读）"></textarea>
-                  <!-- 第 34 轮：电文正文（传真机该有的内容——检测参数以电报文形式打印在纸上） -->
+                  <!-- 第 35 轮：检测方案书（告诉用户机器将执行什么流程——真内容不重复摘要块） -->
                   <div class="fx-msg" data-fx-msg>
-                    <p>本次检测：<span data-msg-target>tuanjie · GLM-5.3</span></p>
-                    <p>基准库：官方链路 · 探针 8 项 · 金丝雀 3 题</p>
-                    <p>预估耗时：约 1-2 分钟</p>
+                    <p>— 本次检测方案 —</p>
+                    <p>① 管道探针 8 项：tokenizer 计数、错误文本格式、finish_reason 形态逐项与基准比对。</p>
+                    <p>② 分布采样 60 次：token 频次统计，计算与基准分布的余弦相似度。</p>
+                    <p>③ 金丝雀答题 3 题：算术、常识、复述，验证推理能力未被替换。</p>
+                    <p>④ 综合判定：探针 + 分布 + 金丝雀三源交叉，低于阈值即报注水嫌疑。</p>
                   </div>
                 </div>
                 <div class="fx-minfo-clip">
