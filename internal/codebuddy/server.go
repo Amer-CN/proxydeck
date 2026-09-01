@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +45,9 @@ type Server struct {
 	statsMu    sync.Mutex
 	stats      map[string]*modelStat // 按模型累计（GUI 消耗 TOP）
 	statsPath  string
+
+	limitMu    sync.Mutex // hy4-preview 限流窗口（第 43 轮自动故障转移）
+	limitUntil time.Time
 }
 
 // modelStat 单模型用量累计。
@@ -141,6 +145,20 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			resp["credential"] = sum
 		}
 	}
+	// 第 43 轮：hy4-preview 限流窗口状态（GUI/脚本可观测；到期解除由 hy4Limited 懒处理）
+	s.limitMu.Lock()
+	if !s.limitUntil.IsZero() {
+		if time.Now().After(s.limitUntil) {
+			s.limitUntil = time.Time{}
+		} else {
+			resp["hy4_limit"] = map[string]any{
+				"active":   true,
+				"until":    s.limitUntil.Format("2006-01-02 15:04:05"),
+				"fallback": hy4Fallback,
+			}
+		}
+	}
+	s.limitMu.Unlock()
 	writeJSON(w, resp)
 }
 
@@ -399,6 +417,60 @@ var passthroughBodyKeys = []string{
 	"verbosity", "reasoning_summary",
 }
 
+// ============ hy4-preview 限流自动故障转移（第 43 轮） ============
+// 用户裁决：hy4-preview 撞上游配额 429 时，代理层自动切换 deepseek-v4-pro 并按
+// 上游报文里的重置时点计时，到期自动恢复——agent 配置零改动，用户无感。
+// 识别当次请求立即用 fallback 重放，客户端拿到的是成功响应（子智能体不死）。
+
+const (
+	hy4Primary  = "hy4-preview"
+	hy4Fallback = "deepseek-v4-pro"
+)
+
+// hy4Limited 报告 hy4-preview 是否处于限流窗口；到期即自动解除（懒检查，
+// 无后台定时器——解除后的第一个请求自然回到 hy4-preview）。
+func (s *Server) hy4Limited() bool {
+	s.limitMu.Lock()
+	defer s.limitMu.Unlock()
+	if s.limitUntil.IsZero() {
+		return false
+	}
+	if time.Now().After(s.limitUntil) {
+		log.Printf("[codebuddy] hy4-preview 限流窗口到期，自动恢复")
+		s.limitUntil = time.Time{}
+		return false
+	}
+	return true
+}
+
+// hy4Trip 记录一次限流窗口（重置时点来自上游报文）。
+func (s *Server) hy4Trip(until time.Time) {
+	s.limitMu.Lock()
+	defer s.limitMu.Unlock()
+	s.limitUntil = until
+}
+
+// resetTimeRe 上游 429 报文里的重置时点：「将在 2026-09-02 06:20:02 UTC+8 重置」。
+var resetTimeRe = regexp.MustCompile(`(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})`)
+
+// parseQuotaReset 从上游 429 报文提取限流重置时间（上游报 UTC+8，按固定东八区
+// 解析）。非配额类 429 或解析不出时点返回零值（调用方不触发故障转移，如实透传）。
+func parseQuotaReset(body string) time.Time {
+	if !strings.Contains(body, "Quota exceeded") && !strings.Contains(body, "频率限制") {
+		return time.Time{}
+	}
+	m := resetTimeRe.FindStringSubmatch(body)
+	if m == nil {
+		return time.Time{}
+	}
+	loc := time.FixedZone("UTC+8", 8*3600)
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", m[1], loc)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 64<<20))
 	var payload map[string]any
@@ -441,27 +513,51 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 502, err.Error())
 		return
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
-		backendBase+"/v2/chat/completions", mustJSONReader(backendBody))
-	if err != nil {
-		writeErr(w, 500, err.Error())
-		return
+	// 限流窗口内 hy4-preview 请求体层改写 fallback（agent 零感知）
+	sentModel := modelName
+	if sentModel == hy4Primary && s.hy4Limited() {
+		backendBody["model"] = hy4Fallback
+		sentModel = hy4Fallback
+		log.Printf("[codebuddy] hy4-preview 限流中，本次切换 %s", hy4Fallback)
 	}
-	req.Header = hdr
 	start := time.Now()
-	resp, err := s.client.Do(req)
-	if err != nil {
-		log.Printf("[codebuddy] chat model=%s err=%v", modelName, err)
-		writeErr(w, 502, "upstream error: "+err.Error())
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	var resp *http.Response
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
+			backendBase+"/v2/chat/completions", mustJSONReader(backendBody))
+		if err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+		req.Header = hdr
+		resp, err = s.client.Do(req)
+		if err != nil {
+			log.Printf("[codebuddy] chat model=%s err=%v", sentModel, err)
+			writeErr(w, 502, "upstream error: "+err.Error())
+			return
+		}
+		if resp.StatusCode == http.StatusOK {
+			break
+		}
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		log.Printf("[codebuddy] chat model=%s status=%d err=%s", modelName, resp.StatusCode, truncate(string(errBody), 200))
+		resp.Body.Close()
+		log.Printf("[codebuddy] chat model=%s status=%d err=%s", sentModel, resp.StatusCode, truncate(string(errBody), 200))
+		// hy4-preview 撞配额 429：记限流窗口并立刻用 fallback 重放本次请求
+		// （仅首跳触发，重放自身失败如实透传，不循环）；fallback 请求不触发
+		if attempt == 0 && sentModel == hy4Primary && resp.StatusCode == http.StatusTooManyRequests {
+			if until := parseQuotaReset(string(errBody)); !until.IsZero() {
+				s.hy4Trip(until)
+				backendBody["model"] = hy4Fallback
+				sentModel = hy4Fallback
+				log.Printf("[codebuddy] hy4-preview 限流至 %s，切换 %s 并重放本次请求",
+					until.Format("01-02 15:04"), hy4Fallback)
+				continue
+			}
+		}
 		writeErr(w, resp.StatusCode, string(errBody))
 		return
 	}
+	defer resp.Body.Close()
 
 	if clientWantsStream {
 		// 流式：SSE 原样转发（后端已是标准 OpenAI SSE）；
@@ -470,7 +566,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("X-Accel-Buffering", "no")
 		flusher, _ := w.(http.Flusher)
-		scan := newUsageScanner(modelName, s)
+		scan := newUsageScanner(sentModel, s)
 		buf := make([]byte, 32*1024)
 		for {
 			n, rerr := resp.Body.Read(buf)
@@ -490,11 +586,11 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 非流式：聚合后端 SSE 为单个 chat.completion（usage 顺带入账）
-	result := collectStream(resp.Body, modelName)
-	log.Printf("[codebuddy] chat model=%s status=200 dur=%s finish=%v", modelName,
+	result := collectStream(resp.Body, sentModel)
+	log.Printf("[codebuddy] chat model=%s status=200 dur=%s finish=%v", sentModel,
 		time.Since(start).Round(time.Millisecond), result["finish_reason_debug"])
 	if usage, ok := result["usage"].(map[string]any); ok {
-		s.addStat(modelName, toInt(usage["prompt_tokens"]), toInt(usage["completion_tokens"]), toInt(usage["total_tokens"]))
+		s.addStat(sentModel, toInt(usage["prompt_tokens"]), toInt(usage["completion_tokens"]), toInt(usage["total_tokens"]))
 	}
 	writeJSON(w, result)
 }
