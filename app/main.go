@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	appVersion  = "v3.8.1"
+	appVersion  = "v3.8.2"
 	coreVersion = "v1.2.0"
 	appTitle    = "ProxyDeck · 多平台代理控制台"
 )
@@ -246,7 +246,7 @@ func main() {
 	// 注意：代理以独立 headless 子进程常驻，关窗不停止代理。
 	// 需要停代理时，在 COMMAND 甲板扳下「代理核心」开关即可。
 
-	// 自绘无边框 + 窗口图标（任务栏）；Dispatch 二次保险（部分环境早期句柄未就绪）
+	// 自绘无边框 + 窗口图标；Dispatch 二次保险（部分环境早期句柄未就绪）
 	if hwnd := w.Window(); hwnd != nil {
 		setFrameless(uintptr(hwnd))
 		setWindowIcon(uintptr(hwnd))
@@ -255,6 +255,17 @@ func main() {
 		if hwnd := w.Window(); hwnd != nil {
 			setFrameless(uintptr(hwnd))
 			setWindowIcon(uintptr(hwnd))
+		}
+	})
+	// 第 47 轮：一键更新重启的自愈——新进程起窗时旧窗可能仍持前台（前台锁定规则
+	// 让新窗创建后停在不可见），延迟 600ms 检查并带出（此时旧进程通常已退）。
+	time.Sleep(600 * time.Millisecond)
+	if hwnd := w.Window(); hwnd != nil {
+		showWindowIfHidden(uintptr(hwnd))
+	}
+	w.Dispatch(func() {
+		if hwnd := w.Window(); hwnd != nil {
+			showWindowIfHidden(uintptr(hwnd))
 		}
 	})
 

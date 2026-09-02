@@ -226,6 +226,19 @@ func foregroundWindow(hwnd uintptr) {
 	user32.NewProc("SetForegroundWindow").Call(hwnd)
 }
 
+// showWindowIfHidden 自愈窗口可见性（第 47 轮）：一键更新重启的新进程，
+// 起窗瞬间旧进程未退、旧窗仍持前台——Windows 前台锁定规则会让新窗创建后停在
+// 不可见（实测 EnumWindows vis=False，进程活、窗口藏，用户须手动再运行）。
+// 不可见则 ShowWindow 带出（可见则不动，最小化状态不惊扰）。
+func showWindowIfHidden(hwnd uintptr) {
+	user32 := syscall.NewLazyDLL("user32.dll")
+	vis, _, _ := user32.NewProc("IsWindowVisible").Call(hwnd)
+	if vis == 0 {
+		user32.NewProc("ShowWindow").Call(hwnd, 5) // SW_SHOW
+		user32.NewProc("SetForegroundWindow").Call(hwnd)
+	}
+}
+
 // faxPopupMutexGuard 子进程侧单实例保险：同名互斥体已存在 = 已有浮窗，
 // 找到它置前然后本进程自退（覆盖两个入口几乎同时点击的竞态窗口）。
 func faxPopupMutexGuard() bool {
