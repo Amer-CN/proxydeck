@@ -2725,6 +2725,10 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <span class="legend">IGNITE</span>
                   <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
                 </button>
+                <div class="pt-banner warn" id="cbHy4Banner" style="display:none">
+                  <div style="flex:1 1 auto"><b>hy4-preview 限流中 · 已自动切换 deepseek-v4-pro</b>
+                    <div id="cbHy4Detail" style="margin-top:2px"></div></div>
+                </div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
@@ -7459,6 +7463,28 @@ var PT_I18N = {
     banner.style.display = '';
   }
 
+  /* 第 43 轮：WorkBuddy hy4-preview 限流状态条——/health hy4_limit 驱动，
+     显示 fallback 与恢复倒计时（until 为上游报的 UTC+8 时点，本地换算显示）；
+     解除（到期懒清除）后随 3 秒轮询自动隐藏 */
+  function updateHy4Banner(h) {
+    var banner = $('cbHy4Banner'), detail = $('cbHy4Detail');
+    if (!banner || !detail) return;
+    var lim = h.hy4_limit;
+    if (!lim || !lim.active) { banner.style.display = 'none'; return; }
+    var until = new Date(String(lim.until || '').replace(' ', 'T') + '+08:00');
+    var txt = '';
+    if (!isNaN(until.getTime())) {
+      var mins = Math.max(0, Math.round((until.getTime() - Date.now()) / 60000));
+      var hh = Math.floor(mins / 60), mm = mins % 60;
+      txt = '约 ' + (hh > 0 ? hh + ' 小时 ' : '') + mm + ' 分钟后自动恢复（' +
+        until.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '）';
+    } else {
+      txt = '恢复时间未知，稍后自动重试 hy4-preview';
+    }
+    detail.textContent = txt;
+    banner.style.display = '';
+  }
+
   async function loadPluginStats(V, mode) {
     try {
       var h = await (await fetch('http://127.0.0.1:' + V.port + '/health')).json();
@@ -7467,6 +7493,7 @@ var PT_I18N = {
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
       }
       if (V.id === 'tuanjie') updateJudgeBanner(h);
+      if (V.id === 'codebuddy') updateHy4Banner(h);
       /* Qoder 积分：官方实时额度（openapi.qoder.com.cn）——只在点「↻ 刷新」时
          访问一次官方接口（插件侧缓存长期有效，轮询绝不打官方）。
          主数字 = 套餐剩余 + 可用专属包剩余；副行 = 明细与累计已耗。
