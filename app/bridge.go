@@ -290,9 +290,11 @@ var httpClient = &http.Client{Timeout: 1500 * time.Millisecond}
 var httpClientSlow = &http.Client{Timeout: 10 * time.Second}
 
 // 更新检查缓存：bind 立即返回缓存，网络刷新在后台 goroutine（不阻塞 bind 队列）。
+// updateCacheAt 记写入时刻：负缓存（限额失败）10 分钟过期重拉，成功缓存永久有效。
 var (
 	updateCacheMu sync.Mutex
 	updateCache   string
+	updateCacheAt time.Time
 )
 
 // 一键更新流程状态：bind 只读写这几个字段并瞬时返回，真正的下载/替换在
@@ -522,16 +524,28 @@ func (a *app) bindAll(w webview.WebView) {
 	// 旧版下载量就"消失"了，用户会误以为没人用。累计下载才是真实反馈。
 	_ = w.Bind("ccCheckUpdate", func() string {
 		// 只读缓存（瞬时返回，不阻塞 WebView2 的串行 bind 队列）；
-		// 网络刷新由后台 goroutine 异步完成（见 startUpdateRefresher）。
+		// 网络刷新由后台 goroutine 异步完成（见下方 releases 拉取）。
 		updateCacheMu.Lock()
-		cached := updateCache
+		cached, cacheAt := updateCache, updateCacheAt
 		updateCacheMu.Unlock()
 		if cached != "" {
-			return cached
+			// 负缓存（限额失败）10 分钟内直接命中，不再触发重拉
+			if strings.Contains(cached, `"ok":false`) && time.Since(cacheAt) > 10*time.Minute {
+				updateCacheMu.Lock()
+				updateCache = ""
+				updateCacheMu.Unlock()
+			} else {
+				return cached
+			}
 		}
 		return `{"ok":false,"msg":"checking"}`
 	})
-	// 后台异步拉取 GitHub releases（不占 bind 队列；成功写缓存供前端重试读取）
+	// 后台异步拉取 GitHub releases（不占 bind 队列；成功写缓存供前端重试读取）。
+	// 通道优先级（第 46 轮实测教训：匿名 API 限额按出口 IP 计，共享 NAT/代理出口
+	// 极易 60/h 撞墙，更新检查整片失败）：
+	//   ①本机 gh CLI 已登录（gh api 认证限额 5000/h）→ 用它拉
+	//   ②gh 不存在/失败 → 匿名 HTTP 兜底；匿名 403 限额后负缓存 10 分钟，
+	//     防手动检查+每小时复查反复烧同一出口的额度
 	go func() {
 		const url = "https://api.github.com/repos/Amer-CN/proxydeck/releases?per_page=100"
 		type asset struct {
@@ -545,16 +559,42 @@ func (a *app) bindAll(w webview.WebView) {
 			HTMLURL string  `json:"html_url"`
 			Assets  []asset `json:"assets"`
 		}
-		resp, err := httpClientSlow.Get(url)
-		if err != nil {
+		fetchBody := func() (string, int) {
+			// ① gh CLI（已登录时限额 5000/h，共享出口不受匿名 60/h 连坐）
+			if out, err := hiddenCmd("gh", "api", "repos/Amer-CN/proxydeck/releases?per_page=100",
+				"--jq", ".").Output(); err == nil {
+				return string(out), http.StatusOK
+			}
+			// ② 匿名 HTTP 兜底
+			resp, err := httpClientSlow.Get(url)
+			if err != nil {
+				log.Printf("[update] releases 拉取失败: %v", err)
+				return "", 0
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				log.Printf("[update] releases 状态异常: %d", resp.StatusCode)
+				return "", resp.StatusCode
+			}
+			b, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+			return string(b), http.StatusOK
+		}
+		body, status := fetchBody()
+		if status == http.StatusForbidden {
+			// 匿名限额：负缓存 10 分钟（updateCache 填 not-ok JSON，前端「暂时无法连接」
+			// 且不再重试；10 分钟由 cacheAt 判定过期重新拉）
+			updateCacheMu.Lock()
+			updateCache = `{"ok":false,"msg":"github rate limited"}`
+			updateCacheAt = time.Now()
+			updateCacheMu.Unlock()
 			return
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
+		if status != http.StatusOK {
 			return
 		}
 		var releases []rel
-		if json.NewDecoder(resp.Body).Decode(&releases) != nil || len(releases) == 0 {
+		if json.NewDecoder(strings.NewReader(body)).Decode(&releases) != nil || len(releases) == 0 {
+			log.Printf("[update] releases 解析失败或为空")
 			return
 		}
 		totalDownloads := 0
