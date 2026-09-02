@@ -1,3 +1,20 @@
+## v3.8.3 · 六甲板帮助专属化 · 模型参数可信化
+
+### 🚀 新功能
+
+- 六甲板「模型参考/使用帮助」专属化：原 COMMAND/团结/WorkBuddy 三家共用一份全局内容（Qoder/B.AI/Comate 连按钮都没有），现各甲板各一套——帮助只讲自己（团结账号池/K3 护航、WorkBuddy hy4 兜底/脱敏、Qoder agent SDK、B.AI 透明转发、Comate zulu），模型参考各拉各的后端实时清单、模型名点击复制；COMMAND 保留全模型价格速查表
+- 模型参考离线兜底：团结/WorkBuddy 拉不到时显示内置实测名单，Qoder/Comate 如实提示点火后拉取
+
+### 🐛 Bug 修复
+
+- 模型悬停参数可信化：1-token 实测 14 模型思考档位矩阵——deepseek 系与 auto 拒 off（原统一 low/medium/high 会误导 Agent 填出 400），其余 11 个 off/low/medium/high/max 全接；无实测出处的上下文/最大输出数字删除、如实显示「未核实」（仅保留 glm-5.2/deepseek-v4-pro/deepseek-v4-flash 实测 1M 三条）；删除「max_tokens 超限直接报错」假注释（实测上游 1M 照收）
+- COMMAND 无价格条目的 13 个模型悬停从静默黑屏改显「未核实」占位
+- B.AI 悬停补三条代理层已验证约束：max_tokens 钳 8192 / effort max→high / 超约 1M 截断最早轮次
+
+### ✨ 体验优化
+
+- 模型矩阵 hy3/hy4-preview 合并为 HY 组（同一系列不再分两类）
+
 ## v3.8.2 · 更新后窗口自愈
 
 ### 🐛 Bug 修复

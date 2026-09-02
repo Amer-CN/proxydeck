@@ -2648,7 +2648,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.8.2</span>
+                    <span class="v ver" id="etchVer">v3.8.3</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3149,13 +3149,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.8.2">v3.8.2</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.8.3">v3.8.3</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.8.2</div>
+                    <div class="s" id="buildNo">v3.8.3</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.8.2</span>
+                  <span class="pt-val" id="verChip">v3.8.3</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -8053,6 +8053,14 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.8.3', date: '2026-09-03', groups: [
+      { label: '🚀 新功能', items: [
+        '六甲板「模型参考/使用帮助」专属化：原三家共用一份全局内容（Qoder/B.AI/Comate 连按钮都没有），现各甲板各一套——帮助只讲自己（团结账号池/K3 护航、WorkBuddy hy4 兜底/脱敏、Qoder agent SDK、B.AI 透明转发、Comate zulu），模型参考各拉各的后端实时清单、模型名点击复制',
+        'COMMAND 保留全模型价格速查表' ] },
+      { label: '🐛 Bug 修复', items: [
+        '模型悬停参数可信化：1-token 实测 14 模型思考档位（deepseek 系拒 off，原统一 low/medium/high 会误导 Agent 填出 400）；无实测出处的上下文/最大输出数字删除、如实显示「未核实」；COMMAND 无价格条目的 13 个模型悬停从静默黑屏改显占位；B.AI 补三条代理层已验证约束（max_tokens 钳 8192 / effort max→high / 超约 1M 截断）' ] },
+      { label: '✨ 体验优化', items: [
+        '模型矩阵 hy3/hy4-preview 合并为 HY 组（同一系列不再分两类）' ] } ] },
     { v: 'v3.8.2', date: '2026-09-02', groups: [
       { label: '🐛 Bug 修复', items: [
         '修一键更新重启后新窗口不出现（需手动再运行）——前台锁定规则让新窗停在不可见，启动时自检带出',
@@ -8839,7 +8847,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.8.2';
+  var UI_CUR = 'v3.8.3';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
