@@ -523,34 +523,39 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 
 // ============ /model/info（Agent 填写指南） ============
 
-// modelMeta 腾讯后端无元数据端点，以下为实测整理（与 Python 版一致）。
+// modelMeta 腾讯后端无元数据端点。reasoning 为 2026-09-02 实测矩阵（走后端
+// 端口发 1-token 最小请求探测 reasoning_effort 接受档位：deepseek 系与 auto
+// 拒绝 off（400 11150），其余五档全接受）。maxInput 仅保留有实测备注的三条
+// （glm-5.2、deepseek-v4-pro、deepseek-v4-flash）；其余模型的 maxInput /
+// maxOutput 数字来源不可考（Python v3.0.0 抄录，其声称的请求级校验实测
+// 不存在），一律不写——前端对缺失字段如实显示「未核实」。
 var modelMeta = map[string]map[string]any{
-	"glm-5.3":             {"maxInput": 131072, "maxOutput": 32768, "reasoning": "low/medium/high", "note": "新模型"},
-	"glm-5.2":             {"maxInput": 1048576, "maxOutput": 131072, "reasoning": "low/medium/high", "note": "上下文实测 1M"},
-	"glm-5.1":             {"maxInput": 131072, "maxOutput": 32768, "reasoning": "low/medium/high"},
-	"glm-5v-turbo":        {"maxInput": 131072, "maxOutput": 16384, "reasoning": "off", "note": "视觉模型"},
-	"kimi-k3":             {"maxInput": 262144, "maxOutput": 65536, "reasoning": "low/medium/high"},
-	"kimi-k2.7":           {"maxInput": 262144, "maxOutput": 65536, "reasoning": "low/medium/high"},
-	"kimi-k2.6":           {"maxInput": 262144, "maxOutput": 65536, "reasoning": "low/medium/high"},
-	"kimi-k2.5":           {"maxInput": 262144, "maxOutput": 32768, "reasoning": "low/medium/high"},
-	"deepseek-v4-pro":     {"maxInput": 1048576, "maxOutput": 65536, "reasoning": "low/medium/high", "note": "上下文实测 1M"},
-	"deepseek-v4-flash":   {"maxInput": 1048576, "maxOutput": 65536, "reasoning": "low/medium/high", "note": "思考深：思考消耗输出预算，max_tokens 建议 ≥8000"},
-	"deepseek-v3.2":       {"maxInput": 131072, "maxOutput": 32768, "reasoning": "low/medium/high"},
-	"minimax-m3-pay":      {"maxInput": 1048576, "maxOutput": 65536, "reasoning": "low/medium/high"},
-	"minimax-m3":          {"maxInput": 1048576, "maxOutput": 65536, "reasoning": "low/medium/high"},
-	"hy3-preview-agent":   {"maxInput": 262144, "maxOutput": 65536, "reasoning": "low/medium/high"},
-	"hy3":                 {"maxInput": 262144, "maxOutput": 65536, "reasoning": "low/medium/high"},
-	"hy3-preview":         {"maxInput": 262144, "maxOutput": 65536, "reasoning": "low/medium/high"},
-	"auto":                {"maxInput": 1048576, "maxOutput": 65536, "reasoning": "low/medium/high", "note": "后端自动路由到合适模型"},
+	"auto":              {"reasoning": "low/medium/high/max", "note": "后端自动路由到合适模型"},
+	"hy4-preview":       {"reasoning": "off/low/medium/high/max"},
+	"hy3":               {"reasoning": "off/low/medium/high/max"},
+	"hy3-preview":       {"reasoning": "off/low/medium/high/max"},
+	"hy3-preview-agent": {"reasoning": "off/low/medium/high/max"},
+	"glm-5.3":           {"reasoning": "off/low/medium/high/max", "note": "新模型"},
+	"glm-5.3-flash":     {"reasoning": "off/low/medium/high/max"},
+	"glm-5.2":           {"maxInput": 1048576, "reasoning": "off/low/medium/high/max", "note": "上下文实测 1M"},
+	"glm-5.1":           {"reasoning": "off/low/medium/high/max"},
+	"glm-5v-turbo":      {"reasoning": "off/low/medium/high/max", "note": "视觉模型"},
+	"minimax-m3":        {"reasoning": "off/low/medium/high/max"},
+	"minimax-m3-pay":    {"reasoning": "off/low/medium/high/max"},
+	"kimi-k3":           {"reasoning": "off/low/medium/high/max"},
+	"kimi-k2.7":         {"reasoning": "off/low/medium/high/max"},
+	"kimi-k2.6":         {"reasoning": "off/low/medium/high/max"},
+	"kimi-k2.5":         {"reasoning": "off/low/medium/high/max"},
+	"deepseek-v4-pro":   {"maxInput": 1048576, "reasoning": "low/medium/high/max", "note": "上下文实测 1M"},
+	"deepseek-v4-flash": {"maxInput": 1048576, "reasoning": "low/medium/high/max", "note": "思考深：思考消耗输出预算，max_tokens 建议 ≥8000"},
+	"deepseek-v3.2":     {"reasoning": "low/medium/high/max"},
 }
 
 func (s *Server) handleModelInfo(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(modelCandidates))
 	for _, m := range s.Models(r.Context()) {
+		// 未命中 modelMeta 的模型不硬造字段：空 meta 输出，前端如实显示「未核实」。
 		meta := modelMeta[m]
-		if meta == nil {
-			meta = map[string]any{"reasoning": "low/medium/high"}
-		}
 		entry := map[string]any{"name": m}
 		for k, v := range meta {
 			entry[k] = v

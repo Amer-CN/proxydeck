@@ -3008,6 +3008,8 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <div id="qoderModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.modelRef">模型参考</button>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
                   <button type="button" class="ibtn2" id="qoderClearLog" data-i18n="app.btn.clear">清空</button></div>
                 <div class="pt-log" id="qoderLog"></div>
                </div></div>
@@ -3056,6 +3058,8 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <div id="baModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.modelRef">模型参考</button>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
                   <button type="button" class="ibtn2" id="baClearLog" data-i18n="app.btn.clear">清空</button></div>
                 <div class="pt-log" id="baLog"></div>
                </div></div>
@@ -3247,6 +3251,8 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <div id="comateModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.modelRef">模型参考</button>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
                   <button type="button" class="ibtn2" id="comateClearLog" data-i18n="app.btn.clear">清空</button></div>
                 <div class="pt-log" id="comateLog"></div>
                </div></div>
@@ -4821,7 +4827,13 @@ var PT_I18N = {
     clearTimeout(modelTipTimer);
     modelTipTimer = setTimeout(function () {
       var p = pricingLookup(id);
-      if (!p) return;
+      if (!p) {
+        /* 无 PRICING 条目：不再静默黑屏，显示未核实占位（复制行为不变） */
+        scHover(shHead(id, {}) +
+          '<div class="sh-rows">' + shRow('价格与参数', '未核实') + '</div>' +
+          '<div class="sh-foot"><span>上游无公开口径 · 未核实</span><span>点击复制模型名</span></div>');
+        return;
+      }
       var rows = '';
       rows += shRow('输入', p.free ? '免费' : '$' + p.in + ' /1M');
       rows += shRow('输出', p.free ? '免费' : '$' + p.out + ' /1M');
@@ -4840,16 +4852,25 @@ var PT_I18N = {
       var meta = (V.metaMap || {})[id];
       var f = function (n) { return n >= 1048576 ? (n / 1048576) + 'M' : n >= 1024 ? Math.round(n / 1024) + 'K' : (n || '—'); };
       var rows = '';
-      if (meta) {
-        rows += shRow('上下文', meta.maxInput ? f(meta.maxInput) : '—');
-        rows += shRow('最大输出', meta.maxOutput ? f(meta.maxOutput) : '未暴露', !!meta.maxOutput);
-        rows += shRow('思考级别', esc(meta.reasoning || '—'));
-      } else {
-        rows += shRow('元数据', '暂无');
+      /* 缺失字段一律「未核实」（不加 hot），不硬造数字——这些参数会进用户的 Agent 配置 */
+      rows += shRow('上下文', meta && meta.maxInput ? f(meta.maxInput) : '未核实');
+      rows += shRow('最大输出', meta && meta.maxOutput ? f(meta.maxOutput) : '未核实', !!(meta && meta.maxOutput));
+      rows += shRow('思考级别', meta && meta.reasoning ? esc(meta.reasoning) : '未核实');
+      if (V.mode === 'bai') {
+        /* bai 无元数据端点；以下三条为代理层已验证行为（internal/bai/server.go adaptQuirks） */
+        rows += shRow('max_tokens', '>8192 钳到 8192');
+        rows += shRow('effort', 'max 改写为 high');
+        rows += shRow('超长对话', '超约 1M 截断最早轮次');
       }
+      var miss = !meta || !meta.maxInput || !meta.maxOutput || !meta.reasoning;
+      var foot;
+      if (V.mode === 'bai') foot = '行为规则为代理层实测 · 参数未核实：上游无公开口径，填 Agent 时自行验证';
+      else if (miss) foot = (meta && meta.note && meta.note.indexOf('实测') >= 0 ? esc(meta.note) + ' · ' : '') +
+        '未核实字段：上游无公开口径，填 Agent 时自行验证';
+      else foot = meta && meta.note ? esc(meta.note) : '插件后端 · 价格见官网';
       scHover(shHead(id, {}) +
         '<div class="sh-rows">' + rows + '</div>' +
-        '<div class="sh-foot"><span>' + (meta && meta.note ? esc(meta.note) : '插件后端 · 价格见官网') + '</span><span>点击复制模型名</span></div>');
+        '<div class="sh-foot"><span>' + foot + '</span><span>点击复制模型名</span></div>');
     }, 1000);
   }
 
@@ -6826,12 +6847,12 @@ var PT_I18N = {
   }, 3000);
 
   var PLUGIN_VENDOR_COLORS = { glm: '#ff6b9d', kimi: '#b06bff', deepseek: '#4d8dff', minimax: '#ffb300',
-    hy3: '#00ffa3', codely: '#00d4ff', auto: '#7c9dff', claude: '#ff9d6b', openai: '#6bff9d',
+    hy3: '#00ffa3', hy: '#00ffa3', codely: '#00d4ff', auto: '#7c9dff', claude: '#ff9d6b', openai: '#6bff9d',
     gemini: '#6bd9ff', xai: '#d9ff6b', qwen: '#00d4ff', mimo: '#ff7a45' };
   function pluginVendorOf(id) {
     var s = (id.split('/')[0] || '').toLowerCase();
-    var m = s.match(/^(glm|kimi|deepseek|minimax|hy3|codely|auto)/);
-    if (m) return m[1];
+    var m = s.match(/^(glm|kimi|deepseek|minimax|hy\d|codely|auto)/);
+    if (m) return /^hy\d$/.test(m[1]) ? 'hy' : m[1]; /* hy3/hy4-preview 同属 Hy 系列，归一组 */
     var cm = s.match(/^(opus|sonnet|haiku|fable|claude)/);
     if (cm) return 'claude';
     if (/^gpt/.test(s)) return 'openai';
@@ -8368,15 +8389,14 @@ var PT_I18N = {
       if (e.target.classList.contains('modal-mask')) close();
     };
     var wrap = root.querySelector('#refTblWrap');
-    if (wrap) {
-      wrap.innerHTML = buildRefTable();
-      wrap.querySelectorAll('[data-copy-m]').forEach(function (el) {
-        el.onclick = function () { copyText(el.dataset.copyM, '模型名'); };
-      });
-    }
+    if (wrap) wrap.innerHTML = buildRefTable();
+    /* data-copy-m 通用绑定：COMMAND 全局价格表与各甲板参考表统一靠它复制 */
+    root.querySelectorAll('[data-copy-m]').forEach(function (el) {
+      el.onclick = function () { copyText(el.dataset.copyM, '模型名'); };
+    });
   }
 
-  var HELP_HTML = '<h3>使用帮助 · GUIDE</h3><div class="m-body">' +
+  var HELP_HTML = '<h3>使用帮助 · GUIDE · COMMAND 口径</h3><div class="m-body">' +
     '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（伴随自检仪式）；运行中<b>拉回最左</b>熄火。三个代理甲板（COMMAND 55990 / TUANJIE 8788 / WORKBUDDY 8787）各有独立拉杆。<br>' +
     '<b>【后台常驻】</b> 平时关窗（红灯 / 系统关闭）<b>不停后台代理</b>，重开面板自动识别运行中；只有设置页的「彻底关机」拨杆会连后台一起停。<br>' +
     '<b>【接入】</b> 任意 OpenAI 兼容客户端：Base URL 填各甲板显示的地址（如 <code>http://127.0.0.1:55990/v1</code>）；API Key 用 CommandCode Studio 生成的 Key（点火前填好，程序记住）。<br>' +
@@ -8420,6 +8440,165 @@ var PT_I18N = {
     });
     return html + '</table>';
   }
+
+  /* ================= 六甲板「使用帮助 / 模型参考」专属化 =================
+     COMMAND 沿用上面 HELP_HTML / REF_HTML（官方 CommandCode 口径 + PRICING 全表）；
+     其余五甲板内容各自独立：帮助只讲本甲板真实存在的功能，
+     模型参考点击时实时对各自后端拉取（离线时团结/WorkBuddy 回退内置名单）。 */
+  var HELP_MAP = {
+    cmd: HELP_HTML,
+    tj:
+      '<h3>使用帮助 · GUIDE · 团结</h3><div class="m-body">' +
+      '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8788）；运行中<b>拉回最左</b>熄火。<br>' +
+      '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8788/v1</code>（甲板上点击即复制）；登录态自动读取 <code>~/.codely-cli/oauth_creds.json</code>。<br>' +
+      '<b>【账号池】</b>添加账号即启用多号轮换，单账号模式读桌面端登录态；「▦ 账号矩阵」全屏查看每账号一张信息卡。<br>' +
+      '<b>【K3 限流护航】</b>开启后 KIMI-K3 撞限流先自动换号重试，全池撞墙再按上游 Retry-After 排队等待（缺省 60s，总预算 30 分钟）；关闭时 429 直接透传。<br>' +
+      '<b>【媒体转路由】</b>不识图模型收到识图请求时自动改路由到识图模型（团结 codely-vl 或外部账号配置的模型），改路由累计次数显示在「账号池」标题旁；识图模型与外部账号在 设置 → 媒体转路由 管理。<br>' +
+      '<b>【注水检测】</b>设置 → 注水检测：金丝雀探针（指纹漂移+答题）识别上游是否换便宜模型，生效于团结链路。<br>' +
+      '<b>【积分统计】</b>官方积分口径：积分总额 / 今日已用 / 今日剩余（24:00 重置）/ 月度积分 / 赠送池+日赠；点火后自动拉一次，之后点「↻ 刷新」手动拉（官网 429 保护）。<br>' +
+      '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>',
+    cb:
+      '<h3>使用帮助 · GUIDE · WorkBuddy</h3><div class="m-body">' +
+      '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8787）；拉回最左熄火。模型探测首次约 20 秒。<br>' +
+      '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8787/v1</code>（甲板上点击即复制）。<br>' +
+      '<b>【hy4 限流兜底】</b>开启后 hy4-preview 撞配额 429 时自动切换 fallback 并按上游重置时点计时，关闭时 429 如实透传；「限流切换模型」选择切换目标，触发时甲板顶部黄条提示。<br>' +
+      '<b>【脱敏】</b>已开启：system/tools 零宽脱敏防审核误拦。<br>' +
+      '<b>【统计】</b>可用模型（实时拉取）/ 积分 / 月额度 / 状态 / 健康检查；「↻ 刷新」强制实时拉一次积分。<br>' +
+      '<b>【模型矩阵】</b>点火后自动探测，点击模型名一键复制。</div>',
+    qoder:
+      '<h3>使用帮助 · GUIDE · Qoder</h3><div class="m-body">' +
+      '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火，托管 Qoder 智能体引擎（8785）；拉回最左熄火。<br>' +
+      '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8785/v1</code>（甲板上点击即复制）。<br>' +
+      '<b>【协议适配】</b>官方 agent SDK worker · OpenAI 兼容。<br>' +
+      '<b>【积分】</b>积分卡显示「累计已耗」，点击积分卡可清零累计计数（对完账后从头计数，不影响 Qoder 官方账户）；「↻ 刷新」现拉官方额度（旁路 60s 缓存）。剩余量在官方签名墙后拿不到——不放假数字。<br>' +
+      '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>',
+    bai:
+      '<h3>使用帮助 · GUIDE · B.AI</h3><div class="m-body">' +
+      '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8891）；拉回最左熄火。Go 栈直连 api.b.ai。<br>' +
+      '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8891/v1</code>（甲板上点击即复制）。<br>' +
+      '<b>【协议适配】</b>透明转发 · developer→system · effort max→high · 免费可用。<br>' +
+      '<b>【模型矩阵】</b>点火后由服务端拉上游模型清单并缓存；「↻ 刷新」与拉杆同权强制现拉。需在注水检测页配置 B.AI 密钥，未配置时矩阵显示 NO KEY。</div>',
+    comate:
+      '<h3>使用帮助 · GUIDE · Comate</h3><div class="m-body">' +
+      '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火，托管 Comate 智能体引擎（8786）；拉回最左熄火。<br>' +
+      '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8786/v1</code>（甲板上点击即复制）。<br>' +
+      '<b>【协议适配】</b>zulu 会话引擎 · OpenAI 兼容 · 免费可用。<br>' +
+      '<b>【运行提示】</b>免费档上游限速是常态，运行时「限速中」灯常亮。<br>' +
+      '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>'
+  };
+
+  function refNameCell(copyVal, shown) {
+    return '<td class="pm-name" data-copy-m="' + esc(copyVal) + '">' + esc(shown) + '</td>';
+  }
+  async function refFetchList(port, path) {
+    try {
+      var d = await (await fetch('http://127.0.0.1:' + port + path)).json();
+      if (d && d.ok === false) return { err: d.err || 'err' };
+      var arr = (d && d.data) || [];
+      if (Array.isArray(arr) && arr.length) return { list: arr };
+    } catch (e) {}
+    return null;
+  }
+  async function refFetchMeta(port) {
+    try {
+      var l = await (await fetch('http://127.0.0.1:' + port + '/model/info')).json();
+      if (Array.isArray(l) && l.length) {
+        var m = {};
+        l.forEach(function (x) { m[x.name] = x; });
+        return m;
+      }
+    } catch (e) {}
+    return {};
+  }
+  function refNote(msg) {
+    return '<h3>模型参考 · MODEL REF</h3><div class="m-body"><div class="if-empty">// ' + msg + '</div></div>';
+  }
+
+  var TJ_REF_FALLBACK = ['GLM-5.3', 'KIMI-K3', 'GLM-5.3-FLASH', 'codely-basic', 'codely-core', 'codely-flash', 'codely-air', 'codely-vl'];
+  var CB_REF_FALLBACK = ['auto', 'hy4-preview', 'hy3', 'glm-5.3', 'glm-5.3-flash', 'glm-5.2', 'glm-5.1',
+    'glm-5v-turbo', 'minimax-m3', 'kimi-k3', 'kimi-k2.7', 'kimi-k2.6', 'deepseek-v4-flash', 'deepseek-v4-pro'];
+
+  async function refForTj() {
+    var r = await refFetchList(8788, '/v1/models?full=true');
+    if (r && r.err) { openModal(refNote('上游拉取失败 · 稍后再试')); return; }
+    var list = r ? r.list : TJ_REF_FALLBACK.map(function (id) { return { id: id }; });
+    var meta = await refFetchMeta(8788);
+    var html = '<h3>模型参考 · MODEL REF · 团结</h3><div class="m-body">' +
+      '<b>【口径】</b>清单与 8788 后端实时一致' + (r ? '' : '（当前离线，展示内置名单）') + '；点击模型名复制。' +
+      '<table class="pm-tbl"><thead><tr><th>模型</th><th>上下文</th><th>推理档位</th><th>备注</th></tr></thead>';
+    list.forEach(function (m) {
+      var id = m.id || m, mi = meta[id] || {};
+      html += '<tr>' + refNameCell(id, id) +
+        '<td>' + (mi.maxInput ? intFmt(mi.maxInput) : '—') + '</td>' +
+        '<td>' + esc(mi.reasoning || '—') + '</td>' +
+        '<td>' + esc(mi.note || '—') + '</td></tr>';
+    });
+    openModal(html + '</table></div>');
+  }
+
+  async function refForCb() {
+    var r = await refFetchList(8787, '/v1/models');
+    if (r && r.err) { openModal(refNote('上游拉取失败 · 稍后再试')); return; }
+    var list = r ? r.list : CB_REF_FALLBACK.map(function (id) { return { id: id }; });
+    var meta = await refFetchMeta(8787);
+    var html = '<h3>模型参考 · MODEL REF · WorkBuddy</h3><div class="m-body">' +
+      '<b>【口径】</b>清单与 8787 后端实时一致' + (r ? '' : '（当前离线，展示内置名单）') + '；点击模型名复制。' +
+      '<table class="pm-tbl"><thead><tr><th>模型</th><th>上下文</th><th>最大输出</th><th>推理档位</th></tr></thead>';
+    list.forEach(function (m) {
+      var id = m.id || m, mi = meta[id] || {};
+      html += '<tr>' + refNameCell(id, id) +
+        '<td>' + (mi.maxInput ? intFmt(mi.maxInput) : '—') + '</td>' +
+        '<td>' + (mi.maxOutput ? intFmt(mi.maxOutput) : '—') + '</td>' +
+        '<td>' + esc(mi.reasoning || '—') + '</td></tr>';
+    });
+    openModal(html + '</table></div>');
+  }
+
+  /* Qoder / Comate：/v1/models 返回 id + display_name（内部代号 → 界面名）。
+     无内置名单——离线时不编造，点火后拉到的就是后端真实清单。 */
+  function refForNamed(port, title) {
+    return async function () {
+      var r = await refFetchList(port, '/v1/models');
+      if (!r) { openModal(refNote('插件未运行 · 点火后与后端实时清单一致')); return; }
+      if (r.err) { openModal(refNote('拉取失败 · 稍后再试')); return; }
+      var html = '<h3>模型参考 · MODEL REF · ' + title + '</h3><div class="m-body">' +
+        '<b>【口径】</b>与 ' + port + ' 后端实时一致；点击复制可用名（界面名与内部代号后端双向匹配，填哪个都行）。' +
+        '<table class="pm-tbl"><thead><tr><th>界面名</th><th>内部代号</th></tr></thead>';
+      r.list.forEach(function (m) {
+        var id = m.id || m;
+        var dn = (m.display_name && m.display_name !== id) ? m.display_name : '';
+        html += '<tr>' + refNameCell(dn || id, dn || id) +
+          '<td>' + (dn ? esc(id) : '—') + '</td></tr>';
+      });
+      openModal(html + '</table></div>');
+    };
+  }
+  var refForQoder = refForNamed(8785, 'Qoder');
+  var refForComate = refForNamed(8786, 'Comate');
+
+  async function refForBai() {
+    var r = await refFetchList(8891, '/model/matrix');
+    if (!r) { openModal(refNote('插件未运行 · 点火后列出上游真实模型清单')); return; }
+    if (r.err === 'need_key') { openModal(refNote('未配置 B.AI 密钥（注水检测页填入）')); return; }
+    if (r.err) { openModal(refNote('上游拉取失败 · 可点甲板「↻ 刷新」重试')); return; }
+    var html = '<h3>模型参考 · MODEL REF · B.AI</h3><div class="m-body">' +
+      '<b>【口径】</b>裸名清单与 8891 上游实时一致；透明转发免费可用，价格与上下文以官网为准；点击模型名复制。' +
+      '<table class="pm-tbl"><thead><tr><th>模型</th></tr></thead>';
+    r.list.forEach(function (m) {
+      var id = m.id || m;
+      html += '<tr>' + refNameCell(id, id) + '</tr>';
+    });
+    openModal(html + '</table></div>');
+  }
+
+  var REF_MAP = {
+    cmd: function () { openModal(REF_HTML); },
+    tj: refForTj,
+    cb: refForCb,
+    qoder: refForQoder,
+    bai: refForBai,
+    comate: refForComate
+  };
 
   function setModelFilter(mode) {
     if (S.modelFilter === mode) return;
@@ -8478,12 +8657,16 @@ var PT_I18N = {
     $('refreshStats').onclick = function () { refreshStats(true); logInto($('logStream'), 'sys', '手动刷新链路监测数据'); };
     $('clearLog').onclick = function () { $('logStream').innerHTML = ''; logInto($('logStream'), 'sys', '日志已清空'); };
 
-    /* —— 模态窗（帮助 / 模型参考）：三个甲板的按钮统一绑定 —— */
-    $$('button[data-i18n="app.btn.help"]').forEach(function (b) {
-      b.onclick = function () { openModal(HELP_HTML); };
-    });
-    $$('button[data-i18n="app.btn.modelRef"]').forEach(function (b) {
-      b.onclick = function () { openModal(REF_HTML); };
+    /* —— 模态窗（帮助 / 模型参考）：按 data-deck 甲板分发，六甲板各开各的内容 —— */
+    ['app.btn.help', 'app.btn.modelRef'].forEach(function (key) {
+      $$('button[data-i18n="' + key + '"]').forEach(function (b) {
+        b.onclick = function () {
+          var deck = b.closest('[data-deck]');
+          var dk = deck ? deck.getAttribute('data-deck') : 'cmd';
+          if (key === 'app.btn.help') openModal(HELP_MAP[dk] || HELP_MAP.cmd);
+          else (REF_MAP[dk] || REF_MAP.cmd)();
+        };
+      });
     });
     $$('button[data-i18n="app.btn.changelog"]').forEach(function (b) {
       b.onclick = function () {
