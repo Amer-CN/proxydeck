@@ -18,7 +18,7 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 │   ├─ bridge.go                WebView2 JS 桥（ccGetState/ccStart/...绑定）
 │   ├─ plugins.go               插件托管：pluginDefs 注册 + 启动/停止/健康检查
 │   ├─ plugin_modes.go          --plugin-* 子模式（进程内直跑插件服务）
-│   └─ ui.html                  全部 UI（内嵌，5 个视图 tab）
+│   └─ ui.html                  全部 UI（内嵌；四模式键甲板 + Qoder/B.AI/Comate/媒体/注水副页）
 ├─ internal/
 │   ├─ proxy + server + api     主代理核心
 │   ├─ tuanjie/                 团结插件后端（8788）
@@ -41,7 +41,7 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   7. `app/ui.html` **`var CHANGELOG_DATA`**（甲板内「更新日志」浮层的**独立副本**，不读 `CHANGELOG.md`！
      只改仓库文件不改这里，浮层就还是旧版——v3.6.2 / v3.6.3 两次都栽在这里）
   外加 `CHANGELOG.md` 顶条 + GitHub Release（正文＝CHANGELOG 顶条逐字，标题＝`vX.Y.Z · 主题 · 主题`）。
-  全在 `grep -rn "v3\.6\.[0-9]" app/` 一枪能扫到的范围内，改完照这条 grep 复核一遍。
+  改完用旧版本串 grep app/ 复核一遍（应只剩 CHANGELOG_DATA 历史条目）。
 
 ## 版本号三段位规则（2026-08-31 定，用户裁决）
 
@@ -75,7 +75,7 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 
 | 操作 | 是否断服务 |
 |---|---|
-| python build.py（替换运行中的 exe） | **断**，需全停，先打招呼 |
+| python build.py（os.replace 被运行中 exe 锁定必败） | 换装改走腾位法：ren 旧 exe 腾位 → 新 exe 落位 → 只重启 GUI，**后端不断** |
 | taskkill ProxyDeck 进程 | **断**，先打招呼 |
 | 改代码后要生效 | **断**（要重启对应服务） |
 | 改 ui.html / git 提交 / push / 查日志 | 不断 |
@@ -122,6 +122,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 ### WorkBuddy（8787）——子智能体可用
 - 支持 tool_calls（实测返回过标准工具调用），可当 Agent/子智能体模型
 - glm-5.2 / kimi-k3 等可用
+- **模型元数据纪律（2026-09-02 定）**：`/model/info` 的 modelMeta 只准填实测值
+  （reasoning 实测矩阵：deepseek 系与 auto 拒 off，其余 11 个 off~max 全接；
+  maxInput 仅 glm-5.2 / deepseek-v4-pro / deepseek-v4-flash 三条实测 1M）。
+  查无实据的上下文/最大输出一律缺省不填——GUI 悬停会如实显示「未核实」，
+  禁止照抄官方宣传数字回填（曾因统一写 low/medium/high 误导 Agent 填出 400）
 - **hy4-preview 限流兜底（v3.8.1）**：撞配额 429 自动切 fallback（缺省
   deepseek-v4-pro）并按上游重置时点倒计时，到期自动恢复；GUI 甲板有开关
   （/v1/failover GET/POST，配置持久化 codebuddy-failover.json）。实测教训：
@@ -145,7 +150,10 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
    各插件服务的响应必须带 CORS 头（见各包的 corsWith）
 4. **Git Bash 后台进程会被回收**：长驻服务用工具的 run_in_background 或 cmd start
 5. **`env -u` 启动 windowsgui 程序会假死**：测环境变量相关逻辑用 cmd 脚本
-6. **exe 被运行中的自己锁定**：构建替换前需全停；或构建到新文件名
+6. **exe 被运行中的自己锁定**：直接覆盖 / os.replace 必败。实测**腾位法免全停**
+   （2026-09-02 用户实证裁决）：`ren ProxyDeck.exe ProxyDeck.old.exe`（运行中的 exe
+   允许改名）→ 新 exe 落位原路径 → 只需关掉并重启 GUI；插件是独立常驻子进程
+   （关 GUI 不死），**后端完全不用停**。旧的 .old 文件等进程自然退出后删
 7. **流式响应转发**：FlushInterval 50ms 保 SSE 及时；stream_options.include_usage 补 usage
 8. **协作流程**：见 ~/.zcode/AGENTS.md（子智能体 executor/code-reviewer 四步流程），
    简报写 .work/current-task.md
@@ -156,10 +164,13 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 11. **升版日志必须从 git 提交清单倒推**（git log 上版..HEAD），不能凭工作记忆——
     v3.8.1 曾漏记同批的 hy4 兜底整块功能（用户指出后补）
 
-## 当前状态（2026-09-02）
+## 当前状态（2026-09-03）
 
-- 版本 v3.8.2 已发布（GitHub Release + exe 附件）；一键更新已上线
+- 版本 v3.8.3 已发布（GitHub Release + exe 附件 12,105,216 字节）；一键更新已上线
   （GUI 内直接下载替换重启，无需去网页）
+- v3.8.3 三批改动：六甲板「模型参考/使用帮助」专属化（HELP_MAP/REF_MAP 按
+  data-deck 分发，Qoder/B.AI/Comate 补齐按钮）；模型悬停参数可信化（缺字段
+  一律显示「未核实」，COMMAND 无价格条目模型不再黑屏）；hy3/hy4-preview 归并 HY 组
 - 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck
 - 服务通常在跑：55990（headless 主代理）/ 8788（团结）/ 8787（WorkBuddy）/
   8786（Comate）/ 8785（Qoder）/ 8891（B.AI）
