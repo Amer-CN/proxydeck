@@ -8292,7 +8292,7 @@ var PT_I18N = {
       body: function () {
         var u = window._UPDATE || {};
         return '新版本 <b>' + escHtml(String(u.latest || '…')) + '</b> 已发布（当前 ' + escHtml(UI_CUR) + '）。' +
-          '点「立即更新」前往仓库下载页。';
+          (u.dl_url ? '点「立即更新」自动下载替换并重启 GUI。' : '点「立即更新」前往仓库下载页。');
       },
       btn: '知道了',
       go: '立即更新'
@@ -8333,7 +8333,12 @@ var PT_I18N = {
     var goBtn = root.querySelector('[data-notice-go]');
     if (goBtn) goBtn.onclick = function () {
       var u = window._UPDATE || {};
-      call('Open', u.url || 'https://github.com/Amer-CN/command-code-proxy-tools/releases');
+      if (u.dl_url) {
+        /* 一键更新：后端下载 → 校验 → 腾位替换 → 自动重启（老 Release 无 dl_url 时退回开网页） */
+        startOneKeyUpdate();
+      } else {
+        call('Open', u.url || 'https://github.com/Amer-CN/command-code-proxy-tools/releases');
+      }
       closeNotice();
     };
   }
@@ -8686,7 +8691,8 @@ var PT_I18N = {
     _chkRetries = 0;
     var latest = r.latest || null;
     if (latest) {
-      window._UPDATE = { latest: latest, url: r.url || '', downloads: r.downloads > 0 ? r.downloads : ((window._UPDATE && window._UPDATE.downloads) || 0) };
+      window._UPDATE = { latest: latest, url: r.url || '', downloads: r.downloads > 0 ? r.downloads : ((window._UPDATE && window._UPDATE.downloads) || 0),
+        dl_url: r.dl_url || '', dl_size: r.dl_size || 0 };
       if (r.downloads > 0) { try { localStorage.setItem('dlCount', String(r.downloads)); } catch (e) {} }
     }
     renderDlCount();
@@ -8695,12 +8701,67 @@ var PT_I18N = {
       if (detail) detail.textContent = '当前 ' + UI_CUR + ' · 更新浮窗内可「立即更新」';
       delete noticeSeen.upd; /* 手动点「立即检查」= 用户明确想看，允许重新弹 */
       queueNotice('upd', true);
+      /* 手动弹过也记档：之后每小时自动复查对同一版本不再重复弹（手动检查本身不受限） */
+      try { localStorage.setItem('updNotified', latest); } catch (e) {}
     } else {
       if (title) title.textContent = latest ? '已是最新版本' : '尚未获取到版本信息';
       if (detail) detail.textContent = latest ? '当前 ' + UI_CUR : '网络受限 · 稍后再试';
     }
     if (btn) { btn.disabled = false; btn.textContent = '立即检查'; }
     setTimeout(function () { if (lamp) lamp.classList.remove('on'); }, 1600);
+  }
+
+  /* ================= 一键更新（下载→替换→重启 全自动） ================= */
+  /* 后端一步触发（OneKeyUpdate 'start'），前端每 800ms 轮询 'status' 画进度；
+     phase=replaced 后 GUI 自己退出，前端停轮询即可；phase=failed 恢复按钮并显示后端 msg。
+     触发失败（无 dl_url / 流程已在跑）同样恢复按钮。 */
+  var _okPoll = null; // 进度轮询定时器（非 null = 更新进行中，防重复触发）
+  function startOneKeyUpdate() {
+    if (_okPoll) return;
+    var btn = $('checkUpdateBtn'), title = $('updTitle'), detail = $('updDetail'), lamp = $('updLamp');
+    if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
+    if (lamp) lamp.classList.add('on');
+    var latest = (window._UPDATE && window._UPDATE.latest) || UI_CUR;
+    if (title) title.textContent = '正在更新 ' + latest;
+    if (detail) detail.textContent = '准备下载…';
+    logInto($('logStream'), 'sys', '一键更新：开始下载 ' + latest);
+    var lastPhase = '';
+    call('OneKeyUpdate', 'start').then(function (r) {
+      if (!r || !r.ok) {
+        _okPoll = null;
+        if (title) title.textContent = '无法更新';
+        if (detail) detail.textContent = (r && r.msg) || '无法开始更新';
+        logInto($('logStream'), 'err', '一键更新：' + ((r && r.msg) || '无法开始'));
+        if (btn) { btn.disabled = false; btn.textContent = '立即检查'; }
+        if (lamp) lamp.classList.remove('on');
+        return;
+      }
+      _okPoll = setInterval(function () {
+        call('OneKeyUpdate', 'status').then(function (s) {
+          if (!s || !s.ok || !_okPoll) return;
+          var ph = s.phase || 'idle';
+          if (ph !== lastPhase) {
+            lastPhase = ph;
+            if (ph === 'downloaded') logInto($('logStream'), 'ok', '下载完成 · 校验通过');
+            if (ph === 'replaced') logInto($('logStream'), 'ok', '替换完成 · 正在重启 GUI');
+            if (ph === 'failed') logInto($('logStream'), 'err', '一键更新失败：' + (s.msg || ''));
+          }
+          if (detail) {
+            if (ph === 'downloading') detail.textContent = (s.pct >= 0) ? ('下载中 ' + s.pct + '%') : '下载中…';
+            else if (ph === 'downloaded') detail.textContent = '校验完成，正在替换…';
+            else if (ph === 'replaced') detail.textContent = '已替换，正在重启…';
+            else if (ph === 'failed') detail.textContent = s.msg || '更新失败';
+          }
+          if (ph === 'replaced') { clearInterval(_okPoll); _okPoll = null; return; }
+          if (ph === 'failed') {
+            clearInterval(_okPoll); _okPoll = null;
+            if (title) title.textContent = '更新失败';
+            if (btn) { btn.disabled = false; btn.textContent = '立即检查'; }
+            if (lamp) lamp.classList.remove('on');
+          }
+        });
+      }, 800);
+    });
   }
 
   /* ================= 轮询启动 ================= */
@@ -8766,7 +8827,7 @@ var PT_I18N = {
     pollState();
     if (HAS_BRIDGE) {
       (async function checkUpdate() {
-        window._UPDATE = { latest: UI_CUR, url: '', downloads: 0 };
+        window._UPDATE = { latest: UI_CUR, url: '', downloads: 0, dl_url: '', dl_size: 0 };
         var cachedDl = 0;
         try { cachedDl = parseInt(localStorage.getItem('dlCount') || '0', 10) || 0; } catch (e) {}
         if (!(cachedDl > 0)) cachedDl = 2;
@@ -8779,12 +8840,19 @@ var PT_I18N = {
           try {
             r = await call('CheckUpdate');
             if (r && r.ok && r.latest) {
-              window._UPDATE = { latest: r.latest, url: r.url || '', downloads: r.downloads > 0 ? r.downloads : cachedDl };
+              window._UPDATE = { latest: r.latest, url: r.url || '', downloads: r.downloads > 0 ? r.downloads : cachedDl,
+                dl_url: r.dl_url || '', dl_size: r.dl_size || 0 };
               if (r.downloads > 0) { try { localStorage.setItem('dlCount', String(r.downloads)); } catch (e) {} }
               renderDlCount();
               if (verCmp(UI_CUR, r.latest) < 0) {
-                queueNotice('upd', true);
-                logInto($('logStream'), 'ok', '检测到新版本 ' + r.latest + '（当前 ' + UI_CUR + '）');
+                /* 同一版本只自动弹一次：localStorage 记已提醒的 tag，版本变化时自然失效重弹 */
+                var notified = '';
+                try { notified = localStorage.getItem('updNotified') || ''; } catch (e) {}
+                if (notified !== r.latest) {
+                  try { localStorage.setItem('updNotified', r.latest); } catch (e) {}
+                  queueNotice('upd', true);
+                  logInto($('logStream'), 'ok', '检测到新版本 ' + r.latest + '（当前 ' + UI_CUR + '）');
+                }
               }
               return true;
             }
@@ -8794,6 +8862,10 @@ var PT_I18N = {
           return false;
         }
         tryOnce();
+        /* GUI 常开期间每小时整点复查一次：tryOnce 失败 3 次后自停，定时器路径须把
+           attempt 清零再调，否则重试计数会挡住所有后续重查（checking 时 2 秒重试的
+           既有逻辑原样保留，不受影响） */
+        setInterval(function () { attempt = 0; tryOnce(); }, 60 * 60 * 1000);
       })();
     } else {
       renderDlCount();

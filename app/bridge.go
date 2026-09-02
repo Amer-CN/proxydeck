@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -293,6 +295,16 @@ var (
 	updateCache   string
 )
 
+// 一键更新流程状态：bind 只读写这几个字段并瞬时返回，真正的下载/替换在
+// runOneKeyUpdateFlow 的 goroutine 里。updFlowActive 保证同一时间只跑一个流程。
+var (
+	updFlowMu     sync.Mutex
+	updFlowActive atomic.Bool
+	updPhase      = "idle" // idle | downloading | downloaded | replaced | failed
+	updPct        = -1     // 0-100；-1 = 服务器没给 Content-Length，前端显示不定进度
+	updMsg        = ""
+)
+
 // 官网用量缓存：bind 读缓存，后台 goroutine 只在前端触发（usageRefreshCh）时
 // 刷新一次——拉杆启动/手动刷新各触发一次，不做周期轮询（官网 429 限流教训）。
 var (
@@ -523,7 +535,10 @@ func (a *app) bindAll(w webview.WebView) {
 	go func() {
 		const url = "https://api.github.com/repos/Amer-CN/proxydeck/releases?per_page=100"
 		type asset struct {
-			Download int `json:"download_count"`
+			Name               string `json:"name"`
+			Download           int    `json:"download_count"`
+			BrowserDownloadURL string `json:"browser_download_url"`
+			Size               int64  `json:"size"`
 		}
 		type rel struct {
 			TagName string  `json:"tag_name"`
@@ -549,14 +564,43 @@ func (a *app) bindAll(w webview.WebView) {
 				totalDownloads += a.Download
 			}
 		}
+		// 一键更新用的直链：只认最新 release 里名字为 ProxyDeck.exe 的 asset
+		//（实测形态 https://github.com/Amer-CN/proxydeck/releases/download/vX.Y.Z/ProxyDeck.exe）。
+		// 老 release 没有该 asset 时留空串 → 前端「立即更新」退回打开网页的旧行为。
+		dlURL, dlSize := "", int64(0)
+		for _, as := range latest.Assets {
+			if as.Name == "ProxyDeck.exe" {
+				dlURL, dlSize = as.BrowserDownloadURL, as.Size
+				break
+			}
+		}
 		b, _ := json.Marshal(map[string]any{
 			"ok": true, "latest": latest.TagName, "url": latest.HTMLURL,
 			"downloads": totalDownloads, // 所有版本累计下载量
+			"dl_url":    dlURL,          // 新增：exe 直链（老前端忽略新字段，兼容）
+			"dl_size":   dlSize,         // 新增：exe 字节数（下载后校验用；0 = 未知不校验）
 		})
 		updateCacheMu.Lock()
 		updateCache = string(b)
 		updateCacheMu.Unlock()
 	}()
+	// 一键更新：触发（action="start"）启动后台 goroutine 立即返回；查询（action="status"）
+	// 返回进度。webview_go 的 Bind 按位置把 JS 参数 JSON 反序列化进 Go 参数（个数必须相等），
+	// JS 对象映射不进 string 参数，故 action 用纯字符串（前端恒传 'start'/'status'，空串按 start 处理）。
+	// bind 体内只碰缓存/互斥锁（微秒级），下载/替换全程在 goroutine——绝不阻塞串行 bind 队列。
+	_ = w.Bind("ccOneKeyUpdate", func(action string) string {
+		if action == "status" {
+			updFlowMu.Lock()
+			defer updFlowMu.Unlock()
+			b, _ := json.Marshal(map[string]any{"ok": true, "phase": updPhase, "pct": updPct, "msg": updMsg})
+			return string(b)
+		}
+		if action == "" || action == "start" {
+			return a.startOneKeyUpdateFlow(w)
+		}
+		b, _ := json.Marshal(map[string]any{"ok": false, "msg": "未知 action: " + action})
+		return string(b)
+	})
 	// 插件绑定（ccPlugin*）：实现见 plugin_bindings.go。
 	a.bindPluginBindings(w)
 	_ = w.Bind("ccCalib", func(model, v string) string {
@@ -743,6 +787,163 @@ func (a *app) bindAll(w webview.WebView) {
 		}
 		windowCmd(uintptr(h), strings.TrimSpace(cmd))
 		return jsonOK("")
+	})
+}
+
+/* ---------------- 一键更新流程（下载 → 校验 → 腾位替换 → 重启） ---------------- */
+
+// startOneKeyUpdateFlow 触发一键更新：CAS 抢占单流程名额后立即返回（下载在 goroutine）。
+// 下载地址只从后端 updateCache 取（GitHub Releases 数据），不信任前端传参——
+// 这个文件落地后要被执行，URL 来源必须后端权威。
+func (a *app) startOneKeyUpdateFlow(w webview.WebView) string {
+	if !updFlowActive.CompareAndSwap(false, true) {
+		return `{"ok":false,"msg":"更新流程已在进行中"}`
+	}
+	updateCacheMu.Lock()
+	cached := updateCache
+	updateCacheMu.Unlock()
+	var info struct {
+		Latest string `json:"latest"`
+		DlURL  string `json:"dl_url"`
+		DlSize int64  `json:"dl_size"`
+	}
+	_ = json.Unmarshal([]byte(cached), &info)
+	if info.DlURL == "" {
+		updFlowActive.Store(false)
+		return `{"ok":false,"msg":"当前版本信息没有 exe 直链（老 Release 无 ProxyDeck.exe asset），请到仓库下载页手动更新"}`
+	}
+	updFlowMu.Lock()
+	updPhase, updPct, updMsg = "downloading", -1, "连接下载源…"
+	updFlowMu.Unlock()
+	go a.runOneKeyUpdateFlow(w, info.Latest, info.DlURL, info.DlSize)
+	return `{"ok":true,"msg":"started"}`
+}
+
+// runOneKeyUpdateFlow 一键更新主流程（goroutine 内跑，与 bind 队列完全隔离）。
+func (a *app) runOneKeyUpdateFlow(w webview.WebView, latest, dlURL string, dlSize int64) {
+	// 流程结束（无论成败）释放名额；失败后允许再次触发重试。
+	defer updFlowActive.Store(false)
+	setPhase := func(phase string, pct int, msg string) {
+		updFlowMu.Lock()
+		updPhase, updPct, updMsg = phase, pct, msg
+		updFlowMu.Unlock()
+	}
+	// fail：phase=failed + msg 指路。.new/.old 残留故意不删（用户可手动救）。
+	fail := func(msg string) {
+		setPhase("failed", -1, msg)
+		log.Printf("[update] 失败：%s", msg)
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		fail("无法定位自身可执行文件: " + err.Error())
+		return
+	}
+	if rp, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = rp
+	}
+	dir := filepath.Dir(exe)
+	newFile := filepath.Join(dir, "ProxyDeck.exe.new")
+	oldFile := filepath.Join(dir, "ProxyDeck.exe.old")
+
+	log.Printf("[update] 开始下载 %s ← %s", latest, dlURL)
+	// 30 分钟专用 client：exe 包体积大（GitHub → objects.githubusercontent 会 302，
+	// http.Client 默认跟随重定向），1.5s/10s 的既有 client 都撑不住整包下载。
+	dlClient := &http.Client{Timeout: 30 * time.Minute}
+	resp, err := dlClient.Get(dlURL)
+	if err != nil {
+		fail("下载失败: " + err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fail(fmt.Sprintf("下载失败: HTTP %d", resp.StatusCode))
+		return
+	}
+	out, err := os.Create(newFile)
+	if err != nil {
+		fail("创建临时文件失败（" + newFile + "）: " + err.Error())
+		return
+	}
+	var written int64
+	total := resp.ContentLength // -1 = 服务器未给长度 → pct 恒 -1，前端显示不定进度
+	buf := make([]byte, 256*1024)
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, werr := out.Write(buf[:n]); werr != nil {
+				out.Close()
+				fail("写入临时文件失败（" + newFile + "）: " + werr.Error())
+				return
+			}
+			written += int64(n)
+			if total > 0 {
+				pct := int(written * 100 / total)
+				if pct > 100 {
+					pct = 100
+				}
+				setPhase("downloading", pct, fmt.Sprintf("下载中 %d%%（%.1f MB）", pct, float64(written)/1048576))
+			}
+		}
+		if rerr != nil {
+			if rerr == io.EOF {
+				break
+			}
+			out.Close()
+			fail("下载中断: " + rerr.Error())
+			return
+		}
+	}
+	out.Close()
+	// 下载完成校验：字节数必须等于 Releases 里登记的 size（有 size 才校验）。
+	if dlSize > 0 && written != dlSize {
+		fail(fmt.Sprintf("校验失败：下载 %d 字节，应为 %d 字节（文件留在 %s，可手动核查）", written, dlSize, newFile))
+		return
+	}
+	log.Printf("[update] 下载完成 %.1f MB，校验通过", float64(written)/1048576)
+	setPhase("downloaded", 100, "下载完成 · 校验通过")
+
+	// 腾位法替换（Windows 允许 rename 运行中的 exe，本会话构建腾位实证多次）：
+	// 1) 运行中的旧 exe 改名 .old 腾出原路径 → 2) .new 改名顶替原路径。
+	if err := os.Rename(exe, oldFile); err != nil {
+		// .old 残留挡路的两种报错都要接住（审查 P2 勘误）：Permission=残留被占用；
+		// Windows 上 rename 到已存在目标最常报 ErrExist（ERROR_ALREADY_EXISTS）而非
+		// Permission——只接后者会让「首轮失败→二次更新」必挂
+		if (os.IsPermission(err) || os.IsExist(err)) && os.Remove(oldFile) == nil {
+			err = os.Rename(exe, oldFile)
+		}
+		if err != nil {
+			fail(fmt.Sprintf("替换失败（旧程序改名 .old 不成）: %v", err))
+			return
+		}
+	}
+	if err := os.Rename(newFile, exe); err != nil {
+		fail(fmt.Sprintf("替换失败（新包就位不成）: %v（旧程序在 %s，新包在 %s，可手动放回）", err, oldFile, newFile))
+		return
+	}
+	log.Printf("[update] 替换完成，拉起新进程并关闭旧窗口")
+
+	// 重启：先拉起新 exe（无参数 = 主界面，与现状启动模式一致；工作目录 = exe 目录，
+	// 保证 api-key.txt / stats.json 等数据文件定位不变），再关旧窗。
+	cmd := hiddenCmd(exe)
+	cmd.Dir = dir
+	if err := cmd.Start(); err != nil {
+		fail(fmt.Sprintf("新程序启动失败（文件已替换，可手动运行 %s）: %v", exe, err))
+		return
+	}
+	log.Printf("[update] 新进程已启动 pid=%d，旧窗口即将关闭", cmd.Process.Pid)
+	setPhase("replaced", 100, "已替换，正在重启…")
+	// 关窗路径选择（自定理由在案）：不走 w.Dispatch(w.Destroy)——main.go 133 行审查记录：
+	// Destroy 在 Run 消息循环里整窗销毁曾致 0xc0000005 崩溃，主 GUI 的 w.Destroy 挂在
+	// defer（Run 返回后才执行）。故沿用 ccWindowCmd/ccFaxClose 的「关闭」同款语义：
+	// PostMessage WM_CLOSE → Run() 干净返回 → defer w.Destroy() 自然执行 → 进程正常退出。
+	// 兜底：窗口句柄拿不到时（理论上不该发生）os.Exit(0) 直接退出，新进程已在前一步起好。
+	w.Dispatch(func() {
+		if h := w.Window(); h != nil {
+			windowCmd(uintptr(h), "close")
+		} else {
+			os.Exit(0)
+		}
 	})
 }
 
