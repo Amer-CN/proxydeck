@@ -6,8 +6,8 @@
 ## 项目一句话
 
 Windows 独立 GUI 工具（单 exe，Go + WebView2 + 内嵌 HTML）：把 CommandCode /
-团结 / WorkBuddy(腾讯CodeBuddy) / Notion AI / WPS灵犀 的订阅转成本地 OpenAI 兼容接口，
-科幻全息风格控制台统一管理。完全开箱即用，无任何激活/授权机制。
+团结 / WorkBuddy(腾讯CodeBuddy) / Comate(百度) / Qoder(阿里) / B.AI 的订阅转成
+本地 OpenAI 兼容接口，机械风控制台统一管理。完全开箱即用，无任何激活/授权机制。
 
 ## 架构速览
 
@@ -23,14 +23,15 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 │   ├─ proxy + server + api     主代理核心
 │   ├─ tuanjie/                 团结插件后端（8788）
 │   ├─ codebuddy/               WorkBuddy 插件后端（8787）
-│   ├─ notion/                  Notion AI 插件后端（8789，仅对话协议）
-│   └─ lingxi/                  WPS灵犀插件后端（8790，仅对话协议）
+│   ├─ comate/                  Comate 插件后端（8786）
+│   ├─ qoder/                   Qoder 插件后端（8785）
+│   └─ bai/                     B.AI 插件后端（8891）
 └─ build.py                     构建脚本（单模式，python build.py）
 ```
 
-- 端口约定：主代理 55990 / WorkBuddy 8787 / 团结 8788 / Notion 8789 / 灵犀 8790
+- 端口约定：主代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891
 - 插件 = spawn 本 exe 的 `--plugin-<id> --port <n>` 子进程，独立常驻，关 GUI 不中断
-- **升版本必须同步的 7 处**（漏一处就有地方显示旧版）：
+- **升版本必须同步的位置**（漏一处就有地方显示旧版；2026-09-02 按实操勘误计数）：
   1. `app/main.go` `appVersion`
   2. `app/ui.html` `id="etchVer"`（顶栏蚀刻）
   3. `app/ui.html` `.pt-nameplate`（铭牌，含 `aria-label` 同行两处）
@@ -121,10 +122,10 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 ### WorkBuddy（8787）——子智能体可用
 - 支持 tool_calls（实测返回过标准工具调用），可当 Agent/子智能体模型
 - glm-5.2 / kimi-k3 等可用
-
-### Notion（8789）/ 灵犀（8790）——仅对话，无 Agent 能力
-- 协议层无 tools 字段，**只能对话，不能作为子智能体**（UI 顶栏已标警示）
-- Notion 限流史：曾因高频测试触发限流，冷却 48h 后恢复；试探一次就会重置倒计时
+- **hy4-preview 限流兜底（v3.8.1）**：撞配额 429 自动切 fallback（缺省
+  deepseek-v4-pro）并按上游重置时点倒计时，到期自动恢复；GUI 甲板有开关
+  （/v1/failover GET/POST，配置持久化 codebuddy-failover.json）。实测教训：
+  上游限流是滑动窗口+按日配额双形态
 
 ### B.AI / b.ai（8891）——已重新接入（v3.5.0），但保留当年实测结论
 - **现状**：`internal/bai`，COMMAND 键副页，Go 栈透明转发 `https://api.b.ai`；
@@ -148,16 +149,25 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 7. **流式响应转发**：FlushInterval 50ms 保 SSE 及时；stream_options.include_usage 补 usage
 8. **协作流程**：见 ~/.zcode/AGENTS.md（子智能体 executor/code-reviewer 四步流程），
    简报写 .work/current-task.md
+9. **python build.py 静默失败**：exe 被运行中进程锁定时 os.replace 报错走 stderr、
+   输出缓冲乱序会把错误吞掉——务必字节校验产物（grep 版本串）再部署
+10. **GitHub 匿名 API 限额按出口 IP 计**（60/h）：共享 NAT/Clash 出口必撞墙；
+    更新检查类功能优先走 gh CLI 认证通道
+11. **升版日志必须从 git 提交清单倒推**（git log 上版..HEAD），不能凭工作记忆——
+    v3.8.1 曾漏记同批的 hy4 兜底整块功能（用户指出后补）
 
-## 当前状态（2026-08-19）
+## 当前状态（2026-09-02）
 
-- 版本 v2.5.1 已发布（GitHub Release + exe 附件）
+- 版本 v3.8.2 已发布（GitHub Release + exe 附件）；一键更新已上线
+  （GUI 内直接下载替换重启，无需去网页）
 - 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck
-- 服务通常在跑：55990（headless 主代理）/ 8788（团结）/ 8787（WorkBuddy）
-- **待办：8788 待重启激活空响应重试**（代码已提交 5eeca56，等用户给停服窗口；
-  重启时顺带换成 v2.5.1 构建——本地 exe 仍是 v2.5.0 版本字符串）
+- 服务通常在跑：55990（headless 主代理）/ 8788（团结）/ 8787（WorkBuddy）/
+  8786（Comate）/ 8785（Qoder）/ 8891（B.AI）
+- 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
+  出口 IP 计，共享网络易撞墙，撞后负缓存 10 分钟）
 - ZCode 侧模型配置：tuanjie provider（8788）配了 GLM-5.3/codely 系；
-  子智能体 executor 用团结模型、code-reviewer 用 WorkBuddy（依赖服务在跑）
+  子智能体 executor 用团结模型、code-reviewer 用 WorkBuddy（依赖服务在跑；
+  WorkBuddy 的 hy4-preview 撞配额时代理自动切 deepseek-v4-pro）
 
 ## 常用命令
 
@@ -169,6 +179,7 @@ node --check <js>                    # ui.html 抽取 script 后语法校验
 ./ProxyDeck.exe -headless # 主代理后台模式
 ./ProxyDeck.exe --plugin-tuanjie --port 8788   # 单独拉团结
 curl http://127.0.0.1:8788/health    # 健康检查
+curl http://127.0.0.1:8787/v1/failover   # WorkBuddy hy4 兜底状态/配置
 git push myrepo HEAD:main            # 推送（remote 名是 myrepo 不是 origin）
 ```
 

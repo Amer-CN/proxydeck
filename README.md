@@ -6,10 +6,10 @@
 
 [![Typing SVG](https://readme-typing-svg.demolab.com/?font=Fira+Code&size=20&pause=1200&color=B3593B&center=true&vCenter=true&width=620&lines=%E4%B8%80%E4%B8%AAexe%EF%BC%8C%E5%8F%8C%E5%87%BB%E5%8D%B3%E7%94%A8;CommandCode+%2F+%E5%9B%A2%E7%BB%93+%2F+WorkBuddy+%E4%B8%80%E7%AB%99%E6%89%98%E7%AE%A1;OpenAI%E5%85%BC%E5%AE%B9%E6%8E%A5%E5%8F%A3%C2%B7%E5%BC%80%E6%BA%90%E5%85%8D%E8%B4%B9)](https://git.io/typing-svg)
 
-[![Version](https://img.shields.io/badge/Version-v3.0.0-E8483F?style=for-the-badge)](https://github.com/Amer-CN/proxydeck/releases)
+[![Version](https://img.shields.io/badge/Version-v3.8.2-E8483F?style=for-the-badge)](https://github.com/Amer-CN/proxydeck/releases)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge)](#-快速开始)
 [![License](https://img.shields.io/badge/License-%E5%BC%80%E6%BA%90%E5%85%8D%E8%B4%B9-10B981?style=for-the-badge)](#%EF%B8%8F-%E5%85%B3%E4%BA%8E%E5%85%8D%E8%B4%B9%E4%B8%8E%E8%BE%B9%E7%95%8C)
-[![Size](https://img.shields.io/badge/Size-10MB-8B5CF6?style=for-the-badge)](https://github.com/Amer-CN/proxydeck/releases)
+[![Size](https://img.shields.io/badge/Size-12MB-8B5CF6?style=for-the-badge)](https://github.com/Amer-CN/proxydeck/releases)
 
 </div>
 
@@ -26,7 +26,7 @@ Agent 都能直接接——一个 exe 双击即用，零安装零配置。
 ## 🚀 快速开始
 
 1. **下载**：从 [Releases](https://github.com/Amer-CN/proxydeck/releases) 下载
-   `ProxyDeck.exe`（单文件，约 10MB，无需安装）
+   `ProxyDeck.exe`（单文件，约 12MB，无需安装）
 2. **点火**：双击打开，把 COMMAND 甲板的红色拉杆拉到最右
 3. **接入**：在你的 AI 客户端里填——
 
@@ -42,6 +42,9 @@ API Key:   你的 CommandCode Key（commandcode.ai/studio → API keys）
 | CommandCode | 55990 | API Key |
 | 团结（Codely） | 8788 | 自动读取 ~/.codely-cli 登录态 |
 | WorkBuddy（CodeBuddy） | 8787 | 自动读取桌面端登录态 |
+| Comate（百度） | 8786 | 自动读取 ~/.comate/cli-login.json |
+| Qoder（阿里） | 8785 | 自动读取桌面端登录态 |
+| B.AI | 8891 | 注水检测页填入密钥 |
 
 > **平台各自需要你自己的有效订阅**——本工具只做接口转换，不含任何账号资源。
 
