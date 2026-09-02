@@ -5,6 +5,7 @@
 //   GET  /quota                 官方积分快照（get-user-resource，5min 缓存）
 //   GET  /v1/models             动态探测的可用模型（1h 缓存）
 //   GET  /model/info            模型元数据（Agent 填写指南：上下文/最大输出/思考级别）
+//   GET/POST /v1/failover       hy4 限流兜底开关 + fallback 模型（GUI 甲板）
 //   POST /v1/chat/completions   OpenAI Chat（流式透传 / 非流式聚合）
 package codebuddy
 
@@ -45,6 +46,11 @@ type Server struct {
 	statsMu    sync.Mutex
 	stats      map[string]*modelStat // 按模型累计（GUI 消耗 TOP）
 	statsPath  string
+
+	failMu       sync.Mutex // hy4 兜底配置（GUI 开关 + fallback 模型，落盘 codebuddy-failover.json）
+	failEnabled  bool
+	failFallback string
+	failPath     string
 
 	limitMu    sync.Mutex // hy4-preview 限流窗口（第 43 轮自动故障转移）
 	limitUntil time.Time
@@ -89,6 +95,8 @@ func NewServer(desensitize bool) (*Server, error) {
 	if exe, err := os.Executable(); err == nil {
 		s.statsPath = filepath.Join(filepath.Dir(exe), "codebuddy-stats.json")
 		s.loadStats()
+		s.failPath = filepath.Join(filepath.Dir(exe), "codebuddy-failover.json")
+		s.loadFailover()
 	}
 	return s, nil
 }
@@ -101,6 +109,7 @@ func (s *Server) Start(host, port string) error {
 	mux.HandleFunc("/v1/models", s.handleModels)
 	mux.HandleFunc("/model/info", s.handleModelInfo)
 	mux.HandleFunc("/v1/stats", s.handleStats)
+	mux.HandleFunc("/v1/failover", s.handleFailover)
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
@@ -146,19 +155,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// 第 43 轮：hy4-preview 限流窗口状态（GUI/脚本可观测；到期解除由 hy4Limited 懒处理）
-	s.limitMu.Lock()
-	if !s.limitUntil.IsZero() {
-		if time.Now().After(s.limitUntil) {
-			s.limitUntil = time.Time{}
-		} else {
-			resp["hy4_limit"] = map[string]any{
-				"active":   true,
-				"until":    s.limitUntil.Format("2006-01-02 15:04:05"),
-				"fallback": hy4Fallback,
-			}
-		}
+	if lim := s.hy4LimitState(); lim != nil {
+		resp["hy4_limit"] = lim
 	}
-	s.limitMu.Unlock()
 	writeJSON(w, resp)
 }
 
@@ -240,6 +239,164 @@ func (s *Server) saveStats() {
 	if os.WriteFile(tmp, b, 0o644) == nil {
 		_ = os.Rename(tmp, s.statsPath)
 	}
+}
+
+// ============ hy4 兜底配置（开关 + fallback 模型，GUI 甲板可切） ============
+
+// failoverCfg 落盘结构：statsPath 同目录的 codebuddy-failover.json。
+type failoverCfg struct {
+	Enabled  bool   `json:"enabled"`
+	Fallback string `json:"fallback"`
+}
+
+// failoverConfig 内存配置快照（handleChat 守卫用）。
+type failoverConfig struct {
+	enabled  bool
+	fallback string
+}
+
+func (s *Server) failoverConfig() failoverConfig {
+	s.failMu.Lock()
+	defer s.failMu.Unlock()
+	return failoverConfig{enabled: s.failEnabled, fallback: s.failFallback}
+}
+
+// loadFailover 启动读回；文件缺失/损坏（解析失败或 fallback 为空）用缺省值
+// （开 + deepseek-v4-pro，即 hy4Fallback 常量降级后的唯一用途）。
+func (s *Server) loadFailover() {
+	s.failMu.Lock()
+	defer s.failMu.Unlock()
+	s.failEnabled = true
+	s.failFallback = hy4Fallback
+	if s.failPath == "" {
+		return
+	}
+	b, err := os.ReadFile(s.failPath)
+	if err != nil {
+		return
+	}
+	var c failoverCfg
+	if json.Unmarshal(b, &c) != nil || c.Fallback == "" {
+		return
+	}
+	s.failEnabled = c.Enabled
+	s.failFallback = c.Fallback
+}
+
+// saveFailover 原子落盘（照抄 saveStats）。
+func (s *Server) saveFailover() {
+	if s.failPath == "" {
+		return
+	}
+	s.failMu.Lock()
+	b, err := json.Marshal(failoverCfg{Enabled: s.failEnabled, Fallback: s.failFallback})
+	s.failMu.Unlock()
+	if err != nil {
+		return
+	}
+	tmp := s.failPath + ".tmp"
+	if os.WriteFile(tmp, b, 0o644) == nil {
+		_ = os.Rename(tmp, s.failPath)
+	}
+}
+
+// hy4LimitState 限流窗口快照（无窗口/已到期返回 nil；到期顺带懒清除）。
+// handleHealth 与 /v1/failover GET 共用；fallback 字段反映当前配置而非缺省常量。
+func (s *Server) hy4LimitState() map[string]any {
+	s.limitMu.Lock()
+	defer s.limitMu.Unlock()
+	if s.limitUntil.IsZero() {
+		return nil
+	}
+	if time.Now().After(s.limitUntil) {
+		s.limitUntil = time.Time{}
+		return nil
+	}
+	s.failMu.Lock()
+	fb := s.failFallback
+	s.failMu.Unlock()
+	return map[string]any{
+		"active":   true,
+		"until":    s.limitUntil.Format("2006-01-02 15:04:05"),
+		"fallback": fb,
+	}
+}
+
+// handleFailover /v1/failover：兜底开关与 fallback 模型读写（GUI 甲板）。
+// GET → {enabled, fallback, hy4_limit}；POST body {"enabled":bool,"fallback":"model-id"}
+// （两字段均可选）→ fallback 非空且 ∈ modelCandidates，否则 400。
+func (s *Server) handleFailover(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		cfg := s.failoverConfig()
+		resp := map[string]any{"enabled": cfg.enabled, "fallback": cfg.fallback, "hy4_limit": s.hy4LimitState()}
+		writeJSON(w, resp)
+	case http.MethodPost:
+		var body struct {
+			Enabled  *bool   `json:"enabled"`
+			Fallback *string `json:"fallback"`
+		}
+		b, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if err := json.Unmarshal(b, &body); err != nil {
+			writeErr(w, 400, "bad json: "+err.Error())
+			return
+		}
+		if body.Fallback != nil {
+			f := *body.Fallback
+			valid := false // 必须命中候选池（第 43 轮勘误：曾写成 f != ""，非空即放行）
+			for _, m := range modelCandidates {
+				if m == f {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				writeErr(w, 400, "unknown fallback model: "+f)
+				return
+			}
+		}
+		s.failMu.Lock()
+		if body.Fallback != nil {
+			s.failFallback = *body.Fallback
+		}
+		if body.Enabled != nil {
+			s.failEnabled = *body.Enabled
+		}
+		cfg := failoverConfig{enabled: s.failEnabled, fallback: s.failFallback}
+		s.failMu.Unlock()
+		s.saveFailover()
+		log.Printf("[codebuddy] failover 配置更新: enabled=%v fallback=%s", cfg.enabled, cfg.fallback)
+		writeJSON(w, map[string]any{"enabled": cfg.enabled, "fallback": cfg.fallback})
+	default:
+		writeErr(w, 405, "method not allowed")
+	}
+}
+
+// failoverDecision 兜底守卫的判定结果（纯逻辑，便于单测）。
+type failoverDecision struct {
+	rewrite bool      // 请求前改写模型
+	trip    bool      // 记限流窗口并重放
+	until   time.Time // 窗口重置时点（trip=true 时有效）
+}
+
+// failoverDecide 兜底守卫纯逻辑：cfg.enabled=false 时改写与 trip 一律不触发
+//（429 如实透传）。limited=是否已处于限流窗口；status/body=上游响应
+//（仅 hy4-preview 的 429 配额报文参与 trip 判定）。
+func failoverDecide(cfg failoverConfig, sentModel string, limited bool, status int, body string) failoverDecision {
+	var d failoverDecision
+	if !cfg.enabled || sentModel != hy4Primary {
+		return d
+	}
+	if limited {
+		d.rewrite = true
+	}
+	if status == http.StatusTooManyRequests {
+		if until := parseQuotaReset(body); !until.IsZero() {
+			d.trip = true
+			d.until = until
+		}
+	}
+	return d
 }
 
 // ============ 模型列表（动态探测，后端无模型列表端点） ============
@@ -418,9 +575,11 @@ var passthroughBodyKeys = []string{
 }
 
 // ============ hy4-preview 限流自动故障转移（第 43 轮） ============
-// 用户裁决：hy4-preview 撞上游配额 429 时，代理层自动切换 deepseek-v4-pro 并按
+// 用户裁决：hy4-preview 撞上游配额 429 时，代理层自动切换 fallback 并按
 // 上游报文里的重置时点计时，到期自动恢复——agent 配置零改动，用户无感。
 // 识别当次请求立即用 fallback 重放，客户端拿到的是成功响应（子智能体不死）。
+// hy4 兜底可在 GUI 关闭（429 如实透传）、fallback 模型可改（/v1/failover，
+// 落盘 codebuddy-failover.json）；hy4Fallback 常量只作缺省值。
 
 const (
 	hy4Primary  = "hy4-preview"
@@ -513,12 +672,15 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 502, err.Error())
 		return
 	}
-	// 限流窗口内 hy4-preview 请求体层改写 fallback（agent 零感知）
+	// 限流窗口内 hy4-preview 请求体层改写 fallback（agent 零感知）；
+	// 兜底关闭（GUI 可关）时不改写、不 trip，429 如实透传（现行为）
+	cfg := s.failoverConfig()
 	sentModel := modelName
-	if sentModel == hy4Primary && s.hy4Limited() {
-		backendBody["model"] = hy4Fallback
-		sentModel = hy4Fallback
-		log.Printf("[codebuddy] hy4-preview 限流中，本次切换 %s", hy4Fallback)
+	limited := sentModel == hy4Primary && s.hy4Limited()
+	if d := failoverDecide(cfg, sentModel, limited, 0, ""); d.rewrite {
+		backendBody["model"] = cfg.fallback
+		sentModel = cfg.fallback
+		log.Printf("[codebuddy] hy4-preview 限流中，本次切换 %s", cfg.fallback)
 	}
 	start := time.Now()
 	var resp *http.Response
@@ -542,15 +704,16 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()
 		log.Printf("[codebuddy] chat model=%s status=%d err=%s", sentModel, resp.StatusCode, truncate(string(errBody), 200))
-		// hy4-preview 撞配额 429：记限流窗口并立刻用 fallback 重放本次请求
-		// （仅首跳触发，重放自身失败如实透传，不循环）；fallback 请求不触发
-		if attempt == 0 && sentModel == hy4Primary && resp.StatusCode == http.StatusTooManyRequests {
-			if until := parseQuotaReset(string(errBody)); !until.IsZero() {
-				s.hy4Trip(until)
-				backendBody["model"] = hy4Fallback
-				sentModel = hy4Fallback
+		// hy4-preview 撞配额 429：兜底开启时记限流窗口并立刻用 fallback 重放本次
+		// 请求（仅首跳触发，重放自身失败如实透传，不循环）；fallback 请求不触发；
+		// 兜底关闭 → 不记窗口不重放，429 如实透传
+		if attempt == 0 && resp.StatusCode == http.StatusTooManyRequests {
+			if d := failoverDecide(cfg, sentModel, false, resp.StatusCode, string(errBody)); d.trip {
+				s.hy4Trip(d.until)
+				backendBody["model"] = cfg.fallback
+				sentModel = cfg.fallback
 				log.Printf("[codebuddy] hy4-preview 限流至 %s，切换 %s 并重放本次请求",
-					until.Format("01-02 15:04"), hy4Fallback)
+					d.until.Format("01-02 15:04"), cfg.fallback)
 				continue
 			}
 		}

@@ -2612,6 +2612,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="cbProbe"><span>模型探测</span><b></b></span>
                     <span class="pt-dot" data-dot="cbMask"><span>脱敏防护</span><b></b></span>
+                    <span class="pt-dot" data-dot="cbHy4"><span>hy4 兜底</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -2725,11 +2726,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <span class="legend">IGNITE</span>
                   <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
                 </button>
-                <div class="pt-banner warn" id="cbHy4Banner" style="display:none">
-                  <div style="flex:1 1 auto"><b>hy4-preview 限流中 · 已自动切换 deepseek-v4-pro</b>
-                    <div id="cbHy4Detail" style="margin-top:2px"></div></div>
-                </div>
-                <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.baseUrl">BASE URL</div>
@@ -2897,7 +2893,34 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
                 </button>
                 <div class="pt-div"></div>
+                                <div class="pt-banner warn" id="cbHy4Banner" style="display:none">
+                  <div style="flex:1 1 auto"><b>hy4-preview 限流中 · 已自动切换 deepseek-v4-pro</b>
+                    <div id="cbHy4Detail" style="margin-top:2px"></div></div>
+                </div>
+                <div class="pt-div"></div>
+                <div class="pt-row">
+                  <div class="pt-rowline">
+                    <div class="pt-label"><div class="t">hy4 限流兜底</div></div>
+                    <span class="pt-val" data-val="cbHy4">—</span>
+                  </div>
+                  <div class="pt-gear k3" style="--s:0;--c:2" data-gear="cbHy4" data-count="2"
+                       role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="1"
+                       aria-label="hy4 限流兜底">
+                    <div class="stops"><span class="cur">关</span><span>开</span></div>
+                    <div class="pt-rail"><i></i><i></i><span class="k"></span></div>
+                  </div>
+                  <p class="pt-notice">开启后 8787 在 hy4-preview 撞配额 429 时自动切换 fallback 并按上游重置时点计时，关闭时 429 如实透传。</p>
+                </div>
+                <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t">限流切换模型</div>
+                    <div class="s">hy4-preview 撞配额 429 时自动切换到的 fallback 模型</div>
+                  </div>
+                  <select class="ibtn2" id="cbHy4Fallback" title="hy4 限流时自动切换到的 fallback 模型"></select>
+                </div></div>
+                <div class="pt-div"></div>
+<div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.baseUrl">BASE URL</div>
                     <div class="s" data-i18n="app.s.copy">点击复制</div>
@@ -7465,24 +7488,43 @@ var PT_I18N = {
 
   /* 第 43 轮：WorkBuddy hy4-preview 限流状态条——/health hy4_limit 驱动，
      显示 fallback 与恢复倒计时（until 为上游报的 UTC+8 时点，本地换算显示）；
-     解除（到期懒清除）后随 3 秒轮询自动隐藏 */
+     解除（到期懒清除）后随 3 秒轮询自动隐藏。
+     倒计时本地走秒：banner 显示期间开 1 秒 interval 刷 detail（剩余时分 + 恢复
+     时点），隐藏/until 过期即 clearInterval——不新增网络请求，3 秒 health 轮询
+     只负责「是否显示状态条」。 */
+  var cbHy4Timer = null;
   function updateHy4Banner(h) {
     var banner = $('cbHy4Banner'), detail = $('cbHy4Detail');
     if (!banner || !detail) return;
     var lim = h.hy4_limit;
-    if (!lim || !lim.active) { banner.style.display = 'none'; return; }
-    var until = new Date(String(lim.until || '').replace(' ', 'T') + '+08:00');
-    var txt = '';
-    if (!isNaN(until.getTime())) {
-      var mins = Math.max(0, Math.round((until.getTime() - Date.now()) / 60000));
-      var hh = Math.floor(mins / 60), mm = mins % 60;
-      txt = '约 ' + (hh > 0 ? hh + ' 小时 ' : '') + mm + ' 分钟后自动恢复（' +
-        until.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '）';
-    } else {
-      txt = '恢复时间未知，稍后自动重试 hy4-preview';
+    if (!lim || !lim.active) {
+      if (cbHy4Timer) { clearInterval(cbHy4Timer); cbHy4Timer = null; }
+      banner.style.display = 'none';
+      return;
     }
-    detail.textContent = txt;
+    var until = new Date(String(lim.until || '').replace(' ', 'T') + '+08:00');
+    if (isNaN(until.getTime())) {
+      detail.textContent = '恢复时间未知，稍后自动重试 hy4-preview';
+      banner.style.display = '';
+      return;
+    }
     banner.style.display = '';
+    var tick = function () {
+      var left = until.getTime() - Date.now();
+      if (left <= 0) { /* 本地到点：停表，等 health 轮询确认解除后收条 */
+        if (cbHy4Timer) { clearInterval(cbHy4Timer); cbHy4Timer = null; }
+        detail.textContent = '约 0 分钟后自动恢复（' +
+          until.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '）';
+        return;
+      }
+      var mins = Math.round(left / 60000);
+      var hh = Math.floor(mins / 60), mm = mins % 60;
+      detail.textContent = '约 ' + (hh > 0 ? hh + ' 小时 ' : '') + mm + ' 分钟后自动恢复（' +
+        until.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '）';
+    };
+    tick();
+    if (cbHy4Timer) clearInterval(cbHy4Timer);
+    cbHy4Timer = setInterval(tick, 1000);
   }
 
   async function loadPluginStats(V, mode) {
@@ -7493,7 +7535,10 @@ var PT_I18N = {
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
       }
       if (V.id === 'tuanjie') updateJudgeBanner(h);
-      if (V.id === 'codebuddy') updateHy4Banner(h);
+      if (V.id === 'codebuddy') {
+        updateHy4Banner(h);
+        loadCbFailover(V, true); /* 窗口/开关/模型三态同步（失败静默） */
+      }
       /* Qoder 积分：官方实时额度（openapi.qoder.com.cn）——只在点「↻ 刷新」时
          访问一次官方接口（插件侧缓存长期有效，轮询绝不打官方）。
          主数字 = 套餐剩余 + 可用专属包剩余；副行 = 明细与累计已耗。
@@ -7732,6 +7777,89 @@ var PT_I18N = {
       } finally { tjK3Busy = false; }
     })();
   });
+
+
+  /* ================= WorkBuddy hy4 限流兜底（开关 + fallback 模型） ================= */
+  /* 照抄 tjK3 两段式：GET /v1/failover 探活 → POST 改配置 → renderCbFailover 上屏。
+     选项用 V.modelIds（/model/info 与 /v1/models 同源探测的真实可用模型）填充，
+     当前 fallback 不在名单里时也保留为选项。 */
+  var cbHy4Busy = false;
+  function renderCbFailover(cfg, models) {
+    var on = !!cfg.enabled;
+    PTApp.gear('cbHy4', on ? 1 : 0, true);
+    var val = document.querySelector('[data-val="cbHy4"]');
+    if (val) val.textContent = on ? '开' : '关';
+    var sel = $('cbHy4Fallback');
+    if (sel) {
+      var opts = (models || []).slice();
+      if (cfg.fallback && opts.indexOf(cfg.fallback) < 0) opts.unshift(cfg.fallback);
+      if (opts.length) {
+        var sig = opts.join('\u0001');
+        if (sel.__cbSig !== sig) { /* 3 秒轮询重渲染不重建相同选项（避免打断下拉操作） */
+          sel.__cbSig = sig;
+          sel.innerHTML = opts.map(function (m) {
+            return '<option value="' + escHtml(m) + '">' + escHtml(m) + '</option>';
+          }).join('');
+          sel.disabled = false;
+        }
+        if (sel.value !== cfg.fallback) sel.value = cfg.fallback;
+      } else if (!sel.options.length) {
+        sel.innerHTML = '<option value="">—</option>';
+        sel.disabled = true;
+      }
+    }
+    PTApp.dot('cbHy4', on);
+  }
+  /* 轮询路径静默（插件未启动时不刷 err 日志）；手动路径 silent=false */
+  async function loadCbFailover(V, silent) {
+    try {
+      var cfg = await (await fetch('http://127.0.0.1:' + V.port + '/v1/failover')).json();
+      renderCbFailover(cfg, V.modelIds || []);
+    } catch (e) {
+      if (!silent) plog(V, 'err', 'hy4 兜底配置读取失败（插件未启动？）');
+    }
+  }
+  PTApp.onGear('cbHy4', function (i) {
+    if (cbHy4Busy) return Promise.resolve(false);
+    cbHy4Busy = true;
+    var V = PV.cb;
+    return (async function () {
+      try {
+        await (await fetch('http://127.0.0.1:' + V.port + '/v1/failover')).json();
+        var r = await (await fetch('http://127.0.0.1:' + V.port + '/v1/failover', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: i === 1 })
+        })).json();
+        renderCbFailover(r, V.modelIds || []);
+        plog(V, r.enabled ? 'ok' : 'sys', r.enabled
+          ? 'hy4 限流兜底已开启：hy4-preview 撞配额 429 自动切 ' + r.fallback + '，按上游重置时点计时'
+          : 'hy4 限流兜底已关闭：429 如实透传');
+        return true;
+      } catch (e) {
+        plog(V, 'err', 'hy4 兜底切换失败（插件未启动？）');
+        return false;
+      } finally { cbHy4Busy = false; }
+    })();
+  });
+  (function () {
+    var sel = $('cbHy4Fallback');
+    if (!sel) return;
+    sel.addEventListener('change', function () {
+      var V = PV.cb;
+      (async function () {
+        try {
+          var r = await (await fetch('http://127.0.0.1:' + V.port + '/v1/failover', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fallback: sel.value })
+          })).json();
+          renderCbFailover(r, V.modelIds || []);
+          plog(V, 'ok', '限流切换模型 → ' + r.fallback);
+        } catch (e) {
+          plog(V, 'err', 'fallback 模型切换失败（插件未启动？）');
+        }
+      })();
+    });
+  })();
 
 
   /* ================= 语言（原版 i18n 机制 + app.* 扩展字典七语） ================= */
