@@ -6,7 +6,7 @@
 
 [![Typing SVG](https://readme-typing-svg.demolab.com/?font=Fira+Code&size=20&pause=1200&color=B3593B&center=true&vCenter=true&width=620&lines=%E4%B8%80%E4%B8%AAexe%EF%BC%8C%E5%8F%8C%E5%87%BB%E5%8D%B3%E7%94%A8;CommandCode+%2F+%E5%9B%A2%E7%BB%93+%2F+WorkBuddy+%E4%B8%80%E7%AB%99%E6%89%98%E7%AE%A1;OpenAI%E5%85%BC%E5%AE%B9%E6%8E%A5%E5%8F%A3%C2%B7%E5%BC%80%E6%BA%90%E5%85%8D%E8%B4%B9)](https://git.io/typing-svg)
 
-[![Version](https://img.shields.io/badge/Version-v3.8.3-E8483F?style=for-the-badge)](https://github.com/Amer-CN/proxydeck/releases)
+[![Version](https://img.shields.io/badge/Version-v3.8.4-E8483F?style=for-the-badge)](https://github.com/Amer-CN/proxydeck/releases)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge)](#-快速开始)
 [![License](https://img.shields.io/badge/License-%E5%BC%80%E6%BA%90%E5%85%8D%E8%B4%B9-10B981?style=for-the-badge)](#%EF%B8%8F-%E5%85%B3%E4%BA%8E%E5%85%8D%E8%B4%B9%E4%B8%8E%E8%BE%B9%E7%95%8C)
 [![Size](https://img.shields.io/badge/Size-12MB-8B5CF6?style=for-the-badge)](https://github.com/Amer-CN/proxydeck/releases)

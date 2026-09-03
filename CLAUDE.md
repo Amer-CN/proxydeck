@@ -94,6 +94,15 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   429 和"200 空响应"**（空响应重试已实现在 tuanjie/server.go 的 ensureNonEmpty，5eeca56）
 - 已知上游故障：间歇 400 "Invalid model name passed in model=None"（多实例映射失步，
   插件已内置 3 次重试；高发期可能连撞，等待即可）
+- **2026-09-04 实测三条**：
+  - codely 别名现行映射：codely-core→glm-5-fp8-128k、codely-vl→glm-5.3-flash、
+    codely-flash/basic/air→deepseek-v4-flash（ga-260731/0731 双部署负载均衡）
+  - 官方团队白名单实测收紧为 alias-only-proxy-models / KIMI-K3 / GLM-5.3-FLASH：
+    GLM-5.3 直连已 401（team_model_access_denied），桌面客户端模型目录里的 GLM-5.3
+    选项不可用（目录与权限不匹配，非代理问题）
+  - rc.55→rc.58 逆向四项无变化（签名种子与两层 HMAC / telemetry 不发 x-b3 /
+    metadata 四字段 / UA 构造）；UA 无版本门槛（rc.54/55/58 直连全 200）；
+    反竞品 system 检测仍活跃；GLM-5.3 TPM 滑窗参数留静默窗口实测
 
 #### ⚠ 团结风控识别特征（2026-08-25 实测，血泪教训）
 - **状态**：2026-08 官方被封过号（Unity 登录锁死、access token 失效、网页无法登录）。
@@ -164,14 +173,15 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 11. **升版日志必须从 git 提交清单倒推**（git log 上版..HEAD），不能凭工作记忆——
     v3.8.1 曾漏记同批的 hy4 兜底整块功能（用户指出后补）
 
-## 当前状态（2026-09-03）
+## 当前状态（2026-09-04）
 
-- 版本 v3.8.3 已发布（GitHub Release + exe 附件 12,105,216 字节）；一键更新已上线
+- 版本 v3.8.4（本地提交，GitHub Release 待发布）；一键更新已上线
   （GUI 内直接下载替换重启，无需去网页）
-- v3.8.3 三批改动：六甲板「模型参考/使用帮助」专属化（HELP_MAP/REF_MAP 按
-  data-deck 分发，Qoder/B.AI/Comate 补齐按钮）；模型悬停参数可信化（缺字段
-  一律显示「未核实」，COMMAND 无价格条目模型不再黑屏）；hy3/hy4-preview 归并 HY 组
-- 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck
+- v3.8.4 改动：别名映射变化告警（详见 water.go Resolved——上游偷换 codely
+  别名底层模型，日志当天报「模型映射变化 旧→新」，流式/非流式全覆盖）；
+  「关于」面板累计下载行移除；池路径错误日志补 dur/inflight 维度（2f5a377）；
+  UA 对齐官方 CLI rc.58。main.go appVersion 曾在 v3.8.3 漏改（停在 v3.8.2）已补
+- 远程 main 暂落后本地（v3.8.4 七个提交待推送）；仓库 github.com/Amer-CN/proxydeck
 - 服务通常在跑：55990（headless 主代理）/ 8788（团结）/ 8787（WorkBuddy）/
   8786（Comate）/ 8785（Qoder）/ 8891（B.AI）
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
