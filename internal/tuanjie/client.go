@@ -45,7 +45,7 @@ const (
 
 	// cliUserAgentFallback 探测不到本机 CLI 版本时的兜底 UA（构建时最新版）。
 	// 格式：fmt.Sprintf("codely-cli/%s (%s; %s)", cliVersion, platform, arch)。
-	cliUserAgentFallback = "codely-cli/1.0.0-rc.55 (win32; x64)"
+	cliUserAgentFallback = "codely-cli/1.0.0-rc.58 (win32; x64)"
 )
 
 // cliUserAgent 启动时解析：优先读本机 npm 全局安装的 codely-cli 实际版本

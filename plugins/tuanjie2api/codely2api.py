@@ -34,7 +34,7 @@ LISTEN_PORT = 8788
 
 # 官方 CLI 内置的签名种子（逆向自 1.0.0-release.52），与 cli_api_key 两层 HMAC 派生签名密钥
 CODELY_SIGNING_SEED = bytes.fromhex("406f00f74768ba0cb0cd30f097ec6c2bdacb89c61a38b7dd140838bbd0e98018")
-CLI_USER_AGENT = "codely-cli/1.0.0-release.52 (win32; x64)"
+CLI_USER_AGENT = "codely-cli/1.0.0-rc.58 (win32; x64)"
 
 # ============ State ============
 app = FastAPI(title="codely2api")
