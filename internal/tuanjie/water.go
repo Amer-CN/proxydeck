@@ -62,8 +62,9 @@ type passiveEvent struct {
 // WaterCheck 注水检测器（被动事件 + 探针基线，持久化 water-check.json）。
 type WaterCheck struct {
 	mu       sync.Mutex
-	Baseline map[string]int `json:"baseline"` // "uid|model" -> prompt_tokens 基线
-	Passive  []passiveEvent `json:"passive"`
+	Baseline map[string]int    `json:"baseline"` // "uid|model" -> prompt_tokens 基线
+	Passive  []passiveEvent    `json:"passive"`
+	Resolved map[string]string `json:"resolved"` // 归一化请求名 -> 最近返回名（别名解析结果）
 	path     string
 }
 
@@ -71,11 +72,14 @@ func waterFilePath() string { return filepath.Join(exeDirForAccounts(), "tuanjie
 
 // LoadWater 从磁盘恢复检测器状态。
 func LoadWater() *WaterCheck {
-	w := &WaterCheck{Baseline: map[string]int{}, path: waterFilePath()}
+	w := &WaterCheck{Baseline: map[string]int{}, Resolved: map[string]string{}, path: waterFilePath()}
 	if b, err := os.ReadFile(w.path); err == nil {
 		_ = json.Unmarshal(b, w)
 		if w.Baseline == nil {
 			w.Baseline = map[string]int{}
+		}
+		if w.Resolved == nil {
+			w.Resolved = map[string]string{}
 		}
 	}
 	return w
@@ -106,6 +110,32 @@ func (w *WaterCheck) RecordPassive(requested, returned, userID string) {
 		w.Passive = w.Passive[len(w.Passive)-50:]
 	}
 	w.save()
+}
+
+// RecordResolution 记录别名解析结果（归一化请求名 → 最近返回名）：上游把
+// 别名（codely-core 等）解析成真实模型后，响应 model 字段返回真实名。
+// 返回 (旧值, 是否变化)——首次落基线、与上次相同不落盘、变化落盘返回旧值，
+// 官方调整映射当天打日志可见。
+func (w *WaterCheck) RecordResolution(requested, returned string) (from string, changed bool) {
+	if requested == "" || returned == "" {
+		return "", false
+	}
+	key, val := normalizeModelName(requested), normalizeModelName(returned)
+	if key == val {
+		return "", false // 直连真实模型（仅大小写/路由前缀差异），无别名解析
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.Resolved == nil {
+		w.Resolved = map[string]string{}
+	}
+	from = w.Resolved[key]
+	changed = from != val
+	if changed {
+		w.Resolved[key] = val
+		w.save()
+	}
+	return from, changed
 }
 
 // normalizeModelName 归一化：小写、去路由前缀（z-ai/ 等）。

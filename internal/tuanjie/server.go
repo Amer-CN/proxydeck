@@ -982,6 +982,14 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			s.addStat(model, done.Usage.PromptTokens, done.Usage.CompletionTokens, done.Usage.TotalTokens)
 			// 被动注水观测：非流式能直接读响应 model
 			s.water.RecordPassive(model, done.Model, poolUID)
+			// 别名解析观测：非流式能直接读响应 model（同 scanner）
+			if from, changed := s.water.RecordResolution(model, done.Model); changed {
+				if from == "" {
+					log.Printf("[tuanjie] 别名解析基线 %s → %s", model, done.Model)
+				} else {
+					log.Printf("[tuanjie] 模型映射变化 %s: %s → %s", model, from, done.Model)
+				}
+			}
 			s.activity.Add("ok", model+" · 账号 "+poolUID, model, poolUID,
 				time.Since(start).Milliseconds(), done.Usage.TotalTokens, 200)
 		}
@@ -1119,6 +1127,14 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 	if json.Unmarshal(respBody, &done) == nil && done.Usage != nil {
 		s.addStat(model, done.Usage.PromptTokens, done.Usage.CompletionTokens, done.Usage.TotalTokens)
+		// 别名解析观测：非流式能直接读响应 model（同 scanner）
+		if from, changed := s.water.RecordResolution(model, done.Model); changed {
+			if from == "" {
+				log.Printf("[tuanjie] 别名解析基线 %s → %s", model, done.Model)
+			} else {
+				log.Printf("[tuanjie] 模型映射变化 %s: %s → %s", model, from, done.Model)
+			}
+		}
 	}
 }
 
@@ -1420,6 +1436,7 @@ type usageScanner struct {
 	buf       string
 	srv       *Server
 	errLogged bool
+	resSeen   bool // 本流已记过 model 字段（SSE 每个数据块都带，防逐 chunk 重复记录）
 }
 
 func newUsageScanner(model string, srv *Server) *usageScanner {
@@ -1439,6 +1456,7 @@ func (u *usageScanner) feed(chunk []byte) {
 			continue
 		}
 		var chunk struct {
+			Model string `json:"model"`
 			Usage *struct {
 				PromptTokens     int64 `json:"prompt_tokens"`
 				CompletionTokens int64 `json:"completion_tokens"`
@@ -1454,6 +1472,17 @@ func (u *usageScanner) feed(chunk []byte) {
 		if len(chunk.Error) > 0 && string(chunk.Error) != "null" && !u.errLogged {
 			u.errLogged = true
 			log.Printf("[tuanjie] 流内错误 model=%s %s", u.model, truncate(string(chunk.Error), 300))
+		}
+		// 别名解析观测：本流首块带 model 即记一次（官方改映射当天可见）
+		if chunk.Model != "" && !u.resSeen {
+			u.resSeen = true
+			if from, changed := u.srv.water.RecordResolution(u.model, chunk.Model); changed {
+				if from == "" {
+					log.Printf("[tuanjie] 别名解析基线 %s → %s", u.model, chunk.Model)
+				} else {
+					log.Printf("[tuanjie] 模型映射变化 %s: %s → %s", u.model, from, chunk.Model)
+				}
+			}
 		}
 		if chunk.Usage != nil {
 			u.srv.addStat(u.model, chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens, chunk.Usage.TotalTokens)
