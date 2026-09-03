@@ -869,8 +869,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 				poolErrBody = eb
 				break
 			}
-			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d 重试 %d/3 err=%s",
-				model, poolUID, resp.StatusCode, attempt+1, truncate(string(eb), 200))
+			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d dur=%.1fs inflight=%d 重试 %d/3 err=%s",
+				model, poolUID, resp.StatusCode, time.Since(start).Seconds(), len(s.registry.Inflight()), attempt+1, truncate(string(eb), 200))
 			time.Sleep(800 * time.Millisecond)
 			resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, token, sess)
 			if err != nil {
@@ -935,8 +935,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			}
 			s.activity.Add("error", model+" · 账号 "+poolUID+" 上游返回 "+strconv.Itoa(resp.StatusCode),
 				model, poolUID, time.Since(start).Milliseconds(), 0, resp.StatusCode)
-			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d err=%s",
-				model, poolUID, resp.StatusCode, truncate(string(poolErrBody), 300))
+			log.Printf("[tuanjie] pool chat model=%s account=%s status=%d dur=%.1fs inflight=%d err=%s",
+				model, poolUID, resp.StatusCode, time.Since(start).Seconds(), len(s.registry.Inflight()), truncate(string(poolErrBody), 300))
 			s.noteUpstreamError(resp.StatusCode, string(poolErrBody))
 			writeErr(w, resp.StatusCode, string(poolErrBody))
 			return
