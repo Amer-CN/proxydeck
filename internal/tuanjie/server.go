@@ -44,6 +44,7 @@ type Server struct {
 	baselines     *BaselineStore // 绝对基准库（注水检测三层：探针+分布比对锚点）
 	mediaReroutes atomic.Int64   // 媒体改路由累计次数（GUI 展示）
 	judgeAlert    judgmentAlert  // 疑似官方判定变更告警（互斥锁保护）
+	seedAlert     seedAlert      // 官方 CLI 签名种子轮换告警（种子卫兵，互斥锁保护）
 
 	waterHistMu sync.Mutex
 	waterHist   []waterHistoryEntry // 注水检测历史（内存环形 20 条，GET ?history=1）
@@ -71,7 +72,8 @@ type judgmentAlert struct {
 func NewServer() *Server {
 	s := &Server{client: NewClient(), pool: NewAccountPool(), stats: map[string]*modelStat{}, startedAt: time.Now(), pacer: NewPacer(),
 		registry: NewRegistry(), water: LoadWater(), activity: NewActivityLog(),
-		providers: NewProviderStore(), baselines: LoadBaselines()}
+		providers: NewProviderStore(), baselines: LoadBaselines(),
+		seedAlert: seedAlert{online: "unchecked"}} // 首轮在线核验完成前 /health 报 unchecked
 	LoadMediaConfig()
 	if exe, err := os.Executable(); err == nil {
 		s.statsPath = filepath.Join(filepath.Dir(exe), "tuanjie-stats.json")
@@ -142,6 +144,11 @@ func (s *Server) Start(host, port string) error {
 	s.lifeCancel = lifeCancel
 	s.mu.Unlock()
 	go s.pool.ResumeBudgetLoop(lifeCtx, s.queryQuotaForResume)
+
+	// 种子卫兵：周期核对本机官方 CLI bundle 的签名特征串（种子 hex + 签名头名），
+	// 任一消失（官方轮换种子/改签名方案）置告警（/health seed_alert + GUI 警示条）。
+	// 同样只在 Start 起，测试构造 Server 不起后台循环。
+	go s.SeedGuardLoop(lifeCtx)
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
 	if err != nil {
@@ -256,6 +263,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	resp["judgment_since"] = judgeSince
 	s.judgeAlert.mu.Unlock()
+	s.seedAlert.mu.Lock()
+	resp["seed_alert"] = s.seedAlert.active
+	resp["seed_signal"] = s.seedAlert.signal
+	resp["seed_latest"] = s.seedAlert.latest // registry 查到的 latest 版本号（查不到为空）
+	resp["seed_online"] = s.seedAlert.online // 在线层状态 ok/registry_error/download_error/seed_missing/unchecked
+	s.seedAlert.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }

@@ -2792,6 +2792,11 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <div id="tjJudgeDetail" style="margin-top:2px"></div></div>
                   <button type="button" class="ibtn2" id="tjJudgeDismiss" title="本次会话不再提示">×</button>
                 </div>
+                <div class="pt-banner warn" id="tjSeedBanner" style="display:none">
+                  <div style="flex:1 1 auto"><b>官方 CLI 签名特征已变化（可能轮换了签名方案），请尽快核验种子</b>
+                    <div id="tjSeedDetail" style="margin-top:2px"></div></div>
+                  <button type="button" class="ibtn2" id="tjSeedDismiss" title="本次会话不再提示">×</button>
+                </div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.ignite">点火拉杆</div>
@@ -7498,6 +7503,35 @@ var PT_I18N = {
     banner.style.display = '';
   }
 
+  /* 种子卫兵警示条（tj 甲板顶部）：官方 CLI bundle 里签名特征串（种子 hex /
+     头名）消失时 /health seed_alert=true，核验恢复命中自动解除。
+     tjSeedDismissed 为会话内变量：关闭后本轮会话不再自动弹出。 */
+  var tjSeedDismissed = false;
+  var tjSeedBound = false;
+  function updateSeedBanner(h) {
+    var banner = $('tjSeedBanner'), detail = $('tjSeedDetail');
+    if (!banner || !detail) return;
+    if (!tjSeedBound) {
+      tjSeedBound = true;
+      $('tjSeedDismiss').onclick = function () {
+        tjSeedDismissed = true;
+        banner.style.display = 'none';
+      };
+    }
+    if (!h.seed_alert || tjSeedDismissed) {
+      banner.style.display = 'none';
+      return;
+    }
+    /* 在线核对信息（/health seed_latest/seed_online）：警示条本身只在
+       seed_alert=true 时出现，registry 最新版与在线核验状态只在条内追加，
+       平时不刷屏。 */
+    var txt = h.seed_signal ? ('信号: ' + h.seed_signal) : '';
+    if (h.seed_latest) txt += (txt ? ' · ' : '') + 'registry最新版: ' + h.seed_latest;
+    if (h.seed_online) txt += (txt ? ' · ' : '') + '在线核验: ' + h.seed_online;
+    detail.textContent = txt;
+    banner.style.display = '';
+  }
+
   /* 第 43 轮：WorkBuddy hy4-preview 限流状态条——/health hy4_limit 驱动，
      显示 fallback 与恢复倒计时（until 为上游报的 UTC+8 时点，本地换算显示）；
      解除（到期懒清除）后随 3 秒轮询自动隐藏。
@@ -7546,7 +7580,7 @@ var PT_I18N = {
         V.uptime = h.uptimeSec;
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
       }
-      if (V.id === 'tuanjie') updateJudgeBanner(h);
+      if (V.id === 'tuanjie') { updateJudgeBanner(h); updateSeedBanner(h); }
       if (V.id === 'codebuddy') {
         updateHy4Banner(h);
         loadCbFailover(V, true); /* 窗口/开关/模型三态同步（失败静默） */
