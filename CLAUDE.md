@@ -40,7 +40,9 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   6. `app/ui.html` `var UI_CUR`（更新检查比对用）
   7. `app/ui.html` **`var CHANGELOG_DATA`**（甲板内「更新日志」浮层的**独立副本**，不读 `CHANGELOG.md`！
      只改仓库文件不改这里，浮层就还是旧版——v3.6.2 / v3.6.3 两次都栽在这里）
-  外加 `CHANGELOG.md` 顶条 + GitHub Release（正文＝CHANGELOG 顶条逐字，标题＝`vX.Y.Z · 主题 · 主题`）。
+  外加 `CHANGELOG.md` 顶条 + GitHub Release（正文＝CHANGELOG 顶条逐字，标题＝`vX.Y.Z · 主题 · 主题`，
+  **必须附 `ProxyDeck.exe` 附件**——那是一键更新的下载源，漏传 = 用户点更新 404；
+  2026-09-04 发 v3.8.5 时曾漏、事后补传）。
   改完用旧版本串 grep app/ 复核一遍（应只剩 CHANGELOG_DATA 历史条目）。
 
 ## 版本号三段位规则（2026-08-31 定，用户裁决）
