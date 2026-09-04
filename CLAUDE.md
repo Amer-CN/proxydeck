@@ -104,29 +104,37 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     metadata 四字段 / UA 构造）；UA 无版本门槛（rc.54/55/58 直连全 200）；
     反竞品 system 检测仍活跃；GLM-5.3 TPM 滑窗参数留静默窗口实测
 
-#### ⚠ 团结风控识别特征（2026-08-25 实测，血泪教训）
+#### ⚠ 团结风控识别特征（2026-08-25 实测；2026-09-04 解包实证重大修正）
 - **状态**：2026-08 官方被封过号（Unity 登录锁死、access token 失效、网页无法登录）。
-- **✅ 抓包实证的核心差异（2026-08-25 直连抓包 894 包）**：
-  - **官方 CLI 的连接目标是 `codely.tuanjie.cn`**（35 条 TLS 连接 SNI 全是它），
-    由官方后端转发到 litellm；
-  - **我们的反代直连 `codely-litellm.tuanjie.cn`**（litellm 网关本体）。
-  - 这是最硬的判定信号：litellm 网关很可能只接受官方后端转发来的流量，
-    外部直连 litellm = 一眼反代。
-- **次一级的差异**（本地 8788 诊断日志对比）：
-  - 官方 CLI：极简请求体（`model/max_tokens/messages`、2 条消息、无 stream/tools）；
-  - ZCode/agent：带 `stream_options / tools / tool_choice / stream`、超大消息。
-- **协议层**：官方 CLI 消息角色含 `gemini/gemini_reasoning`（会话存档实证），
-  ZCode 是 OpenAI 角色（assistant/reasoning_content）——疑似差异，未完全实锤。
-- **排除项**：TLS 指纹（官方 CLI 走 Clash 时与我们同指纹）；
-  "走 Gemini 协议" 的早期判断因 SDK 方法名误判，已推翻（详见 git 历史）。
-- **修复边界**：服务端判定黑盒、规则随时变，**无 100% 保证**；修改连接路径
-  （改连 codely.tuanjie.cn）需要换认证方式，风险高收益不确定，不建议投入。
+- **🔴 2026-09-04 推翻「入口域名最硬差异」结论**：解包 rc.58 bundle 实证，官方 CLI 的
+  chat/模型请求**同样直连 `codely-litellm.tuanjie.cn`**（gemini.js 内 chat base 常量 +
+  签名函数专门只对该域名及其子域签名）；`codely.tuanjie.cn` 只用于登录鉴权、dashboard、
+  埋点、技能下载。08-25「抓包 894 包全见 codely.tuanjie.cn → 直连 litellm = 一眼反代」
+  的旧结论**作废**（成因未定：当时 CLI 版本更老或抓包时段无 chat 流量）——
+  **入口域名这个轴上我们与官方一致，无需也无处改路径**。
+- **现行风控认知**：封号轴心 = session + 签名凭证链（官方客服原话，见下方红线节）；
+  UA 无版本门槛（rc.54/55/58 直连全 200）、TLS 指纹与官方同源，均不在判定主轴。
+- **次一级差异**（本地 8788 诊断日志对比，仍成立）：官方 CLI 请求体极简
+  （model/max_tokens/messages、2 条消息、无 stream/tools）；ZCode/agent 带
+  stream_options/tools/tool_choice、超大消息。协议角色差异（gemini 系角色 vs OpenAI
+  角色）疑似存在未实锤。
+- **种子卫兵（v3.8.5 上线）**：封号轴 = 签名 → 盯官方种子即盯封号轴。
+  internal/tuanjie/seedcheck.go 双层监控：①本机 bundle/gemini.js 特征扫描
+  （种子 hex + X-Codely-Signature 头名）；②npm registry 在线核对——每小时查
+  latest 版本号，**版本变了才下载新包验特征（约 16MB 一次性），没变零下载**。
+  任一层特征消失 → /health `seed_alert=true` + GUI 警示条；字段
+  seed_alert/seed_signal/seed_latest/seed_online；网络故障只记状态不误报。
+  2026-09-04 实测：rc.58 种子与签名算法逐字段一致、registry latest=rc.58。
+  旁证链：种子真轮换 → 全线 401 → 连续 3 次触发 judgment_alert（client 自动换 key
+  不掩盖告警）；⚠ team_model_access_denied 的 401 同样推高计数（潜在误报源）；
+  探针/水印旁路的 401 不进告警链；告警状态只反映在 /health 与 GUI，不写日志文件。
+- **凭证纪律**：tuanjie-accounts.json.bak-* 内含有效 JWT，gitignore 已补通配
+  （2026-09-04，ebaf3c9）；账号备份文件一律不准进 git。
 
 #### 可选缓解（不保证，风险自担）
-- 转发层裁剪请求：去掉 `stream_options`（官方 CLI 不带）、隐藏 `tools/tool_choice`
-  字段、消息合并压缩——能降低请求形态差异，但会损失 ZCode 的 Agent 能力
-  （工具调用）或引发别的协议问题，需权衡。
-- 真·规避（换号、伪装更多）不在本项目职责内，也不建议投入。
+- 请求形态裁剪（去 stream_options / 隐藏 tools / 消息合并）理论上降低次一级差异，
+  但损失 ZCode 的 Agent 工具调用能力或引发协议问题，默认不做；
+  真·规避（换号、深度伪装）不在本项目职责内，也不建议投入。
 
 ### WorkBuddy（8787）——子智能体可用
 - 支持 tool_calls（实测返回过标准工具调用），可当 Agent/子智能体模型
@@ -172,16 +180,18 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     更新检查类功能优先走 gh CLI 认证通道
 11. **升版日志必须从 git 提交清单倒推**（git log 上版..HEAD），不能凭工作记忆——
     v3.8.1 曾漏记同批的 hy4 兜底整块功能（用户指出后补）
+12. **池路径流式成功不写 activity 事件**：流式分支读完流即 return，非流式也只在
+    响应含 usage 时才记 ok（server.go 池路径）；单账号路径 200 一律 defer 记。
+    排查「回落明明成功但实时动态没有 ok」先想到这条——2026-09-04 媒体改路由
+    回落 codely-vl 零 ok 事件即此因（请求实际成功）
 
 ## 当前状态（2026-09-04）
 
-- 版本 v3.8.4（本地提交，GitHub Release 待发布）；一键更新已上线
-  （GUI 内直接下载替换重启，无需去网页）
-- v3.8.4 改动：别名映射变化告警（详见 water.go Resolved——上游偷换 codely
-  别名底层模型，日志当天报「模型映射变化 旧→新」，流式/非流式全覆盖）；
-  「关于」面板累计下载行移除；池路径错误日志补 dur/inflight 维度（2f5a377）；
-  UA 对齐官方 CLI rc.58。main.go appVersion 曾在 v3.8.3 漏改（停在 v3.8.2）已补
-- 远程 main 暂落后本地（v3.8.4 七个提交待推送）；仓库 github.com/Amer-CN/proxydeck
+- 版本 v3.8.5（本地提交，GitHub Release 待发布；v3.8.4 的 Release 也仍未发）；
+  一键更新已上线（GUI 内直接下载替换重启，无需去网页）
+- v3.8.5 改动：种子卫兵（seedcheck.go，官方 CLI 签名种子轮换双层自动告警，
+  详见「团结风控识别特征」节）；gitignore 补账号备份通配防凭据泄露（ebaf3c9）
+- 远程 main 暂落后本地（v3.8.4 起多个提交待推送）；仓库 github.com/Amer-CN/proxydeck
 - 服务通常在跑：55990（headless 主代理）/ 8788（团结）/ 8787（WorkBuddy）/
   8786（Comate）/ 8785（Qoder）/ 8891（B.AI）
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
@@ -210,7 +220,7 @@ git push myrepo HEAD:main            # 推送（remote 名是 myrepo 不是 orig
 即封号判定依据 = **session（x-litellm-session-id）+ 签名（X-Codely-Signature）凭证链**。
 只要请求携带这套 CLI 凭证链，官方不管流量从哪个客户端壳发出。
 
-**我们的实现必须逐字节保持与官方 CLI（@unity-china/codely-cli rc.54）一致，任何"顺手优化/重构"都禁止触碰以下项：**
+**我们的实现必须逐字节保持与官方 CLI（@unity-china/codely-cli rc.58）一致，任何"顺手优化/重构"都禁止触碰以下项：**
 
 1. `codelySigningSeedHex = "406f00f74768ba0cb0cd30f097ec6c2bdacb89c61a38b7dd140838bbd0e98018"`（client.go）
 2. 签名密钥派生：`HMAC(seed,"codely-signing-v1") → HMAC(k1, cli_api_key)`（codelySigningKey）
@@ -218,8 +228,10 @@ git push myrepo HEAD:main            # 推送（remote 名是 myrepo 不是 orig
 ")`，输出 `v1.<ts>.<base64url>`（SignLitellm）
 4. x-litellm-session-id 头 = 请求体 litellm_session_id = prompt_cache_key（每请求 randomUUID）
 5. cli_api_key 换取路径 `codely.tuanjie.cn/api/api-token/cli-api-key`（不能改成其他换取源）
-6. cliUserAgent = `codely-cli/1.0.0-rc.54 (win32; x64)`（官方 HTTP UA 真值：Dre/QEe 构造器
+6. cliUserAgent = `codely-cli/1.0.0-rc.58 (win32; x64)`（官方 HTTP UA 真值：Dre/QEe 构造器
    defaultHeaders，`codely-cli/${版本} (${process.platform}; ${process.arch})`。
+   版本号动态读本机 npm 安装的官方 CLI（client.go:54-87），读不到用兜底常量——
+   **官方发新版必须同步兜底常量并重验种子**（种子卫兵会自动盯，f97f787 为 rc.55→rc.58 先例）。
    注意：`Codely-CLI - OSS/...` 是官方 telemetry 埋点字段（getRealUserAgent），
    不是 HTTP 请求 UA——2026-08-27 曾误用并已修正）
 7. **不带** X-DashScope-CacheControl/X-DashScope-UserAgent（官方仅 isDashScopeProvider
