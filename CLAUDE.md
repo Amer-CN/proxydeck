@@ -187,11 +187,12 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 
 ## 当前状态（2026-09-04）
 
-- 版本 v3.8.5（本地提交，GitHub Release 待发布；v3.8.4 的 Release 也仍未发）；
+- 版本 v3.8.5（GitHub Release v3.8.4 / v3.8.5 均已发布，2026-09-04）；
   一键更新已上线（GUI 内直接下载替换重启，无需去网页）
 - v3.8.5 改动：种子卫兵（seedcheck.go，官方 CLI 签名种子轮换双层自动告警，
   详见「团结风控识别特征」节）；gitignore 补账号备份通配防凭据泄露（ebaf3c9）
-- 远程 main 暂落后本地（v3.8.4 起多个提交待推送）；仓库 github.com/Amer-CN/proxydeck
+- 远程 main 已同步（2026-09-04 推送至 fb9792c，含标签 v3.8.4/v3.8.5）；
+  仓库 github.com/Amer-CN/proxydeck
 - 服务通常在跑：55990（headless 主代理）/ 8788（团结）/ 8787（WorkBuddy）/
   8786（Comate）/ 8785（Qoder）/ 8891（B.AI）
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
