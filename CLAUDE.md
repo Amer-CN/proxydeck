@@ -92,6 +92,10 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - codely-basic/flash/air 同后端 `deepseek-v4-flash-0731`（真 v4 flash），仅推理深度不同
   （实测同题：basic 3.8K / air 6.8K / flash 9.4K reasoning tokens）
 - 费率（官方 /model/info）：codely 系 1.6/3.2；GLM-5.3 3.2/11.2；KIMI-K3 16/80（贵，慎用）
+- **KIMI-K3 429 兜底（pacing，GUI「K3 限流护航」拨杆 /kimi-pacing）**：model 含
+  "KIMI" 才启用；池路径两层——即时换号（≤3 次，换前 1s 退避）+ 全池撞墙按
+  Retry-After 排队重发（单请求 30 分钟总预算）；单账号路径只有等待层。v3.8.6 起
+  换号/排队/恢复事件全程进实时动态（流式成功本无 ok 事件，恢复事件由兜底自发上报）
 - GLM-5.3：≥825K 上下文，effort 参数时灵时不灵（上游 bug）；**上游过载时偶发
   429 和"200 空响应"**（空响应重试已实现在 tuanjie/server.go 的 ensureNonEmpty，5eeca56）
 - 已知上游故障：间歇 400 "Invalid model name passed in model=None"（多实例映射失步，
@@ -148,7 +152,9 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   禁止照抄官方宣传数字回填（曾因统一写 low/medium/high 误导 Agent 填出 400）
 - **hy4-preview 限流兜底（v3.8.1）**：撞配额 429 自动切 fallback（缺省
   deepseek-v4-pro）并按上游重置时点倒计时，到期自动恢复；GUI 甲板有开关
-  （/v1/failover GET/POST，配置持久化 codebuddy-failover.json）。实测教训：
+  （/v1/failover GET/POST，配置持久化 codebuddy-failover.json；v3.8.6 起
+  POST 响应同构带 hy4_limit、甲板 hy4 行常驻三态状态字「未限流/已限流跑
+  fallback/关」、警告条随 fallback 配置显示不再写死）。实测教训：
   上游限流是滑动窗口+按日配额双形态
 
 ### B.AI / b.ai（8891）——已重新接入（v3.5.0），但保留当年实测结论
@@ -185,16 +191,21 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 12. **池路径流式成功不写 activity 事件**：流式分支读完流即 return，非流式也只在
     响应含 usage 时才记 ok（server.go 池路径）；单账号路径 200 一律 defer 记。
     排查「回落明明成功但实时动态没有 ok」先想到这条——2026-09-04 媒体改路由
-    回落 codely-vl 零 ok 事件即此因（请求实际成功）
+    回落 codely-vl 零 ok 事件即此因（请求实际成功）。例外：429 兜底介入过的
+    请求，恢复事件由兜底路径自发上报（v3.8.6），不依赖 ok 事件
 
 ## 当前状态（2026-09-04）
 
-- 版本 v3.8.5（GitHub Release v3.8.4 / v3.8.5 均已发布，2026-09-04）；
+- 版本 v3.8.6（GitHub Release v3.8.6 已发布，2026-09-04）；
   一键更新已上线（GUI 内直接下载替换重启，无需去网页）
-- v3.8.5 改动：种子卫兵（seedcheck.go，官方 CLI 签名种子轮换双层自动告警，
-  详见「团结风控识别特征」节）；gitignore 补账号备份通配防凭据泄露（ebaf3c9）
-- 远程 main 已同步（2026-09-04 推送至 fb9792c，含标签 v3.8.4/v3.8.5）；
+- v3.8.6 改动：限流/兜底状态可见化——KIMI-K3 429 兜底事件进团结实时动态
+  （tuanjie/server.go 池/单账号双路径），WorkBuddy hy4 行常驻三态状态字 +
+  /v1/failover POST 响应补 hy4_limit + 警告条随 fallback 配置显示
+- 远程 main 已同步（2026-09-04 推送至 a1b5569，含标签 v3.8.6）；
   仓库 github.com/Amer-CN/proxydeck
+- 本地换装待做（发版时点）：运行中 exe 与 8788/8787 插件仍是 v3.8.5 代码，
+  git 显示 ProxyDeck.exe modified 属预期；换装走腾位法或 GUI 一键更新，
+  8788/8787 插件需停启一次后端改动才生效
 - 服务通常在跑：55990（headless 主代理）/ 8788（团结）/ 8787（WorkBuddy）/
   8786（Comate）/ 8785（Qoder）/ 8891（B.AI）
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
