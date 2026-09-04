@@ -15,6 +15,7 @@ app.exe
 .work/
 tuanjie-pacing.json
 tuanjie-accounts.json
+tuanjie-accounts.json.bak-*
 tuanjie-providers.json
 tuanjie-media.json
 tuanjie-vision.json
