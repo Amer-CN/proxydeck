@@ -701,6 +701,10 @@ func aliasNote(name string) string {
 	return ""
 }
 
+// pacingSwitchBackoff 池路径 429 兜底第一层「即时换号」重发前的退避时长
+// （包级 var 便于测试注入短时长，避免真实秒级等待）。
+var pacingSwitchBackoff = time.Second
+
 // handleChat 转发对话请求（流式/非流式均透传）。
 // 上游瞬时错误（模型未映射/限流/网关抖动）会自动换 key 重试一次；
 // 每次请求记录 model/状态码/耗时到日志；流式注入 include_usage 并解析
@@ -889,13 +893,24 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			s.pacer.pending.Add(1)
 			defer s.pacer.pending.Add(-1)
 		}
+		switches := 0 // 本请求即时换号已用次数（每请求最多 3 次，超限只走第二层等待）
 		for pacing && resp != nil && resp.StatusCode == http.StatusTooManyRequests && time.Now().Before(pacingDeadline) {
 			poolErrBody, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 			resp.Body.Close()
 			// 第一层：换号即时试（每轮只试一个候选；PickWithToken 按负载/
-			// 轮询选号，多轮 429 自然轮遍池里其他可用号，返回同号=没得换）
-			if nAcc, nTok := s.pool.PickWithToken(model); nAcc != nil && nAcc.UserID != poolUID {
-				log.Printf("[tuanjie] pacing pool model=%s account=%s status=429 即时换号 %s 重试", model, poolUID, nAcc.UserID)
+			// 轮询选号，多轮 429 自然轮遍池里其他可用号，返回同号=没得换）。
+			// 重发前先退避 pacingSwitchBackoff（防两账号互 429 时零间隔乒乓），
+			// 且每请求最多换 3 次，超限跳过本层直接走第二层 Retry-After 等待。
+			if nAcc, nTok := s.pool.PickWithToken(model); nAcc != nil && nAcc.UserID != poolUID && switches < 3 {
+				switches++
+				log.Printf("[tuanjie] pacing pool model=%s account=%s status=429 即时换号 %s 重试 第 %d/3 次", model, poolUID, nAcc.UserID, switches)
+				select {
+				case <-r.Context().Done():
+				case <-time.After(pacingSwitchBackoff):
+				}
+				if r.Context().Err() != nil {
+					break
+				}
 				poolUID = nAcc.UserID
 				token = nTok
 				resp, err = s.ForwardDirect(r.Context(), http.MethodPost, "/v1/chat/completions", body, nTok, sess)
