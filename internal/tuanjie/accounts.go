@@ -132,7 +132,12 @@ func (p *AccountPool) Pick(model string) *Account {
 	if len(enabled) == 0 {
 		return nil
 	}
-	// 模型路由：精确匹配账号 Models 列表；空列表 = 兜底接未认领模型
+	// 模型路由：精确匹配账号 Models 列表；空列表 = 兜底接未认领模型。
+	// 认领权威化：池内任一账号配置过 Models（= 池是显式配置过的）时，
+	// 无人认领（claimers 与 fallbacks 均空）直接返回 nil，不再兜底到
+	// 「全部 enabled 任选」——防把账号无权限的模型（如 401 team not
+	// allowed）派给不该接的号；全部账号 Models 为空的旧式配置（含单账号
+	// 本地模式）行为完全不变。GLM 资格过滤仍在认领过滤之后。
 	if model != "" {
 		var claimers, fallbacks []*Account
 		for _, a := range enabled {
@@ -151,6 +156,12 @@ func (p *AccountPool) Pick(model string) *Account {
 			enabled = claimers
 		} else if len(fallbacks) > 0 {
 			enabled = fallbacks
+		} else {
+			for _, a := range p.accounts {
+				if len(a.Models) > 0 {
+					return nil // 显式配置过的池无人认领该模型：不派发
+				}
+			}
 		}
 	}
 	// GLM 资格路由

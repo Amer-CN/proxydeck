@@ -43,14 +43,28 @@ func TestPick_Fallback(t *testing.T) {
 }
 
 func TestPick_NoFallbackNoClaimer(t *testing.T) {
-	// 所有账号都有非空 Models 且都不包含请求模型 → 向后兼容：仍能返回某账号
+	// 所有账号都有非空 Models 且都不包含请求模型（= 显式配置过的池）→
+	// 认领权威化：无人认领返回 nil，不再向后兼容地任选账号派发
 	a := &Account{UserID: "a1", Enabled: true, HasGLM53: true, Models: []string{"gpt-4o"}}
 	b := &Account{UserID: "a2", Enabled: true, HasGLM53: true, Models: []string{"claude-3"}}
 	p := newTestPool(a, b)
 
-	got := p.Pick("qwen-max")
-	if got == nil {
-		t.Fatal("Pick(qwen-max) = nil, want non-nil (backward compat)")
+	if got := p.Pick("qwen-max"); got != nil {
+		t.Fatalf("Pick(qwen-max) = %v, want nil (认领权威化：显式池无人认领不派发)", got)
+	}
+}
+
+// TestPick_AllModelsEmpty 全部账号 Models 为空的旧式配置（含单账号本地模式）
+// 保持旧兜底行为：任选 enabled 账号返回，不因认领权威化返回 nil。
+func TestPick_AllModelsEmpty(t *testing.T) {
+	a := &Account{UserID: "a1", Enabled: true, HasGLM53: true}
+	b := &Account{UserID: "a2", Enabled: true, HasGLM53: true}
+	p := newTestPool(a, b)
+
+	for i := 0; i < 5; i++ {
+		if got := p.Pick("qwen-max"); got == nil {
+			t.Fatalf("iter %d: Pick(qwen-max) = nil, want non-nil (旧式配置兜底不变)", i)
+		}
 	}
 }
 
