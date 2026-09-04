@@ -2648,7 +2648,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.8.4</span>
+                    <span class="v ver" id="etchVer">v3.8.5</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3154,13 +3154,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.8.4">v3.8.4</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.8.5">v3.8.5</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.8.4</div>
+                    <div class="s" id="buildNo">v3.8.5</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.8.4</span>
+                  <span class="pt-val" id="verChip">v3.8.5</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -8076,6 +8076,13 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.8.5', date: '2026-09-04', groups: [
+      { label: '🚀 新功能', items: [
+        '种子卫兵上线：每小时盯官方 CLI 签名种子，被换当天告警',
+        '官方发新版自动下载验包，本机不更新也盯得住',
+        '告警直达：GUI 警示条 + 健康检查双出口' ] },
+      { label: '🐛 Bug 修复', items: [
+        '补 gitignore 漏洞：账号备份（含凭证）防误提交' ] } ] },
     { v: 'v3.8.4', date: '2026-09-04', groups: [
       { label: '🚀 新功能', items: [
         '别名映射变化告警：上游偷换 codely 别名底层模型，日志当天报「模型映射变化 旧→新」，流式/非流式全覆盖' ] },
@@ -8877,7 +8884,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.8.4';
+  var UI_CUR = 'v3.8.5';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
