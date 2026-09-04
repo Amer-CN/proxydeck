@@ -906,8 +906,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			s.pacer.pending.Add(1)
 			defer s.pacer.pending.Add(-1)
 		}
-		switches := 0 // 本请求即时换号已用次数（每请求最多 3 次，超限只走第二层等待）
+		switches := 0      // 本请求即时换号已用次数（每请求最多 3 次，超限只走第二层等待）
+		pacedPool := false // 本请求 429 兜底实际介入过——池路径流式成功不写 ok 事件，兜底生命周期须自发上报实时动态
 		for pacing && resp != nil && resp.StatusCode == http.StatusTooManyRequests && time.Now().Before(pacingDeadline) {
+			pacedPool = true
 			poolErrBody, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 			resp.Body.Close()
 			// 第一层：换号即时试（每轮只试一个候选；PickWithToken 按负载/
@@ -917,6 +919,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			if nAcc, nTok := s.pool.PickWithToken(model); nAcc != nil && nAcc.UserID != poolUID && switches < 3 {
 				switches++
 				log.Printf("[tuanjie] pacing pool model=%s account=%s status=429 即时换号 %s 重试 第 %d/3 次", model, poolUID, nAcc.UserID, switches)
+				s.activity.Add("info", model+" · 429 换号 "+poolUID+" → "+nAcc.UserID+"（"+strconv.Itoa(switches)+"/3）", model, nAcc.UserID, 0, 0, 429)
 				select {
 				case <-r.Context().Done():
 				case <-time.After(pacingSwitchBackoff):
@@ -943,6 +946,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			log.Printf("[tuanjie] pacing pool model=%s account=%s status=429 等待 %s 后重发（剩余预算 %s）", model, poolUID, wait.Round(time.Second), time.Until(pacingDeadline).Round(time.Second))
+			s.activity.Add("info", model+" · 429 全池限流，等待 "+strconv.Itoa(int(wait.Round(time.Second).Seconds()))+"s 后重发", model, poolUID, 0, 0, 429)
 			select {
 			case <-r.Context().Done():
 			case <-time.After(wait):
@@ -971,6 +975,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 		// 200 透传（流式逐块冲刷 + 注册表 touch + usage 入账）
 		s.noteUpstreamOK()
+		if pacedPool { // 兜底介入后恢复成功：补完成事件（流式路径没有 ok 事件可承载）
+			s.activity.Add("info", model+" · 限流兜底完成，重发成功", model, poolUID, 0, 0, 200)
+		}
 		copyHeader(w, resp)
 		w.Header().Set("X-Accel-Buffering", "no")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -1045,7 +1052,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	resp, err := send()
 	// 节奏器 429 兜底：pacing 开启时代为等待自动重发（客户端只看到慢请求），
 	// 重发共用同一 30 分钟总预算，超限后透传最后一次原始错误。
+	pacedSingle := false // 本请求 429 兜底实际介入过（成功后补完成事件给实时动态）
 	for pacing && err == nil && resp != nil && resp.StatusCode == http.StatusTooManyRequests && time.Now().Before(pacingDeadline) {
+		pacedSingle = true
 		errBody, _ = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()
 		wait := RetryWait(resp.Header.Get("Retry-After"))
@@ -1056,6 +1065,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		log.Printf("[tuanjie] pacing model=%s status=429 等待 %s 后重发（剩余预算 %s）", model, wait.Round(time.Second), time.Until(pacingDeadline).Round(time.Second))
+		s.activity.Add("info", model+" · 429 限流，等待 "+strconv.Itoa(int(wait.Round(time.Second).Seconds()))+"s 后重发", model, "", 0, 0, 429)
 		select {
 		case <-r.Context().Done():
 		case <-time.After(wait):
@@ -1103,6 +1113,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.noteUpstreamOK()
+	if pacedSingle { // 兜底介入后恢复成功：补完成事件
+		s.activity.Add("info", model+" · 限流等待结束，重发成功", model, "", 0, 0, 200)
+	}
 
 	// 200 但内容为空（上游过载时偶发，ZCode 侧表现为 empty_model_response）：
 	// 在写给客户端之前嗅探，空则丢弃本次响应重放一次。
