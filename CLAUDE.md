@@ -193,6 +193,9 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     排查「回落明明成功但实时动态没有 ok」先想到这条——2026-09-04 媒体改路由
     回落 codely-vl 零 ok 事件即此因（请求实际成功）。例外：429 兜底介入过的
     请求，恢复事件由兜底路径自发上报（v3.8.6），不依赖 ok 事件
+13. **无 BOM 的 UTF-8 .ps1 中文注释会被 PowerShell 5.1 按 GBK 解析**：乱码可能
+    拼出引号/花括号直接炸语法（2026-09-04 换装脚本踩过：报「意外的标记 "}"」
+    且行号错位难排查）。写 .ps1 要么纯 ASCII，要么存成 UTF-8 with BOM
 
 ## 当前状态（2026-09-04）
 
@@ -201,13 +204,13 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - v3.8.6 改动：限流/兜底状态可见化——KIMI-K3 429 兜底事件进团结实时动态
   （tuanjie/server.go 池/单账号双路径），WorkBuddy hy4 行常驻三态状态字 +
   /v1/failover POST 响应补 hy4_limit + 警告条随 fallback 配置显示
-- 远程 main 已同步（2026-09-04 推送至 a1b5569，含标签 v3.8.6）；
+- 远程 main 与本地一致（v3.8.6 发版 a1b5569 + 其后知识库收尾，含标签 v3.8.6）；
   仓库 github.com/Amer-CN/proxydeck
-- 本地换装待做（发版时点）：运行中 exe 与 8788/8787 插件仍是 v3.8.5 代码，
-  git 显示 ProxyDeck.exe modified 属预期；换装走腾位法或 GUI 一键更新，
-  8788/8787 插件需停启一次后端改动才生效
-- 服务通常在跑：55990（headless 主代理）/ 8788（团结）/ 8787（WorkBuddy）/
-  8786（Comate）/ 8785（Qoder）/ 8891（B.AI）
+- 本地已换装并 live 验证（2026-09-04 腾位法，单命令内完成无停机空窗）：GUI 与
+  全部五个插件均跑 v3.8.6 exe，ProxyDeck.old.exe 已删；KIMI-K3 兜底事件在真实
+  429 流量下当场捕获（换号/排队事件 + pending 计数），hy4 failover GET/POST 验证通过
+- 服务当前在跑：8788（团结）/ 8787（WorkBuddy）/ 8786（Comate）/ 8785（Qoder）/
+  8891（B.AI）；55990（headless 主代理）未启动（需要时 `./ProxyDeck.exe -headless`）
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
   出口 IP 计，共享网络易撞墙，撞后负缓存 10 分钟）
 - ZCode 侧模型配置：tuanjie provider（8788）配了 GLM-5.3/codely 系；
