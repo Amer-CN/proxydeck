@@ -2899,7 +2899,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </button>
                 <div class="pt-div"></div>
                                 <div class="pt-banner warn" id="cbHy4Banner" style="display:none">
-                  <div style="flex:1 1 auto"><b>hy4-preview 限流中 · 已自动切换 deepseek-v4-pro</b>
+                  <div style="flex:1 1 auto"><b id="cbHy4Title">hy4-preview 限流中</b>
                     <div id="cbHy4Detail" style="margin-top:2px"></div></div>
                 </div>
                 <div class="pt-div"></div>
@@ -2914,7 +2914,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <div class="stops"><span class="cur">关</span><span>开</span></div>
                     <div class="pt-rail"><i></i><i></i><span class="k"></span></div>
                   </div>
-                  <p class="pt-notice">开启后 8787 在 hy4-preview 撞配额 429 时自动切换 fallback 并按上游重置时点计时，关闭时 429 如实透传。</p>
+                  <p class="pt-notice">开启后 8787 在 hy4-preview 撞配额 429 时自动切换 fallback 并按上游重置时点计时，关闭时 429 如实透传。当前 <b data-val="cbHy4State">—</b></p>
                 </div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -7548,6 +7548,9 @@ var PT_I18N = {
       banner.style.display = 'none';
       return;
     }
+    /* fallback 名取实时配置（banner 标题不再硬编码 deepseek-v4-pro） */
+    var title = $('cbHy4Title');
+    if (title) title.textContent = 'hy4-preview 限流中 · 已自动切换 ' + (lim.fallback || 'fallback');
     var until = new Date(String(lim.until || '').replace(' ', 'T') + '+08:00');
     if (isNaN(until.getTime())) {
       detail.textContent = '恢复时间未知，稍后自动重试 hy4-preview';
@@ -7835,6 +7838,15 @@ var PT_I18N = {
     PTApp.gear('cbHy4', on ? 1 : 0, true);
     var val = document.querySelector('[data-val="cbHy4"]');
     if (val) val.textContent = on ? '开' : '关';
+    /* 常驻状态字（照抄 tjK3Pend 样式）：/v1/failover 的 hy4_limit 三态——
+       兜底关 / 未限流正常 / 限流中跑 fallback，配 3 秒轮询实时刷新 */
+    var st = document.querySelector('[data-val="cbHy4State"]');
+    if (st) {
+      if (!on) st.textContent = '兜底关 · 429 直接透传';
+      else if (cfg.hy4_limit && cfg.hy4_limit.active)
+        st.textContent = '已限流 · 正在用 ' + (cfg.hy4_limit.fallback || cfg.fallback) + ' 跑';
+      else st.textContent = '未限流 · hy4-preview 正常跑';
+    }
     var sel = $('cbHy4Fallback');
     if (sel) {
       var opts = (models || []).slice();

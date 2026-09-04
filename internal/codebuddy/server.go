@@ -366,7 +366,9 @@ func (s *Server) handleFailover(w http.ResponseWriter, r *http.Request) {
 		s.failMu.Unlock()
 		s.saveFailover()
 		log.Printf("[codebuddy] failover 配置更新: enabled=%v fallback=%s", cfg.enabled, cfg.fallback)
-		writeJSON(w, map[string]any{"enabled": cfg.enabled, "fallback": cfg.fallback})
+		// 响应体与 GET 同构补 hy4_limit：GUI 切开关后立即用 POST 响应渲染状态字，
+		// 缺该字段会短暂显示错误的「未限流」，等 3 秒轮询才纠正。
+		writeJSON(w, map[string]any{"enabled": cfg.enabled, "fallback": cfg.fallback, "hy4_limit": s.hy4LimitState()})
 	default:
 		writeErr(w, 405, "method not allowed")
 	}
