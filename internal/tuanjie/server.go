@@ -1201,6 +1201,17 @@ func (s *Server) forwardExternal(w http.ResponseWriter, r *http.Request, body []
 	started := time.Now()
 	if path == "/chat/completions" {
 		body = sanitizeForExternal(body)
+		// 协议分流（账号配置的 protocol，providers.go Add 归一化）：responses 转
+		// 出站 /v1/responses + 结果翻回 chat 格式（responses_forward.go）；anthropic
+		// 转出站 /v1/messages + 结果翻回 chat 格式（anthropic_forward.go）；旧配置
+		// 无 protocol 字段时用 isZenResponsesModel 兜底，保证 Zen 老配置不断流。
+		// 媒体改路由识图与普通 chat 调用点都汇入这里，回落语义不变。
+		switch externalProtocolRoute(prov, model) {
+		case "responses":
+			return s.forwardExternalResponses(w, r, body, model, wantsStream, prov, started)
+		case "anthropic":
+			return s.forwardExternalAnthropic(w, r, body, model, wantsStream, prov, started)
+		}
 	}
 	pname := prov.Name
 	rid := s.registry.Register(model, pname, wantsStream)

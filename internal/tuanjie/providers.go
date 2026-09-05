@@ -25,11 +25,15 @@ const providerFetchTimeout = 2500 * time.Millisecond
 
 // ExternalProvider 用户配置的外部 provider（tuanjie-providers.json）。
 // Models 是参与转发的模型列表（缺省空 = 仅展示不转发，向后兼容旧配置）。
+// Protocol 出站协议：chat（/chat/completions，缺省）/ responses（/responses）/
+// anthropic（/v1/messages，仅存值暂不转发）；Add 时归一化，旧配置无此字段时
+// 由 ProviderProtocol 归为 chat（Zen 老配置的 responses 兜底在分流处单独判）。
 type ExternalProvider struct {
-	Name    string   `json:"name"`
-	BaseURL string   `json:"base_url"`
-	APIKey  string   `json:"api_key"`
-	Models  []string `json:"models,omitempty"`
+	Name     string   `json:"name"`
+	BaseURL  string   `json:"base_url"`
+	APIKey   string   `json:"api_key"`
+	Models   []string `json:"models,omitempty"`
+	Protocol string   `json:"protocol,omitempty"`
 }
 
 // ProviderInfo 单个 provider 的展示信息（不含 api_key）。
@@ -40,6 +44,7 @@ type ProviderInfo struct {
 	BaseURL      string         `json:"base_url"`
 	ConfigModels []string       `json:"config_models"`
 	Models       []string       `json:"models"`
+	Protocol     string         `json:"protocol,omitempty"`
 	OK           bool           `json:"ok"`
 	Error        string         `json:"error,omitempty"`
 	SubStatus    string         `json:"subscription_status,omitempty"`
@@ -135,11 +140,27 @@ func (ps *ProviderStore) AllModels() []struct {
 	return out
 }
 
-// Add 添加（重名拒绝）。命名/URL 规范化、models 逐条去空白后落盘。
+// ProviderProtocol 返回归一化出站协议：trim+小写，仅 chat/responses/anthropic
+// 三值有效，其余（含旧配置无 protocol 字段的空值）一律归为 chat。
+// 注意：Zen 老配置（无 protocol 字段）靠分流处的 isZenResponsesModel 兜底走
+// responses，不经本函数判定。
+func ProviderProtocol(p *ExternalProvider) string {
+	switch strings.ToLower(strings.TrimSpace(p.Protocol)) {
+	case "responses":
+		return "responses"
+	case "anthropic":
+		return "anthropic"
+	default:
+		return "chat"
+	}
+}
+
+// Add 添加（重名拒绝）。命名/URL/协议归一化、models 逐条去空白后落盘。
 func (ps *ProviderStore) Add(p ExternalProvider) bool {
 	p.Name = strings.TrimSpace(p.Name)
 	p.BaseURL = strings.TrimRight(strings.TrimSpace(p.BaseURL), "/")
 	p.APIKey = strings.TrimSpace(p.APIKey)
+	p.Protocol = ProviderProtocol(&p)
 	models := p.Models[:0:0]
 	for _, m := range p.Models {
 		if m = strings.TrimSpace(m); m != "" {
@@ -199,6 +220,37 @@ func (ps *ProviderStore) RemoveModel(providerName, model string) bool {
 				}
 			}
 			return false
+		}
+	}
+	return false
+}
+
+// Update 按名称更新 base_url / api_key / protocol（编辑账号，免删改）：
+// api_key 留空 = 保留原值；protocol 留空 = 保留原值（旧配置磁盘空值不回填成
+// chat，Zen 兜底依赖空值），显式给值才经 ProviderProtocol 归一化；Models 与
+// 名称一律不动。账号不存在或 base_url 为空返回 false。
+func (ps *ProviderStore) Update(name string, p ExternalProvider) bool {
+	name = strings.TrimSpace(name)
+	p.BaseURL = strings.TrimRight(strings.TrimSpace(p.BaseURL), "/\\")
+	p.APIKey = strings.TrimSpace(p.APIKey)
+	p.Protocol = strings.TrimSpace(p.Protocol)
+	if name == "" || p.BaseURL == "" {
+		return false
+	}
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	for i, e := range ps.list {
+		if e.Name == name {
+			ps.list[i].BaseURL = p.BaseURL
+			if p.APIKey != "" {
+				ps.list[i].APIKey = p.APIKey
+			}
+			if p.Protocol != "" {
+				ps.list[i].Protocol = ProviderProtocol(&p)
+			}
+			ps.saveLocked()
+			delete(ps.cache, name)
+			return true
 		}
 	}
 	return false
@@ -295,9 +347,12 @@ func (ps *ProviderStore) Invalidate() {
 }
 
 // baseInfo 仅由本地配置拼出的展示信息（不发网络），供冷启动占位与拉取初值共用。
+// Protocol 透传原始值：旧配置（无 protocol 字段）原样给空串，前端徽章只认
+// responses/anthropic（chat 与空串都不显示），行为不变。
 func baseInfo(p ExternalProvider) ProviderInfo {
 	return ProviderInfo{Name: p.Name, BaseURL: p.BaseURL,
-		ConfigModels: append([]string{}, p.Models...), Models: []string{}}
+		ConfigModels: append([]string{}, p.Models...), Models: []string{},
+		Protocol: p.Protocol}
 }
 
 // fetchProviderInfo 查单个 provider：模型列表 + 订阅 + 用量。

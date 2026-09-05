@@ -2648,7 +2648,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.8.6</span>
+                    <span class="v ver" id="etchVer">v3.9.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3154,13 +3154,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.8.6">v3.8.6</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.9.0">v3.9.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.8.6</div>
+                    <div class="s" id="buildNo">v3.9.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.8.6</span>
+                  <span class="pt-val" id="verChip">v3.9.0</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -3299,7 +3299,12 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="acc-f-row"><label>base_url</label><input class="pt-field" id="pvUrl" placeholder="https://host/v1" spellcheck="false" autocomplete="off"></div>
                   <div class="acc-f-row"><label>api_key</label><input class="pt-field" id="pvKey" type="password" placeholder="Bearer key" spellcheck="false" autocomplete="off"></div>
                   <div class="acc-f-row"><label>models</label><input class="pt-field" id="pvModels" placeholder="agnes-2.0-flash, agnes-image-2.1-flash" spellcheck="false" autocomplete="off"></div>
-                  <p class="acc-f-help">OpenAI 兼容第三方源：订阅/用量取自其计费接口，不支持的端点会如实标注；models 留空 = 仅信息展示，填写的模型命中请求时由该源直接转发（静态 Bearer，不占团结账号池）。加账号后可在卡片上逐个增删模型。</p>
+                  <div class="acc-f-row"><label>protocol</label><select class="pt-field" id="pvProtocol" title="该账号的出站协议，决定转发到哪个端点">
+                    <option value="chat" selected>Chat Completions（/chat/completions）</option>
+                    <option value="responses">Responses（/responses）</option>
+                    <option value="anthropic">Anthropic Messages（/v1/messages）</option>
+                  </select></div>
+                  <p class="acc-f-help">OpenAI 兼容第三方源：订阅/用量取自其计费接口，不支持的端点会如实标注；models 留空 = 仅信息展示，填写的模型命中请求时由该源直接转发（静态 Bearer，不占团结账号池）。加账号后可在卡片上逐个增删模型。protocol 决定出站端点：chat=/chat/completions、responses=/responses（如 Zen muse-spark 只支持此协议）、anthropic=/v1/messages（原生 x-api-key 认证），旧账号无此字段按原行为兼容。</p>
                   <div class="acc-f-actions"><button type="button" class="ibtn2 accent" id="pvAdd">添加</button></div>
                 </div>
                </div></div>
@@ -5293,9 +5298,14 @@ var PT_I18N = {
      并入媒体转路由子页面后由 openMediaReroutePage 打开（openProvidersPage 保留为入口别名）。 */
   function pvCardHtml(p) {
     var host = (p.base_url || "").replace(/^https?:\/\//, "");
-    var usageTxt = p.usage && typeof p.usage.total_usage === "number"
-      ? "$" + (p.usage.total_usage / 100).toFixed(2)
-      : "不可用";
+    var usageUnknown = !(p.usage && typeof p.usage.total_usage === "number");
+    var usageTxt = usageUnknown
+      ? "用量未知"
+      : "$" + (p.usage.total_usage / 100).toFixed(2);
+    /* 悬停提示只在"用量未知"时挂：查询成功时"用量查询未成功"字样会自相矛盾 */
+    var usageTitle = usageUnknown
+      ? ' title="用量查询未成功（' + escHtml(p.usage_status || "无数据") + '）；不影响账号连接与模型转发"'
+      : '';
     /* 紧凑两行卡：首行 LED·名称·host·用量·删除；次行状态+模型徽章+内联加模型。
        原五段堆叠（头部/徽章/限额/操作/加模型各占一行）一张卡吃掉半屏 */
     var limitTxt = p.sub
@@ -5309,15 +5319,21 @@ var PT_I18N = {
         (configured ? ' <button type="button" class="pv-x" data-pv-mdel="' + escHtml(p.name) + '" data-pv-mname="' + escHtml(m) + '" title="删除模型 ' + escHtml(m) + '">✕</button>' : '') +
         '</span>';
     }).join(" ");
+    // 协议徽章：responses/anthropic 才显示（chat 缺省不显示，省地方）；旧数据无 protocol 字段同样不显示
+    var protoTag = p.protocol === "responses" ? '<span class="acc-tag glm" title="出站协议 Responses（/responses）">Responses</span> '
+      : p.protocol === "anthropic" ? '<span class="acc-tag glm" title="出站协议 Anthropic Messages（/v1/messages）">Anthropic</span> '
+      : '';
     return '<div class="mx-card' + (p.ok ? '' : ' off') + '">' +
       '<div class="pv-line"><span class="mx-led' + (p.ok ? '' : ' off') + '"></span>' +
       '<span class="mx-name">' + escHtml(p.name) + '</span>' +
       '<span class="pv-host" title="' + escHtml(host) + '">' + escHtml(host) + '</span>' +
-      '<span class="pv-usage"><b>' + usageTxt + '</b>' + limitTxt + '</span>' +
+      '<span class="pv-usage"' + usageTitle + '><b>' + usageTxt + '</b>' + limitTxt + '</span>' +
+      '<button type="button" class="ibtn2" data-pv-edit="' + escHtml(p.name) + '" title="修改该账号的 base_url / api_key / 协议（models 在卡片上增删）">改</button>' +
       '<button type="button" class="ibtn2" data-pv-del="' + escHtml(p.name) + '" title="删除该外部账号">删</button></div>' +
       '<div class="pv-models">' +
       (p.ok ? '<span class="acc-tag" style="background:#3ecf8e">已连接</span>'
-            : '<span class="acc-tag budget">不可达</span>') +
+            : '<span class="acc-tag budget">不可达</span>') + ' ' +
+      protoTag +
       (p.sub && p.sub.has_payment_method ? '<span class="acc-tag glm">已绑支付</span> ' : '') +
       models +
       '<span class="pv-model-add">' +
@@ -5330,6 +5346,8 @@ var PT_I18N = {
   /* 外部账号卡列表 + 新增表单常驻媒体转路由甲板（静态标记见 ui-src.html data-deck="media"），
      这里只渲染卡片网格。 */
   /* 渲染外部账号卡 + 上屏读数 + 重绑卡片事件（给什么画什么：live 数据 / 缓存数据 / null=失败） */
+  /* 当前正在编辑的账号名（""=非编辑态，添加表单按新增走）；与 bindPvAdd 同作用域共享 */
+  var pvEditName = "";
   function renderProvidersData(provs) {
     var grid = $('pvGrid');
     if (!grid) return;
@@ -5347,6 +5365,34 @@ var PT_I18N = {
           });
         } catch (e) { toast('err', '外部账号', '删除失败（团结插件未启动？）'); }
         refreshProviders();
+      };
+    });
+    grid.querySelectorAll('[data-pv-edit]').forEach(function (b) {
+      b.onclick = function () {
+        var p = (provs || []).find(function (x) { return x.name === b.dataset.pvEdit; });
+        var nameI = $('pvName'), urlI = $('pvUrl'), keyI = $('pvKey'), sel = $('pvProtocol');
+        if (!nameI) return;
+        pvEditName = b.dataset.pvEdit;
+        var fbody = $('pvFormBody'), tgl = $('pvFormToggle');
+        if (fbody) fbody.hidden = false;
+        if (tgl) tgl.textContent = '− 收起添加表单';
+        nameI.value = pvEditName;
+        nameI.readOnly = true;
+        if (urlI) urlI.value = (p && p.base_url) || "";
+        if (keyI) { keyI.value = ""; keyI.placeholder = "留空 = 保持原 key"; }
+        if (sel) {
+          var tmp = sel.querySelector('option[value=""]'); // 上一次编辑残留的临时项
+          if (tmp) tmp.remove();
+          if (p && !p.protocol) {
+            // 旧配置（磁盘无 protocol 字段）：插入临时空值项并选中，提交时不改动
+            var o = document.createElement('option');
+            o.value = ""; o.textContent = "旧配置·自动（不改动）";
+            sel.insertBefore(o, sel.firstChild);
+          }
+          sel.value = (p && p.protocol) || "";
+        }
+        var abtn = $('pvAdd');
+        if (abtn) abtn.textContent = "保存修改";
       };
     });
     grid.querySelectorAll('[data-pv-mdel]').forEach(function (b) {
@@ -5415,7 +5461,7 @@ var PT_I18N = {
     });
     setScReadout('mrScExt', provs.length ? okN + '/' + provs.length + ' 可达' : '未配置',
       provs.length ? (okN ? (okN === provs.length ? 'ok' : 'warn') : 'crit') : '');
-    setScReadout('mrScUsage', hasUsage ? '$' + (usage / 100).toFixed(2) : '不可用', '');
+    setScReadout('mrScUsage', hasUsage ? '$' + (usage / 100).toFixed(2) : '用量未知', '');
     PTApp.dot('mrExt', okN > 0, false, provs.length ? (okN + '/' + provs.length) : '');
   }
   /* 新增外部账号表单：DOM 常驻媒体转路由甲板且默认折叠，程序初始化时绑一次 */
@@ -5430,16 +5476,32 @@ var PT_I18N = {
     add.onclick = async function () {
       var name = ($('pvName').value || "").trim(), url = ($('pvUrl').value || "").trim(), key = ($('pvKey').value || "").trim();
       var models = ($('pvModels').value || "").split(",").map(function (m) { return m.trim(); }).filter(function (m) { return m; });
-      if (!name || !url || !key) { toast("err", "外部账号", "名称 / base_url / api_key 都不能为空"); return; }
+      var proto = ($('pvProtocol') && !$('pvProtocol').disabled && $('pvProtocol').value) || "chat";
+      var editing = !!pvEditName;
+      // 编辑态只要求 base_url（key 留空 = 保持原 key）；protocol 传下拉现值（临时项即 ""，后端保留原值）
+      if (editing ? !url : (!name || !url || !key)) { toast("err", "外部账号", editing ? "base_url 不能为空" : "名称 / base_url / api_key 都不能为空"); return; }
+      var payload = editing
+        ? { action: "edit", name: pvEditName, base_url: url, api_key: key, protocol: ($('pvProtocol') && $('pvProtocol').value) || "" }
+        : { action: "add", name: name, base_url: url, api_key: key, models: models, protocol: proto };
       var r = null;
       try {
         r = await (await fetch("http://127.0.0.1:8788/providers", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "add", name: name, base_url: url, api_key: key, models: models })
+          body: JSON.stringify(payload)
         })).json();
       } catch (e) { toast("err", "外部账号", "保存失败（团结插件未启动？）"); return; }
       toast(r.ok ? "ok" : "err", "外部账号", r.msg || "");
-      if (r.ok) { $('pvName').value = ""; $('pvUrl').value = ""; $('pvKey').value = ""; $('pvModels').value = ""; }
+      if (r.ok) {
+        if (editing) { // 清编辑态，恢复"添加"默认表单
+          pvEditName = "";
+          $('pvName').readOnly = false;
+          var abtn = $('pvAdd'); if (abtn) abtn.textContent = "添加";
+          var tmp = $('pvProtocol') && $('pvProtocol').querySelector('option[value=""]');
+          if (tmp) tmp.remove();
+          var keyI = $('pvKey'); if (keyI) keyI.placeholder = "Bearer key";
+        }
+        $('pvName').value = ""; $('pvUrl').value = ""; $('pvKey').value = ""; $('pvModels').value = ""; if ($('pvProtocol')) $('pvProtocol').value = "chat";
+      }
       refreshProviders();
     };
   }
@@ -8088,6 +8150,12 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.9.0', date: '2026-09-05', groups: [
+      { label: '🚀 新功能', items: [
+        '外部账号支持 Responses / Anthropic 协议自动转发',
+        '外部账号卡片支持在线编辑，免删号重加' ] },
+      { label: '✨ 体验优化', items: [
+        '用量拿不到时显示「用量未知」，不再误读成不可用' ] } ] },
     { v: 'v3.8.6', date: '2026-09-04', groups: [
       { label: '🚀 新功能', items: [
         '团结 KIMI-K3 限流兜底全程上实时动态：换号、排队、恢复可见',
@@ -8902,7 +8970,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.8.6';
+  var UI_CUR = 'v3.9.0';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });

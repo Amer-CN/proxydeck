@@ -237,12 +237,13 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Action  string   `json:"action"` // add | remove | addmodel | removemodel
-		Name    string   `json:"name"`
-		BaseURL string   `json:"base_url"`
-		APIKey  string   `json:"api_key"`
-		Models  []string `json:"models"` // 参与转发的模型（可空=仅展示）
-		Model   string   `json:"model"`  // addmodel/removemodel 的单个模型
+		Action   string   `json:"action"` // add | edit | remove | addmodel | removemodel
+		Name     string   `json:"name"`
+		BaseURL  string   `json:"base_url"`
+		APIKey   string   `json:"api_key"`
+		Models   []string `json:"models"`  // 参与转发的模型（可空=仅展示）
+		Model    string   `json:"model"`   // addmodel/removemodel 的单个模型
+		Protocol string   `json:"protocol"` // 出站协议 chat/responses/anthropic（可空=chat，Add 内归一化）
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "msg": "请求体解析失败"})
@@ -250,11 +251,19 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 	}
 	switch req.Action {
 	case "add":
-		if s.providers.Add(ExternalProvider{Name: req.Name, BaseURL: req.BaseURL, APIKey: req.APIKey, Models: req.Models}) {
+		if s.providers.Add(ExternalProvider{Name: req.Name, BaseURL: req.BaseURL, APIKey: req.APIKey, Models: req.Models, Protocol: req.Protocol}) {
 			s.providers.Invalidate()
 			writeJSON(w, map[string]any{"ok": true, "msg": "外部账号已添加"})
 		} else {
 			writeJSON(w, map[string]any{"ok": false, "msg": "添加失败（名称/base_url/key 不能为空，或名称已存在）"})
+		}
+	case "edit":
+		// key/protocol 留空 = 保留原值（Update 内处理），models 不动
+		if s.providers.Update(req.Name, ExternalProvider{Name: req.Name, BaseURL: req.BaseURL, APIKey: req.APIKey, Protocol: req.Protocol}) {
+			s.providers.Invalidate()
+			writeJSON(w, map[string]any{"ok": true, "msg": "外部账号已更新"})
+		} else {
+			writeJSON(w, map[string]any{"ok": false, "msg": "更新失败（账号不存在或 base_url 为空）"})
 		}
 	case "remove":
 		if s.providers.Remove(req.Name) {
