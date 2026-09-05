@@ -195,20 +195,43 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     请求，恢复事件由兜底路径自发上报（v3.8.6），不依赖 ok 事件
 13. **无 BOM 的 UTF-8 .ps1 中文注释会被 PowerShell 5.1 按 GBK 解析**：乱码可能
     拼出引号/花括号直接炸语法（2026-09-04 换装脚本踩过：报「意外的标记 "}"」
-    且行号错位难排查）。写 .ps1 要么纯 ASCII，要么存成 UTF-8 with BOM
+    且行号错位难排查）。写 .ps1 要么纯 ASCII，要么存成 UTF-8 with BOM。
+    **变体（2026-09-05 ZCode stop hook 踩过）**：`[Console]::In.ReadToEnd()` 读
+    管道也按 GBK 解码——ZCode 喂 UTF-8，中文全变乱码、正则永不命中（每轮误拦）。
+    修法：stdin 用 `[Console]::OpenStandardInput()` 按字节读再 UTF8.GetString，
+    输出错误同样按 UTF8 字节写 stderr。
 
-## 当前状态（2026-09-04）
+## 外部账号（tuanjie-providers.json，v3.9.0）
 
-- 版本 v3.8.6（GitHub Release v3.8.6 已发布，2026-09-04）；
+- **三协议**：账号自带 `protocol` 字段——chat（/chat/completions 缺省）/
+  responses（/responses，Zen muse-spark-1.3-contributor-free 只支持此协议）/
+  anthropic（/v1/messages，原生 x-api-key + anthropic-version 认证）；入站统一
+  chat，出站按协议转换后翻回 chat，客户端零改动
+- 旧配置无 protocol 字段走 isZenResponsesModel 白名单兜底（Zen 老条目不断流）；
+  **edit 更新时 protocol 留空=保留原值，磁盘空值绝不能回填 chat**
+- **在线编辑**：卡片「改」按钮免删号重加；api_key 留空=保持原 key
+- 计费徽章语义：绿点「已连接」=计费接口连通，不代表模型可用；用量拿不到
+  显示「用量未知」（很多源不实现 OpenAI 计费接口，属正常）
+- **媒体改路由链**（tuanjie-media.json）：vision=muse-spark（Zen 免费，识图
+  主力）/ image、video 仍走 Agnes；识图回落链 vision→vision_fallback→codely-vl
+  兜尾。**只对团结 8788 生效**——其他插件无此逻辑；含图请求整轮改写（含全部
+  上下文）交给识图模型，图片入历史后每轮都会触发（codely-core→muse-spark
+  610 次实测），与客户端自己的识图子智能体不冲突（子智能体用识图模型直通，
+  主对话轮次被兜底）
+- **日志重定向坑**：手动拉插件别用 PowerShell `Start-Process -RedirectStandard*`
+  （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
+  保留历史日志，GUI 日志面板才有内容）
+
+## 当前状态（2026-09-05）
+
+- 版本 v3.9.0（GitHub Release v3.9.0 已发布，commit 4516ee1，含 exe 附件）；
   一键更新已上线（GUI 内直接下载替换重启，无需去网页）
-- v3.8.6 改动：限流/兜底状态可见化——KIMI-K3 429 兜底事件进团结实时动态
-  （tuanjie/server.go 池/单账号双路径），WorkBuddy hy4 行常驻三态状态字 +
-  /v1/failover POST 响应补 hy4_limit + 警告条随 fallback 配置显示
-- 远程 main 与本地一致（v3.8.6 发版 a1b5569 + 其后知识库收尾，含标签 v3.8.6）；
-  仓库 github.com/Amer-CN/proxydeck
-- 本地已换装并 live 验证（2026-09-04 腾位法，单命令内完成无停机空窗）：GUI 与
-  全部五个插件均跑 v3.8.6 exe，ProxyDeck.old.exe 已删；KIMI-K3 兜底事件在真实
-  429 流量下当场捕获（换号/排队事件 + pending 计数），hy4 failover GET/POST 验证通过
+- v3.9.0 改动：外部账号多协议转发（Responses/Anthropic）+ 协议下拉 + 在线
+  编辑 + 「用量未知」文案；核心文件 internal/tuanjie/responses_forward.go、
+  anthropic_forward.go、providers.go（Update）、handlers_extra.go（edit action）
+- 远程 main 与本地一致（4516ee1，含标签 v3.9.0）；仓库 github.com/Amer-CN/proxydeck
+- 本地已全停换装并 live 验证（2026-09-05）：GUI 与五个插件全部跑 v3.9.0 exe，
+  旧 exe 残留已清；muse-spark 经 8788 非流式/流式转发实测 200，五端口健康
 - 服务当前在跑：8788（团结）/ 8787（WorkBuddy）/ 8786（Comate）/ 8785（Qoder）/
   8891（B.AI）；55990（headless 主代理）未启动（需要时 `./ProxyDeck.exe -headless`）
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
