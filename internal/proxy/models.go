@@ -9,11 +9,11 @@ import (
 )
 
 // modelInfo 描述一个模型及其所属套餐。
-// Go 套餐字段与官方 https://commandcode.ai/docs/plans/go 的 32 个模型表保持一致。
+// Go 套餐字段与官方 https://commandcode.ai/docs/plans/go 的 36 个模型表保持一致。
 type modelInfo struct {
 	ID      string
 	OwnedBy string
-	OnGo    bool // 是否包含在 Go 套餐（32 个）内
+	OnGo    bool // 是否包含在 Go 套餐（36 个）内
 }
 
 // catalogModels 官方完整模型目录（61 个），按厂商 A→Z 分组。
@@ -103,12 +103,12 @@ var catalogModels = []modelInfo{
 }
 
 // HandleModels handles the /v1/models endpoint.
-// 支持 ?plan=go 只返回 Go 套餐内模型（32 个），默认返回全部 55 个——与官方目录一致。
+// 支持 ?plan=go 只返回 Go 套餐内模型（36 个），默认返回全部 61 个——与官方目录一致。
 func (p *Proxy) HandleModels(w http.ResponseWriter, r *http.Request) {
 	plan := r.URL.Query().Get("plan")
 	items := catalogModels
 	if plan == "go" {
-		items = make([]modelInfo, 0, 32)
+		items = make([]modelInfo, 0, 36)
 		for _, m := range catalogModels {
 			if m.OnGo {
 				items = append(items, m)

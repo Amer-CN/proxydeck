@@ -102,14 +102,14 @@ func (p *Proxy) writeAnthropicError(w http.ResponseWriter, status int, message, 
 }
 
 // checkPlanModel 校验模型是否在当前套餐内：catalogModels 中 OnGo=false 的模型
-// （claude-*、google/gemini-* 等）不在 Go 套餐（32 个）内，直接返回明确错误；
+// （claude-*、google/gemini-* 等）不在 Go 套餐（36 个）内，直接返回明确错误；
 // 未收录的未知模型放行（与 MapModel 的透传策略一致，由上游决定是否接受）。
 func checkPlanModel(model string) error {
 	mapped := MapModel(model)
 	for _, m := range catalogModels {
 		if m.ID == mapped {
 			if !m.OnGo {
-				return fmt.Errorf("model %q is not included in your current plan; it requires Pro or Max (Go plan includes 32 models, see /v1/models?plan=go)", model)
+				return fmt.Errorf("model %q is not included in your current plan; it requires Pro or Max (Go plan includes 36 models, see /v1/models?plan=go)", model)
 			}
 			return nil
 		}

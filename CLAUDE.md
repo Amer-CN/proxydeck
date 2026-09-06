@@ -87,8 +87,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 ## 模型情报（实测结论，血泪换来的）
 
 ### 团结（8788，tuanjie）——主力
-- 白名单 6 个模型 ID，**大小写敏感**：`GLM-5.3`、`KIMI-K3`（全大写）、
-  `codely-core/basic/flash/air/vl`
+- 可用模型 ID（2026-09-06 实测 /v1/models，大小写敏感）：`KIMI-K3`（全大写）、
+  `GLM-5.3-FLASH`、`codely-core/basic/flash/air/vl`；**GLM-5.3 直连名已 401**
+  （team_model_access_denied，上游白名单只剩 alias-only-proxy-models / KIMI-K3 / GLM-5.3-FLASH），
+  **codely-core 即 GLM-5.3 的承载入口**——上游把 GLM-5.3 收进 core 别名，
+  选 core 实际用的就是 GLM-5.3（用户 2026-09-06 确认，直连 401 同日复核）
 - codely-basic/flash/air 同后端 `deepseek-v4-flash-0731`（真 v4 flash），仅推理深度不同
   （实测同题：basic 3.8K / air 6.8K / flash 9.4K reasoning tokens）
 - 费率（官方 /model/info）：codely 系 1.6/3.2；GLM-5.3 3.2/11.2；KIMI-K3 16/80（贵，慎用）
