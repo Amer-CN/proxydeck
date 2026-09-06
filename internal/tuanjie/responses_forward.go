@@ -334,6 +334,9 @@ func responsesToChatCompletion(respBody []byte, model string) ([]byte, *respUsag
 			Arguments string `json:"arguments"`
 		} `json:"output"`
 		Usage *respUsage `json:"usage"`
+		IncompleteDetails *struct {
+			Reason string `json:"reason"`
+		} `json:"incomplete_details"`
 	}
 	if err := json.Unmarshal(respBody, &rr); err != nil {
 		return nil, nil, false
@@ -372,6 +375,10 @@ func responsesToChatCompletion(respBody []byte, model string) ([]byte, *respUsag
 	finish := "stop"
 	if len(toolCalls) > 0 {
 		finish = "tool_calls"
+	} else if rr.Status == "incomplete" && rr.IncompleteDetails != nil &&
+		rr.IncompleteDetails.Reason == "max_output_tokens" {
+		// Responses API max_output_tokens 耗尽收尾，对齐 chat 语义的截断口径
+		finish = "length"
 	}
 	message := map[string]any{"role": "assistant", "content": content}
 	if len(toolCalls) > 0 {
@@ -468,6 +475,9 @@ func streamResponsesToChat(w io.Writer, fl http.Flusher, model string, body io.R
 						Error *struct {
 							Message string `json:"message"`
 						} `json:"error"`
+						IncompleteDetails *struct {
+							Reason string `json:"reason"`
+						} `json:"incomplete_details"`
 					} `json:"response"`
 				}
 				if json.Unmarshal([]byte(payload), &ev) == nil {
@@ -487,7 +497,9 @@ func streamResponsesToChat(w io.Writer, fl http.Flusher, model string, body io.R
 							}}}, "", nil)
 							toolCount++
 						}
-					case "response.completed":
+					case "response.completed", "response.incomplete":
+						// incomplete = max_output_tokens 等耗尽收尾（Responses API 规范），
+						// 不接住这条客户端会收到零块空流
 						if ev.Response != nil && ev.Response.Usage != nil && onUsage != nil {
 							u := ev.Response.Usage
 							onUsage(u.InputTokens, u.OutputTokens, u.TotalTokens)
@@ -495,6 +507,10 @@ func streamResponsesToChat(w io.Writer, fl http.Flusher, model string, body io.R
 						finish := "stop"
 						if toolCount > 0 {
 							finish = "tool_calls"
+						} else if ev.Type == "response.incomplete" && ev.Response != nil &&
+							ev.Response.IncompleteDetails != nil &&
+							ev.Response.IncompleteDetails.Reason == "max_output_tokens" {
+							finish = "length"
 						}
 						var usage *respUsage
 						if ev.Response != nil {

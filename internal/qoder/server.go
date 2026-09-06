@@ -219,6 +219,8 @@ func isQuotaError(msg string) bool {
 func (s *Server) handleCreditsSet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "仅支持 POST"})
 		return
 	}

@@ -723,6 +723,11 @@ var pacingSwitchBackoff = time.Second
 // 每次请求记录 model/状态码/耗时到日志；流式注入 include_usage 并解析
 // 最终 usage chunk 计入消耗统计（/v1/stats 供 GUI 消耗 TOP 展示）。
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 64<<20))
 	var req struct {
 		Model  string          `json:"model"`
@@ -1345,8 +1350,14 @@ func (s *Server) handleImagesGenerations(w http.ResponseWriter, r *http.Request)
 		})
 		return
 	}
-	if st := s.forwardExternal(w, r, body, model, false, prov, "/images/generations"); st == -1 {
-		writeJSON(w, map[string]any{"error": map[string]any{"message": prov.Name + " 生图请求失败（网络错误，详见实时动态）", "type": "server_error"}})
+	if st := s.forwardExternal(w, r, body, model, false, prov, "/images/generations"); st != 0 {
+		if st == -1 {
+			writeJSON(w, map[string]any{"error": map[string]any{"message": prov.Name + " 生图请求失败（网络错误，详见实时动态）", "type": "server_error"}})
+		} else {
+			// 429/5xx：forwardExternal 未写客户端，必须在此写终态，
+			// 否则 Go 兜底 200 空响应（实测 Agnes 429 曾被吞成 200 空体）
+			writeErr(w, st, prov.Name+" 生图请求失败（HTTP "+strconv.Itoa(st)+"，限流或暂时故障），请稍后重试")
+		}
 	}
 }
 
@@ -1402,8 +1413,14 @@ func (s *Server) handleVideoCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if st := s.forwardExternal(w, r, body, model, false, prov, "/videos"); st == -1 {
-		writeJSON(w, map[string]any{"error": map[string]any{"message": prov.Name + " 视频请求失败（网络错误，详见实时动态）", "type": "server_error"}})
+	if st := s.forwardExternal(w, r, body, model, false, prov, "/videos"); st != 0 {
+		if st == -1 {
+			writeJSON(w, map[string]any{"error": map[string]any{"message": prov.Name + " 视频请求失败（网络错误，详见实时动态）", "type": "server_error"}})
+		} else {
+			// 429/5xx：forwardExternal 未写客户端，必须在此写终态，
+			// 否则 Go 兜底 200 空响应（实测 Agnes 429 曾被吞成 200 空体）
+			writeErr(w, st, prov.Name+" 视频任务创建失败（HTTP "+strconv.Itoa(st)+"，限流或暂时故障），请稍后重试")
+		}
 	}
 }
 
