@@ -94,7 +94,9 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   选 core 实际用的就是 GLM-5.3（用户 2026-09-06 确认，直连 401 同日复核）
 - codely-basic/flash/air 同后端 `deepseek-v4-flash-0731`（真 v4 flash），仅推理深度不同
   （实测同题：basic 3.8K / air 6.8K / flash 9.4K reasoning tokens）
-- 费率（官方 /model/info）：codely 系 1.6/3.2；GLM-5.3 3.2/11.2；KIMI-K3 16/80（贵，慎用）
+- 费率（官方 /model/info）：codely 系 1.6/3.2；GLM-5.3 3.2/11.2；KIMI-K3 16/80（贵，慎用）。
+  **⚠ 2026-09-06 晚实测 `/model/info` 上游已拦（nginx 403 HTML，带签名也一样），
+  代理正确回 502——费率数字是历史缓存，不再能实时刷新**
 - **KIMI-K3 429 兜底（pacing，GUI「K3 限流护航」拨杆 /kimi-pacing）**：model 含
   "KIMI" 才启用；池路径两层——即时换号（≤3 次，换前 1s 退避）+ 全池撞墙按
   Retry-After 排队重发（单请求 30 分钟总预算）；单账号路径只有等待层。v3.8.6 起
@@ -168,12 +170,24 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 ### B.AI / b.ai（8891）——已重新接入（v3.5.0），但保留当年实测结论
 - **现状**：`internal/bai`，COMMAND 键副页，Go 栈透明转发 `https://api.b.ai`；
   模型矩阵走 GUI 专用旁路 `/model/matrix`（详见 `docs/bai-model-matrix-design.md`）
-- **当年实测结论（2026-08-19 曾据此整个拆除，commit 9fd9bf9；结论本身未被推翻）**：
-  其 "deepseek-v4-flash" 实测为 2025 上半年的 DeepSeek 推理系模型换皮（知识截止 2025H1，
-  不知道 2025-12 的 V4），且 CF WAF 滚动封锁长请求（1010）——**这一路不适合当主力 Agent 后端**
+- **当年实测结论（2026-08-19 曾据此整个拆除，commit 9fd9bf9；2026-09-06 带真实 key
+  复测，换皮部分实证）**：其 "deepseek-v4-flash" 实测为 2025 上半年的 DeepSeek 推理系
+  模型换皮（**2026-09-06 自报知识截止 2025-05、不知道 2025-12 的 V4，坐实**；且 6 个
+  免费模型指纹题 prompt_tokens 各不相同 95/46/288/43/37/116——不是同一后端套皮）。
+  `glm-5.3-flash` 同样换皮（**自报截止约 2025-01~03，对不上自家名**）；`hy3` 自称混元、
+  截止 2024-07（名字与自称至少一致）。CF WAF 滚动封锁长请求（1010）：历史封的是 6-8M
+  字符级，380K 字符实测 200 通过（未往上推，原结论保留）——**这一路不适合当主力 Agent 后端**
 - 上游 `/v1/models` 实测只给 `id/object/created/owned_by/supported_endpoint_types`，
   `created` 恒为占位值、无任何价格或免费字段；`/model/info`、`/key/info` 等元数据路径一律 403
   （网关只放行推理路径）。**别指望从接口自动判定模型是否免费**
+- **2026-09-06 晚带真实 key 实测补充（免费模型随便测：qwen3.8-flash/glm-5.3-flash/
+  mimo-v2.5/hy3/deepseek-v4-flash/deepseek-v4-flash-vision-exp）**：
+  - adaptQuirks 的 developer→system 改写**实证必要**：同请求直连上游 400
+    （`developer is not one of ['system',...]`）、过 8891 即 200
+  - max_tokens 钳到 8192 现为**预防性而非必需**：直连 99999 上游也 200（上游行为
+    已变，钳制无害保留）
+  - 全链路通过：live /v1/models 48 个（与缓存矩阵一致）、非流式/流式/长请求 380K
+    字符均 200；未覆盖：6-8M 字符级 WAF 极端量级（不值得花 token 复现）
 
 ## 已踩的坑（改代码前必读）
 
@@ -181,7 +195,9 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 2. **Go ReverseProxy 必须显式改 req.Host**，否则 Cloudflare 403（Host 不认识）
 3. **GUI 跨域**：ui.html 从 localhost:随机端口 fetch 127.0.0.1:端口 属跨域，
    各插件服务的响应必须带 CORS 头（见各包的 corsWith）
-4. **Git Bash 后台进程会被回收**：长驻服务用工具的 run_in_background 或 cmd start
+4. **Git Bash 后台进程会被回收**：长驻服务用工具的 run_in_background
+   （`cmd start /b` 会被拒「拒绝访问」；旧 cmd start 方式拉的 8788 没存活过，
+   2026-09-06 实证——`cmd //c "start ..."` 退出码 1）
 5. **`env -u` 启动 windowsgui 程序会假死**：测环境变量相关逻辑用 cmd 脚本
 6. **exe 被运行中的自己锁定**：直接覆盖 / os.replace 必败。实测**腾位法免全停**
    （2026-09-02 用户实证裁决）：`ren ProxyDeck.exe ProxyDeck.old.exe`（运行中的 exe
@@ -212,7 +228,13 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     中文打碎，上游模型收到 mojibake 后回复"编码问题"（2026-09-06 实测假阳性，
     Qoder/WorkBuddy 都中过招）。测试请求体一律写 UTF-8 文件 +
     `--data-binary @file`
-15. **故障时间线陷阱**：判定"持续故障"前先拉逐分钟成败统计——两次测试之间
+15. **注水探针 max_tokens 自适应名单须含 codely 系**：probes.go probeCall 名单
+    （deepseek/glm-5/kimi/o1/o3）2026-09-06 漏 codely 别名组——codely-core 上游即
+    思考型 GLM-5.3，只拿 8 token 预算时 content 恒空、金丝雀「算术」必误判
+    （d207471 已补 `codely`）。**探针基线（tuanjie-baselines.json）是启动时加载进
+    内存**：改/删条目必须重启 8788 才生效；探针预算变更后旧基线不可比，须删
+    `tuanjie|codely-core` 条目重启重采（2026-09-06 实证）
+16. **故障时间线陷阱**：判定"持续故障"前先拉逐分钟成败统计——两次测试之间
     的空白期 ≠ 故障持续期（2026-09-06 曾把 6.5 分钟的上游间歇故障误判成
     "连接钉死 85 分钟"，靠逐分钟数据翻案撤回）
 
@@ -245,29 +267,32 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-09-06）
+## 当前状态（2026-09-06 晚）
 
 - 版本 v3.9.0（GitHub Release 已发布，4516ee1，含 exe 附件）+ 本地未发版修复
-  **f722e40**：Zen 流式 incomplete 空流、媒体端点吞 429/5xx、非 POST 405——
-  已本地部署并 live 验证；未 push、未发版
+  **f722e40**（Zen 流式 incomplete 空流、媒体端点吞 429/5xx、非 POST 405）+
+  **4e89335**（Go plan 数字漂移 32/55→36/61、codebuddy chat 非 POST 405、团结
+  白名单勘误 core 即 GLM-5.3）+ **d207471**（注水探针 max_tokens 名单补 codely
+  系、金丝雀误报修复）——三批均已本地部署并 live 验证；均未 push、未发版
 - ProxyDeck.exe（工作区未提交改动）：go 直构 23MB 版（非 build.py 精简口径），
-  8788 与 8785 实跑的就是它；v3.9.1 发版时 build.py 重出再提交
-- 远程 main 在 067eae8，本地领先一个提交（f722e40）；仓库
+  8788 与 8787 实跑的就是它；v3.9.1 发版时 build.py 重出再提交
+- 远程 main 在 067eae8，**本地领先四个提交**（f722e40 / f231424 / 4e89335 / d207471）；仓库
   github.com/Amer-CN/proxydeck
 - 服务当前在跑：8788（团结）/ 8787（WorkBuddy）/ 8786（Comate）/ 8785（Qoder）/
-  8891（B.AI）/ 55990（headless，09-06 测试会话拉起）。8788 与 8785 已于 09-06
-  重启换装含修复的 exe；8787/8786/8891/55990 仍跑 v3.9.0 映像（三处修复均不
-  涉及这些端口的行为，无需重启）
-- 全量实测 2026-09-06 完成：6 服务约 50 端点 + K3 兜底全链路 + 生图生视频
-  全流程（结论已并入上文模型情报与坑 14/15）；未覆盖：GUI 交互、B.AI 带真实
-  key 的请求
-- v3.9.1 发版待办：CHANGELOG 从 git log 倒推（含 f722e40 三项）、build.py
-  正式构建、版本号 7 处同步、GitHub Release 附 exe
+  8891（B.AI）。8788 与 8785 先后重启换装、8787 于修复后重启换装，8786/8891
+  仍跑 v3.9.0 映像（新修复不涉及这些端口的行为，无需重启）；55990 当前未跑
+  （09-06 晚测试中临时拉起验证后关闭）
+- 全量实测 2026-09-06（晚补测闭环）：6 服务约 50 端点 + K3 兜底全链路 + 生图生视频
+  全流程 + B.AI 带 key 免费矩阵 6 模型（换皮实证见上文）+ 注水 check 全流程
+  （身份✔/能力✔/基线重采）+ GUI 传真浮窗端到端（回执 W-0881）；未覆盖：
+  6-8M 字符级 WAF 极端量级
+- v3.9.1 发版待办：CHANGELOG 从 git log 倒推（含 f722e40 / 4e89335 / d207471 三批）、
+  build.py 正式构建、版本号 7 处同步、GitHub Release 附 exe
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
   出口 IP 计，共享网络易撞墙，撞后负缓存 10 分钟）
-- ZCode 侧模型配置：tuanjie provider（8788）配了 GLM-5.3/codely 系；
-  子智能体 executor 用团结模型、code-reviewer 用 WorkBuddy（依赖服务在跑；
-  WorkBuddy 的 hy4-preview 撞配额时代理自动切 deepseek-v4-pro）
+- ZCode 侧模型配置：tuanjie provider（8788）配了 codely 系（core 即 GLM-5.3
+  承载入口）；子智能体 executor 用团结模型、code-reviewer 用 WorkBuddy
+  （依赖服务在跑；WorkBuddy 的 hy4-preview 撞配额时代理自动切 deepseek-v4-pro）
 
 ## 常用命令
 
