@@ -95,11 +95,16 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - **KIMI-K3 429 兜底（pacing，GUI「K3 限流护航」拨杆 /kimi-pacing）**：model 含
   "KIMI" 才启用；池路径两层——即时换号（≤3 次，换前 1s 退避）+ 全池撞墙按
   Retry-After 排队重发（单请求 30 分钟总预算）；单账号路径只有等待层。v3.8.6 起
-  换号/排队/恢复事件全程进实时动态（流式成功本无 ok 事件，恢复事件由兜底自发上报）
+  换号/排队/恢复事件全程进实时动态（流式成功本无 ok 事件，恢复事件由兜底自发上报）。
+  2026-09-06 全链路实测通过：真实 429 → 换号×3 → 全池排队 60s×2 → 恢复 200
+  （含 usage），与设计一致
 - GLM-5.3：≥825K 上下文，effort 参数时灵时不灵（上游 bug）；**上游过载时偶发
   429 和"200 空响应"**（空响应重试已实现在 tuanjie/server.go 的 ensureNonEmpty，5eeca56）
 - 已知上游故障：间歇 400 "Invalid model name passed in model=None"（多实例映射失步，
-  插件已内置 3 次重试；高发期可能连撞，等待即可）
+  插件已内置 3 次重试；高发期可能连撞，等待即可）。2026-09-06 再发实证：
+  15:13-15:20 约 6.5 分钟，**按模型区分**——codely 别名组与 KIMI-K3 解析失败、
+  glm-5.3-flash 系正常，同分钟内成败交错 = 实例级映射失步；官方 CLI 同时段
+  可用 → 池中仅部分实例坏。诊断教训见坑 15
 - **2026-09-04 实测三条**：
   - codely 别名现行映射：codely-core→glm-5-fp8-128k、codely-vl→glm-5.3-flash、
     codely-flash/basic/air→deepseek-v4-flash（ga-260731/0731 双部署负载均衡）
@@ -200,6 +205,13 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     管道也按 GBK 解码——ZCode 喂 UTF-8，中文全变乱码、正则永不命中（每轮误拦）。
     修法：stdin 用 `[Console]::OpenStandardInput()` 按字节读再 UTF8.GetString，
     输出错误同样按 UTF8 字节写 stderr。
+14. **Git Bash 内联中文 curl -d 会送出乱码**：Windows 终端编码把请求体里的
+    中文打碎，上游模型收到 mojibake 后回复"编码问题"（2026-09-06 实测假阳性，
+    Qoder/WorkBuddy 都中过招）。测试请求体一律写 UTF-8 文件 +
+    `--data-binary @file`
+15. **故障时间线陷阱**：判定"持续故障"前先拉逐分钟成败统计——两次测试之间
+    的空白期 ≠ 故障持续期（2026-09-06 曾把 6.5 分钟的上游间歇故障误判成
+    "连接钉死 85 分钟"，靠逐分钟数据翻案撤回）
 
 ## 外部账号（tuanjie-providers.json，v3.9.0）
 
@@ -218,22 +230,36 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   上下文）交给识图模型，图片入历史后每轮都会触发（codely-core→muse-spark
   610 次实测），与客户端自己的识图子智能体不冲突（子智能体用识图模型直通，
   主对话轮次被兜底）
+- **Agnes 生图生视频合同（2026-09-06 实测，免费账号）**：生图 POST
+  /v1/images/generations 约 7-8s 返回图片 URL。生视频两型号合同不同——
+  `agnes-video-v2.0` **不需要 mode**；`agnes-video-2.5-flash`（默认配置）
+  **必填 mode**，合法值 `text`/`keyframe`/`reference`（文生视频用
+  `"mode":"text"`，文档 wiki.agnes-ai.com/en/docs/agnes-video-v25）。流程：
+  POST /v1/videos → 轮询 GET /v1/videos/{id}（代理自动补 model_name）→
+  约 60s completed → metadata.url 即 MP4。429/5xx 已如实透传（f722e40
+  修复前 forwardExternal 的失败状态会被调用方吞成 200 空响应）
 - **日志重定向坑**：手动拉插件别用 PowerShell `Start-Process -RedirectStandard*`
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-09-05）
+## 当前状态（2026-09-06）
 
-- 版本 v3.9.0（GitHub Release v3.9.0 已发布，commit 4516ee1，含 exe 附件）；
-  一键更新已上线（GUI 内直接下载替换重启，无需去网页）
-- v3.9.0 改动：外部账号多协议转发（Responses/Anthropic）+ 协议下拉 + 在线
-  编辑 + 「用量未知」文案；核心文件 internal/tuanjie/responses_forward.go、
-  anthropic_forward.go、providers.go（Update）、handlers_extra.go（edit action）
-- 远程 main 与本地一致（4516ee1，含标签 v3.9.0）；仓库 github.com/Amer-CN/proxydeck
-- 本地已全停换装并 live 验证（2026-09-05）：GUI 与五个插件全部跑 v3.9.0 exe，
-  旧 exe 残留已清；muse-spark 经 8788 非流式/流式转发实测 200，五端口健康
+- 版本 v3.9.0（GitHub Release 已发布，4516ee1，含 exe 附件）+ 本地未发版修复
+  **f722e40**：Zen 流式 incomplete 空流、媒体端点吞 429/5xx、非 POST 405——
+  已本地部署并 live 验证；未 push、未发版
+- ProxyDeck.exe（工作区未提交改动）：go 直构 23MB 版（非 build.py 精简口径），
+  8788 与 8785 实跑的就是它；v3.9.1 发版时 build.py 重出再提交
+- 远程 main 在 067eae8，本地领先一个提交（f722e40）；仓库
+  github.com/Amer-CN/proxydeck
 - 服务当前在跑：8788（团结）/ 8787（WorkBuddy）/ 8786（Comate）/ 8785（Qoder）/
-  8891（B.AI）；55990（headless 主代理）未启动（需要时 `./ProxyDeck.exe -headless`）
+  8891（B.AI）/ 55990（headless，09-06 测试会话拉起）。8788 与 8785 已于 09-06
+  重启换装含修复的 exe；8787/8786/8891/55990 仍跑 v3.9.0 映像（三处修复均不
+  涉及这些端口的行为，无需重启）
+- 全量实测 2026-09-06 完成：6 服务约 50 端点 + K3 兜底全链路 + 生图生视频
+  全流程（结论已并入上文模型情报与坑 14/15）；未覆盖：GUI 交互、B.AI 带真实
+  key 的请求
+- v3.9.1 发版待办：CHANGELOG 从 git log 倒推（含 f722e40 三项）、build.py
+  正式构建、版本号 7 处同步、GitHub Release 附 exe
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
   出口 IP 计，共享网络易撞墙，撞后负缓存 10 分钟）
 - ZCode 侧模型配置：tuanjie provider（8788）配了 GLM-5.3/codely 系；
