@@ -110,10 +110,14 @@ func probeCall(ctx context.Context, target *probeTarget, model string, msgs []ma
 	// reasoning_content）8 个预算全烧在推理段、content 恒空——给 96 保
 	// content 出得来（GLM-5.3 采基准实测 96 出数率约 7/8）。非思考模型
 	// 多给的预算用不完，无副作用。
+	// codely 系上游即 GLM-5.3 系（2026-09-06 上游收编，core 即 GLM-5.3
+	// 承载入口），同属思考型——名单必须带上，否则 8 预算全烧推理段、
+	// content 恒空，金丝雀答题必误判。
 	mt := 8
 	lm := strings.ToLower(model)
 	if strings.Contains(lm, "deepseek") || strings.Contains(lm, "glm-5") ||
-		strings.Contains(lm, "kimi") || strings.Contains(lm, "o1") || strings.Contains(lm, "o3") {
+		strings.Contains(lm, "kimi") || strings.Contains(lm, "o1") || strings.Contains(lm, "o3") ||
+		strings.Contains(lm, "codely") {
 		mt = 96
 	}
 	body := map[string]any{
