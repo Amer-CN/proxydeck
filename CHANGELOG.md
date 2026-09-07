@@ -5,6 +5,7 @@
 - 「外部账号」升级为「自定义服务商」：添加/编辑拆分独立状态（编辑态标题明示目标、收起即重置），表单对齐 ZCode——名称 / Base URL / API Key / API 格式下拉（Chat Completions / Responses / Anthropic Messages）/ 模型逐个添加成列表；修复编辑后残留他号内容
 - opencode.ai 出站自动携带 x-opencode-session 会话头（官方文档要求的稳定会话标识，chat / responses / anthropic 三条转发路径全覆盖）：Zen 免费模型经代理转发不再被 MissingSessionID 拒
 - 识图模型下拉补团结池原生识图模型：GLM-5.3-FLASH / KIMI-K3 可选（对齐后端 builtinVisionCapable）
+- 自定义服务商可达性口径修正：绿点改按 /models 连通判定，计费端点超时/404 不再误标「不可达」（Zen 冷启动误标根治）
 
 ## v3.9.1 · 实测修复集中发版 · 探针误报修正
 

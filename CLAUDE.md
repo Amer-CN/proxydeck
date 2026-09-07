@@ -241,8 +241,15 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 16. **故障时间线陷阱**：判定"持续故障"前先拉逐分钟成败统计——两次测试之间
     的空白期 ≠ 故障持续期（2026-09-06 曾把 6.5 分钟的上游间歇故障误判成
     "连接钉死 85 分钟"，靠逐分钟数据翻案撤回）
+17. **发版版本串共 6 处**：app/main.go appVersion + ui.html 的 UI_CUR / etchVer /
+    nameplate / buildNo / verChip——漏改任一则应用自报旧版并误弹「发现新版本」
+    框（弹窗当前值取 ui.html UI_CUR，与 appVersion 不同源；v3.10.0 实测踩坑）
+18. **opencode Zen 会话头 + 测试假阴性**：出站 opencode.ai 必带
+    `x-opencode-session`（进程级稳定 UUID，opencode_session.go），缺头按出口
+    分片随机 400 MissingSessionID；ZCode「连接测试」按钮发裸请求必报错=假阴性，
+    以真实对话为准。完整定案见 CODELY.md 2026-09-07 条
 
-## 外部账号（tuanjie-providers.json，v3.9.0）
+## 自定义服务商（tuanjie-providers.json；v3.9.0 引入时叫「外部账号」，v3.10.0 改名重构）
 
 - **三协议**：账号自带 `protocol` 字段——chat（/chat/completions 缺省）/
   responses（/responses，Zen muse-spark-1.3-contributor-free 只支持此协议）/
@@ -250,12 +257,18 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   chat，出站按协议转换后翻回 chat，客户端零改动
 - 旧配置无 protocol 字段走 isZenResponsesModel 白名单兜底（Zen 老条目不断流）；
   **edit 更新时 protocol 留空=保留原值，磁盘空值绝不能回填 chat**
-- **在线编辑**：卡片「改」按钮免删号重加；api_key 留空=保持原 key
-- 计费徽章语义：绿点「已连接」=计费接口连通，不代表模型可用；用量拿不到
-  显示「用量未知」（很多源不实现 OpenAI 计费接口，属正常）
-- **媒体改路由链**（tuanjie-media.json）：vision=muse-spark（Zen 免费，识图
-  主力）/ image、video 仍走 Agnes；识图回落链 vision→vision_fallback→codely-vl
-  兜尾。**只对团结 8788 生效**——其他插件无此逻辑；含图请求整轮改写（含全部
+- **opencode 会话头**（v3.10.0，opencode_session.go）：出站到 opencode.ai 的三条
+  转发路径自动带 `x-opencode-session`（进程级稳定 UUID）；缺头时 Zen 免费模型
+  按出口分片随机 400 MissingSessionID。完整定案见 CODELY.md 2026-09-07 条
+- **在线编辑**：卡片「改」按钮免删号重加（v3.10.0 添加/编辑拆分独立状态）；
+  api_key 留空=保持原 key
+- 计费徽章语义（35cf8bf 改口径）：绿点=**/models 连通**（转发真正依赖的端点）；
+  计费端点的 404/超时只进状态文案（「用量未知」提示兜住），不再判不可达——
+  此前 Zen 冷启动计费超时被误标红牌（2026-09-07 实测）；/models 不通才判真死
+- **媒体改路由链**（tuanjie-media.json）：vision 现为 codely-vl（v3.10.0 下拉
+  补 GLM-5.3-FLASH / KIMI-K3 / muse-spark 可选）/ image、video 仍走 Agnes；
+  识图回落链 vision→vision_fallback→codely-vl 兜尾（当前 fallback 已清空）。
+  **只对团结 8788 生效**——其他插件无此逻辑；含图请求整轮改写（含全部
   上下文）交给识图模型，图片入历史后每轮都会触发（codely-core→muse-spark
   610 次实测），与客户端自己的识图子智能体不冲突（子智能体用识图模型直通，
   主对话轮次被兜底）
@@ -277,8 +290,9 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   x-opencode-session 会话头（Zen 免费模型经代理不再 MissingSessionID；实测加头后
   400→429 过门）+ 识图下拉补 GLM-5.3-FLASH / KIMI-K3；README 徽章已同步
 - 远程 main 与本地同步（本次发版提交后 push）；仓库 github.com/Amer-CN/proxydeck
-- 服务已换装 v3.10.0：用户手动重启（8788 团结 / 8786 COMATE / 8891 B.AI 已点火，
-  其余甲板用户自行处理）；muse-spark-1.3-contributor-free 经代理实测 200 过门
+- 服务全跑 v3.10.0：8788/8787/8786/8785/8891 五插件全部在线（22:5x 探测 200，
+  用户 GUI 点火），55990 按需未跑；muse-spark-1.3-contributor-free 经代理实测
+  200 过门（会话头生效）
 - 发版坑（v3.10.0 实测）：版本串共 6 处——app/main.go appVersion + ui.html 的
   UI_CUR / etchVer / nameplate / buildNo / verChip——漏改任一则自报旧版并误弹
   「发现新版本」框（弹窗当前值取自 ui.html UI_CUR，与 appVersion 不同源）
