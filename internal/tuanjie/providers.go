@@ -21,7 +21,8 @@ const providerTTL = 120 * time.Second
 
 // providerFetchTimeout 单个 provider 计费/模型查询超时。8s 是"管理端同步调用无所谓"
 // 时代的口径，但子页面打开就是 8s×N 的白屏，压到 2.5s：拉不到就下次后台补。
-const providerFetchTimeout = 2500 * time.Millisecond
+// var 仅为单测注入短超时用，运行时勿改。
+var providerFetchTimeout = 2500 * time.Millisecond
 
 // ExternalProvider 用户配置的外部 provider（tuanjie-providers.json）。
 // Models 是参与转发的模型列表（缺省空 = 仅展示不转发，向后兼容旧配置）。
@@ -356,13 +357,22 @@ func baseInfo(p ExternalProvider) ProviderInfo {
 }
 
 // fetchProviderInfo 查单个 provider：模型列表 + 订阅 + 用量。
+// OK 口径（v3.10.0 修正）：以 /models 连通性为准——那是转发链路真正依赖的端点。
+// 订阅/用量端点仅服务展示：部分 provider 根本没有（如 opencode.ai 恒 404），
+// 冷启动链路抖动还会超时；此前网络级失败直接判「不可达」，把好端端的 Zen
+// 标成红牌（实测 2026-09-07），现改为错误文案留在状态字段、由前端
+// 「用量未知」提示兜住，不再影响 OK。
 func fetchProviderInfo(p ExternalProvider) ProviderInfo {
 	info := baseInfo(p)
 	cl := &http.Client{Timeout: providerFetchTimeout, Transport: smartProxyTransport}
 	hdr := map[string]string{"Authorization": "Bearer " + p.APIKey, "Accept": "application/json"}
 
-	// 模型列表（失败不致命：留空列表）
-	if r, err := getJSON(cl, p.BaseURL+"/models", hdr); err == nil {
+	// 模型列表：连通即可达；失败则不可达（网络错/状态码都如实进 Error）
+	if r, err := getJSON(cl, p.BaseURL+"/models", hdr); err != nil {
+		info.OK = false
+		info.Error = truncateErr(err)
+	} else {
+		info.OK = true
 		if ms, ok := r["data"].([]any); ok {
 			for _, m := range ms {
 				if mm, ok := m.(map[string]any); ok {
@@ -374,25 +384,16 @@ func fetchProviderInfo(p ExternalProvider) ProviderInfo {
 		}
 	}
 
-	// 订阅 + 用量（任一失败如实记录状态码；网络级异常 = 不可达，学群友 ok=false 口径）
+	// 订阅 + 用量（任一失败如实记录状态码/错误文案；不影响 OK）
 	sub, subErr := getJSON(cl, p.BaseURL+"/dashboard/billing/subscription", hdr)
 	info.SubStatus = statusOf(sub, subErr)
 	if subErr == nil {
 		info.Sub = sub
-	} else if _, isStatus := subErr.(*statusError); !isStatus {
-		info.OK = false
-		info.Error = truncateErr(subErr)
 	}
 	usage, usageErr := getJSON(cl, p.BaseURL+"/dashboard/billing/usage", hdr)
 	info.UsageStatus = statusOf(usage, usageErr)
 	if usageErr == nil {
 		info.Usage = usage
-	} else if _, isStatus := usageErr.(*statusError); !isStatus {
-		info.OK = false
-		info.Error = truncateErr(usageErr)
-	}
-	if info.Error == "" {
-		info.OK = true // 两个计费端点都连通（HTTP 状态码不论）即视为可达
 	}
 	return info
 }
