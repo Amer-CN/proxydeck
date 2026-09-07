@@ -197,7 +197,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
    各插件服务的响应必须带 CORS 头（见各包的 corsWith）
 4. **Git Bash 后台进程会被回收**：长驻服务用工具的 run_in_background
    （`cmd start /b` 会被拒「拒绝访问」；旧 cmd start 方式拉的 8788 没存活过，
-   2026-09-06 实证——`cmd //c "start ..."` 退出码 1）
+   2026-09-06 实证——`cmd //c "start ..."` 退出码 1）。
+   **⚠ run_in_background 拉的服务与会话同生共死**：会话挂起/结束后进程树被
+   回收——2026-09-07 凌晨实证，5 插件随会话全灭、服务静默下线数小时。
+   **跨会话常驻只能 GUI 点火**（插件是 GUI 的分离子进程，关 GUI 不死；
+   会话后台任务只用于「本次会话内」的临时服务或发版换装）
 5. **`env -u` 启动 windowsgui 程序会假死**：测环境变量相关逻辑用 cmd 脚本
 6. **exe 被运行中的自己锁定**：直接覆盖 / os.replace 必败。实测**腾位法免全停**
    （2026-09-02 用户实证裁决）：`ren ProxyDeck.exe ProxyDeck.old.exe`（运行中的 exe
