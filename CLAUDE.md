@@ -277,8 +277,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   x-opencode-session 会话头（Zen 免费模型经代理不再 MissingSessionID；实测加头后
   400→429 过门）+ 识图下拉补 GLM-5.3-FLASH / KIMI-K3；README 徽章已同步
 - 远程 main 与本地同步（本次发版提交后 push）；仓库 github.com/Amer-CN/proxydeck
-- 服务待重启换装 v3.10.0：运行中旧版锁定 ProxyDeck.exe，新版已构建为
-  ProxyDeck-v3.10.0.exe（关闭程序后改名或重跑 build.py 均可）；重启瞬断 8788
+- 服务已换装 v3.10.0：用户手动重启（8788 团结 / 8786 COMATE / 8891 B.AI 已点火，
+  其余甲板用户自行处理）；muse-spark-1.3-contributor-free 经代理实测 200 过门
+- 发版坑（v3.10.0 实测）：版本串共 6 处——app/main.go appVersion + ui.html 的
+  UI_CUR / etchVer / nameplate / buildNo / verChip——漏改任一则自报旧版并误弹
+  「发现新版本」框（弹窗当前值取自 ui.html UI_CUR，与 appVersion 不同源）
 - .work/ 已清场：旧测试日志与上一任务简报已删（current-task.md 由下一任务重写）
 - 实测记录（2026-09-06 两轮全量）：结论已并入上文模型情报与坑 14/15/16；
   唯一未覆盖：B.AI 6-8M 字符级 WAF 极端量级（判定不值得复现）
