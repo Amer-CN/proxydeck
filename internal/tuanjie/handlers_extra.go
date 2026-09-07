@@ -253,7 +253,7 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 	case "add":
 		if s.providers.Add(ExternalProvider{Name: req.Name, BaseURL: req.BaseURL, APIKey: req.APIKey, Models: req.Models, Protocol: req.Protocol}) {
 			s.providers.Invalidate()
-			writeJSON(w, map[string]any{"ok": true, "msg": "外部账号已添加"})
+			writeJSON(w, map[string]any{"ok": true, "msg": "自定义服务商已添加"})
 		} else {
 			writeJSON(w, map[string]any{"ok": false, "msg": "添加失败（名称/base_url/key 不能为空，或名称已存在）"})
 		}
@@ -261,16 +261,16 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 		// key/protocol 留空 = 保留原值（Update 内处理），models 不动
 		if s.providers.Update(req.Name, ExternalProvider{Name: req.Name, BaseURL: req.BaseURL, APIKey: req.APIKey, Protocol: req.Protocol}) {
 			s.providers.Invalidate()
-			writeJSON(w, map[string]any{"ok": true, "msg": "外部账号已更新"})
+			writeJSON(w, map[string]any{"ok": true, "msg": "自定义服务商已更新"})
 		} else {
 			writeJSON(w, map[string]any{"ok": false, "msg": "更新失败（账号不存在或 base_url 为空）"})
 		}
 	case "remove":
 		if s.providers.Remove(req.Name) {
 			s.providers.Invalidate()
-			writeJSON(w, map[string]any{"ok": true, "msg": "外部账号已删除"})
+			writeJSON(w, map[string]any{"ok": true, "msg": "自定义服务商已删除"})
 		} else {
-			writeJSON(w, map[string]any{"ok": false, "msg": "未找到该外部账号"})
+			writeJSON(w, map[string]any{"ok": false, "msg": "未找到该自定义服务商"})
 		}
 	case "addmodel":
 		if s.providers.AddModel(req.Name, req.Model) {

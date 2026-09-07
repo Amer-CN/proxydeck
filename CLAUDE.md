@@ -271,13 +271,14 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-09-06 深夜，v3.9.1 已发版）
+## 当前状态（2026-09-07，v3.10.0 已发版）
 
-- **v3.9.1 已发布**：GitHub Release 附 build.py 正式 exe（11.7MB），README 徽章已
-  同步；CHANGELOG 顶条 = 实测修复集中发版（f722e40 / 4e89335 / d207471 三批修复）
+- **v3.10.0 已发布**：自定义服务商界面重构（原外部账号）+ opencode.ai 出站自动带
+  x-opencode-session 会话头（Zen 免费模型经代理不再 MissingSessionID；实测加头后
+  400→429 过门）+ 识图下拉补 GLM-5.3-FLASH / KIMI-K3；README 徽章已同步
 - 远程 main 与本地同步（本次发版提交后 push）；仓库 github.com/Amer-CN/proxydeck
-- 服务全跑 v3.9.1 官方版：8788/8787/8786/8785/8891 + GUI 全部换装重启并 health
-  验证过（含抽验：8788 chat 200、8787/8788 GET 405）；55990 未跑（按需 headless）
+- 服务待重启换装 v3.10.0：运行中旧版锁定 ProxyDeck.exe，新版已构建为
+  ProxyDeck-v3.10.0.exe（关闭程序后改名或重跑 build.py 均可）；重启瞬断 8788
 - .work/ 已清场：旧测试日志与上一任务简报已删（current-task.md 由下一任务重写）
 - 实测记录（2026-09-06 两轮全量）：结论已并入上文模型情报与坑 14/15/16；
   唯一未覆盖：B.AI 6-8M 字符级 WAF 极端量级（判定不值得复现）

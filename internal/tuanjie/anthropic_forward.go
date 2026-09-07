@@ -568,6 +568,7 @@ func (s *Server) forwardExternalAnthropic(w http.ResponseWriter, r *http.Request
 		accept = "text/event-stream"
 	}
 	req.Header.Set("Accept", accept)
+	applyOpenCodeSession(req, prov.BaseURL)
 	cl := &http.Client{Timeout: 120 * time.Second, Transport: smartProxyTransport}
 	resp, err := cl.Do(req)
 	if err != nil {

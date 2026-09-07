@@ -1230,6 +1230,7 @@ func (s *Server) forwardExternal(w http.ResponseWriter, r *http.Request, body []
 	req.Header.Set("Authorization", "Bearer "+prov.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	applyOpenCodeSession(req, prov.BaseURL)
 	cl := &http.Client{Timeout: 120 * time.Second, Transport: smartProxyTransport}
 	resp, err := cl.Do(req)
 	if err != nil {

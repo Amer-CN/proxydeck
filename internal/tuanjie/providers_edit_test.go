@@ -161,7 +161,7 @@ func TestHandleProvidersEditAction(t *testing.T) {
 
 	// 成功：base_url 更新（去尾斜杠）、key/protocol 留空保留
 	out := post(`{"action":"edit","name":"p1","base_url":"https://edited.example/v9/","api_key":"","protocol":""}`)
-	if out["ok"] != true || out["msg"] != "外部账号已更新" {
+	if out["ok"] != true || out["msg"] != "自定义服务商已更新" {
 		t.Fatalf("编辑成功响应不对: %v", out)
 	}
 	if e := ps.List()[0]; e.BaseURL != "https://edited.example/v9" || e.APIKey != "sk-old" || e.Protocol != "chat" {
