@@ -46,7 +46,6 @@ func (a *app) keyFile() string       { return filepath.Join(exeDir(), "api-key.t
 func (a *app) statsFile() string     { return filepath.Join(exeDir(), "stats.json") }
 func (a *app) noticeFile() string    { return filepath.Join(exeDir(), "notice_dismissed.flag") }
 func (a *app) closeHintFile() string { return filepath.Join(exeDir(), "close_hint_dismissed.flag") }
-func (a *app) mirrorFile() string    { return filepath.Join(exeDir(), "update-mirror.txt") }
 func (a *app) baseURL() string       { return "http://" + net.JoinHostPort(a.host, a.port) }
 func (a *app) healthURL() string     { return a.baseURL() + "/health" }
 
@@ -309,6 +308,10 @@ var (
 	updPct        = -1     // 0-100；-1 = 服务器没给 Content-Length，前端显示不定进度
 	updMsg        = ""
 )
+
+// updateMirrorCandidates 一键更新下载镜像链（按序尝试，全部失败回退直连）。
+// 公共镜像时有失效（2026-09-08 实测 mirror.ghproxy.com 已死），哪个挂了改这里。
+var updateMirrorCandidates = []string{"https://ghfast.top", "https://gh-proxy.com"}
 
 // 官网用量缓存：bind 读缓存，后台 goroutine 只在前端触发（usageRefreshCh）时
 // 刷新一次——拉杆启动/手动刷新各触发一次，不做周期轮询（官网 429 限流教训）。
@@ -629,28 +632,6 @@ func (a *app) bindAll(w webview.WebView) {
 		updateCache = string(b)
 		updateCacheMu.Unlock()
 	}()
-	// 下载加速镜像存取：设置页读写，一键更新下载时读同一文件给 GitHub 直链加前缀。
-	// 持久化 exe 目录 update-mirror.txt（纯文本一行，存前缀本身）；读取容忍文件缺失=空（直连）。
-	_ = w.Bind("ccGetUpdateMirror", func() string {
-		bm, _ := json.Marshal(map[string]any{"ok": true, "mirror": a.readUpdateMirror()})
-		return string(bm)
-	})
-	_ = w.Bind("ccSetUpdateMirror", func(mirror string) string {
-		m, err := normalizeMirrorInput(mirror)
-		if err != nil {
-			return jsonErr(err)
-		}
-		if m == "" { // trim 后空串 = 清除回直连：删文件（容忍本就不存在）
-			if err := os.Remove(a.mirrorFile()); err != nil && !os.IsNotExist(err) {
-				return jsonErr(err)
-			}
-			return jsonOK("已清除镜像 · 更新下载走直连")
-		}
-		if err := os.WriteFile(a.mirrorFile(), []byte(m), 0o644); err != nil {
-			return jsonErr(err)
-		}
-		return jsonOK("镜像前缀已保存 · 更新下载优先走镜像，失败自动回退直连")
-	})
 	// 一键更新：触发（action="start"）启动后台 goroutine 立即返回；查询（action="status"）
 	// 返回进度。webview_go 的 Bind 按位置把 JS 参数 JSON 反序列化进 Go 参数（个数必须相等），
 	// JS 对象映射不进 string 参数，故 action 用纯字符串（前端恒传 'start'/'status'，空串按 start 处理）。
@@ -869,33 +850,6 @@ func applyMirror(dlURL, mirror string) string {
 	return strings.TrimSuffix(mirror, "/") + "/" + dlURL
 }
 
-// normalizeMirrorInput 校验并归一用户输入的镜像前缀：trim 后空串 = 清除回直连（返回空）；
-// 非空必须是 http/https URL（能解析出 host），否则报错（绑定层回 {"ok":false,...}）。
-func normalizeMirrorInput(s string) (string, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return "", nil
-	}
-	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
-		return "", errors.New("镜像前缀必须是 http(s) 开头的 URL")
-	}
-	u, err := url.Parse(s)
-	if err != nil || u.Host == "" {
-		return "", errors.New("镜像前缀不是合法的 URL")
-	}
-	return s, nil
-}
-
-// readUpdateMirror 读 exe 目录 update-mirror.txt 里存的镜像前缀；
-// 文件缺失/读取失败一律按空（直连）处理，绝不打断更新流程。
-func (a *app) readUpdateMirror() string {
-	b, err := os.ReadFile(a.mirrorFile())
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(b))
-}
-
 // fileSHA256 计算文件 sha256，返回小写十六进制摘要。
 func fileSHA256(path string) (string, error) {
 	f, err := os.Open(path)
@@ -947,7 +901,8 @@ func (a *app) runOneKeyUpdateFlow(w webview.WebView, latest, dlURL string, dlSiz
 		updPhase, updPct, updMsg = phase, pct, msg
 		updFlowMu.Unlock()
 	}
-	// fail：phase=failed + msg 指路。.new/.old 残留故意不删（用户可手动救）。
+	// fail：phase=failed + msg 指路。下载半成品 .new 已随候选失败清理；
+	// .old 残留故意不删（用户可手动救）。
 	fail := func(msg string) {
 		setPhase("failed", -1, msg)
 		log.Printf("[update] 失败：%s", msg)
@@ -965,22 +920,31 @@ func (a *app) runOneKeyUpdateFlow(w webview.WebView, latest, dlURL string, dlSiz
 	newFile := filepath.Join(dir, "ProxyDeck.exe.new")
 	oldFile := filepath.Join(dir, "ProxyDeck.exe.old")
 
-	// 下载加速镜像：exe 目录 update-mirror.txt 一行前缀（读取失败按空=直连，不打断更新）。
-	// 配置了镜像且直链是 GitHub 时先走镜像（phase 文案带「（镜像）」标记），
-	// 任何失败（transport / 非 200 / 字节数不符）记一条 log 后自动回退直连完整重下。
-	mirror := a.readUpdateMirror()
-	mirURL := applyMirror(dlURL, mirror)
-	usedMirror := mirURL != dlURL
-	var written int64
-	var failMsg string
-
-	// 30 分钟专用 client：exe 包体积大（GitHub → objects.githubusercontent 会 302，
-	// http.Client 默认跟随重定向），1.5s/10s 的既有 client 都撑不住整包下载。
+	// 下载候选链：镜像常量按序在前、直连兜底最后一位（全部候选失败才 fail）。
+	// 镜像/直连只进 log——phase 文案不含「镜像」字样，用户零感知。
+	// 镜像尝试用 120s 专用超时：公共镜像挂起时（连接建立但不吐数据）不把用户
+	// 吊死在单个候选上，超时即切下一个；直连沿用 30 分钟大超时（exe 包体积大，
+	// GitHub → objects.githubusercontent 会 302，http.Client 默认跟随重定向，
+	// 1.5s/10s 的既有 client 都撑不住整包下载）。
 	dlClient := &http.Client{Timeout: 30 * time.Minute}
-	// downloadOne 从 u 下载整包写入 newFile：成功返回写入字节数；失败返回带原因的
-	// fail 文案（沿用直连时代的报错措辞），由调用方决定 fail 还是回退直连重下。
-	downloadOne := func(u string) (int64, string) {
-		resp, err := dlClient.Get(u)
+	mirrorClient := &http.Client{Timeout: 120 * time.Second}
+	type dlCandidate struct {
+		name   string // log 用的来源标记：镜像前缀本身 / direct
+		url    string
+		client *http.Client
+	}
+	candidates := make([]dlCandidate, 0, len(updateMirrorCandidates)+1)
+	for _, m := range updateMirrorCandidates {
+		// applyMirror 对非 GitHub 直链原样返回 → 与直连重复，不作为候选
+		if u := applyMirror(dlURL, m); u != dlURL {
+			candidates = append(candidates, dlCandidate{name: m, url: u, client: mirrorClient})
+		}
+	}
+	candidates = append(candidates, dlCandidate{name: "direct", url: dlURL, client: dlClient})
+	// downloadOne 用 client 从 u 下载整包写入 newFile：成功返回写入字节数；失败返回
+	// 带原因的 fail 文案（沿用直连时代的报错措辞），由候选循环决定切下一个还是收尾。
+	downloadOne := func(u string, client *http.Client) (int64, string) {
+		resp, err := client.Get(u)
 		if err != nil {
 			return 0, "下载失败: " + err.Error()
 		}
@@ -1023,60 +987,48 @@ func (a *app) runOneKeyUpdateFlow(w webview.WebView, latest, dlURL string, dlSiz
 		return got, ""
 	}
 
-	if usedMirror {
-		log.Printf("[update] 开始下载 %s ← 镜像 %s", latest, mirURL)
-		setPhase("downloading", -1, "连接下载源（镜像）…")
-		written, failMsg = downloadOne(mirURL)
-		if failMsg == "" && dlSize > 0 && written != dlSize {
-			failMsg = fmt.Sprintf("字节数不符：下载 %d 字节，应为 %d 字节", written, dlSize)
+	// 每个候选完整走：下载 → 字节数校验（有 dlSize 时）→ sha256 校验（digest 带
+	// sha256: 前缀时），全过即成功跳出；任一环失败（transport/非 200/size 不符/
+	// sha256 不符）：log 记录来源与原因、删半成品 .new、切下一个候选。
+	var written int64
+	var lastErr string
+	for _, c := range candidates {
+		log.Printf("[update] 开始下载 %s ← %s（来源 %s）", latest, c.url, c.name)
+		setPhase("downloading", -1, "连接下载源…")
+		written, lastErr = downloadOne(c.url, c.client)
+		if lastErr == "" && dlSize > 0 && written != dlSize {
+			// 下载完成校验：字节数必须等于 Releases 里登记的 size（有 size 才校验）。
+			lastErr = fmt.Sprintf("校验失败：下载 %d 字节，应为 %d 字节", written, dlSize)
 		}
-		if failMsg != "" {
-			log.Printf("[update] 镜像下载失败（%s），自动回退直连重下 %s", failMsg, dlURL)
-			setPhase("downloading", -1, "连接下载源…")
-			usedMirror = false
+		if lastErr == "" && strings.HasPrefix(dlDigest, "sha256:") {
+			// sha256 校验（加固）：GitHub asset 自带 digest（形如 sha256:<hex>）时，
+			// 下载文件必须逐字节对得上——不符即疑似下载源被篡改。
+			sum, err := fileSHA256(newFile)
+			if err != nil {
+				lastErr = "sha256 校验失败（读取 " + newFile + "）: " + err.Error()
+			} else if !strings.EqualFold("sha256:"+sum, dlDigest) {
+				lastErr = fmt.Sprintf("sha256 不符，疑似源被篡改：应为 %s，实为 sha256:%s", dlDigest, sum)
+			} else {
+				log.Printf("[update] sha256 校验通过：%s", dlDigest)
+			}
 		}
+		if lastErr == "" {
+			break
+		}
+		log.Printf("[update] 下载源 %s 失败：%s；尝试下一个候选", c.name, lastErr)
+		_ = os.Remove(newFile) // 清掉半成品，避免下一个候选的 os.Create 混入残留
 	}
-	if !usedMirror {
-		if mirURL == dlURL {
-			// 没配镜像（或直链本就非 GitHub）→ 直连即首试，保持原有日志措辞与行为
-			log.Printf("[update] 开始下载 %s ← %s", latest, dlURL)
-		}
-		written, failMsg = downloadOne(dlURL)
-		if failMsg != "" {
-			fail(failMsg)
-			return
-		}
-		// 下载完成校验：字节数必须等于 Releases 里登记的 size（有 size 才校验）。
-		if dlSize > 0 && written != dlSize {
-			fail(fmt.Sprintf("校验失败：下载 %d 字节，应为 %d 字节（文件留在 %s，可手动核查）", written, dlSize, newFile))
-			return
-		}
+	if lastErr != "" {
+		fail(lastErr) // 全部候选失败：用最后一个候选（直连）的错误收尾
+		return
 	}
-
-	// sha256 校验（加固）：GitHub asset 自带 digest（形如 sha256:<hex>）时，无论镜像/直连，
-	// 下载文件必须逐字节对得上——不符即疑似下载源被篡改，立即失败（.new 保留供核查）。
-	// digest 为空（老 release）或非 sha256 前缀（如历史 md5）→ 跳过，沿用字节数校验，行为不变。
-	if strings.HasPrefix(dlDigest, "sha256:") {
-		sum, err := fileSHA256(newFile)
-		if err != nil {
-			fail("sha256 校验失败（读取 " + newFile + "）: " + err.Error())
-			return
-		}
-		if !strings.EqualFold("sha256:"+sum, dlDigest) {
-			fail(fmt.Sprintf("sha256 不符，疑似源被篡改：应为 %s，实为 sha256:%s（文件留在 %s，可手动核查）", dlDigest, sum, newFile))
-			return
-		}
-		log.Printf("[update] sha256 校验通过：%s", dlDigest)
-	} else if dlDigest != "" {
+	// digest 非空但非 sha256 前缀（如历史 md5）→ 跳过比对，沿用字节数校验，行为不变。
+	if dlDigest != "" && !strings.HasPrefix(dlDigest, "sha256:") {
 		log.Printf("[update] 跳过 digest 校验（非 sha256 格式: %s），沿用字节数校验", dlDigest)
 	}
 
 	log.Printf("[update] 下载完成 %.1f MB，校验通过", float64(written)/1048576)
-	if usedMirror {
-		setPhase("downloaded", 100, "下载完成（镜像）· 校验通过")
-	} else {
-		setPhase("downloaded", 100, "下载完成 · 校验通过")
-	}
+	setPhase("downloaded", 100, "下载完成 · 校验通过")
 
 	// 腾位法替换（Windows 允许 rename 运行中的 exe，本会话构建腾位实证多次）：
 	// 1) 运行中的旧 exe 改名 .old 腾出原路径 → 2) .new 改名顶替原路径。

@@ -3170,20 +3170,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   </div>
                   <button type="button" class="pt-deck-btn" id="checkUpdateBtn" data-i18n="app.btn.checkNow">立即检查</button>
                 </div></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t">下载加速镜像</div>
-                    <div class="s">给更新包下载直链加加速前缀；下载失败自动回退直连。留空=直连。</div>
-                  </div>
-                  <input class="pt-field" id="updMirror" list="updMirrorList"
-                         placeholder="https://ghfast.top/ · 留空=直连" spellcheck="false" autocomplete="off">
-                  <button type="button" class="ibtn2" id="updMirrorSaveBtn" data-i18n="app.btn.save">保存</button>
-                </div></div>
-                <datalist id="updMirrorList">
-                  <option value="https://ghfast.top/"></option>
-                  <option value="https://gh-proxy.com/"></option>
-                  <option value="https://mirror.ghproxy.com/"></option>
-                </datalist>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.about">关于 · About</span></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -9012,26 +8998,6 @@ var PT_I18N = {
     /* —— 设置区 —— */
     $('githubBtn').onclick = function () { call('Open', 'https://github.com/Amer-CN/command-code-proxy-tools'); };
     $('checkUpdateBtn').onclick = function () { checkUpdateNow(); };
-
-    /* —— 下载加速镜像：一键更新给 GitHub 直链加前缀走镜像，失败自动回退直连 —— */
-    $('updMirrorSaveBtn').onclick = async function () {
-      var v = $('updMirror').value.trim();
-      var r = await call('SetUpdateMirror', v);
-      if (r && r.ok) {
-        toast('ok', '下载加速镜像', r.msg || (v ? '已保存' : '已清除'));
-        logInto($('logStream'), 'ok', r.msg || (v ? '镜像前缀已保存' : '镜像前缀已清除'));
-      } else {
-        toast('err', '下载加速镜像', (r && r.msg) || '保存失败');
-        logInto($('logStream'), 'err', '保存镜像前缀失败: ' + ((r && r.msg) || '未知错误'));
-      }
-    };
-    /* 打开设置页时回填已存的镜像前缀 */
-    PTApp.onModeChange(function (m) {
-      if (m !== 'set') return;
-      call('GetUpdateMirror').then(function (r) {
-        if (r && r.ok) { var el = $('updMirror'); if (el) el.value = r.mirror || ''; }
-      });
-    });
 
     /* —— 电源拨杆：彻底关机——连带后台代理进程一起结束。
        平时关窗（红绿灯/系统关闭）不停后台；只有这个拨杆是全停+关窗 —— */

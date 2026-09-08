@@ -3,6 +3,7 @@
 package main
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -31,39 +32,31 @@ func TestApplyMirror(t *testing.T) {
 	}
 }
 
-// normalizeMirrorInput（ccSetUpdateMirror 的校验纯函数）：空串=清除；合法 http(s) 通过；
-// 非 http(s) / 无 host 拒绝。
-func TestNormalizeMirrorInput(t *testing.T) {
-	// 空串（含纯空白）→ ("", nil)：清除回直连
-	for _, s := range []string{"", "   ", "\t"} {
-		m, err := normalizeMirrorInput(s)
-		if err != nil || m != "" {
-			t.Errorf("%q 应归一为空串（清除），got (%q, %v)", s, m, err)
-		}
+// TestUpdateMirrorCandidates 镜像链常量合法性（防将来手滑写重/写坏）：
+// 非空；每条是能解析出 host 的 http(s) URL；无尾斜杠（applyMirror 会归一，
+// 常量层保持干净）；两两不同（重复 = 白试一遍）。
+func TestUpdateMirrorCandidates(t *testing.T) {
+	if len(updateMirrorCandidates) == 0 {
+		t.Fatal("镜像候选链为空：下载将只剩直连，链路退化")
 	}
-	// 合法 http(s) URL → trim 后原样返回
-	for _, s := range []string{
-		"https://ghfast.top/",
-		"http://127.0.0.1:8080/",
-		"  https://gh-proxy.com/  ",
-	} {
-		m, err := normalizeMirrorInput(s)
-		if err != nil {
-			t.Errorf("%q 应合法，got err %v", s, err)
+	seen := make(map[string]bool, len(updateMirrorCandidates))
+	for _, m := range updateMirrorCandidates {
+		if m == "" {
+			t.Errorf("候选含空串")
+			continue
 		}
-		if want := strings.TrimSpace(s); m != want {
-			t.Errorf("%q 归一错误，got %q want %q", s, m, want)
+		if !strings.HasPrefix(m, "http://") && !strings.HasPrefix(m, "https://") {
+			t.Errorf("候选 %q 必须是 http(s) URL", m)
 		}
-	}
-	// 拒绝：裸域名 / 非 http(s) scheme / 无 host
-	for _, s := range []string{
-		"ghfast.top",        // 裸域名，无 scheme
-		"ftp://ghfast.top/", // 非 http(s) scheme
-		"https://",          // 无 host
-		"://broken",
-	} {
-		if _, err := normalizeMirrorInput(s); err == nil {
-			t.Errorf("%q 应被拒绝", s)
+		if u, err := url.Parse(m); err != nil || u.Host == "" {
+			t.Errorf("候选 %q 不是合法 URL（err=%v）", m, err)
 		}
+		if strings.HasSuffix(m, "/") {
+			t.Errorf("候选 %q 不应带尾斜杠", m)
+		}
+		if seen[m] {
+			t.Errorf("候选 %q 重复", m)
+		}
+		seen[m] = true
 	}
 }
