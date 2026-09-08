@@ -47,10 +47,11 @@ type Server struct {
 	stats      map[string]*modelStat // 按模型累计（GUI 消耗 TOP）
 	statsPath  string
 
-	failMu       sync.Mutex // hy4 兜底配置（GUI 开关 + fallback 模型，落盘 codebuddy-failover.json）
-	failEnabled  bool
-	failFallback string
-	failPath     string
+	failMu               sync.Mutex // hy4 兜底配置（GUI 开关 + fallback 模型，落盘 codebuddy-failover.json）
+	failEnabled          bool
+	failFallback         string
+	failDefaultReasoning string
+	failPath             string
 
 	limitMu    sync.Mutex // hy4-preview 限流窗口（第 43 轮自动故障转移）
 	limitUntil time.Time
@@ -245,29 +246,41 @@ func (s *Server) saveStats() {
 
 // failoverCfg 落盘结构：statsPath 同目录的 codebuddy-failover.json。
 type failoverCfg struct {
-	Enabled  bool   `json:"enabled"`
-	Fallback string `json:"fallback"`
+	Enabled          bool   `json:"enabled"`
+	Fallback         string `json:"fallback"`
+	DefaultReasoning string `json:"default_reasoning"`
 }
 
 // failoverConfig 内存配置快照（handleChat 守卫用）。
 type failoverConfig struct {
-	enabled  bool
-	fallback string
+	enabled          bool
+	fallback         string
+	defaultReasoning string
 }
 
 func (s *Server) failoverConfig() failoverConfig {
 	s.failMu.Lock()
 	defer s.failMu.Unlock()
-	return failoverConfig{enabled: s.failEnabled, fallback: s.failFallback}
+	return failoverConfig{enabled: s.failEnabled, fallback: s.failFallback,
+		defaultReasoning: s.failDefaultReasoning}
 }
 
+// reasoningTiers 上游 reasoning_effort 合法档位（与 modelMeta 矩阵口径一致）。
+var reasoningTiers = map[string]bool{"off": true, "low": true, "medium": true, "high": true, "max": true}
+
+// defaultReasoningTier 思考缺省档：hy4-preview 在调用方不发 reasoning_effort 时
+// 默认深度思考（2026-09-08 实测 16/16 输出 token 全为 reasoning），注入 low 治理。
+const defaultReasoningTier = "low"
+
 // loadFailover 启动读回；文件缺失/损坏（解析失败或 fallback 为空）用缺省值
-// （开 + deepseek-v4-pro，即 hy4Fallback 常量降级后的唯一用途）。
+// （开 + deepseek-v4-pro，即 hy4Fallback 常量降级后的唯一用途）；
+// default_reasoning 缺字段或值不在合法档位集合时落缺省 low。
 func (s *Server) loadFailover() {
 	s.failMu.Lock()
 	defer s.failMu.Unlock()
 	s.failEnabled = true
 	s.failFallback = hy4Fallback
+	s.failDefaultReasoning = defaultReasoningTier
 	if s.failPath == "" {
 		return
 	}
@@ -281,6 +294,9 @@ func (s *Server) loadFailover() {
 	}
 	s.failEnabled = c.Enabled
 	s.failFallback = c.Fallback
+	if reasoningTiers[c.DefaultReasoning] {
+		s.failDefaultReasoning = c.DefaultReasoning
+	}
 }
 
 // saveFailover 原子落盘（照抄 saveStats）。
@@ -289,7 +305,8 @@ func (s *Server) saveFailover() {
 		return
 	}
 	s.failMu.Lock()
-	b, err := json.Marshal(failoverCfg{Enabled: s.failEnabled, Fallback: s.failFallback})
+	b, err := json.Marshal(failoverCfg{Enabled: s.failEnabled, Fallback: s.failFallback,
+		DefaultReasoning: s.failDefaultReasoning})
 	s.failMu.Unlock()
 	if err != nil {
 		return
@@ -362,7 +379,7 @@ func (s *Server) handleFailover(w http.ResponseWriter, r *http.Request) {
 		if body.Enabled != nil {
 			s.failEnabled = *body.Enabled
 		}
-		cfg := failoverConfig{enabled: s.failEnabled, fallback: s.failFallback}
+		cfg := failoverConfig{enabled: s.failEnabled, fallback: s.failFallback, defaultReasoning: s.failDefaultReasoning}
 		s.failMu.Unlock()
 		s.saveFailover()
 		log.Printf("[codebuddy] failover 配置更新: enabled=%v fallback=%s", cfg.enabled, cfg.fallback)
@@ -399,6 +416,23 @@ func failoverDecide(cfg failoverConfig, sentModel string, limited bool, status i
 		}
 	}
 	return d
+}
+
+// reasoningDefaultFor 缺省 reasoning_effort 注入判定（纯逻辑，便于单测）。
+// 客户端已带 reasoning_effort 时不注入的分支由调用方保证（透传优先，不进本函数）。
+// 返回空串表示不注入：模型无元数据 / reasoning 矩阵缺失，或配置档位不在该模型矩阵。
+func reasoningDefaultFor(metaEntry map[string]any, model, cfg string) string {
+	_ = model
+	if metaEntry == nil || cfg == "" {
+		return ""
+	}
+	matrix, _ := metaEntry["reasoning"].(string)
+	for _, tier := range strings.Split(matrix, "/") {
+		if tier == cfg {
+			return cfg
+		}
+	}
+	return ""
 }
 
 // ============ 模型列表（动态探测，后端无模型列表端点） ============
@@ -694,6 +728,13 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		sentModel = cfg.fallback
 		log.Printf("[codebuddy] hy4-preview 限流中，本次切换 %s", cfg.fallback)
 	}
+	// 思考缺省档：客户端未带 reasoning_effort 时按配置注入（已带一律不动，透传优先）
+	if _, ok := backendBody["reasoning_effort"]; !ok {
+		if eff := reasoningDefaultFor(modelMeta[sentModel], sentModel, cfg.defaultReasoning); eff != "" {
+			backendBody["reasoning_effort"] = eff
+			log.Printf("[codebuddy] model=%s 未带 reasoning_effort，注入缺省 %s", sentModel, eff)
+		}
+	}
 	start := time.Now()
 	var resp *http.Response
 	for attempt := 0; ; attempt++ {
@@ -716,6 +757,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()
 		log.Printf("[codebuddy] chat model=%s status=%d err=%s", sentModel, resp.StatusCode, truncate(string(errBody), 200))
+		// 11128 专项诊断（2026-09-08 实锤为内容指纹拦截，固定前缀便于 grep）
+		if strings.Contains(string(errBody), "11128") {
+			log.Printf("[codebuddy] 11128 为内容指纹拦截（第三方 Agent system 模板句/品牌词常见），对照 desensitize.go 指纹清洗表排查，body 预览: %s", truncate(string(errBody), 200))
+		}
 		// hy4-preview 撞配额 429：兜底开启时记限流窗口并立刻用 fallback 重放本次
 		// 请求（仅首跳触发，重放自身失败如实透传，不循环）；fallback 请求不触发；
 		// 兜底关闭 → 不记窗口不重放，429 如实透传

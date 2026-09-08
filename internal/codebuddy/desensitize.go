@@ -35,6 +35,33 @@ var sensitiveTerms = []string{
 	"murder", "kill", "violence", "violent",
 	"Claude Code", "Claude Opus", "Claude Sonnet", "Claude Haiku", "Claude Fable",
 	"Anthropic", "Co-Authored-By", "noreply@anthropic.com",
+	// 11128 实证增补（2026-09-08）：品牌词（MrWhatHuang 实测会被拦）
+	// + 报错回显指纹（xueyue33 实测历史回显触发 11128）
+	"Codex", "OpenAI",
+	// "API error" 不带尾冒号（主智能体裁决 2026-09-08）：sensitivePattern 整体被
+	// \b(?:...)\b 包裹，条目以冒号结尾时冒号后接空格的常见形态（如 `API error: 500`）
+	// 边界不成立、永不命中，等于死条目；裸词形同时覆盖裸形态与带冒号形态，
+	// 且本词表只作用于 system/developer/tools 三处，零宽插入无语义副作用。
+	"Error: API error", "API error",
+	"Illegal API invocation", "unapproved channel",
+}
+
+// fingerprintRules 11128 内容指纹删除表（删行派，学 wnddd839/codebuddyapi-proxy
+// v0.3.10：上游按请求内容做精确字符串黑名单（大小写不敏感），对命中句做最小
+// 删除、语义无损）。首条实测：仅删括号注解、保留 `Main branch: <branch>`，400→200。
+var fingerprintRules = []struct {
+	re   *regexp.Regexp
+	repl string
+}{
+	{regexp.MustCompile(`(?i)\b(Main branch) \(you will usually use this for PRs\)`), "$1"},
+}
+
+// stripFingerprints 对文本应用指纹删除表（命中即删，未命中原样返回）。
+func stripFingerprints(text string) string {
+	for _, r := range fingerprintRules {
+		text = r.re.ReplaceAllString(text, r.repl)
+	}
+	return text
 }
 
 // sensitivePattern 大正则（词长降序避免短词先吃掉长词，\b 边界 + 忽略大小写）。
@@ -196,10 +223,11 @@ func desensitizeMessage(m map[string]any, roles map[string]bool, harnessUser, co
 			return nm
 		}
 	}
-	// 字符串或 content blocks 都做零宽脱敏（保留原文，不裁剪）
+	// 字符串或 content blocks 都做指纹删除（11128 黑名单句）+ 零宽脱敏
+	//（保留原文，不裁剪；顺序：删除优先）
 	switch v := content.(type) {
 	case string:
-		nm["content"] = DesensitizeText(v)
+		nm["content"] = DesensitizeText(stripFingerprints(v))
 	case []any:
 		blocks := make([]any, 0, len(v))
 		for _, blk := range v {
@@ -210,7 +238,7 @@ func desensitizeMessage(m map[string]any, roles map[string]bool, harnessUser, co
 						nb[k] = val
 					}
 					if s, ok := bm["text"].(string); ok {
-						nb["text"] = DesensitizeText(s)
+						nb["text"] = DesensitizeText(stripFingerprints(s))
 					}
 					blocks = append(blocks, nb)
 					continue
