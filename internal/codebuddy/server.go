@@ -781,26 +781,35 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	if clientWantsStream {
-		// 流式：SSE 原样转发（后端已是标准 OpenAI SSE）；
+		// 流式：SSE 逐行清洗后转发——CodeBuddy 后端每个 delta 同时携带 content
+		// 与 reasoning_content 两个键（未活动侧为空字符串），ZCode 的流解析按
+		// 字段出现切分 part，双键并存会把一次思考阶段撕成几十个「思考」条目
+		// （团结上游只发活动侧键，无此现象）。剔掉空字符串键即对齐团结流形；
 		// 同时行扫描 data: 行提取 usage 入账（消耗 TOP 统计）
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("X-Accel-Buffering", "no")
 		flusher, _ := w.(http.Flusher)
 		scan := newUsageScanner(sentModel, s)
+		cleaner := &sseFieldCleaner{}
 		buf := make([]byte, 32*1024)
 		for {
 			n, rerr := resp.Body.Read(buf)
 			if n > 0 {
 				scan.feed(buf[:n])
-				if _, werr := w.Write(buf[:n]); werr != nil {
-					return
+				if out := cleaner.feed(buf[:n]); len(out) > 0 {
+					if _, werr := w.Write(out); werr != nil {
+						return
+					}
 				}
 				if flusher != nil {
 					flusher.Flush()
 				}
 			}
 			if rerr != nil {
+				if out := cleaner.flush(); len(out) > 0 {
+					_, _ = w.Write(out)
+				}
 				return
 			}
 		}
@@ -858,6 +867,85 @@ func (u *usageScanner) feed(chunk []byte) {
 			u.srv.addStat(u.model, chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens, chunk.Usage.TotalTokens)
 		}
 	}
+}
+
+// sseFieldCleaner 流式 SSE 逐行清洗：剔除 delta 里值为空字符串的 content /
+// reasoning_content 键（CodeBuddy 后端每帧双键、未活动侧空串；ZCode 按字段
+// 出现切分 part，会把一次思考撕成几十个「思考」条目）。非 data 行、[DONE]、
+// 解析失败的行一律原样透传；不完整行跨 feed 缓冲，flush 冲尾。
+type sseFieldCleaner struct {
+	buf []byte
+}
+
+func (s *sseFieldCleaner) feed(chunk []byte) []byte {
+	s.buf = append(s.buf, chunk...)
+	var out []byte
+	for {
+		i := bytes.IndexByte(s.buf, '\n')
+		if i < 0 {
+			break
+		}
+		line := s.buf[:i+1]
+		out = appendCleanedSSELine(out, line)
+		s.buf = s.buf[i+1:]
+	}
+	return out
+}
+
+func (s *sseFieldCleaner) flush() []byte {
+	if len(s.buf) == 0 {
+		return nil
+	}
+	out := appendCleanedSSELine(nil, s.buf)
+	s.buf = nil
+	return out
+}
+
+// appendCleanedSSELine 把一行 SSE 清洗后追加到 out：仅当是可解析的 data 行且
+// delta 里存在空字符串的 content / reasoning_content 时才重写，否则原样追加。
+func appendCleanedSSELine(out, line []byte) []byte {
+	trimmed := bytes.TrimSpace(line)
+	if !bytes.HasPrefix(trimmed, []byte("data:")) || bytes.Contains(trimmed, []byte("[DONE]")) {
+		return append(out, line...)
+	}
+	var chunk map[string]any
+	if json.Unmarshal(bytes.TrimSpace(trimmed[5:]), &chunk) != nil {
+		return append(out, line...)
+	}
+	changed := false
+	choices, ok := chunk["choices"].([]any)
+	if !ok {
+		return append(out, line...)
+	}
+	for _, c := range choices {
+		cm, ok := c.(map[string]any)
+		if !ok {
+			continue
+		}
+		delta, ok := cm["delta"].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, k := range []string{"content", "reasoning_content"} {
+			if v, exists := delta[k]; exists {
+				if str, isStr := v.(string); isStr && str == "" {
+					delete(delta, k)
+					changed = true
+				}
+			}
+		}
+	}
+	if !changed {
+		return append(out, line...)
+	}
+	nb, err := json.Marshal(chunk)
+	if err != nil {
+		return append(out, line...)
+	}
+	out = append(out, []byte("data: ")...)
+	out = append(out, nb...)
+	out = append(out, '\n')
+	return out
 }
 
 func mustJSONReader(v any) io.Reader {
