@@ -1222,21 +1222,38 @@ func (s *Server) forwardExternal(w http.ResponseWriter, r *http.Request, body []
 	rid := s.registry.Register(model, pname, wantsStream)
 	defer s.registry.Finish(rid)
 
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, externalBaseURL(prov.BaseURL)+path, bytes.NewReader(body))
-	if err != nil {
-		// 构造错与网络错同语义：不写客户端，报 -1 给调用方终态/回落
-		return -1
-	}
-	req.Header.Set("Authorization", "Bearer "+prov.APIKey)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	applyOpenCodeSession(req, prov.BaseURL)
 	cl := &http.Client{Timeout: 120 * time.Second, Transport: smartProxyTransport}
-	resp, err := cl.Do(req)
-	if err != nil {
+	// uTLS 握手 EOF 等传输层错误是「快失败」（Agnes CDN 更新后间歇性拒指纹握手，
+	// 2026-09-08 实测：chat 8/8 成功、生图/探测偶发 EOF；直连标准 TLS 全通），
+	// 换新连接立即重试一次即可恢复；慢失败（上游 120s 超时）不重试避免双倍等待。
+	// 重试发生在向客户端写任何字节之前，流式/非流式均安全。
+	var resp *http.Response
+	var doErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, externalBaseURL(prov.BaseURL)+path, bytes.NewReader(body))
+		if err != nil {
+			// 构造错与网络错同语义：不写客户端，报 -1 给调用方终态/回落
+			return -1
+		}
+		req.Header.Set("Authorization", "Bearer "+prov.APIKey)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		applyOpenCodeSession(req, prov.BaseURL)
+		resp, doErr = cl.Do(req)
+		if doErr == nil {
+			break
+		}
+		if attempt == 0 && time.Since(started) <= 10*time.Second {
+			s.activity.Add("info", model+" · "+pname+" 传输错误重试: "+doErr.Error(), model, pname, time.Since(started).Milliseconds(), 0, 0)
+			log.Printf("[tuanjie] external model=%s provider=%s 传输错误重试: %v", model, pname, doErr)
+			continue
+		}
+		break
+	}
+	if doErr != nil {
 		latency := time.Since(started).Milliseconds()
-		s.activity.Add("error", model+" · "+pname+" 异常: "+err.Error(), model, pname, latency, 0, 0)
-		log.Printf("[tuanjie] external chat model=%s provider=%s err=%v", model, pname, err)
+		s.activity.Add("error", model+" · "+pname+" 异常: "+doErr.Error(), model, pname, latency, 0, 0)
+		log.Printf("[tuanjie] external chat model=%s provider=%s err=%v", model, pname, doErr)
 		// 网络级失败也是瞬时故障：不写客户端，报给调用方回落重试；
 		// 调用方不回落时（链尽/非回落场景）负责写终态错误
 		return -1
