@@ -88,9 +88,9 @@ func TestDesensitizeBodyFingerprintChain(t *testing.T) {
 
 // reasoningDefaultFor 四个边界：正常注入 / 模型不在矩阵 / 档位不在该模型矩阵 / 矩阵缺失。
 func TestReasoningDefaultFor(t *testing.T) {
-	// 正常：hy4-preview + low → "low"
-	if got := reasoningDefaultFor(modelMeta["hy4-preview"], "hy4-preview", "low"); got != "low" {
-		t.Fatalf("hy4-preview+low 应注入 low, got %q", got)
+	// 正常：hy4-preview + max → "max"（缺省档定 max，用模型最强思考能力）
+	if got := reasoningDefaultFor(modelMeta["hy4-preview"], "hy4-preview", "max"); got != "max" {
+		t.Fatalf("hy4-preview+max 应注入 max, got %q", got)
 	}
 	// 模型不在矩阵（元数据为 nil）→ 不注入
 	if got := reasoningDefaultFor(nil, "no-such-model", "low"); got != "" {
@@ -128,8 +128,8 @@ func TestFailoverDefaultReasoningRoundtrip(t *testing.T) {
 	}
 }
 
-// failoverCfg 缺字段 / 非法值 → 读回落缺省 "low"。
-func TestFailoverDefaultReasoningFallbackToLow(t *testing.T) {
+// failoverCfg 缺字段 / 非法值 → 读回落缺省 "max"。
+func TestFailoverDefaultReasoningFallbackToMax(t *testing.T) {
 	cases := map[string]string{
 		"missing": `{"enabled":true,"fallback":"glm-5.3"}`,
 		"invalid": `{"enabled":true,"fallback":"glm-5.3","default_reasoning":"ultra"}`,
@@ -144,8 +144,8 @@ func TestFailoverDefaultReasoningFallbackToLow(t *testing.T) {
 		s.failMu.Lock()
 		got := s.failDefaultReasoning
 		s.failMu.Unlock()
-		if got != "low" {
-			t.Fatalf("%s: 缺字段/非法 default_reasoning 应回落 low, got %q", name, got)
+		if got != "max" {
+			t.Fatalf("%s: 缺字段/非法 default_reasoning 应回落 max, got %q", name, got)
 		}
 	}
 }

@@ -268,13 +268,14 @@ func (s *Server) failoverConfig() failoverConfig {
 // reasoningTiers 上游 reasoning_effort 合法档位（与 modelMeta 矩阵口径一致）。
 var reasoningTiers = map[string]bool{"off": true, "low": true, "medium": true, "high": true, "max": true}
 
-// defaultReasoningTier 思考缺省档：hy4-preview 在调用方不发 reasoning_effort 时
-// 默认深度思考（2026-09-08 实测 16/16 输出 token 全为 reasoning），注入 low 治理。
-const defaultReasoningTier = "low"
+// defaultReasoningTier 思考缺省档：调用方不发 reasoning_effort 时注入的档位。
+// 定 max（用户裁决 2026-09-08：国产模型对比国外闭源有差距，思考能开多高开多高，
+// 用模型最强的一面；modelMeta 实测矩阵内全部模型均接受 max，deepseek 系仅拒 off）。
+const defaultReasoningTier = "max"
 
 // loadFailover 启动读回；文件缺失/损坏（解析失败或 fallback 为空）用缺省值
 // （开 + deepseek-v4-pro，即 hy4Fallback 常量降级后的唯一用途）；
-// default_reasoning 缺字段或值不在合法档位集合时落缺省 low。
+// default_reasoning 缺字段或值不在合法档位集合时落缺省 max。
 func (s *Server) loadFailover() {
 	s.failMu.Lock()
 	defer s.failMu.Unlock()
