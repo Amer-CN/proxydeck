@@ -18,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 )
 
 // Server 是团结转发的本地 OpenAI 兼容服务。
@@ -718,6 +719,32 @@ func aliasNote(name string) string {
 // （包级 var 便于测试注入短时长，避免真实秒级等待）。
 var pacingSwitchBackoff = time.Second
 
+// invalidUTF8BodyMessage 本地拒绝非法 UTF-8 请求体时的返回文案。
+const invalidUTF8BodyMessage = "请求体不是合法 UTF-8，已本地拒绝（未转发上游）。" +
+	"请确认发送端以 UTF-8 编码 JSON；命令行测试请把 body 写入文件后用 " +
+	"curl --data-binary @文件，不要用 -d '中文'（Git Bash 调用原生 curl.exe 时会按本地" +
+	"代码页 GBK 转码，整份 JSON 会变成非法 UTF-8）"
+
+// rejectInvalidUTF8Body 请求体不是合法 UTF-8 时写本地 400 并返回 true（调用方直接 return）。
+//
+// 为什么必须在本地拦：上游网关对非法 UTF-8 的 JSON 只回一句误导性的
+// 「Invalid model name passed in model=None」400（实测 2026-09-10：同一份 JSON，
+// 内容换成裸 GBK 字节 C4 E3 BA C3 必 400，换回真 UTF-8 即 200，与长度无关；
+// 09-06 起日志里 64 次该错误全部来自这类 body）。转发出去等于把「编码错了」
+// 伪装成「模型名错了」，还要被 retriableUpstream 当瞬时错误空重试 3 轮（~4s）。
+//
+// 注意 Go 的 encoding/json 对非法 UTF-8 是宽容的（坏字节替换成 U+FFFD 后照常解析），
+// 所以必须校验原始字节，且必须在解析 model / 重排 body 之前做。
+func (s *Server) rejectInvalidUTF8Body(w http.ResponseWriter, body []byte) bool {
+	if utf8.Valid(body) {
+		return false
+	}
+	log.Printf("[tuanjie] chat 请求体不是合法 UTF-8（%d 字节），本地拒绝，未转发上游", len(body))
+	s.activity.Add("error", "请求体不是合法 UTF-8，本地拒绝（未转发）", "?", "", 0, 0, http.StatusBadRequest)
+	writeErr(w, http.StatusBadRequest, invalidUTF8BodyMessage)
+	return true
+}
+
 // handleChat 转发对话请求（流式/非流式均透传）。
 // 上游瞬时错误（模型未映射/限流/网关抖动）会自动换 key 重试一次；
 // 每次请求记录 model/状态码/耗时到日志；流式注入 include_usage 并解析
@@ -729,6 +756,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+	if s.rejectInvalidUTF8Body(w, body) {
+		return
+	}
 	var req struct {
 		Model  string          `json:"model"`
 		Stream bool            `json:"stream"`
@@ -1807,6 +1837,14 @@ func retriableUpstream(body string) bool {
 		return false
 	}
 	low := strings.ToLower(body)
+	// 模型名报错是确定性的：同一请求重发结果不变，重试纯属浪费。实测
+	// `Invalid model name passed in model=None` 连重 3 次全 400（~4s 白等），
+	// 该错误的正源是上游收到非法 UTF-8 的 body（已在 handleChat 本地拦截，
+	// 这里兜底防其它入口漏进来）。下面保留 "model" 是为了照旧重试
+	// 「模型未映射」那类确实可能瞬时的错误。
+	if strings.Contains(low, "invalid model name") {
+		return false
+	}
 	return strings.Contains(low, "model") ||
 		strings.Contains(low, "rate") ||
 		strings.Contains(low, "429") ||
