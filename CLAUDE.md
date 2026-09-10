@@ -155,6 +155,14 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 ### WorkBuddy（8787）——子智能体可用
 - 支持 tool_calls（实测返回过标准工具调用），可当 Agent/子智能体模型
 - glm-5.2 / kimi-k3 等可用
+- **模型列表机制（2026-09-10 定案）**：`/v1/models` = **硬编码候选池
+  （`modelCandidates`）+ 每小时在线探测过滤**（TTL 1h）。探测只能把池内不可用的
+  筛掉，**发现不了上游新增**；腾讯侧无任何 `/models` 类端点（`/models`、
+  `/v1/models`、`/v2/models` 全 404）——所以「自动更新」只等于可用性刷新，
+  **上游新增模型必须手工入池**，且要动三处：`modelCandidates` + `modelMeta`
+  （`server.go`）+ ui.html 的 `CB_REF_FALLBACK`（v3.10.3 加 `deepseek-v4.1-flash`
+  即走此流程）。8787 由**编译进 exe 的 Go 后端**提供，`plugins/codebuddy2api/`
+  是早期 Python 实现、已不在链路上（仅 `credential.go` 一处注释提到它）
 - **模型元数据纪律（2026-09-02 定）**：`/model/info` 的 modelMeta 只准填实测值
   （reasoning 实测矩阵：deepseek 系与 auto 拒 off，其余 11 个 off~max 全接；
   maxInput 仅 glm-5.2 / deepseek-v4-pro / deepseek-v4-flash 三条实测 1M）。
@@ -248,6 +256,15 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     `x-opencode-session`（进程级稳定 UUID，opencode_session.go），缺头按出口
     分片随机 400 MissingSessionID；ZCode「连接测试」按钮发裸请求必报错=假阴性，
     以真实对话为准。完整定案见 CODELY.md 2026-09-07 条
+19. **同一工作树禁止多窗口并发接手同一任务**：2026-09-10 实测——三个会话
+    （收到的是同一句「接手这个会话的任务」）同时改 `internal/codebuddy/server.go`
+    与 `sse_cleaner_test.go`，互写工作树、各自把对方的改动当成越界，其中一个
+    未打招呼就 `taskkill` 了 8787 后端配合换装（正是本文件明令要先问的那种操作）。
+    接手前先 `git status` + 看 `~/.zcode/cli/hooks/activity-*.log`（PostToolUse
+    钩子逐条记录 Edit/Write/Bash 与时间戳，可反查是谁在几点改了哪个文件）确认
+    没有别的会话在动同一批文件；commit / push / Release 这类不可逆且对外的动作
+    尤其必须串行，且推送前先 `git ls-remote <remote> refs/heads/main` 复核远端
+    有没有被别人推进过
 
 ## 自定义服务商（tuanjie-providers.json；v3.9.0 引入时叫「外部账号」，v3.10.0 改名重构）
 
@@ -284,19 +301,35 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-09-07，v3.10.0 已发版）
+## 当前状态（2026-09-10，v3.10.3 已发版）
 
-- **v3.10.0 已发布**：自定义服务商界面重构（原外部账号）+ opencode.ai 出站自动带
-  x-opencode-session 会话头（Zen 免费模型经代理不再 MissingSessionID；实测加头后
-  400→429 过门）+ 识图下拉补 GLM-5.3-FLASH / KIMI-K3；README 徽章已同步
-- 远程 main 与本地同步（本次发版提交后 push）；仓库 github.com/Amer-CN/proxydeck
-- 服务全跑 v3.10.0：8788/8787/8786/8785/8891 五插件全部在线（22:5x 探测 200，
-  用户 GUI 点火），55990 按需未跑；muse-spark-1.3-contributor-free 经代理实测
-  200 过门（会话头生效）
-- 发版坑（v3.10.0 实测）：版本串共 6 处——app/main.go appVersion + ui.html 的
-  UI_CUR / etchVer / nameplate / buildNo / verChip——漏改任一则自报旧版并误弹
-  「发现新版本」框（弹窗当前值取自 ui.html UI_CUR，与 appVersion 不同源）
-- .work/ 已清场：旧测试日志与上一任务简报已删（current-task.md 由下一任务重写）
+- **v3.10.3 已发布**：WorkBuddy 模型池补 `deepseek-v4.1-flash`（官方标记 0.03x
+  独家优惠；reasoning 拒 off，同 deepseek 系）+ 流式清洗新增**空数组 `tool_calls`
+  剔除**（ZCode 以 `tool_calls != null` 判定工具调用，空数组同样命中，一次思考
+  被逐帧切成几十条——8787 实测 153 条 → 1 条），两个单测守门。提交 `41dc9a7`，
+  Release 附 `ProxyDeck.exe` 且 asset sha256 与源码构建逐字节一致
+- 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck（remote 名 `myrepo`，
+  不是 origin；`push_api.py` 里的 `REPO` 写的是改名前旧名 `command-code-proxy-tools`，
+  GitHub 会重定向，能用但名字陈旧）
+- 服务现状（2026-09-10 17:0x 探测）：8787 / 8788 在线（200），8786 / 8785 / 8891
+  与 55990 当时未起（按需，GUI 点火）。注意 8787 的实例是外部命令拉起的、
+  不是 GUI 的分离子进程，GUI 插件开关未必管得住它——重启 GUI 后恢复常态
+- **换装纪律**：`ProxyDeck.exe` 换装走腾位法（rename 运行中的 exe → 新包顶替原
+  路径），**后端不断、只有 GUI 需重启**；一键更新的替换目标取自
+  `os.Executable()`（`bridge.go`）而非硬编码路径，所以腾位换装后**先重启一次
+  GUI 再谈别的**，避免在 `.old` 名字上继续套娃
+- 发版坑：版本串共 **7 处**——`app/main.go appVersion` + ui.html 的 `UI_CUR` /
+  `etchVer` / `nameplate`（含 `aria-label`，同行两处）/ `buildNo` / `verChip` /
+  **`CHANGELOG_DATA`**；漏改任一则自报旧版并误弹「发现新版本」框（弹窗当前值取自
+  `UI_CUR`，与 `appVersion` 不同源）。`CHANGELOG_DATA` 是内嵌 JS，改完用 node
+  实解一次验语法（改坏会白屏）。⚠ 坑 17 写作「6 处」是旧口径、漏列
+  `CHANGELOG_DATA`，与上文「升版本必须同步的位置」7 项不一致，以 7 项为准
+- `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
+  GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
+- `.work/` 现状：简报 `current-task.md` 由下一任务重写；另有若干构建中间产物
+  （`pd3103*.exe`、`ProxyDeck.prev.exe`），全部 gitignore，可随时清
+- **未跟踪、未入库（用户 2026-09-10 裁决）**：`.probe/`（探测草稿）与
+  `docs/glm53flash-litellm-probe-report.md`（LiteLLM 网关通道探测报告，已查无凭证）
 - 实测记录（2026-09-06 两轮全量）：结论已并入上文模型情报与坑 14/15/16；
   唯一未覆盖：B.AI 6-8M 字符级 WAF 极端量级（判定不值得复现）
 - 下一版待办：暂无（发版闭环完成）；新坑/结论随时按惯例入册
