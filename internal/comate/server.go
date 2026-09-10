@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/clientcwd"
 )
 
 // upstreamBase 内部 zulu serve 地址（固定 8792）。
@@ -262,10 +264,14 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	query := flattenMessages(req.Messages)
 	body := map[string]any{
-		"query":   flattenMessages(req.Messages),
-		"cwd":     os.TempDir(), // cwd 固定值即可（插件进程工作目录或系统临时目录）
+		"query":   query,
+		"cwd":     clientcwd.Dir(query, "COMATE_CWD"),
 		"license": license,
+	}
+	if mode := strings.TrimSpace(os.Getenv("COMATE_MODE")); mode != "" {
+		body["mode"] = mode // 不设则用上游默认（Agent，可读写）
 	}
 	model := s.resolveModel(zuluPath, license, req.Model)
 	if model != "" && model != "auto" && model != "auto-free" {

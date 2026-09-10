@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/clientcwd"
 )
 
 // workerTimeout 单次请求总超时（含 worker 起动 + 完整 agent 任务；写码类任务可长达数分钟）。
@@ -24,58 +26,7 @@ const workerTimeout = 600 * time.Second
 // 优先级：请求内提取 > env QODER_CWD（显式钉死）> 系统临时目录。
 // 提取到的路径必须真实存在且是目录才算数（防提示词里随机路径误匹配）。
 func cwdDir(prompt string) string {
-	if p := extractCwdFromPrompt(prompt); p != "" {
-		return p
-	}
-	if p := strings.TrimSpace(os.Getenv("QODER_CWD")); p != "" {
-		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
-			return p
-		}
-	}
-	return os.TempDir()
-}
-
-// cwdMarkers 客户端系统提示里常见的工作目录标记（ZCode/Claude Code 系均为此格式）。
-var cwdMarkers = []string{
-	"working directory", "current directory", "工作目录", "当前工作目录", "cwd",
-}
-
-// extractCwdFromPrompt 从扁平化 prompt 中提取客户端会话的工作目录。
-func extractCwdFromPrompt(prompt string) string {
-	lower := strings.ToLower(prompt)
-	for _, marker := range cwdMarkers {
-		idx := 0
-		for {
-			i := strings.Index(lower[idx:], marker)
-			if i < 0 {
-				break
-			}
-			start := idx + i + len(marker)
-			seg := prompt[start:]
-			// 跳过冒号/空白
-			trimmed := strings.TrimLeft(seg, ":： \t\r\n")
-			// 抓取盘符绝对路径（到行尾/引号/反引号为止）
-			j := 0
-			for j < len(trimmed) {
-				c := trimmed[j]
-				if c == '\r' || c == '\n' || c == '"' || c == '`' || c == '\'' {
-					break
-				}
-				j++
-			}
-			cand := strings.TrimRight(trimmed[:j], " \t.,；;")
-			if len(cand) >= 3 && cand[1] == ':' {
-				if fi, err := os.Stat(cand); err == nil && fi.IsDir() {
-					return cand
-				}
-			}
-			idx = start + j
-			if idx >= len(prompt) {
-				break
-			}
-		}
-	}
-	return ""
+	return clientcwd.Dir(prompt, "QODER_CWD")
 }
 
 // findWorker 探测官方 SDK worker（node 单文件）路径：

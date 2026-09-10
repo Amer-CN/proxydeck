@@ -1,8 +1,8 @@
-package qoder
+package clientcwd
 
 import "testing"
 
-func TestExtractCwdFromPrompt(t *testing.T) {
+func TestExtract(t *testing.T) {
 	cases := []struct{ name, prompt, want string }{
 		{
 			"英文标记+反斜杠路径",
@@ -31,8 +31,16 @@ func TestExtractCwdFromPrompt(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		if got := extractCwdFromPrompt(c.prompt); got != c.want {
-			t.Errorf("%s: extractCwdFromPrompt = %q, want %q", c.name, got, c.want)
+		if got := Extract(c.prompt); got != c.want {
+			t.Errorf("%s: Extract = %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+func TestDirEnvFallback(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLIENTCWD_TEST_CWD", dir)
+	if got := Dir("[System]\nyou are helpful\n[User]\nhi", "CLIENTCWD_TEST_CWD"); got != dir {
+		t.Errorf("Dir env 回退 = %q, want %q", got, dir)
 	}
 }
