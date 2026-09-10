@@ -31,7 +31,8 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 
 - 端口约定：主代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891
 - 插件 = spawn 本 exe 的 `--plugin-<id> --port <n>` 子进程，独立常驻，关 GUI 不中断
-- **升版本必须同步的位置**（漏一处就有地方显示旧版；2026-09-02 按实操勘误计数）：
+- **升版本必须同步的位置**（漏一处就有地方显示旧版；2026-09-02 按实操勘误计数，
+  2026-09-10 补第 8 项）：
   1. `app/main.go` `appVersion`
   2. `app/ui.html` `id="etchVer"`（顶栏蚀刻）
   3. `app/ui.html` `.pt-nameplate`（铭牌，含 `aria-label` 同行两处）
@@ -40,10 +41,13 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   6. `app/ui.html` `var UI_CUR`（更新检查比对用）
   7. `app/ui.html` **`var CHANGELOG_DATA`**（甲板内「更新日志」浮层的**独立副本**，不读 `CHANGELOG.md`！
      只改仓库文件不改这里，浮层就还是旧版——v3.6.2 / v3.6.3 两次都栽在这里）
+  8. `README.md` 版本徽章（shields.io 的 `Version-vX.Y.Z`）——**不在 `app/` 下，历次发版
+     最容易漏**：v3.10.1~v3.10.3 连发三版全漏、徽章停在 v3.10.0，根因就是清单里从来没
+     列过它（2026-09-10 发现并修）
   外加 `CHANGELOG.md` 顶条 + GitHub Release（正文＝CHANGELOG 顶条逐字，标题＝`vX.Y.Z · 主题 · 主题`，
   **必须附 `ProxyDeck.exe` 附件**——那是一键更新的下载源，漏传 = 用户点更新 404；
   2026-09-04 发 v3.8.5 时曾漏、事后补传）。
-  改完用旧版本串 grep app/ 复核一遍（应只剩 CHANGELOG_DATA 历史条目）。
+  改完用旧版本串 grep `app/ README.md` 复核一遍（应只剩 CHANGELOG_DATA 历史条目）。
 
 ## 版本号三段位规则（2026-08-31 定，用户裁决）
 
@@ -105,11 +109,14 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   （含 usage），与设计一致
 - GLM-5.3：≥825K 上下文，effort 参数时灵时不灵（上游 bug）；**上游过载时偶发
   429 和"200 空响应"**（空响应重试已实现在 tuanjie/server.go 的 ensureNonEmpty，5eeca56）
-- 已知上游故障：间歇 400 "Invalid model name passed in model=None"（多实例映射失步，
-  插件已内置 3 次重试；高发期可能连撞，等待即可）。2026-09-06 再发实证：
-  15:13-15:20 约 6.5 分钟，**按模型区分**——codely 别名组与 KIMI-K3 解析失败、
-  glm-5.3-flash 系正常，同分钟内成败交错 = 实例级映射失步；官方 CLI 同时段
-  可用 → 池中仅部分实例坏。诊断教训见坑 15
+- **400 "Invalid model name passed in model=None" 归因已推翻（2026-09-10）**：该报错的
+  真正成因是**上游收到非法 UTF-8 的请求体**（详见坑 14），**不是**上游实例映射失步。
+  证据：①同一份 JSON，内容换成裸 GBK 字节 `C4 E3 BA C3` 必 400、换回真 UTF-8 即 200，
+  与 body 长度无关（同 6 字节的 `abcdef` 通过）；②全量日志里 64 次该报错**无一例外落在
+  单条消息的探测请求**上，12k+ 真实 agent 请求零命中；③PostToolUse 审计日志反查到当时
+  的探测命令正是 `curl -d '...中文...'`。旧「按模型区分 / 实例级失步」结论建立在同一批
+  被 GBK 打碎的探测数据上，一并作废。代理现已本地拦截并回可读 400（v3.10.4），
+  且不再对该确定性错误做无谓重试
 - **2026-09-04 实测三条**：
   - codely 别名现行映射：codely-core→glm-5-fp8-128k、codely-vl→glm-5.3-flash、
     codely-flash/basic/air→deepseek-v4-flash（ga-260731/0731 双部署负载均衡）
@@ -249,9 +256,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 16. **故障时间线陷阱**：判定"持续故障"前先拉逐分钟成败统计——两次测试之间
     的空白期 ≠ 故障持续期（2026-09-06 曾把 6.5 分钟的上游间歇故障误判成
     "连接钉死 85 分钟"，靠逐分钟数据翻案撤回）
-17. **发版版本串共 6 处**：app/main.go appVersion + ui.html 的 UI_CUR / etchVer /
-    nameplate / buildNo / verChip——漏改任一则应用自报旧版并误弹「发现新版本」
-    框（弹窗当前值取 ui.html UI_CUR，与 appVersion 不同源；v3.10.0 实测踩坑）
+17. **版本串清单以文首「升版本必须同步的位置」为唯一权威（现 8 处）**：本坑旧文写「6 处」、
+    漏列 `CHANGELOG_DATA`；「当前状态」节旧文写「7 处」、又漏列 `README.md` 徽章——
+    同一件事在文件里出现三个数字，正是这类计数漂移的成因，别再在别处复述数字。
+    漏改任一项则应用自报旧版并误弹「发现新版本」框（弹窗当前值取 ui.html UI_CUR，
+    与 appVersion 不同源；v3.10.0 实测踩坑）
 18. **opencode Zen 会话头 + 测试假阴性**：出站 opencode.ai 必带
     `x-opencode-session`（进程级稳定 UUID，opencode_session.go），缺头按出口
     分片随机 400 MissingSessionID；ZCode「连接测试」按钮发裸请求必报错=假阴性，
@@ -310,23 +319,27 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck（remote 名 `myrepo`，
   不是 origin；`push_api.py` 里的 `REPO` 写的是改名前旧名 `command-code-proxy-tools`，
   GitHub 会重定向，能用但名字陈旧）
-- 服务现状（2026-09-10 17:0x 探测）：8787 / 8788 在线（200），8786 / 8785 / 8891
-  与 55990 当时未起（按需，GUI 点火）。注意 8787 的实例是外部命令拉起的、
-  不是 GUI 的分离子进程，GUI 插件开关未必管得住它——重启 GUI 后恢复常态
+- 服务现状（2026-09-10 19:2x 复核）：8785 / 8786 / 8787 / 8788 / 8891 五个插件后端
+  全部在线；55990 主代理未起（按需点火）。**GUI 管得住外部拉起的后端**——靠的不是
+  进程归属，而是 `plugins.go` 的 `pluginStart` 先探活端口、健康就「接管复用，不杀不
+  重启」（`pluginList` 的 `healthy` 也无条件查端口，`stop` 按端口杀）。所以旧文
+  「外部拉起的实例 GUI 插件开关未必管得住它」是误解：2026-09-10 曾据此给出「拉杆会
+  撞端口、得先杀掉」的错误处置建议，实际拉杆只会接管
 - **换装纪律**：`ProxyDeck.exe` 换装走腾位法（rename 运行中的 exe → 新包顶替原
   路径），**后端不断、只有 GUI 需重启**；一键更新的替换目标取自
   `os.Executable()`（`bridge.go`）而非硬编码路径，所以腾位换装后**先重启一次
   GUI 再谈别的**，避免在 `.old` 名字上继续套娃
-- 发版坑：版本串共 **7 处**——`app/main.go appVersion` + ui.html 的 `UI_CUR` /
-  `etchVer` / `nameplate`（含 `aria-label`，同行两处）/ `buildNo` / `verChip` /
-  **`CHANGELOG_DATA`**；漏改任一则自报旧版并误弹「发现新版本」框（弹窗当前值取自
-  `UI_CUR`，与 `appVersion` 不同源）。`CHANGELOG_DATA` 是内嵌 JS，改完用 node
-  实解一次验语法（改坏会白屏）。⚠ 坑 17 写作「6 处」是旧口径、漏列
-  `CHANGELOG_DATA`，与上文「升版本必须同步的位置」7 项不一致，以 7 项为准
+- 发版坑：版本串清单以文首「升版本必须同步的位置」为唯一权威（**8 处**，含
+  2026-09-10 补的 `README.md` 徽章），本文件不再复述处数；`CHANGELOG_DATA` 是内嵌 JS，
+  改完用 node 实解一次验语法（改坏会白屏）
 - `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
-- `.work/` 现状：简报 `current-task.md` 由下一任务重写；另有若干构建中间产物
-  （`pd3103*.exe`、`ProxyDeck.prev.exe`），全部 gitignore，可随时清
+- `.work/` 现状：构建中间产物已清（2026-09-10 清掉 `pd3103*.exe`、`ProxyDeck.new/stripped.exe`），
+  exe 仅留两份可回滚副本 `ProxyDeck.prev.exe`、`ProxyDeck.prev-85693aa.exe`；另有已完成任务的
+  简报、各版 release-notes、探测语料与临时脚本等，全部 gitignore，可随时清。
+  简报 `current-task.md` 由下一任务重写；**并行会话改用 `task-<关键词>.md`**（已核
+  `enforce-flow.ps1` 第 49 行对 `current-task.md` 与 `task-*.md` 同等识别为简报；
+  2026-09-10 实测用 `task-*.md` 连改 6 个文件全程未被闸门拦截）
 - **未跟踪、未入库（用户 2026-09-10 裁决）**：`.probe/`（探测草稿）与
   `docs/glm53flash-litellm-probe-report.md`（LiteLLM 网关通道探测报告，已查无凭证）
 - 实测记录（2026-09-06 两轮全量）：结论已并入上文模型情报与坑 14/15/16；
