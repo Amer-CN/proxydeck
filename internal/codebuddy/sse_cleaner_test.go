@@ -94,3 +94,31 @@ func TestSSEFieldCleanerPassthrough(t *testing.T) {
 		t.Fatalf("非 data 行应原样透传, got %q", got)
 	}
 }
+
+// 空数组的 tool_calls 键剔除：ZCode 用 `tool_calls != null` 判定工具调用，
+// 空数组同样命中，会把一次思考按帧切成逐 token 的几十条。
+func TestSSEFieldCleanerStripsEmptyToolCalls(t *testing.T) {
+	line := `data: {"choices":[{"delta":{"role":"assistant","content":"","reasoning_content":"fox","tool_calls":[]}},` +
+		`{"index":0,"delta":{"content":"ok","tool_calls":[]}}]}` + "\n"
+	c := &sseFieldCleaner{}
+	out := string(c.feed([]byte(line))) + string(c.flush())
+	if strings.Contains(out, `"tool_calls"`) {
+		t.Fatalf("空数组 tool_calls 应被剔除, got %q", out)
+	}
+	if !strings.Contains(out, `"reasoning_content":"fox"`) || !strings.Contains(out, `"content":"ok"`) {
+		t.Fatalf("非空键不应丢失, got %q", out)
+	}
+	if !strings.Contains(out, `"role":"assistant"`) {
+		t.Fatalf("其他键不应丢失, got %q", out)
+	}
+}
+
+// 真实工具调用（非空数组）必须原样保留，不能被清洗器误伤。
+func TestSSEFieldCleanerKeepsRealToolCalls(t *testing.T) {
+	line := `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function",` +
+		`"function":{"name":"read","arguments":"{}"}}]}}]}` + "\n"
+	c := &sseFieldCleaner{}
+	if got := string(c.feed([]byte(line))) + string(c.flush()); got != line {
+		t.Fatalf("非空 tool_calls 应原样透传, got %q", got)
+	}
+}

@@ -446,13 +446,16 @@ func reasoningDefaultFor(metaEntry map[string]any, model, cfg string) string {
 // 实测 400 11102 不存在）；glm-5.0 / glm-4.7 已被上游下线（400）。不在官方
 // 列表的历史候选（kimi-k2.5 / deepseek-v3.2 系 / minimax-m2.7 等）部分仍
 // 可用，但按官方口径不进矩阵。
+// 2026-09-10 官方客户端新增「Deepseek-V4.1-Flash」（0.03x 独家优惠），
+// id deepseek-v4.1-flash 实测 200；reasoning off 拒 400 11150，与 deepseek
+// 系一致。
 var modelCandidates = []string{
 	"auto",
 	"hy4-preview", "hy3",
 	"glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5v-turbo",
 	"minimax-m3",
 	"kimi-k3", "kimi-k2.7", "kimi-k2.6",
-	"deepseek-v4-flash", "deepseek-v4-pro",
+	"deepseek-v4.1-flash", "deepseek-v4-flash", "deepseek-v4-pro",
 }
 
 // Models 返回真实可用模型（并行最小请求探测，1h 缓存）。
@@ -567,25 +570,26 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 // maxOutput 数字来源不可考（Python v3.0.0 抄录，其声称的请求级校验实测
 // 不存在），一律不写——前端对缺失字段如实显示「未核实」。
 var modelMeta = map[string]map[string]any{
-	"auto":              {"reasoning": "low/medium/high/max", "note": "后端自动路由到合适模型"},
-	"hy4-preview":       {"reasoning": "off/low/medium/high/max"},
-	"hy3":               {"reasoning": "off/low/medium/high/max"},
-	"hy3-preview":       {"reasoning": "off/low/medium/high/max"},
-	"hy3-preview-agent": {"reasoning": "off/low/medium/high/max"},
-	"glm-5.3":           {"reasoning": "off/low/medium/high/max", "note": "新模型"},
-	"glm-5.3-flash":     {"reasoning": "off/low/medium/high/max"},
-	"glm-5.2":           {"maxInput": 1048576, "reasoning": "off/low/medium/high/max", "note": "上下文实测 1M"},
-	"glm-5.1":           {"reasoning": "off/low/medium/high/max"},
-	"glm-5v-turbo":      {"reasoning": "off/low/medium/high/max", "note": "视觉模型"},
-	"minimax-m3":        {"reasoning": "off/low/medium/high/max"},
-	"minimax-m3-pay":    {"reasoning": "off/low/medium/high/max"},
-	"kimi-k3":           {"reasoning": "off/low/medium/high/max"},
-	"kimi-k2.7":         {"reasoning": "off/low/medium/high/max"},
-	"kimi-k2.6":         {"reasoning": "off/low/medium/high/max"},
-	"kimi-k2.5":         {"reasoning": "off/low/medium/high/max"},
-	"deepseek-v4-pro":   {"maxInput": 1048576, "reasoning": "low/medium/high/max", "note": "上下文实测 1M"},
-	"deepseek-v4-flash": {"maxInput": 1048576, "reasoning": "low/medium/high/max", "note": "思考深：思考消耗输出预算，max_tokens 建议 ≥8000"},
-	"deepseek-v3.2":     {"reasoning": "low/medium/high/max"},
+	"auto":                {"reasoning": "low/medium/high/max", "note": "后端自动路由到合适模型"},
+	"hy4-preview":         {"reasoning": "off/low/medium/high/max"},
+	"hy3":                 {"reasoning": "off/low/medium/high/max"},
+	"hy3-preview":         {"reasoning": "off/low/medium/high/max"},
+	"hy3-preview-agent":   {"reasoning": "off/low/medium/high/max"},
+	"glm-5.3":             {"reasoning": "off/low/medium/high/max", "note": "新模型"},
+	"glm-5.3-flash":       {"reasoning": "off/low/medium/high/max"},
+	"glm-5.2":             {"maxInput": 1048576, "reasoning": "off/low/medium/high/max", "note": "上下文实测 1M"},
+	"glm-5.1":             {"reasoning": "off/low/medium/high/max"},
+	"glm-5v-turbo":        {"reasoning": "off/low/medium/high/max", "note": "视觉模型"},
+	"minimax-m3":          {"reasoning": "off/low/medium/high/max"},
+	"minimax-m3-pay":      {"reasoning": "off/low/medium/high/max"},
+	"kimi-k3":             {"reasoning": "off/low/medium/high/max"},
+	"kimi-k2.7":           {"reasoning": "off/low/medium/high/max"},
+	"kimi-k2.6":           {"reasoning": "off/low/medium/high/max"},
+	"kimi-k2.5":           {"reasoning": "off/low/medium/high/max"},
+	"deepseek-v4.1-flash": {"reasoning": "low/medium/high/max", "note": "新模型 · 官方 0.03x 独家优惠"},
+	"deepseek-v4-pro":     {"maxInput": 1048576, "reasoning": "low/medium/high/max", "note": "上下文实测 1M"},
+	"deepseek-v4-flash":   {"maxInput": 1048576, "reasoning": "low/medium/high/max", "note": "思考深：思考消耗输出预算，max_tokens 建议 ≥8000"},
+	"deepseek-v3.2":       {"reasoning": "low/medium/high/max"},
 }
 
 func (s *Server) handleModelInfo(w http.ResponseWriter, r *http.Request) {
@@ -870,9 +874,10 @@ func (u *usageScanner) feed(chunk []byte) {
 }
 
 // sseFieldCleaner 流式 SSE 逐行清洗：剔除 delta 里值为空字符串的 content /
-// reasoning_content 键（CodeBuddy 后端每帧双键、未活动侧空串；ZCode 按字段
-// 出现切分 part，会把一次思考撕成几十个「思考」条目）。非 data 行、[DONE]、
-// 解析失败的行一律原样透传；不完整行跨 feed 缓冲，flush 冲尾。
+// reasoning_content 键，以及空数组的 tool_calls 键（CodeBuddy 后端每帧把这三个
+// 键全带一遍，未活动侧为空；ZCode 按字段出现切分 part，会把一次思考撕成
+// 几十个「思考」条目）。非 data 行、[DONE]、解析失败的行一律原样透传；
+// 不完整行跨 feed 缓冲，flush 冲尾。
 type sseFieldCleaner struct {
 	buf []byte
 }
@@ -902,7 +907,8 @@ func (s *sseFieldCleaner) flush() []byte {
 }
 
 // appendCleanedSSELine 把一行 SSE 清洗后追加到 out：仅当是可解析的 data 行且
-// delta 里存在空字符串的 content / reasoning_content 时才重写，否则原样追加。
+// delta 里存在空字符串的 content / reasoning_content、或空数组的 tool_calls 时
+// 才重写，否则原样追加。
 func appendCleanedSSELine(out, line []byte) []byte {
 	trimmed := bytes.TrimSpace(line)
 	if !bytes.HasPrefix(trimmed, []byte("data:")) || bytes.Contains(trimmed, []byte("[DONE]")) {
@@ -932,6 +938,16 @@ func appendCleanedSSELine(out, line []byte) []byte {
 					delete(delta, k)
 					changed = true
 				}
+			}
+		}
+		// 空数组的 tool_calls 也必须剔：ZCode 的 openai 兼容解析用
+		// `ce.tool_calls != null` 判定工具调用，空数组同样满足该条件，于是每帧都
+		// 收尾当前思考段、下一帧再重开一段——思考被切成逐 token 几十条。上游每帧
+		// 都带 `"tool_calls":[]`，真实的工具调用是非空数组，不受影响。
+		if v, exists := delta["tool_calls"]; exists {
+			if arr, isArr := v.([]any); isArr && len(arr) == 0 {
+				delete(delta, "tool_calls")
+				changed = true
 			}
 		}
 	}
