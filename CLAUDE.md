@@ -301,13 +301,12 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-09-10，v3.10.3 已发版）
+## 当前状态（2026-09-10，v3.10.4 已发版）
 
-- **v3.10.3 已发布**：WorkBuddy 模型池补 `deepseek-v4.1-flash`（官方标记 0.03x
-  独家优惠；reasoning 拒 off，同 deepseek 系）+ 流式清洗新增**空数组 `tool_calls`
-  剔除**（ZCode 以 `tool_calls != null` 判定工具调用，空数组同样命中，一次思考
-  被逐帧切成几十条——8787 实测 153 条 → 1 条），两个单测守门。提交 `41dc9a7`，
-  Release 附 `ProxyDeck.exe` 且 asset sha256 与源码构建逐字节一致
+- **v3.10.4 已发布**：团结（8788）转发前校验请求体 UTF-8，非法即本地回 400
+  并说明是编码问题，不再转发出去挨上游那句把编码错误伪装成模型名错误的
+  `Invalid model name passed in model=None`；该确定性错误不再重试，省掉三轮
+  必然失败的 ~4s 空等。提交 `b2d19e7`，utf8_body_test.go 四条测试守门
 - 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck（remote 名 `myrepo`，
   不是 origin；`push_api.py` 里的 `REPO` 写的是改名前旧名 `command-code-proxy-tools`，
   GitHub 会重定向，能用但名字陈旧）
