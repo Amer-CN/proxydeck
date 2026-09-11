@@ -306,6 +306,13 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     产物，靠比对 mtime 才发现，最后改用 `git worktree add --detach <目标提交>` 在干净树
     上重编并 amend。**发版编译前必须确认 `git status` 没有他人改动**，或直接走 worktree
     ——否则 exe 与 tag 指向的源码对不上，且会把未审查代码推给全部用户
+21. **不要整行打印进程命令行**：argv 里可能带密钥——GUI 启动 headless 子进程时曾把
+    CommandCode key 拼在 `-api-key` 后（`bridge.go`；2026-09-11 已改为只走
+    `api-key.txt`，仅落盘失败才退回 argv），而排查时一句
+    `Get-CimInstance … CommandLine` 就会把 key 带进会话记录/日志（已实际发生过一次，
+    事后需轮换 key）。打印前一律加
+    `-replace '-api-key \S+','-api-key <redacted>'`；密钥类文件（`api-key.txt`）
+    保持 gitignore
 
 ## 自定义服务商（tuanjie-providers.json；v3.9.0 引入时叫「外部账号」，v3.10.0 改名重构）
 

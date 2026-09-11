@@ -80,9 +80,10 @@ func (a *app) start(key string) (string, error) {
 	if key == "" {
 		key = a.apiKey
 	}
+	keySaved := true
 	if key != "" {
 		a.apiKey = key
-		_ = os.WriteFile(a.keyFile(), []byte(key), 0o600)
+		keySaved = os.WriteFile(a.keyFile(), []byte(key), 0o600) == nil
 	}
 
 	// 端口已有健康代理（可能是上次遗留的 headless 子进程）→ 直接接管观察。
@@ -109,7 +110,10 @@ func (a *app) start(key string) (string, error) {
 		return "", fmt.Errorf("无法定位自身可执行文件: %v", err)
 	}
 	cmd := hiddenCmd(exe, "-headless")
-	if key != "" {
+	/* key 已在上面落盘（api-key.txt），子进程未显式传 key 时会自行读取（见 main.go 的
+	   runCoreHeadless）——正常路径不把密钥放上 argv：进程命令行对本机任意进程可读，
+	   2026-09-11 排查时整行打印进程列表就把 key 打进过会话记录。仅落盘失败才退回 argv。 */
+	if key != "" && !keySaved {
 		cmd.Args = append(cmd.Args, "-api-key", key)
 	}
 	// headless 的 stdout/stderr 落盘（headless-error.log，与 exe 同目录），
