@@ -48,6 +48,9 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   **必须附 `ProxyDeck.exe` 附件**——那是一键更新的下载源，漏传 = 用户点更新 404；
   2026-09-04 发 v3.8.5 时曾漏、事后补传）。
   改完用旧版本串 grep `app/ README.md` 复核一遍（应只剩 CHANGELOG_DATA 历史条目）。
+  `CHANGELOG_DATA` 的 `date` 用**本机发布日**——跨零点发版最容易差一天（v3.10.5 于
+  09-11 01:19 发布却写成 09-10）。历史条目**不回改**（会牵动 tag 与附件对应关系），
+  下次发版顺手校正即可。
 
 ## 版本号三段位规则（2026-08-31 定，用户裁决）
 
@@ -204,6 +207,29 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   - 全链路通过：live /v1/models 48 个（与缓存矩阵一致）、非流式/流式/长请求 380K
     字符均 200；未覆盖：6-8M 字符级 WAF 极端量级（不值得花 token 复现）
 
+### Comate（8786，百度文心快码）——上游自带 agent 工具，不是纯聊天后端
+- **传输**：内部托管 zulu serve（8792），`/v1/chat/completions` 扁平化后打
+  `/api/v1/conversations/init`。zulu 是 **agent 引擎**（`comate-engine` = @comate/kernel：
+  沙箱命令执行、MCP、sqlite-vec 代码库索引、LSP、git），`--mode` **默认 Agent**
+  （可选 Ask/Plan/Cloud/Bot；Ask/Plan 只读）
+- **⚠ 工具无法由客户端注入**：会话请求体字段全集只有 query / cwd / ptoken / license /
+  model / conversation / mode / enableCodebaseSearch / activate{Skills,Commands,
+  Subagents,Rules} / attach{Images,Files}——**没有 `tools`**。所以「让 ZCode/DSH 自己的
+  工具被 comate 模型调用」在代理层无解；可用形态是「给自足任务 → 上游工具在 cwd 里干完 →
+  只回文本」（Qoder 同形态：客户端侧同样看不到 tool_calls）
+- **工作目录跟随（v3.10.5）**：插件从客户端提示词提取 `Working directory:`/`工作目录`
+  标记（`internal/clientcwd` 共享包，与 Qoder 同源），`COMATE_CWD` 可钉死、
+  `COMATE_MODE=Ask` 只读。**此前 cwd 写死 `os.TempDir()`，引擎工具在空目录里空转，
+  表现与纯聊天模型无法区分——2026-09-10 曾据此误判「comate 只能当聊天用」，实为插件缺陷**
+- **query 走命令行参数**：Windows 上限实测约 32767 字符（32700 过 / 32800 ENAMETOOLONG）；
+  超长以 SSE `task_failed` 返回，代理侧表现为「上游 SSE 中断」而非 500
+- **工具过程不可见**：上游有 tool-call-action / tool-params-delta / tool-output-delta 等事件，
+  但本代理只转发 `delta-batch`/`element-add` 的文本，`thinking-delta` 亦被丢弃
+  （首字前那 30~60s 空白即此；若要改善，把它透成 `reasoning_content`）
+- **上游偶发返回占位残渣**：2026-09-11 在 8786 实测两次里有一次 content 就是字面量
+  `<final>...</final>`（18s 返回，非报错），同请求重测即正常；代理如实转发、**comate
+  侧无空响应重试**（团结有 ensureNonEmpty，此处没有）。遇到空/残渣答案先重测再排查
+
 ## 已踩的坑（改代码前必读）
 
 1. **WebView2 不吃系统代理**：Node/Electron fetch 连境外 API 会挂，Go 栈最稳
@@ -274,6 +300,12 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     没有别的会话在动同一批文件；commit / push / Release 这类不可逆且对外的动作
     尤其必须串行，且推送前先 `git ls-remote <remote> refs/heads/main` 复核远端
     有没有被别人推进过
+20. **编译输入 = 工作区当前内容**：`python build.py` / `go build ./app` 编的是磁盘上
+    的源码，**并行会话的未提交改动会被静默编进 exe**——2026-09-11 发 v3.10.5 时中招：
+    另一个会话 01:09 改的 `internal/tuanjie/reqshape.go`（未提交、无 CHANGELOG）已混入
+    产物，靠比对 mtime 才发现，最后改用 `git worktree add --detach <目标提交>` 在干净树
+    上重编并 amend。**发版编译前必须确认 `git status` 没有他人改动**，或直接走 worktree
+    ——否则 exe 与 tag 指向的源码对不上，且会把未审查代码推给全部用户
 
 ## 自定义服务商（tuanjie-providers.json；v3.9.0 引入时叫「外部账号」，v3.10.0 改名重构）
 
@@ -310,17 +342,21 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-09-10，v3.10.4 已发版）
+## 当前状态（2026-09-11，v3.10.5 已发版）
 
-- **v3.10.4 已发布**：团结（8788）转发前校验请求体 UTF-8，非法即本地回 400
-  并说明是编码问题，不再转发出去挨上游那句把编码错误伪装成模型名错误的
-  `Invalid model name passed in model=None`；该确定性错误不再重试，省掉三轮
-  必然失败的 ~4s 空等。提交 `b2d19e7`，utf8_body_test.go 四条测试守门
+- **v3.10.5 已发布**：Comate 通道恢复工具能力——插件按客户端提示词提取工作目录
+  后传给 zulu（此前写死 `os.TempDir()`，引擎自带工具在空目录里等于失效），
+  `COMATE_MODE=Ask` 可只读、`COMATE_CWD` 可钉死目录。提交 `e1fd2fd`。
+  v3.10.4（UTF-8 本地拦截，`b2d19e7`）及更早细节见 `CHANGELOG.md`
 - 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck（remote 名 `myrepo`，
   不是 origin；`push_api.py` 里的 `REPO` 写的是改名前旧名 `command-code-proxy-tools`，
   GitHub 会重定向，能用但名字陈旧）
-- 服务现状（2026-09-10 19:2x 复核）：8785 / 8786 / 8787 / 8788 / 8891 五个插件后端
-  全部在线；55990 主代理未起（按需点火）。**GUI 管得住外部拉起的后端**——靠的不是
+- 服务现状（2026-09-11 01:33 复核）：8785 / 8786 / 8787 / 8788 / 8891 五个插件
+  **全部在线，且都是 v3.10.5 新 exe**（用户 01:19:59~01:20:11 逐个拉杆点火，进程启动
+  时间可证）；55990 主代理未起（按需点火）。**GUI 不持久化插件启动状态**（`plugins.go`
+  无写盘），**重启 GUI 不会自动点火、需逐个拉杆**——2026-09-11 换装后实证：新 GUI
+  01:18:12 起来后四分钟内五插件仍未起；跨会话常驻只能 GUI 点火（坑 4）
+- 服务治理：**GUI 管得住外部拉起的后端**——靠的不是
   进程归属，而是 `plugins.go` 的 `pluginStart` 先探活端口、健康就「接管复用，不杀不
   重启」（`pluginList` 的 `healthy` 也无条件查端口，`stop` 按端口杀）。所以旧文
   「外部拉起的实例 GUI 插件开关未必管得住它」是误解：2026-09-10 曾据此给出「拉杆会
@@ -335,8 +371,10 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
 - `.work/` 现状：构建中间产物已清（2026-09-10 清掉 `pd3103*.exe`、`ProxyDeck.new/stripped.exe`），
-  exe 仅留两份可回滚副本 `ProxyDeck.prev.exe`、`ProxyDeck.prev-85693aa.exe`；另有已完成任务的
-  简报、各版 release-notes、探测语料与临时脚本等，全部 gitignore，可随时清。
+  exe 回滚副本按 `ProxyDeck.prev*.exe` 命名累积（`ProxyDeck.prev.exe`、
+  `ProxyDeck.prev-85693aa.exe`、2026-09-11 加的 `ProxyDeck.prev-dc548a8.exe` 等）；
+  另有已完成任务的简报（`current-task.md`、`task-*.md`）、探测语料与临时脚本等，
+  全部 gitignore，可随时清；**清场需用户确认**（并发会话可能仍在用同名简报）
   简报 `current-task.md` 由下一任务重写；**并行会话改用 `task-<关键词>.md`**（已核
   `enforce-flow.ps1` 第 49 行对 `current-task.md` 与 `task-*.md` 同等识别为简报；
   2026-09-10 实测用 `task-*.md` 连改 6 个文件全程未被闸门拦截）
