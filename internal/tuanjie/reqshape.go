@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // reqshape.go：把转发到团结 LiteLLM 的请求体重排成官方 CLI buildCreateParams
@@ -21,6 +22,9 @@ import (
 // 其余字段一律按客户端原值透传（含 metadata，官方 OpenAI chat 路径
 // 不带 user_id，客户端带了就原样保留）；罕见字段（frequency_penalty 等
 // 官方清单外的）放在 metadata 之前，按字母序稳定输出。
+//
+// 唯一例外是思考档位：客户端发 reasoning_effort 时，紧邻补一份上游真正
+// 解析的 reasoning:{effort,summary}（见 reasoningPayloadFor）。
 
 // officialFieldOrder 官方字段顺序。
 var officialFieldOrder = []string{
@@ -143,6 +147,16 @@ func reshapeChatBody(body []byte, sess *LitellmSession) []byte {
 		}
 		if v, ok := m[name]; ok {
 			fields = append(fields, orderedField{key: name, value: v})
+			// 客户端（ZCode 等）只发 chat 形态 reasoning_effort，团结上游
+			// 只接收不解析它；紧邻补一份 Responses 形态 reasoning 才生效。
+			// 客户端自带 reasoning 时不覆盖（尊重原值）。
+			if name == "reasoning_effort" {
+				if _, own := m["reasoning"]; !own {
+					if rp := reasoningPayloadFor(v); rp != nil {
+						fields = append(fields, orderedField{key: "reasoning", value: rp})
+					}
+				}
+			}
 		}
 	}
 	if !rareDone {
@@ -181,6 +195,48 @@ func reshapeChatBody(body []byte, sess *LitellmSession) []byte {
 		fields = append(fields, orderedField{key: "stream_options", value: so})
 	}
 	return orderedJSON(fields)
+}
+
+// reasoningPayloadFor 把客户端 chat 形态的 reasoning_effort 翻译成团结上游
+// 实际解析的 Responses 形态 reasoning:{effort,summary}。
+//
+// 2026-09-11 直连团结 LiteLLM 实测（reasoning_tokens 中位，问同一道多步题）：
+// reasoning_effort 上游只接收不解析——非法值 "banana" 也返回 200，low/high/max
+// 三档无差别；换成 reasoning:{effort,summary:"auto"} 后档位才落到上游：
+// codely-core 的 low/high 明显压薄思考（多次采样 low≈100-180、high≈140-260，
+// 默认≈550-870），max 与默认无差别；KIMI-K3 采样噪声大、未见稳定档位关系。
+// 官方桌面客户端即此形态：服务端模型配置 extras.thinkingEfforts 的选中值，
+// 由 CLI 落成 reasoning:{effort,summary:"auto"}。
+//
+// 非字符串或空值返回 nil（不注入，不给上游塞垃圾）；注入的 effort 值经
+// reasoningEffortWire 映射（值映射依据官方 CLI 的 WSi()，见其注释），summary
+// 固定 "auto"；上游对未知值静默忽略，不会打坏请求。
+func reasoningPayloadFor(raw json.RawMessage) json.RawMessage {
+	var v string
+	if len(raw) == 0 || json.Unmarshal(raw, &v) != nil || v == "" {
+		return nil
+	}
+	return json.RawMessage(orderedJSON([]orderedField{
+		{key: "effort", value: reasoningEffortWire(v)},
+		{key: "summary", value: "auto"},
+	}))
+}
+
+// reasoningEffortWire 把客户端档位值映射为官方 Responses 形态实际发出的值。
+// 对齐官方 CLI 的 WSi()：low/medium/high/xhigh 原样、minimal→low、其余（含 max）→xhigh。
+// 有意偏离一处：官方梯子（minimal…max）之外的值（off/none/未知）不兜底成 xhigh，
+// 原样透传——别的客户端用 off/none 表示「关思考」，兜底成 xhigh 会把语义反过来；
+// 且团结上游对未知值静默忽略，透传无副作用。
+func reasoningEffortWire(v string) string {
+	switch e := strings.ToLower(v); e {
+	case "low", "medium", "high", "xhigh":
+		return e
+	case "minimal":
+		return "low"
+	case "max":
+		return "xhigh"
+	}
+	return v
 }
 
 // buildMetadataPayload 构造 metadata 字段（对齐官方 buildMetadata LiteLLM

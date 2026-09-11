@@ -61,7 +61,7 @@ func TestReshapeStreamOfficialOrder(t *testing.T) {
 	in := []byte(`{"stream_options":{"include_usage":true},"model":"codely-flash","max_tokens":20,"reasoning_effort":"low","messages":[{"role":"user","content":"OK"}],"tools":[{"type":"function","function":{"name":"f"}}],"tool_choice":"auto","stream":true}`)
 	out := reshapeChatBody(in, testSess("sess-123"))
 	wantOfficialOrder(t, out, []string{
-		"model", "messages", "max_tokens", "reasoning_effort",
+		"model", "messages", "max_tokens", "reasoning_effort", "reasoning",
 		"metadata", "litellm_session_id", "prompt_cache_key",
 		"tools", "parallel_tool_calls", "tool_choice",
 		"stream", "stream_options",
@@ -107,7 +107,7 @@ func TestReshapeInjectMetadata(t *testing.T) {
 	sess.promptSeq = 7
 	out := reshapeChatBody(in, sess)
 	wantOfficialOrder(t, out, []string{
-		"model", "messages", "max_tokens", "reasoning_effort", "top_p",
+		"model", "messages", "max_tokens", "reasoning_effort", "reasoning", "top_p",
 		"metadata", "litellm_session_id", "prompt_cache_key",
 		"tools", "parallel_tool_calls", "tool_choice",
 		"stream", "stream_options",
@@ -263,5 +263,115 @@ func TestReshapeStreamOptionsPreserved(t *testing.T) {
 	so, _ := m["stream_options"].(map[string]any)
 	if so == nil || so["include_usage"] != true {
 		t.Fatalf("stream_options.include_usage 应强制 true，得到 %v", m["stream_options"])
+	}
+}
+
+// TestReshapeInjectsReasoningShape 客户端只发 chat 形态 reasoning_effort 时，
+// 紧邻补一份团结上游真正解析的 Responses 形态 reasoning:{effort,summary:"auto"}。
+// 2026-09-11 直连实测：reasoning_effort 上游只接收不解析（非法值 "banana" 也
+// 200、low/high/max 无差别），reasoning.effort 才按档位分档。
+// 注入的 effort 值经 reasoningEffortWire 映射（对齐官方 CLI 的 WSi()）：
+// 客户端发 max 时注入 xhigh（实测 xhigh 不弱于 max）。
+func TestReshapeInjectsReasoningShape(t *testing.T) {
+	in := []byte(`{"model":"codely-core","messages":[{"role":"user","content":"OK"}],"max_tokens":20,"reasoning_effort":"max","stream":true}`)
+	out := reshapeChatBody(in, testSess("s"))
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("重排后 JSON 非法: %v", err)
+	}
+	if m["reasoning_effort"] != "max" {
+		t.Fatalf("原 reasoning_effort 应保留，得到 %v", m["reasoning_effort"])
+	}
+	r, _ := m["reasoning"].(map[string]any)
+	if r == nil || r["effort"] != "xhigh" || r["summary"] != "auto" {
+		t.Fatalf("应注入 reasoning:{effort:xhigh,summary:auto}，得到 %v", m["reasoning"])
+	}
+	order := topFieldOrder(t, out)
+	for i, k := range order {
+		if k == "reasoning" && (i == 0 || order[i-1] != "reasoning_effort") {
+			t.Fatalf("reasoning 应紧跟 reasoning_effort，得到 %v", order)
+		}
+	}
+}
+
+// TestReshapeClientReasoningNotOverridden 客户端自带 reasoning 时原值保留，
+// 不注入、不覆盖、不重复。
+func TestReshapeClientReasoningNotOverridden(t *testing.T) {
+	in := []byte(`{"model":"m","messages":[{"role":"user","content":"OK"}],"reasoning_effort":"low","reasoning":{"effort":"high","summary":"concise"},"stream":true}`)
+	out := reshapeChatBody(in, testSess("s"))
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("重排后 JSON 非法: %v", err)
+	}
+	r, _ := m["reasoning"].(map[string]any)
+	if r == nil || r["effort"] != "high" || r["summary"] != "concise" {
+		t.Fatalf("客户端自带 reasoning 应原值保留，得到 %v", m["reasoning"])
+	}
+	n := 0
+	for _, k := range topFieldOrder(t, out) {
+		if k == "reasoning" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("reasoning 只应出现一次，得到 %d 次: %s", n, out)
+	}
+}
+
+// TestReshapeReasoningEffortNonString 非字符串（null/数字）reasoning_effort
+// 不注入 reasoning，避免给上游塞垃圾值。
+func TestReshapeReasoningEffortNonString(t *testing.T) {
+	for _, in := range []string{
+		`{"model":"m","messages":[{"role":"user","content":"OK"}],"reasoning_effort":null,"stream":true}`,
+		`{"model":"m","messages":[{"role":"user","content":"OK"}],"reasoning_effort":5,"stream":true}`,
+		`{"model":"m","messages":[{"role":"user","content":"OK"}],"reasoning_effort":"","stream":true}`,
+	} {
+		out := reshapeChatBody([]byte(in), testSess("s"))
+		var m map[string]any
+		if err := json.Unmarshal(out, &m); err != nil {
+			t.Fatalf("重排后 JSON 非法: %v", err)
+		}
+		if _, ok := m["reasoning"]; ok {
+			t.Fatalf("非字符串/空值 reasoning_effort 不应注入 reasoning: %s", out)
+		}
+	}
+}
+
+// TestReasoningEffortWire 档位值映射（对齐官方 CLI 的 WSi()）：minimal→low、
+// low/medium/high/xhigh 原样（大小写不敏感）、max→xhigh；
+// 官方梯子之外的值（off/none/未知）原样透传。
+func TestReasoningEffortWire(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"minimal", "low"},
+		{"Minimal", "low"},
+		{"low", "low"},
+		{"medium", "medium"},
+		{"high", "high"},
+		{"xhigh", "xhigh"},
+		{"max", "xhigh"},
+		{"MAX", "xhigh"},
+		{"off", "off"},
+		{"none", "none"},
+		{"banana", "banana"},
+	}
+	for _, c := range cases {
+		if got := reasoningEffortWire(c.in); got != c.want {
+			t.Fatalf("reasoningEffortWire(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestReasoningTiersFor 档位按模型声明：官方目录只给三个模型声明
+// [max, high, low]，其余别名未声明返回空串。
+func TestReasoningTiersFor(t *testing.T) {
+	for _, m := range []string{"codely-core", "KIMI-K3", "GLM-5.3-FLASH"} {
+		if got := reasoningTiersFor(m); got != "max/high/low" {
+			t.Fatalf("reasoningTiersFor(%q) = %q, want max/high/low", m, got)
+		}
+	}
+	for _, m := range []string{"codely-basic", "codely-vl", "GLM-5.3"} {
+		if got := reasoningTiersFor(m); got != "" {
+			t.Fatalf("reasoningTiersFor(%q) = %q, want 空串（官方未声明）", m, got)
+		}
 	}
 }

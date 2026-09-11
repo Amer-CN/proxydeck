@@ -645,7 +645,7 @@ func (s *Server) handleModelInfo(w http.ResponseWriter, r *http.Request) {
 	// 3. 组装：别名（/v1/models）× 元数据（映射）+ max_model_len
 	list := make([]ModelInfo, 0, len(ml.Data))
 	for _, m := range ml.Data {
-		mi := ModelInfo{Name: m.ID, Reasoning: "off/low/medium/high/max", Note: aliasNote(m.ID)}
+		mi := ModelInfo{Name: m.ID, Reasoning: reasoningTiersFor(m.ID), Note: aliasNote(m.ID)}
 		if m.MaxModelLen != nil {
 			mi.MaxInput = m.MaxModelLen // LiteLLM 上报的上下文上限
 		}
@@ -676,6 +676,19 @@ func (s *Server) handleModelInfo(w http.ResponseWriter, r *http.Request) {
 	infoCacheAt = time.Now()
 	infoCacheMu.Unlock()
 	writeJSON(w, list)
+}
+
+// reasoningTiersFor 返回模型真实支持的思考档位（/model/info 的 reasoning 字段），
+// 对齐官方服务端模型目录的 extras.thinkingEfforts：仅这三个模型声明 [max, high, low]，
+// 其余团结别名官方未声明档位，返回空串（GUI 渲染「未核实」）。
+// 此前此处对所有模型一律声明 off/low/medium/high/max，属过度声明
+// （2026-09-11 实测：只有 codely-core 的 low/high 能真压薄思考，GLM-5.3-FLASH 各档位均无影响）。
+func reasoningTiersFor(model string) string {
+	switch model {
+	case "codely-core", "KIMI-K3", "GLM-5.3-FLASH":
+		return "max/high/low"
+	}
+	return ""
 }
 
 // aliasNote 返回别名的实测说明（2026-08-17 逐测：5 个 codely 别名可用，GLM/公开/百度变体被锁定）。
