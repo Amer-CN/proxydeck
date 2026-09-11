@@ -36,6 +36,13 @@ var pluginDefs = []pluginDef{
 		Args: []string{"--desensitize"}, Port: 8787, Health: "/health",
 	},
 	{
+		// WorkBuddy 国际版：同甲板区域切换的另一半（8789，免费模型池，
+		// 凭据按 workbuddy.ai 过滤，不刷新 token，首条 system 强制）
+		ID: "codebuddy-intl", Name: "WorkBuddy Intl",
+		Native: "codebuddy-intl",
+		Port:   8789, Health: "/health",
+	},
+	{
 		ID: "bai", Name: "B.AI",
 		Native: "bai",
 		Port:   8891, Health: "/health",

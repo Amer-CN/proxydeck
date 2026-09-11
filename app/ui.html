@@ -2602,7 +2602,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
               <div class="pt-sc-body cb" data-body="cb">
                 <div class="sc-unified">
                   <div class="run-line">
-                    <span class="pt-dot grn" data-dot="cbRun"><span class="run-name">WORKBUDDY · 8787</span><b></b></span>
+                    <span class="pt-dot grn" data-dot="cbRun"><span class="run-name" id="cbRunName">WORKBUDDY · 8787</span><b></b></span>
                   </div>
                   <div class="pt-system-readout">
                     <span class="pt-silk">Uptime</span>
@@ -2648,7 +2648,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.10.7</span>
+                    <span class="v ver" id="etchVer">v3.10.8</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -2885,10 +2885,27 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
               <!-- —————— WORKBUDDY 甲板 —————— -->
               <div class="pt-deck" data-deck="cb">
                <div class="pt-deck-scroll"><div class="inner">
+                <div class="pt-row">
+                  <div class="pt-rowline">
+                    <div class="pt-label"><div class="t" data-i18n="app.s.cbRegion">版本</div></div>
+                    <span class="pt-val" data-val="cbRegion" aria-hidden="true">国内版</span>
+                  </div>
+                  <div class="pt-gear k3" style="--s:0;--c:2" data-gear="cbRegion" data-count="2"
+                       role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="1"
+                       aria-label="版本" data-i18n-attr="aria-label:app.s.cbRegion">
+                    <div class="stops">
+                      <span data-i18n="app.val.cbCn">国内版</span>
+                      <span data-i18n="app.val.cbIntl">国际版</span>
+                    </div>
+                    <div class="pt-rail"><i></i><i></i><span class="k"></span></div>
+                  </div>
+                  <p class="pt-notice" data-i18n="app.s.cbRegionN">国内版走 copilot.tencent.com（8787），国际版走 www.codebuddy.ai（8789，含免费模型）· 切换即改本甲板全部目标，互不影响。</p>
+                </div>
+                <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.ignite">点火拉杆</div>
-                    <div class="s" data-i18n="app.s.cbLever">拉到底点火（8787）· 拉回熄火 · 模型探测首次约 20 秒</div>
+                    <div class="s" id="cbLeverSub" data-i18n="app.s.cbLever">拉到底点火（8787）· 拉回熄火 · 模型探测首次约 20 秒</div>
                   </div>
                 </div></div>
                 <button type="button" class="pt-activation" data-ignite="cbRun" data-lever-mode="activate"
@@ -2935,7 +2952,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label"><div class="t" data-i18n="app.desensitize">脱敏</div></div>
-                  <span class="pt-val">已开启 · system/tools 零宽脱敏防审核误拦</span>
+                  <span class="pt-val" id="cbDesVal">已开启 · system/tools 零宽脱敏防审核误拦</span>
                 </div></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
@@ -3154,13 +3171,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.10.7">v3.10.7</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.10.8">v3.10.8</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.10.7</div>
+                    <div class="s" id="buildNo">v3.10.8</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.10.7</span>
+                  <span class="pt-val" id="verChip">v3.10.8</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -5727,6 +5744,8 @@ var PT_I18N = {
   }
   function waterRowHtml(x) {
     var badges = ['repeat', 'math', 'knowledge'].map(function (k) {
+      var noAns = x.unanswered && x.unanswered[k];   /* 未作答（上游未返回正文）≠ 答错，单独显示 */
+      if (noAns) return '<span class="acc-tag warn" title="' + escHtml(noAns) + '">' + (WATER_TITLES[k] || k) + ' 未作答</span>';
       var ok = x.answers && x.answers[k];
       return '<span class="acc-tag ' + (ok ? 'pass' : 'fail') + '">' + (WATER_TITLES[k] || k) + (ok ? ' ✓' : ' ✗') + '</span>';
     }).join(' ');
@@ -5742,13 +5761,20 @@ var PT_I18N = {
       (x.detail ? '<span class="detail" title="' + escHtml(x.detail) + '">' + escHtml(x.detail) + '</span>' : '') +
       '</div>';
   }
-  /* 管道探针表一行：名称/当前值/基准值/匹配状态（quick 无基准值列显示 —） */
+  /* 管道探针表一行：名称/当前值/基准值/匹配状态（quick 无基准值列显示 —）。
+     探针没测成 ≠ 值不匹配：「失败」如实换「未测成（原因）」；「不匹配 ✗」只给
+     真比对出差异的探针；跨渠道跳过的网关报错措辞探针单独标「跨渠道跳过」。 */
   function probeRowHtml(p, cmp) {
     var title = PROBE_TITLES[p.name] || p.name;
-    var statusTxt = p.status === 'ok' ? '正常' : (p.status === 'unstable' ? '不稳定' : '失败');
+    var statusTxt = p.status === 'ok' ? '正常' : (p.status === 'unstable' ? '不稳定' : '未测成');
+    if (p.status === 'error' && p.note) {
+      var why = p.note.length > 16 ? p.note.slice(0, 16) + '…' : p.note;
+      statusTxt = '未测成（' + why + '）';   /* 徽章带原因：HTTP 状态码等，不再只写「失败」 */
+    }
     var matchTxt = '—', matchCls = 'pass';
     if (cmp) {
-      if (cmp.status !== 'ok') { matchTxt = statusTxt; matchCls = 'warn'; }
+      if (cmp.status === 'skip') { matchTxt = '跨渠道跳过'; matchCls = 'warn'; }
+      else if (cmp.status !== 'ok') { matchTxt = statusTxt; matchCls = 'warn'; }
       else if (cmp.match) { matchTxt = '匹配 ✓'; matchCls = 'pass'; }
       else { matchTxt = '不匹配 ✗'; matchCls = 'fail'; }
     }
@@ -5921,7 +5947,7 @@ var PT_I18N = {
     }
     if (dist.stats) {
       rows += '<div class="if-row"><span class="m">本次统计</span>' +
-        '<span class="u">有效样本 ' + (dist.valid || 0) + '（无效 ' + (dist.invalid || 0) + '）' + (dist.insufficient ? ' · 样本不足' : '') + '</span>' +
+        '<span class="u">有效样本 ' + (dist.valid || 0) + '（无效 ' + (dist.invalid || 0) + '）' + (dist.unanswered ? ' · 未作答 ' + dist.unanswered + ' 条' : '') + (dist.insufficient ? ' · 样本不足' : '') + '</span>' +
         '<span class="u">均值 ' + (dist.stats.mean || 0) + ' · 中位 ' + (dist.stats.median || 0) + ' · 标准差 ' + (dist.stats.std_dev || 0) + '</span>' +
         '<span class="u">众数 ' + (dist.stats.mode || 0) + '（×' + (dist.stats.mode_count || 0) + '）</span></div>';
     }
@@ -6207,9 +6233,10 @@ var PT_I18N = {
           ' tok · 出 ' + Number(cost.completion_tokens || 0).toLocaleString() +
           ' tok · 用时 ' + Number(cost.elapsed || 0).toFixed(1) + ' 秒</div>';
       }
-      /* 第 32 轮：弱渠道（无官方链路）首次检测口径副注——基准为首测锚定，判定从弱 */
+      /* 第 32 轮弱渠道副注 / 第 34 轮改口径：非官方渠道不自建基准，报告比对的是
+         该模型的官方渠道基准——有官方基准才可比对，无则如实「无法判定」 */
       var repChDef = (waterChans || []).filter(function (c) { return c.id === (r.channel || ''); })[0];
-      var weakNote = (repChDef && repChDef.strong === false) ? '<div class="if-empty">// 首测锚定，判定从弱</div>' : '';
+      var weakNote = (repChDef && repChDef.strong === false) ? '<div class="if-empty">// 与官方渠道基准比对（该渠道不自建基准）</div>' : '';
       var canaryHtml = rep.canary ? waterRowHtml(rep.canary) : '<div class="if-empty">// 无金丝雀样本</div>';
       return '<div class="fx-report">' +
         '<div class="fx-rsec"><p class="fx-rsec-h">① 检测项<small>ITEMS</small></p>' + itemsHtml + costHtml + '</div>' +
@@ -6475,13 +6502,14 @@ var PT_I18N = {
       if (mm) mm.textContent = (fxModelSel && fxModelSel.value) || '—';
       if (mp) mp.textContent = FX_PROBES + ' 项';
       if (pp) pp.textContent = FX_PROBES + ' 项';
-      /* 第 32 轮：基准口径诚实化——strong 渠道（tuanjie/comate/qoder）显「官方链路」，
-         弱渠道（command/workbuddy/bai）显「首测锚定」；渠道列表缺 strong 字段（DEMO 单项）视作官方链路 */
+      /* 第 32 轮基准口径诚实化 / 第 34 轮改口径——strong 渠道（tuanjie/comate/qoder）
+         显「官方链路」；弱渠道（command/workbuddy/bai）不自建基准，比对的是官方
+         基准：无官方基准时无法判定。渠道列表缺 strong 字段（DEMO 单项）视作官方链路 */
       var mbase = q('[data-fx-mbase]');
       if (mbase) {
         var mbaseId = (fxChSel && fxChSel.value) || '';
         var mbaseCh = (waterChans || []).filter(function (c) { return c.id === mbaseId; })[0];
-        mbase.textContent = mbaseCh && mbaseCh.strong === false ? '首测锚定' : '官方链路';
+        mbase.textContent = mbaseCh && mbaseCh.strong === false ? '无官方基准（无法判定）' : '与官方渠道基准比对';
       }
       fxMinfoNodesSnap = null;                     /* 值已换：强制重建打字机快照 */
     }
@@ -7073,6 +7101,64 @@ var PT_I18N = {
     comate: { id: 'comate', port: 8786, pfx: 'comate', mode: 'comate', uptime: null, phase: 'idle' },
     qoder: { id: 'qoder', port: 8785, pfx: 'qoder', mode: 'qoder', uptime: null, phase: 'idle' }
   };
+
+  /* ---------------- WorkBuddy 甲板：国内版 ⇄ 国际版（同甲板区域切换，不增甲板/模式键） ----------------
+     语义：切换本甲板绑定的插件 codebuddy(8787) ⇄ codebuddy-intl(8789)。
+     V.id / V.port 是 refreshPluginView、loadPluginModels、loadPluginStats、日志、
+     点火拉杆（bindPluginToggle 里 PluginStart/PluginStop 的目标）全部的取数依据——
+     改这两个字段即让端点地址、状态灯、模型列表、日志、积分卡、点火目标整体跟随，
+     再 refreshPluginView('cb') 立即重刷视图。默认 = 国内版（老用户零变化）。 */
+  var CB_REGIONS = {
+    cn:   { id: 'codebuddy',      port: 8787, screen: 'WORKBUDDY · 8787' },
+    intl: { id: 'codebuddy-intl', port: 8789, screen: 'WORKBUDDY · 8789' }
+  };
+  var cbRegion = 'cn'; /* 默认国内版 */
+  function cbRegionApply(regionName) {
+    var r = CB_REGIONS[regionName]; if (!r) return;
+    cbRegion = regionName;
+    var V = PV.cb;
+    var wasRunning = V.phase === 'running' || V.phase === 'starting';
+    V.id = r.id; V.port = r.port;
+    /* 模型/元数据缓存是按上游口径算的，区域换了必须作废重探 */
+    V.lastModels = null; V.lastMeta = null; V.metaMap = null; V.modelIds = null;
+    var nameEl = $('cbRunName');
+    if (nameEl) nameEl.textContent = r.screen;
+    var epEl = $('cbEndpoint');
+    if (epEl) epEl.textContent = 'http://127.0.0.1:' + r.port + '/v1'; /* 端点地址跟随区域 */
+    /* 点火拉杆副标题的端口号随区域变（两套 i18n key，切换时换 key 并立即重刷文案） */
+    var leverSub = $('cbLeverSub');
+    if (leverSub) {
+      var leverKey = regionName === 'intl' ? 'app.s.cbLeverIntl' : 'app.s.cbLever';
+      leverSub.setAttribute('data-i18n', leverKey);
+      leverSub.textContent = t(leverKey);
+    }
+    PTApp.gear('cbRegion', regionName === 'intl' ? 1 : 0); /* 拨杆位置 + [data-val] 状态字 */
+    /* hy4 兜底与 fallback 选择是 CN 专属（failover 只在国内版 chat 路径生效）：
+       国际版下整行收起，状态条也收 */
+    var hy4Gear = document.querySelector('[data-gear="cbHy4"]');
+    if (hy4Gear && hy4Gear.closest('.pt-row')) hy4Gear.closest('.pt-row').style.display = regionName === 'cn' ? '' : 'none';
+    var fbSel = $('cbHy4Fallback');
+    if (fbSel && fbSel.closest('.pt-row')) fbSel.closest('.pt-row').style.display = regionName === 'cn' ? '' : 'none';
+    var hy4Row = $('cbHy4Banner');
+    if (hy4Row) hy4Row.style.display = 'none';
+    /* 脱敏行如实显示：国内版插件带 --desensitize；国际版默认不脱敏（开关保留未启用） */
+    var desVal = $('cbDesVal');
+    if (desVal) desVal.textContent = regionName === 'cn'
+      ? '已开启 · system/tools 零宽脱敏防审核误拦'
+      : '已关闭 · 国际版默认不脱敏';
+    plog(V, 'sys', regionName === 'intl'
+      ? '已切到国际版 · www.codebuddy.ai（8789）· 含免费模型 · 点火目标 codebuddy-intl'
+      : '已切到国内版 · copilot.tencent.com（8787）· 点火目标 codebuddy');
+    /* 当前插件在跑时切换区域：如实提示（不做隐式停堆/迁移，用户自己决定拉杆） */
+    if (wasRunning) plog(V, 'err', '注意：切换前区域的插件仍在运行，本甲板现在监视 ' + r.id + '（8787/8789 互不接管）');
+    refreshPluginView('cb');
+  }
+  PTApp.onGear('cbRegion', function (i) {
+    var target = i === 1 ? 'intl' : 'cn';
+    if (target === cbRegion) return true;
+    cbRegionApply(target);
+    return true;
+  });
   function pSet(V, id, val) { var el = $(V.pfx + id); if (el) el.textContent = val; }
 
   /* ================= COMMAND 甲板 ================= */
@@ -7430,7 +7516,12 @@ var PT_I18N = {
     PTApp.dot(V.mode + 'Health', p === 'running', p !== 'running');
     /* tj 屏健康检查灯已改「账号矩阵」（数据在 loadTuanjieAccounts/renderTuanjieMatrix）；
        cb 屏可用模型灯已改「模型探测」（loadPluginModels 写）+「脱敏防护」（常亮） */
-    if (V.mode === 'cb') PTApp.dot('cbMask', true, false, '开启');
+    if (V.mode === 'cb') {
+      /* 脱敏防护是 CN 专属（--desensitize 只挂在国内版插件上）；国际版常灭，
+         尾字如实标「关」，状态灯随区域 */
+      if (cbRegion === 'intl') PTApp.dot('cbMask', false, true, '关');
+      else PTApp.dot('cbMask', true, false, '开启');
+    }
     /* comate 屏灯：zulu 托管随相位；免费限速运行时常亮（免费档上游限速是常态） */
     if (V.mode === 'comate') {
       PTApp.dot('comateZulu', p === 'running', p === 'starting', p === 'starting' ? '托管中' : '');
@@ -7694,9 +7785,10 @@ var PT_I18N = {
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
       }
       if (V.id === 'tuanjie') { updateJudgeBanner(h); updateSeedBanner(h); }
-      if (V.id === 'codebuddy') {
+      if (V.mode === 'cb') {
+        /* WorkBuddy 两区共用本甲板（cbRegion 决定 V.id），hy4 兜底状态条按区域画 */
         updateHy4Banner(h);
-        loadCbFailover(V, true); /* 窗口/开关/模型三态同步（失败静默） */
+        loadCbFailover(V, true); /* 窗口/开关/模型三态同步（失败静默；国际版直接返回） */
       }
       /* Qoder 积分：官方实时额度（openapi.qoder.com.cn）——只在点「↻ 刷新」时
          访问一次官方接口（插件侧缓存长期有效，轮询绝不打官方）。
@@ -7764,12 +7856,15 @@ var PT_I18N = {
   }
 
   /* WorkBuddy 积分：拉杆启动后拉一次 + 「↻ 刷新」手动拉，轮询不打官网（与团结同规矩）。
-     成功响应存 localStorage，GUI 打开时只画缓存。force=true 跳过后端 5 分钟缓存。 */
+     成功响应存 localStorage，GUI 打开时只画缓存。force=true 跳过后端 5 分钟缓存。
+     缓存键按区域分开：国内版沿用原键（老用户零变化），国际版独立键——
+     防止两区积分互串屏。 */
+  function cbQuotaCacheKey() { return cbRegion === 'intl' ? 'cbQuotaCache_intl' : 'cbQuotaCache'; }
   async function loadCodebuddyQuota(V, force) {
     try {
       var q2 = await (await fetch('http://127.0.0.1:' + V.port + '/quota' + (force ? '?refresh=1' : ''))).json();
       if (!q2 || q2.source === 'none') return; /* 无凭据：保持现状，不覆盖缓存画面 */
-      try { localStorage.setItem('cbQuotaCache', JSON.stringify({ at: Date.now(), q: q2 })); } catch (e) {}
+      try { localStorage.setItem(cbQuotaCacheKey(), JSON.stringify({ at: Date.now(), q: q2 })); } catch (e) {}
       renderCodebuddyQuota(V, q2);
     } catch (e) {}
   }
@@ -7800,7 +7895,7 @@ var PT_I18N = {
   /* 只画上次成功数据（GUI 打开时用，零官网请求） */
   function renderCodebuddyQuotaCache(V) {
     var d = null;
-    try { d = JSON.parse(localStorage.getItem('cbQuotaCache') || 'null'); } catch (e) {}
+    try { d = JSON.parse(localStorage.getItem(cbQuotaCacheKey()) || 'null'); } catch (e) {}
     if (d && d.q) renderCodebuddyQuota(V, d.q);
   }
 
@@ -7976,10 +8071,16 @@ var PT_I18N = {
         sel.disabled = true;
       }
     }
-    PTApp.dot('cbHy4', on);
+    PTApp.dot('cbHy4', on && cbRegion === 'cn'); /* 兜底 CN 专属：国际版不点灯（不参与 failover） */
   }
   /* 轮询路径静默（插件未启动时不刷 err 日志）；手动路径 silent=false */
   async function loadCbFailover(V, silent) {
+    if (cbRegion === 'intl') { /* 国际版无 failover（CN 专属）：不空打 8789，收状态条即可 */
+      var banner2 = $('cbHy4Banner');
+      if (banner2) banner2.style.display = 'none';
+      PTApp.dot('cbHy4', false);
+      return;
+    }
     try {
       var cfg = await (await fetch('http://127.0.0.1:' + V.port + '/v1/failover')).json();
       renderCbFailover(cfg, V.modelIds || []);
@@ -8057,10 +8158,15 @@ var PT_I18N = {
     'app.s.copyUrl':     { zh: '点击复制 · 粘到任意 OpenAI 兼容客户端', 'zh-hant': '點擊複製 · 粘到任意 OpenAI 兼容客戶端', en: 'Click to copy · Paste into any OpenAI-compatible client', de: 'Klicken zum Kopieren · In jeden OpenAI-Client einfügen', ja: 'クリックでコピー・OpenAI互換クライアントに', fr: 'Cliquer pour copier · Coller dans tout client OpenAI', es: 'Clic para copiar · Pégalo en cualquier cliente OpenAI' },
     'app.s.tjLever':     { zh: '拉到底点火（8788）· 运行后拉回最左熄火', 'zh-hant': '拉到底點火（8788）· 運行後拉回最左熄火', en: 'Pull fully to ignite (8788) · Pull back left to stop', de: 'Ganz ziehen zum Start (8788) · Links zurück zum Stop', ja: '右端まで引いて点火（8788）・左へ戻して停止', fr: 'Tirer à fond (8788) · Ramener à gauche', es: 'Tira al fondo (8788) · Vuelve a la izquierda' },
     'app.s.cbLever':     { zh: '拉到底点火（8787）· 拉回熄火 · 模型探测首次约 20 秒', 'zh-hant': '拉到底點火（8787）· 拉回熄火 · 模型探測首次約 20 秒', en: 'Pull fully to ignite (8787) · Pull back to stop · Probe ~20s first run', de: 'Ganz ziehen (8787) · Zurück zum Stop · Erste Suche ~20 s', ja: '右端まで引いて点火（8787）・初回検出約20秒', fr: 'Tirer à fond (8787) · Détection ~20 s au début', es: 'Tira al fondo (8787) · Detección ~20 s la primera vez' },
+    'app.s.cbLeverIntl':     { zh: '拉到底点火（8789）· 拉回熄火 · 模型探测首次约 20 秒', 'zh-hant': '拉到底點火（8789）· 拉回熄火 · 模型探測首次約 20 秒', en: 'Pull fully to ignite (8789) · Pull back to stop · Probe ~20s first run', de: 'Ganz ziehen (8789) · Zurück zum Stop · Erste Suche ~20 s', ja: '右端まで引いて点火（8789）・初回検出約20秒', fr: 'Tirer à fond (8789) · Détection ~20 s au début', es: 'Tira al fondo (8789) · Detección ~20 s la primera vez' },
     'app.s.baiLever':     { zh: '拉到底点火（8891）· 拉回熄火 · Go 栈直连 api.b.ai', 'zh-hant': '拉到底點火（8891）· 拉回熄火 · Go 棧直連 api.b.ai', en: 'Pull to ignite (8891) · Back to stop · Go stack to api.b.ai', de: 'Ziehen zum Starten (8891) · Zurück zum Stoppen · Go-Stack zu api.b.ai', ja: '引いて起動（8891）· 戻して停止 · Goスタックで api.b.ai へ', fr: 'Tirer pour démarrer (8891) · Retour pour arrêter · Pile Go vers api.b.ai', es: 'Tira para encender (8891) · Vuelve para apagar · Pila Go a api.b.ai' },
     'app.s.comateLever':     { zh: '拉杆点火，托管 Comate 智能体引擎（8786）· 拉回熄火', 'zh-hant': '拉桿點火，託管 Comate 智能體引擎（8786）· 拉回熄火', en: 'Pull to ignite, hosting the Comate agent engine (8786) · Pull back to stop', de: 'Ziehen zum Start, hostet die Comate-Engine (8786) · Zurück zum Stoppen', ja: '引いて点火、Comate エージェントエンジンをホスト（8786）· 戻して停止', fr: 'Tirer pour démarrer, héberge le moteur Comate (8786) · Retour pour arrêter', es: 'Tira para encender, aloja el motor de Comate (8786) · Vuelve para apagar' },
     'app.s.qoderLever':      { zh: '拉杆点火，托管 Qoder 智能体引擎（8785）· 拉回熄火', 'zh-hant': '拉桿點火，託管 Qoder 智能體引擎（8785）· 拉回熄火', en: 'Pull to ignite, hosting the Qoder agent engine (8785) · Pull back to stop', de: 'Ziehen zum Start, hostet die Qoder-Engine (8785) · Zurück zum Stoppen', ja: '引いて点火、Qoder エージェントエンジンをホスト（8785）· 戻して停止', fr: 'Tirer pour démarrer, héberge le moteur Qoder (8785) · Retour pour arrêter', es: 'Tira para encender, aloja el motor de Qoder (8785) · Vuelve para apagar' },
     'app.s.copy':     { zh: '点击复制', 'zh-hant': '點擊複製', en: 'Click to copy', de: 'Klicken zum Kopieren', ja: 'クリックでコピー', fr: 'Cliquer pour copier', es: 'Clic para copiar' },
+    'app.s.cbRegion':     { zh: '版本', 'zh-hant': '版本', en: 'Region', de: 'Region', ja: 'リージョン', fr: 'Région', es: 'Región' },
+    'app.s.cbRegionN':     { zh: '国内版走 copilot.tencent.com（8787），国际版走 www.codebuddy.ai（8789，含免费模型）· 切换即改本甲板全部目标，互不影响。', 'zh-hant': '國內版走 copilot.tencent.com（8787），國際版走 www.codebuddy.ai（8789，含免費模型）· 切換即改本甲板全部目標，互不影響。', en: 'CN hits copilot.tencent.com (8787); Intl hits www.codebuddy.ai (8789, includes free models) · Switching retargets this whole deck; both are independent.', de: 'CN erreicht copilot.tencent.com (8787); Intl erreicht www.codebuddy.ai (8789, inkl. kostenlose Modelle) · Umschalen zielt das ganze Deck um; beide sind unabhängig.', ja: '中国版は copilot.tencent.com（8787）、国際版は www.codebuddy.ai（8789、無料モデルあり）・切替でこのデッキの宛先が全て変わる。相互に影響しない。', fr: 'CN rejoint copilot.tencent.com (8787) ; Intl rejoint www.codebuddy.ai (8789, dont modèles gratuits) · Le basculement retarget tout le deck ; les deux sont indépendants.', es: 'CN va a copilot.tencent.com (8787); Intl va a www.codebuddy.ai (8789, incluye modelos gratis) · El cambio redirige todo el deck; ambos son independientes.' },
+    'app.val.cbCn':     { zh: '国内版', 'zh-hant': '國內版', en: 'CN', de: 'CN', ja: '中国版', fr: 'CN', es: 'CN' },
+    'app.val.cbIntl':     { zh: '国际版', 'zh-hant': '國際版', en: 'Intl', de: 'Intl', ja: '国際版', fr: 'Intl', es: 'Intl' },
     'app.s.autostart':     { zh: '登录 Windows 后无窗口自动点火（软件统一，非按代理单独）。', 'zh-hant': '登錄 Windows 後無窗口自動點火（軟件統一，非按代理單獨）。', en: 'Auto-ignite headless after Windows sign-in (app-wide).', de: 'Nach Anmeldung automatisch headless starten (app-weit).', ja: 'Windowsログイン後に自動点火（アプリ全体）。', fr: 'Démarrage auto sans fenêtre après connexion (global).', es: 'Arranque automático sin ventana al iniciar Windows (global).' },
     'app.s.sound':     { zh: '操作每个控件时的轻微咔哒声——开关、挡位、按键与拨杆。', 'zh-hant': '操作每個控件時的輕微咔噠聲——開關、擋位、按鍵與撥杆。', en: 'Slight clicks on every control — switches, gears, keys, levers.', de: 'Leises Klicken bei jeder Bedienung.', ja: '各コントロール操作時の軽いカチッ音。', fr: 'Légers clics sur chaque contrôle.', es: 'Suaves clics en cada control.' },
     'app.s.updIdle':     { zh: '启动后稍等片刻会自动检查一次。', 'zh-hant': '啟動後稍等片刻會自動檢查一次。', en: 'A check runs automatically shortly after launch.', de: 'Kurz nach dem Start erfolgt eine Prüfung.', ja: '起動後しばらくすると自動チェック。', fr: 'Vérification automatique après le lancement.', es: 'Se comprueba automáticamente tras arrancar.' },
@@ -8198,6 +8304,15 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.10.8', date: '2026-09-12', groups: [
+      { label: '🚀 新功能', items: [
+        'WorkBuddy 甲板内可切国际版（8789），免费模型在此',
+        '国际版模型池 15 个：3 个免费 + 12 个付费，已逐条实测' ] },
+      { label: '🐛 Bug 修复', items: [
+        '出站角色降级 developer→system：修 harness 11128',
+        'headless 不再把 API Key 放上命令行' ] },
+      { label: '✨ 体验优化', items: [
+        '注水检测：探针徽章给出未测成原因，分布卡单列未作答' ] } ] },
     { v: 'v3.10.7', date: '2026-09-11', groups: [
       { label: '🐛 Bug 修复', items: [
         '账号池「自动探测」「手动添加」关闭后同样回到账号池' ] } ] },
@@ -8631,7 +8746,7 @@ var PT_I18N = {
   }
 
   var HELP_HTML = '<h3>使用帮助 · GUIDE · COMMAND 口径</h3><div class="m-body">' +
-    '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（伴随自检仪式）；运行中<b>拉回最左</b>熄火。三个代理甲板（COMMAND 55990 / TUANJIE 8788 / WORKBUDDY 8787）各有独立拉杆。<br>' +
+    '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（伴随自检仪式）；运行中<b>拉回最左</b>熄火。三个代理甲板（COMMAND 55990 / TUANJIE 8788 / WORKBUDDY 8787 / 国际版 8789）各有独立拉杆。<br>' +
     '<b>【后台常驻】</b> 平时关窗（红灯 / 系统关闭）<b>不停后台代理</b>，重开面板自动识别运行中；只有设置页的「彻底关机」拨杆会连后台一起停。<br>' +
     '<b>【接入】</b> 任意 OpenAI 兼容客户端：Base URL 填各甲板显示的地址（如 <code>http://127.0.0.1:55990/v1</code>）；API Key 用 CommandCode Studio 生成的 Key（点火前填好，程序记住）。<br>' +
     '<b>【甲板】</b> 四颗模式键：<b>COMMAND / TUANJIE / WORKBUDDY / 设置</b>；键盘方向键也能切换。<b>COMMAND 键再点一次翻到 B.AI</b>（键帽副行 ⇄ 提示，再点翻回）。<b>注水检测</b>与<b>媒体转路由</b>是子页面：上屏（黑屏）看信息、甲板做操作，返回按 <b>设置</b> 键或「← 返回」，Esc 也可以。<br>' +
@@ -8691,14 +8806,17 @@ var PT_I18N = {
       '<b>【注水检测】</b>设置 → 注水检测：金丝雀探针（指纹漂移+答题）识别上游是否换便宜模型，生效于团结链路。<br>' +
       '<b>【积分统计】</b>官方积分口径：积分总额 / 今日已用 / 今日剩余（24:00 重置）/ 月度积分 / 赠送池+日赠；点火后自动拉一次，之后点「↻ 刷新」手动拉（官网 429 保护）。<br>' +
       '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>',
-    cb:
-      '<h3>使用帮助 · GUIDE · WorkBuddy</h3><div class="m-body">' +
-      '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8787）；拉回最左熄火。模型探测首次约 20 秒。<br>' +
-      '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8787/v1</code>（甲板上点击即复制）。<br>' +
+    cb: function () {
+      var p = PV.cb.port; /* 8787 / 8789，随区域 */
+      return '<h3>使用帮助 · GUIDE · WorkBuddy</h3><div class="m-body">' +
+      '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（' + p + '）；拉回最左熄火。模型探测首次约 20 秒。<br>' +
+      '<b>【版本】</b>本甲板可切<b>国内版 / 国际版</b>（国内 8787 / 国际 8789），切换后端点、模型、统计与点火目标全部跟随。<br>' +
+      '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:' + p + '/v1</code>（甲板上点击即复制）。<br>' +
       '<b>【hy4 限流兜底】</b>开启后 hy4-preview 撞配额 429 时自动切换 fallback 并按上游重置时点计时，关闭时 429 如实透传；「限流切换模型」选择切换目标，触发时甲板顶部黄条提示。<br>' +
       '<b>【脱敏】</b>已开启：system/tools 零宽脱敏防审核误拦。<br>' +
       '<b>【统计】</b>可用模型（实时拉取）/ 积分 / 月额度 / 状态 / 健康检查；「↻ 刷新」强制实时拉一次积分。<br>' +
-      '<b>【模型矩阵】</b>点火后自动探测，点击模型名一键复制。</div>',
+      '<b>【模型矩阵】</b>点火后自动探测，点击模型名一键复制。</div>';
+    },
     qoder:
       '<h3>使用帮助 · GUIDE · Qoder</h3><div class="m-body">' +
       '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火，托管 Qoder 智能体引擎（8785）；拉回最左熄火。<br>' +
@@ -8771,13 +8889,17 @@ var PT_I18N = {
   }
 
   async function refForCb() {
-    var r = await refFetchList(8787, '/v1/models');
+    var port = PV.cb.port; /* 8787 / 8789，随区域 */
+    var intl = cbRegion === 'intl';
+    var r = await refFetchList(port, '/v1/models');
     if (r && r.err) { openModal(refNote('上游拉取失败 · 稍后再试')); return; }
-    var list = r ? r.list : CB_REF_FALLBACK.map(function (id) { return { id: id }; });
-    var meta = await refFetchMeta(8787);
-    var html = '<h3>模型参考 · MODEL REF · WorkBuddy</h3><div class="m-body">' +
-      '<b>【口径】</b>清单与 8787 后端实时一致' + (r ? '' : '（当前离线，展示内置名单）') + '；点击模型名复制。' +
+    /* 离线兜底：国内版用内置名单；国际版没有兜底清单，如实显示"离线未知"（不编造） */
+    var list = r ? r.list : (intl ? [] : CB_REF_FALLBACK.map(function (id) { return { id: id }; }));
+    var meta = await refFetchMeta(port);
+    var html = '<h3>模型参考 · MODEL REF · WorkBuddy' + (intl ? ' · 国际版' : '') + '</h3><div class="m-body">' +
+      '<b>【口径】</b>清单与 ' + port + ' 后端实时一致' + (r ? '' : (intl ? '（当前离线，清单未知）' : '（当前离线，展示内置名单）')) + '；点击模型名复制。' +
       '<table class="pm-tbl"><thead><tr><th>模型</th><th>上下文</th><th>最大输出</th><th>推理档位</th></tr></thead>';
+    if (!list.length) html += '<tr><td colspan="4">离线未知</td></tr>';
     list.forEach(function (m) {
       var id = m.id || m, mi = meta[id] || {};
       html += '<tr>' + refNameCell(id, id) +
@@ -8897,7 +9019,7 @@ var PT_I18N = {
         b.onclick = function () {
           var deck = b.closest('[data-deck]');
           var dk = deck ? deck.getAttribute('data-deck') : 'cmd';
-          if (key === 'app.btn.help') openModal(HELP_MAP[dk] || HELP_MAP.cmd);
+          if (key === 'app.btn.help') { var h = HELP_MAP[dk]; openModal(typeof h === 'function' ? h() : (h || HELP_MAP.cmd)); }
           else (REF_MAP[dk] || REF_MAP.cmd)();
         };
       });
@@ -9051,8 +9173,8 @@ var PT_I18N = {
           /* 1) 主代理停堆（杀 headless，55990） */
           try { await call('Stop'); } catch (e) {}
           S.userStopped = true;   /* 阻断自愈看门狗在退出瞬间拉起代理 */
-          /* 2) 插件进程全停（tuanjie / codebuddy） */
-          var ids = ['tuanjie', 'codebuddy'];
+          /* 2) 插件进程全停（tuanjie / codebuddy / codebuddy-intl） */
+          var ids = ['tuanjie', 'codebuddy', 'codebuddy-intl'];
           for (var i = 0; i < ids.length; i++) {
             try { await call('PluginStop', ids[i]); } catch (e) {}
           }
@@ -9073,7 +9195,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.10.7';
+  var UI_CUR = 'v3.10.8';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });

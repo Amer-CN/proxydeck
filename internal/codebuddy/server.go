@@ -32,6 +32,7 @@ import (
 // Server 是 CodeBuddy 转发的本地服务。
 type Server struct {
 	cred        *Credential
+	region      Region // CN（默认，行为与引入区域前逐字节一致）/ INTL
 	desensitize bool
 	client      *http.Client
 	ln          net.Listener
@@ -82,24 +83,61 @@ func corsWith(h http.Handler) http.Handler {
 
 // NewServer 创建服务。desensitize=true 时对 system/developer/tools 做零宽脱敏。
 func NewServer(desensitize bool) (*Server, error) {
-	cred := NewCredential("")
-	if cred.Path() == "" {
-		return nil, fmt.Errorf("未找到 CodeBuddy/WorkBuddy 登录文件，请先在桌面端完成登录")
+	return NewServerForRegion(RegionCN, desensitize)
+}
+
+// NewServerForRegion 按区域创建服务。CN 与 NewServer 完全一致（默认参数 = 今天的行为）；
+// INTL：base URL www.codebuddy.ai、凭据按 workbuddy.ai 过滤、不刷新 token、
+// 强制首条 system、默认不脱敏（--desensitize 开关保留以便将来开启）。
+func NewServerForRegion(region Region, desensitize bool) (*Server, error) {
+	c := NewCredential("", region)
+	if c.Path() == "" {
+		return nil, fmt.Errorf("未找到 %s 区域的 CodeBuddy/WorkBuddy 登录文件，请先在桌面端完成登录", region)
+	}
+	// 凭据文件内容也可能与期望区域不符（极端：目录里只有一个异域文件）——
+	// 读取 domain 复核一次，不符即报错，不许跨区域回退。
+	if err := validateRegion(region, credentialDomain(c)); err != nil {
+		return nil, err
 	}
 	s := &Server{
-		cred:        cred,
+		cred:        c,
+		region:      region,
 		desensitize: desensitize,
 		client:      &http.Client{Timeout: 0}, // 流式长连接不设总超时
 		stats:       map[string]*modelStat{},
 		startedAt:   time.Now(),
 	}
 	if exe, err := os.Executable(); err == nil {
-		s.statsPath = filepath.Join(filepath.Dir(exe), "codebuddy-stats.json")
+		dir := filepath.Dir(exe)
+		// CN 沿用原文件名（老用户零变化）；INTL 独立文件——两区实例可能同时跑，
+		// 共用同一 stats/failover 文件会互相覆盖写
+		suffix := ""
+		if region == RegionINTL {
+			suffix = "-intl"
+		}
+		s.statsPath = filepath.Join(dir, "codebuddy-stats"+suffix+".json")
 		s.loadStats()
-		s.failPath = filepath.Join(filepath.Dir(exe), "codebuddy-failover.json")
+		s.failPath = filepath.Join(dir, "codebuddy-failover"+suffix+".json")
 		s.loadFailover()
 	}
 	return s, nil
+}
+
+// credentialDomain 取凭据 auth.domain（仅该字段；token 等不读不落）。
+func credentialDomain(c *Credential) string {
+	var probe struct {
+		Auth struct {
+			Domain string `json:"domain"`
+		} `json:"auth"`
+	}
+	b, err := os.ReadFile(c.Path())
+	if err != nil {
+		return ""
+	}
+	if json.Unmarshal(b, &probe) != nil {
+		return ""
+	}
+	return probe.Auth.Domain
 }
 
 // Start 在 host:port 监听（阻塞）。
@@ -138,10 +176,12 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	c := s.cfg()
 	resp := map[string]any{
 		"status":  "ok",
 		"service": "codebuddy-go",
-		"backend": backendBase,
+		"backend": c.BaseURL,
+		"region":  string(s.region),
 		"mode":    "direct-proxy (native function calling)",
 	}
 	if !s.startedAt.IsZero() {
@@ -362,7 +402,7 @@ func (s *Server) handleFailover(w http.ResponseWriter, r *http.Request) {
 		if body.Fallback != nil {
 			f := *body.Fallback
 			valid := false // 必须命中候选池（第 43 轮勘误：曾写成 f != ""，非空即放行）
-			for _, m := range modelCandidates {
+			for _, m := range s.cfg().Candidates {
 				if m == f {
 					valid = true
 					break
@@ -458,8 +498,15 @@ var modelCandidates = []string{
 	"deepseek-v4.1-flash", "deepseek-v4-flash", "deepseek-v4-pro",
 }
 
-// Models 返回真实可用模型（并行最小请求探测，1h 缓存）。
+// Models 返回真实可用模型（并行最小请求探测，1h 缓存）。候选池按区域取
+//（CN 全名单；INTL 仅 3 个免费模型，付费 id 未知不入池）。
 func (s *Server) Models(ctx context.Context) []string {
+	candidates := s.cfg().Candidates
+	if s.cfg().NoProbe {
+		/* 池内 id 已人工逐条实测：不做探测。国际版付费模型探测会持续扣费
+		   （2026-09-11 用户裁决关掉），失效时按实际报错处理。 */
+		return candidates
+	}
 	s.probeMu.Lock()
 	fresh := time.Since(s.probeAt) < time.Hour && len(s.probeList) > 0
 	cached := s.probeList
@@ -474,7 +521,7 @@ func (s *Server) Models(ctx context.Context) []string {
 		var mu sync.Mutex
 		okSet := map[string]bool{}
 		sem := make(chan struct{}, 10)
-		for _, m := range modelCandidates {
+		for _, m := range candidates {
 			wg.Add(1)
 			go func(model string) {
 				defer wg.Done()
@@ -490,7 +537,7 @@ func (s *Server) Models(ctx context.Context) []string {
 		wg.Wait()
 		if len(okSet) > 0 {
 			list := make([]string, 0, len(okSet))
-			for _, m := range modelCandidates { // 按候选池顺序输出（稳定）
+			for _, m := range candidates { // 按候选池顺序输出（稳定）
 				if okSet[m] {
 					list = append(list, m)
 				}
@@ -499,28 +546,33 @@ func (s *Server) Models(ctx context.Context) []string {
 			s.probeList = list
 			s.probeAt = time.Now()
 			s.probeMu.Unlock()
-			log.Printf("[codebuddy] 模型探测完成: %d/%d 可用", len(list), len(modelCandidates))
+			log.Printf("[codebuddy] 模型探测完成 region=%s: %d/%d 可用", s.region, len(list), len(candidates))
 			return list
 		}
 	}
 	// 全部失败（网络异常）→ 回退候选池，保证列表不空
 	s.probeMu.Lock()
-	s.probeList = append([]string{}, modelCandidates...)
+	s.probeList = append([]string{}, candidates...)
 	s.probeAt = time.Now()
 	s.probeMu.Unlock()
-	return modelCandidates
+	return candidates
 }
 
 // probeOne 发最小流式请求探测模型是否可用（读到数据即认为后端接受该模型名）。
+// INTL 首条 system 强制（11128），探测请求同样带最小 system 保证可探测。
 func (s *Server) probeOne(ctx context.Context, hdr http.Header, model string) bool {
 	pctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
+	msgs := []map[string]string{{"role": "user", "content": "hi"}}
+	if s.cfg().ForceSystem {
+		msgs = append([]map[string]string{{"role": "system", "content": intlDefaultSystem}}, msgs...)
+	}
 	body, _ := json.Marshal(map[string]any{
 		"model": model, "stream": true,
-		"messages": []map[string]string{{"role": "user", "content": "hi"}},
+		"messages": msgs,
 	})
 	req, err := http.NewRequestWithContext(pctx, http.MethodPost,
-		backendBase+"/v2/chat/completions", bytes.NewReader(body))
+		s.cfg().BaseURL+"/v2/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return false
 	}
@@ -594,9 +646,17 @@ var modelMeta = map[string]map[string]any{
 
 func (s *Server) handleModelInfo(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(modelCandidates))
+	// INTL 模型矩阵未经实测，不硬造元数据：CN 的 modelMeta 不出国际版（空 meta，
+	// 前端如实显示「未核实」）。
+	metaOf := func(m string) map[string]any {
+		if s.region == RegionCN {
+			return modelMeta[m]
+		}
+		return nil
+	}
 	for _, m := range s.Models(r.Context()) {
 		// 未命中 modelMeta 的模型不硬造字段：空 meta 输出，前端如实显示「未核实」。
-		meta := modelMeta[m]
+		meta := metaOf(m)
 		entry := map[string]any{"name": m}
 		for k, v := range meta {
 			entry[k] = v
@@ -676,6 +736,38 @@ func parseQuotaReset(body string) time.Time {
 	return t
 }
 
+// normalizeRoles 把 OpenAI 的 developer 角色降级为 system。
+//
+// 2026-09-11 实测：腾讯后端按角色名判渠道，见到 developer 一律回 400/11128
+// （Illegal API invocation from an unapproved channel），与内容、位置、模型均无关
+// （最小无害句带 developer 即 400，同句带 system 即 200；system 首位 + developer
+// 次位同样 400；glm-5.3-flash 同现象；团结 8788 则接受 developer）。
+// 按 OpenAI 语义发 developer 的客户端（如 DeepSeek Harness 的 pi-ai 适配层——
+// model.reasoning 为真时选 developer 角色）因此整条被拦：脱敏只改 content、
+// 不碰 role，挡不住。与 bai 的 adaptQuirks 同因同治。
+func normalizeRoles(msgs []any) []any {
+	for _, raw := range msgs {
+		if m, ok := raw.(map[string]any); ok {
+			if role, _ := m["role"].(string); role == "developer" {
+				m["role"] = "system"
+			}
+		}
+	}
+	return msgs
+}
+
+// msgsHaveSystem 消息列表里是否已有 system 角色（INTL 自动补 system 判定用）。
+func msgsHaveSystem(msgs []any) bool {
+	for _, m := range msgs {
+		if mm, ok := m.(map[string]any); ok {
+			if role, _ := mm["role"].(string); role == "system" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -713,9 +805,22 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if _, ok := backendBody["stream_options"]; !ok {
 		backendBody["stream_options"] = map[string]any{"include_usage": true}
 	}
+	// developer → system（腾讯后端不认 developer，见 normalizeRoles）
+	if bm, ok := backendBody["messages"].([]any); ok {
+		backendBody["messages"] = normalizeRoles(bm)
+	}
 	if s.desensitize {
 		backendBody = DesensitizeBody(backendBody,
 			[]string{"system", "developer"}, true, true, true)
+	}
+	// INTL 特化：国际版 11128 为「首条消息必须是 system」的结构校验——
+	// 客户端消息里没有 system 时自动在最前补一条最小中性 system；已有 system 不动。
+	if s.cfg().ForceSystem {
+		if bm, ok := backendBody["messages"].([]any); ok && !msgsHaveSystem(bm) {
+			sysMsg := map[string]any{"role": "system", "content": intlDefaultSystem}
+			backendBody["messages"] = append([]any{sysMsg}, bm...)
+			log.Printf("[codebuddy] region=%s 客户端未带 system，自动补最小 system", s.region)
+		}
 	}
 
 	hdr, err := s.cred.Headers(r.Context())
@@ -724,27 +829,31 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 限流窗口内 hy4-preview 请求体层改写 fallback（agent 零感知）；
-	// 兜底关闭（GUI 可关）时不改写、不 trip，429 如实透传（现行为）
+	// 兜底关闭（GUI 可关）时不改写、不 trip，429 如实透传（现行为）。
+	// hy4 兜底与缺省 reasoning 注入均为国内专属逻辑（矩阵/fallback 实测口径都来自
+	// copilot.tencent.com；国际版免费池未实测），INTL 一律跳过，原样透传。
 	cfg := s.failoverConfig()
 	sentModel := modelName
-	limited := sentModel == hy4Primary && s.hy4Limited()
+	limited := sentModel == hy4Primary && s.region == RegionCN && s.hy4Limited()
 	if d := failoverDecide(cfg, sentModel, limited, 0, ""); d.rewrite {
 		backendBody["model"] = cfg.fallback
 		sentModel = cfg.fallback
 		log.Printf("[codebuddy] hy4-preview 限流中，本次切换 %s", cfg.fallback)
 	}
 	// 思考缺省档：客户端未带 reasoning_effort 时按配置注入（已带一律不动，透传优先）
-	if _, ok := backendBody["reasoning_effort"]; !ok {
-		if eff := reasoningDefaultFor(modelMeta[sentModel], sentModel, cfg.defaultReasoning); eff != "" {
-			backendBody["reasoning_effort"] = eff
-			log.Printf("[codebuddy] model=%s 未带 reasoning_effort，注入缺省 %s", sentModel, eff)
+	if s.region == RegionCN {
+		if _, ok := backendBody["reasoning_effort"]; !ok {
+			if eff := reasoningDefaultFor(modelMeta[sentModel], sentModel, cfg.defaultReasoning); eff != "" {
+				backendBody["reasoning_effort"] = eff
+				log.Printf("[codebuddy] model=%s 未带 reasoning_effort，注入缺省 %s", sentModel, eff)
+			}
 		}
 	}
 	start := time.Now()
 	var resp *http.Response
 	for attempt := 0; ; attempt++ {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
-			backendBase+"/v2/chat/completions", mustJSONReader(backendBody))
+			s.cfg().BaseURL+"/v2/chat/completions", mustJSONReader(backendBody))
 		if err != nil {
 			writeErr(w, 500, err.Error())
 			return
@@ -768,8 +877,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 		// hy4-preview 撞配额 429：兜底开启时记限流窗口并立刻用 fallback 重放本次
 		// 请求（仅首跳触发，重放自身失败如实透传，不循环）；fallback 请求不触发；
-		// 兜底关闭 → 不记窗口不重放，429 如实透传
-		if attempt == 0 && resp.StatusCode == http.StatusTooManyRequests {
+		// 兜底关闭 → 不记窗口不重放，429 如实透传。INTL 不参与（国内专属逻辑）。
+		if attempt == 0 && resp.StatusCode == http.StatusTooManyRequests && s.region == RegionCN {
 			if d := failoverDecide(cfg, sentModel, false, resp.StatusCode, string(errBody)); d.trip {
 				s.hy4Trip(d.until)
 				backendBody["model"] = cfg.fallback

@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	appVersion  = "v3.10.7"
+	appVersion  = "v3.10.8"
 	coreVersion = "v1.2.0"
 	appTitle    = "ProxyDeck · 多平台代理控制台"
 )
@@ -196,8 +196,8 @@ func main() {
 
 	app := newApp(*flagHost, *flagPort, *flagAPIKey)
 
-	// 插件子模式（团结 / CodeBuddy / B.AI / Comate）：实现见 plugin_modes.go
-	if *flagPluginTuanjie || *flagPluginCodebuddy || *flagPluginBai || *flagPluginComate || *flagPluginQoder {
+	// 插件子模式（团结 / CodeBuddy / CodeBuddy 国际版 / B.AI / Comate）：实现见 plugin_modes.go
+	if *flagPluginTuanjie || *flagPluginCodebuddy || *flagPluginCodebuddyIntl || *flagPluginBai || *flagPluginComate || *flagPluginQoder {
 		os.Exit(runPluginMode())
 	}
 

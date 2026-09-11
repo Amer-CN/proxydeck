@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	quotaURL     = backendBase + "/v2/billing/meter/get-user-resource"
+	quotaPath    = "/v2/billing/meter/get-user-resource" // 挂在区域 base URL 下（CN copilot.tencent.com；INTL 未实测，失败如实报错）
 	quotaTimeout = 15 * time.Second
 )
 
@@ -141,7 +141,8 @@ func (s *Server) fetchQuotaLive(ctx context.Context) (*Quota, error) {
 	}
 	ctx2, cancel := context.WithTimeout(ctx, quotaTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx2, http.MethodPost, quotaURL, mustJSONReader(body))
+	req, err := http.NewRequestWithContext(ctx2, http.MethodPost,
+		s.cfg().BaseURL+quotaPath, mustJSONReader(body))
 	if err != nil {
 		return nil, err
 	}

@@ -15,12 +15,13 @@ import (
 )
 
 var (
-	flagPluginTuanjie     = flag.Bool("plugin-tuanjie", false, "团结 Cowork (Codely) 插件服务模式（GUI 托管时自动 spawn）")
-	flagPluginCodebuddy   = flag.Bool("plugin-codebuddy", false, "CodeBuddy/WorkBuddy 插件服务模式（GUI 托管时自动 spawn；--desensitize 可选）")
-	flagDesensitize       = flag.Bool("desensitize", false, "CodeBuddy 插件：对 system/developer/tools 做零宽脱敏，缓解腾讯审核误拦")
-	flagPluginBai         = flag.Bool("plugin-bai", false, "B.AI 插件服务模式（本地转发到 api.b.ai，OpenAI 兼容）")
-	flagPluginComate      = flag.Bool("plugin-comate", false, "Comate 插件服务模式（托管 zulu serve，本地 OpenAI 兼容 8786）")
-	flagPluginQoder       = flag.Bool("plugin-qoder", false, "Qoder 插件服务模式（托管官方 agent SDK worker，本地 OpenAI 兼容 8785）")
+	flagPluginTuanjie       = flag.Bool("plugin-tuanjie", false, "团结 Cowork (Codely) 插件服务模式（GUI 托管时自动 spawn）")
+	flagPluginCodebuddy     = flag.Bool("plugin-codebuddy", false, "CodeBuddy/WorkBuddy 插件服务模式（GUI 托管时自动 spawn；--desensitize 可选）")
+	flagPluginCodebuddyIntl = flag.Bool("plugin-codebuddy-intl", false, "WorkBuddy 国际版插件服务模式（GUI 托管时自动 spawn；--desensitize 可选）")
+	flagDesensitize         = flag.Bool("desensitize", false, "CodeBuddy 插件：对 system/developer/tools 做零宽脱敏，缓解腾讯审核误拦")
+	flagPluginBai           = flag.Bool("plugin-bai", false, "B.AI 插件服务模式（本地转发到 api.b.ai，OpenAI 兼容）")
+	flagPluginComate        = flag.Bool("plugin-comate", false, "Comate 插件服务模式（托管 zulu serve，本地 OpenAI 兼容 8786）")
+	flagPluginQoder         = flag.Bool("plugin-qoder", false, "Qoder 插件服务模式（托管官方 agent SDK worker，本地 OpenAI 兼容 8785）")
 )
 
 // runPluginMode 处理 --plugin-tuanjie / --plugin-codebuddy / --plugin-bai / --plugin-comate
@@ -49,6 +50,25 @@ func runPluginMode() int {
 			*flagHost, *flagPort, *flagDesensitize)
 		if err := srv.Start(*flagHost, *flagPort); err != nil {
 			_ = os.WriteFile(filepath.Join(exeDir(), "codebuddy-plugin-error.log"),
+				[]byte(err.Error()), 0o600)
+			os.Exit(1)
+		}
+		select {}
+	}
+
+	// CodeBuddy 国际版插件服务模式：直连 www.codebuddy.ai（凭据按 workbuddy.ai 过滤，
+	// 不刷新 token，首条 system 强制，免费模型池）。
+	if *flagPluginCodebuddyIntl {
+		srv, err := codebuddy.NewServerForRegion(codebuddy.RegionINTL, *flagDesensitize)
+		if err != nil {
+			_ = os.WriteFile(filepath.Join(exeDir(), "codebuddy-intl-plugin-error.log"),
+				[]byte(err.Error()), 0o600)
+			os.Exit(1)
+		}
+		log.Printf("codebuddy-intl-plugin: listening on %s:%s (backend www.codebuddy.ai, desensitize=%v)",
+			*flagHost, *flagPort, *flagDesensitize)
+		if err := srv.Start(*flagHost, *flagPort); err != nil {
+			_ = os.WriteFile(filepath.Join(exeDir(), "codebuddy-intl-plugin-error.log"),
 				[]byte(err.Error()), 0o600)
 			os.Exit(1)
 		}

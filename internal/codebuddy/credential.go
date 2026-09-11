@@ -24,14 +24,13 @@ import (
 )
 
 const (
-	backendBase   = "https://copilot.tencent.com"
 	defaultDomain = "www.codebuddy.cn"
-	userAgent     = "codebuddy2openai-go/1.0"
 )
 
 // Credential 管理桌面端凭据：读取、缓存、过期刷新、回写。
 type Credential struct {
 	mu     sync.Mutex
+	region Region
 	path   string
 	cached map[string]any
 	mtime  time.Time
@@ -83,7 +82,19 @@ func findAuthDirs() []string {
 
 // FindAuthFile 返回最新登录的 auth 文件（按 mtime；目录里可能残留多个历史登录态，
 // 旧 token 可能已被吊销，必须用最新的）。找不到返回空。
+//
+// 2026-09-11 region 修复：国际版登录会往同一目录写 workbuddy-desktop-ai.info，
+// 只按 mtime 取最新会让国内 8787 拿国际 token 打 copilot.tencent.com（反之亦然）。
+// 必须先读每个 .info 的 auth.domain 按 region 过滤，再在命中的文件里取 mtime
+// 最新；没有对应区域的文件就返回空（如实报错，不许回退到另一区域的凭据）。
 func FindAuthFile() string {
+	return FindAuthFileForRegion(RegionCN)
+}
+
+// FindAuthFileForRegion 同 FindAuthFile，但按区域过滤 auth.domain
+//（CN → 含 codebuddy.cn；INTL → 含 workbuddy.ai）。
+func FindAuthFileForRegion(region Region) string {
+	suffix := regionConfigs[region].DomainSuffix
 	for _, d := range findAuthDirs() {
 		ents, err := os.ReadDir(d)
 		if err != nil {
@@ -102,7 +113,11 @@ func FindAuthFile() string {
 			if err != nil {
 				continue
 			}
-			files = append(files, fi{filepath.Join(d, e.Name()), info.ModTime()})
+			p := filepath.Join(d, e.Name())
+			if !authFileDomainMatches(p, suffix) {
+				continue
+			}
+			files = append(files, fi{p, info.ModTime()})
 		}
 		if len(files) > 0 {
 			sort.Slice(files, func(i, j int) bool { return files[i].mtime.After(files[j].mtime) })
@@ -112,12 +127,31 @@ func FindAuthFile() string {
 	return ""
 }
 
-// NewCredential 创建凭据管理器（path 为空则自动查找）。
-func NewCredential(path string) *Credential {
+// authFileDomainMatches 读 auth 文件的 auth.domain 字段判断是否命中区域后缀。
+// 只取字段值，token 等其余内容不读入内存、不落任何输出。
+func authFileDomainMatches(path, suffix string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var probe struct {
+		Auth struct {
+			Domain string `json:"domain"`
+		} `json:"auth"`
+	}
+	if json.Unmarshal(b, &probe) != nil {
+		return false
+	}
+	return containsDomain(probe.Auth.Domain, suffix)
+}
+
+// NewCredential 创建凭据管理器（path 为空则按 region 自动查找）。
+func NewCredential(path string, region Region) *Credential {
 	if path == "" {
-		path = FindAuthFile()
+		path = FindAuthFileForRegion(region)
 	}
 	return &Credential{
+		region: region,
 		path:   path,
 		client: &http.Client{Timeout: 20 * time.Second},
 	}
@@ -166,7 +200,7 @@ func (c *Credential) refresh(ctx context.Context, s *sessionInfo) error {
 	h.Set("X-Auth-Refresh-Source", "plugin")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		backendBase+"/v2/plugin/auth/token/refresh", bytes.NewReader([]byte("{}")))
+		regionConfigs[c.region].BaseURL+"/v2/plugin/auth/token/refresh", bytes.NewReader([]byte("{}")))
 	if err != nil {
 		return err
 	}
@@ -248,11 +282,14 @@ func (c *Credential) buildHeaders(s *sessionInfo) http.Header {
 	h.Set("X-Enterprise-Id", s.Account.EnterpriseID)
 	h.Set("X-Tenant-Id", s.Account.EnterpriseID)
 	h.Set("X-Domain", domain)
-	h.Set("User-Agent", userAgent)
+	// User-Agent 按区域取：CN 沿用原常量值；INTL 用官方 CLI 形（实测生效）
+	h.Set("User-Agent", regionConfigs[c.region].UserAgent)
 	return h
 }
 
 // Headers 返回带最新 token 的后端请求头；必要时先刷新（线程安全）。
+// INTL 特化（NoRefresh）：国际版是独立 Keycloak realm，代理侧刷新会被拒——
+// 每次调用重读 auth 文件（桌面端自己更新 token），过期就如实报错。
 func (c *Credential) Headers(ctx context.Context) (http.Header, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -264,6 +301,9 @@ func (c *Credential) Headers(ctx context.Context) (http.Header, error) {
 		return nil, err
 	}
 	if c.expired(s) {
+		if regionConfigs[c.region].NoRefresh {
+			return nil, fmt.Errorf("国际版 token 已过期（桌面端会自动续期，请打开 WorkBuddy 桌面端刷新登录态）")
+		}
 		if err := c.refresh(ctx, s); err != nil {
 			return nil, err
 		}
