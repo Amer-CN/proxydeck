@@ -2648,7 +2648,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.10.5</span>
+                    <span class="v ver" id="etchVer">v3.10.6</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3154,13 +3154,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.10.5">v3.10.5</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.10.6">v3.10.6</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.10.5</div>
+                    <div class="s" id="buildNo">v3.10.6</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.10.5</span>
+                  <span class="pt-val" id="verChip">v3.10.6</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -8198,6 +8198,13 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.10.6', date: '2026-09-11', groups: [
+      { label: '🐛 Bug 修复', items: [
+        '账号池「模型分配」关闭后不再丢失账号池页',
+        '团结思考档位真生效：选 low/high 能压薄思考' ] },
+      { label: '✨ 体验优化', items: [
+        'Comate/Qoder 转发思考内容：首字前的干等变成可见过程',
+        '团结模型只标实测过的档位，其余显示未核实' ] } ] },
     { v: 'v3.10.5', date: '2026-09-10', groups: [
       { label: '🚀 新功能', items: [
         'Comate 跟随客户端工作目录，模型可用上游自带工具干活',
@@ -9063,7 +9070,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.10.5';
+  var UI_CUR = 'v3.10.6';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
