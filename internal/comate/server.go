@@ -349,9 +349,11 @@ func readFullAnswer(r io.Reader) (string, string) {
 	return "", "上游会话结束但未收到 completed（SSE 中断）"
 }
 
-// handleChatStream 流式：把上游 text-delta / element-add 增量逐块转成 OpenAI chunk，
-// 结束发 finish_reason=stop chunk + data: [DONE]；thinking-delta 忽略。
-// 首个文本块落盘前若上游报错（completed.status!=ok / HTTP 错误 / SSE 中断），可回 502。
+// handleChatStream 流式：把上游 text-delta / thinking-delta / element-add 增量逐块转成
+// OpenAI chunk（文本→delta.content，思考→delta.reasoning_content），结束发
+// finish_reason=stop chunk + data: [DONE]；element-add 的 REASON 是累积型，不透（会与
+// thinking-delta 重复）。首个 chunk（文本或思考）落盘前若上游报错（completed.status!=ok /
+// HTTP 错误 / SSE 中断），可回 502。
 func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, body map[string]any, model string, start time.Time) {
 	created := time.Now().Unix()
 	id := fmt.Sprintf("chatcmpl-comate-%d", rand.Int63())
@@ -378,10 +380,19 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, body m
 	w.Header().Set("Connection", "keep-alive")
 	fl, _ := w.(http.Flusher)
 
-	// committed=true 表示首个文本块已落盘（HTTP 200 已提交）。在此之前若上游报错可回 502。
+	// committed=true 表示首个 chunk（文本或思考）已落盘（HTTP 200 已提交）。在此之前若上游报错可回 502。
 	committed := false
 	emit := func(delta string) {
 		chunk := chunkJSON(id, model, delta, "", created)
+		if !committed {
+			committed = true
+		}
+		_, _ = w.Write([]byte("data: " + string(chunk) + "\n\n"))
+		fl.Flush()
+	}
+	// 思考增量走 delta.reasoning_content，与文本 chunk 互不挤占。
+	emitThinking := func(delta string) {
+		chunk := chunkReasoningJSON(id, model, delta, "", created)
 		if !committed {
 			committed = true
 		}
@@ -405,8 +416,14 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, body m
 		switch ev.Kind {
 		case "delta-batch":
 			for _, c := range ev.Chunks {
-				if c.Kind == "text-delta" && c.Delta != "" {
+				if c.Delta == "" {
+					continue
+				}
+				switch c.Kind {
+				case "text-delta":
 					emit(c.Delta)
+				case "thinking-delta":
+					emitThinking(c.Delta)
 				}
 			}
 		case "element-add":

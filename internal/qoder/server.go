@@ -349,6 +349,33 @@ func chunkJSON(id, model, delta, finish string, created int64) []byte {
 	return b
 }
 
+// chunkReasoningJSON 构造思考增量的 OpenAI 流式 chunk（delta.reasoning_content，
+// DeepSeek 方言，ZCode 等客户端读该键渲染思考过程）。与 chunkJSON 互不影响：
+// 文本增量走 delta.content，思考增量走 delta.reasoning_content，两者可同时出现。
+func chunkReasoningJSON(id, model, thinking, finish string, created int64) []byte {
+	d := map[string]any{}
+	if thinking != "" {
+		d["reasoning_content"] = thinking
+	}
+	fr := any(nil)
+	if finish != "" {
+		fr = finish
+	}
+	m := map[string]any{
+		"id":      id,
+		"object":  "chat.completion.chunk",
+		"created": created,
+		"model":   model,
+		"choices": []map[string]any{{
+			"index":         0,
+			"delta":         d,
+			"finish_reason": fr,
+		}},
+	}
+	b, _ := json.Marshal(m)
+	return b
+}
+
 // completeJSON 构造 OpenAI 非流式完整响应（上游无 usage 数据，填 0）。
 func completeJSON(id, model, content string, created int64) []byte {
 	m := map[string]any{
@@ -427,7 +454,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleChatOnce(w http.ResponseWriter, r *http.Request, auth *qoderAuth, workerPath, prompt, model string, start time.Time) {
 	created := time.Now().Unix()
 	id := fmt.Sprintf("chatcmpl-qoder-%d", rand.Int63())
-	res, err := runWorker(auth, workerPath, model, prompt, nil)
+	res, err := runWorker(auth, workerPath, model, prompt, nil, nil)
 	if err != nil {
 		log.Printf("qoder-plugin: %s %s model=%s 502 %s", r.Method, r.URL.Path, model, time.Since(start))
 		writeError(w, http.StatusBadGateway, err.Error(), "upstream_error")
@@ -454,8 +481,9 @@ func (s *Server) handleChatOnce(w http.ResponseWriter, r *http.Request, auth *qo
 	log.Printf("qoder-plugin: %s %s model=%s 200 %s", r.Method, r.URL.Path, model, time.Since(start))
 }
 
-// handleChatStream 流式：assistant text 块逐个转 OpenAI chunk，result 后发
-// finish_reason=stop chunk + [DONE]。首个文本块落盘前失败可回 502。
+// handleChatStream 流式：assistant text 块逐个转 OpenAI chunk（delta.content），
+// thinking 块逐个转 delta.reasoning_content（思考透传，与文本互不挤占），
+// result 后发 finish_reason=stop chunk + [DONE]。首个 chunk 落盘前失败可回 502。
 func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, auth *qoderAuth, workerPath, prompt, model string, start time.Time) {
 	created := time.Now().Unix()
 	id := fmt.Sprintf("chatcmpl-qoder-%d", rand.Int63())
@@ -464,14 +492,19 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request, auth *
 	w.Header().Set("Connection", "keep-alive")
 	fl, _ := w.(http.Flusher)
 
-	// committed=true 表示首个文本块已落盘（HTTP 200 已提交）。在此之前失败可回 502。
+	// committed=true 表示首个 chunk（文本或思考）已落盘（HTTP 200 已提交）。在此之前失败可回 502。
 	committed := false
 	emit := func(delta string) {
 		committed = true
 		_, _ = w.Write([]byte("data: " + string(chunkJSON(id, model, delta, "", created)) + "\n\n"))
 		fl.Flush()
 	}
-	res, err := runWorker(auth, workerPath, model, prompt, emit)
+	emitThinking := func(delta string) {
+		committed = true
+		_, _ = w.Write([]byte("data: " + string(chunkReasoningJSON(id, model, delta, "", created)) + "\n\n"))
+		fl.Flush()
+	}
+	res, err := runWorker(auth, workerPath, model, prompt, emit, emitThinking)
 	if err == nil {
 		s.addCredits(res.TotalCredits) // result 已到达，累计本次消耗（服务端下发真实口径）
 	}

@@ -87,7 +87,9 @@ type ctrlReq struct {
 //  4. worker 输出 system/assistant 流，最后 result 收尾退出。
 //
 // onText 非 nil 时逐 text 块回调（流式翻译用）。
-func runWorker(auth *qoderAuth, workerPath, model, prompt string, onText func(string)) (*workerResult, error) {
+// onThinking 非 nil 时逐 thinking 块回调（思考透传用）。思考块形态（2026-09-11 探针实测）：
+// {"type":"thinking","thinking":"...","signature":"..."}（Claude stream-json 约定）。
+func runWorker(auth *qoderAuth, workerPath, model, prompt string, onText, onThinking func(string)) (*workerResult, error) {
 	// payload.json：官方 SDK spawn worker 时以 QODER_SDK_AUTH_PAYLOAD_FILE 指路。
 	pf, err := os.CreateTemp("", "qoder-auth-*.json")
 	if err != nil {
@@ -237,13 +239,20 @@ func runWorker(auth *qoderAuth, workerPath, model, prompt string, onText func(st
 			content, _ := m["content"].([]any)
 			for _, c := range content {
 				cm, ok := c.(map[string]any)
-				if !ok || cm["type"] != "text" {
+				if !ok {
 					continue
 				}
-				if t, _ := cm["text"].(string); t != "" {
-					res.Text += t
-					if onText != nil {
-						onText(t)
+				switch cm["type"] {
+				case "text":
+					if t, _ := cm["text"].(string); t != "" {
+						res.Text += t
+						if onText != nil {
+							onText(t)
+						}
+					}
+				case "thinking": // 探针实测：{"type":"thinking","thinking":"...","signature":"..."}
+					if t, _ := cm["thinking"].(string); t != "" && onThinking != nil {
+						onThinking(t)
 					}
 				}
 			}

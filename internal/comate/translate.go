@@ -68,6 +68,33 @@ func chunkJSON(id, model, delta, finish string, created int64) []byte {
 	return b
 }
 
+// chunkReasoningJSON 构造思考增量的 OpenAI 流式 chunk（delta.reasoning_content，
+// DeepSeek 方言，ZCode 等客户端读该键渲染思考过程）。与 chunkJSON 互不影响：
+// 文本增量走 delta.content，思考增量走 delta.reasoning_content，两者可同时出现。
+func chunkReasoningJSON(id, model, thinking, finish string, created int64) []byte {
+	d := map[string]any{}
+	if thinking != "" {
+		d["reasoning_content"] = thinking
+	}
+	fr := any(nil)
+	if finish != "" {
+		fr = finish
+	}
+	m := map[string]any{
+		"id":      id,
+		"object":  "chat.completion.chunk",
+		"created": created,
+		"model":   model,
+		"choices": []map[string]any{{
+			"index":         0,
+			"delta":         d,
+			"finish_reason": fr,
+		}},
+	}
+	b, _ := json.Marshal(m)
+	return b
+}
+
 // completeJSON 构造 OpenAI 非流式完整响应（上游无 usage 数据，填 0）。
 func completeJSON(id, model, content string, created int64) []byte {
 	m := map[string]any{
