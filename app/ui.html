@@ -2648,7 +2648,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.10.6</span>
+                    <span class="v ver" id="etchVer">v3.10.7</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3154,13 +3154,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.10.6">v3.10.6</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.10.7">v3.10.7</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.10.6</div>
+                    <div class="s" id="buildNo">v3.10.7</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.10.6</span>
+                  <span class="pt-val" id="verChip">v3.10.7</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -5650,7 +5650,7 @@ var PT_I18N = {
       } catch (e) { toast("err", "探测失败", String(e)); }
       btn.disabled = false; btn.textContent = "⚡ 自动探测";
       loadTuanjieAccounts();
-        });
+        }, openTuanjieMatrix);
     };
   }
 
@@ -5686,7 +5686,7 @@ var PT_I18N = {
       '<p class="acc-f-help">取法：浏览器登录 codely.tuanjie.cn → F12 → 网络面板任一 api 请求 → 请求头 Bearer 整串即 token；粘到 jwt.io 解码，sub 就是 user_id。</p>' +
       '<div class="acc-f-actions"><button type="button" class="ibtn2 accent" id="accSubmit">添加</button></div></div>';
     btn.onclick = function () {
-      openModal(ACC_FORM);
+      openModal(ACC_FORM, openTuanjieMatrix);
       var eye = $('accEye');
       if (eye) eye.onclick = function () {
         var t = $('accToken');
@@ -8176,14 +8176,14 @@ var PT_I18N = {
     setUiLang(saved);
   })();
   /* ================= 机械风确认弹窗（替代原生 confirm） ================= */
-  function confirmModal(title, message, onConfirm, confirmText) {
+  function confirmModal(title, message, onConfirm, confirmText, back) {
     var html = '<h3>' + escHtml(title) + '</h3><div class="m-body">' +
       '<p class="acc-f-help" style="font-size:11.5px;margin:0 0 4px;line-height:1.8">' + message + '</p>' +
       '<div class="acc-f-actions" style="margin-top:12px">' +
       '<button type="button" class="ibtn2" id="cfmCancel">取消</button>' +
       '<button type="button" class="ibtn2 accent" id="cfmOk">' + escHtml(confirmText || "确定") + '</button>' +
       '</div></div>';
-    openModal(html);
+    openModal(html, back);
     document.getElementById("cfmCancel").onclick = function () {
       document.querySelector(".modal-close").click();
     };
@@ -8198,6 +8198,9 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.10.7', date: '2026-09-11', groups: [
+      { label: '🐛 Bug 修复', items: [
+        '账号池「自动探测」「手动添加」关闭后同样回到账号池' ] } ] },
     { v: 'v3.10.6', date: '2026-09-11', groups: [
       { label: '🐛 Bug 修复', items: [
         '账号池「模型分配」关闭后不再丢失账号池页',
@@ -8205,7 +8208,7 @@ var PT_I18N = {
       { label: '✨ 体验优化', items: [
         'Comate/Qoder 转发思考内容：首字前的干等变成可见过程',
         '团结模型只标实测过的档位，其余显示未核实' ] } ] },
-    { v: 'v3.10.5', date: '2026-09-10', groups: [
+    { v: 'v3.10.5', date: '2026-09-11', groups: [
       { label: '🚀 新功能', items: [
         'Comate 跟随客户端工作目录，模型可用上游自带工具干活',
         '目录可用 COMATE_CWD 钉死，只读模式设 COMATE_MODE=Ask' ] },
@@ -9070,7 +9073,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.10.6';
+  var UI_CUR = 'v3.10.7';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
