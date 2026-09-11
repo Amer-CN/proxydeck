@@ -88,7 +88,9 @@ func NewServer(desensitize bool) (*Server, error) {
 
 // NewServerForRegion 按区域创建服务。CN 与 NewServer 完全一致（默认参数 = 今天的行为）；
 // INTL：base URL www.codebuddy.ai、凭据按 workbuddy.ai 过滤、不刷新 token、
-// 强制首条 system、默认不脱敏（--desensitize 开关保留以便将来开启）。
+// 强制首条 system；脱敏由调用方决定，**两区均默认开启**（国际版同样按内容指纹拦
+// 11128，2026-09-12 用户裁决"不脱敏根本用不了"；plugins.go 的 INTL 插件定义已带
+// --desensitize）。
 func NewServerForRegion(region Region, desensitize bool) (*Server, error) {
 	c := NewCredential("", region)
 	if c.Path() == "" {
@@ -810,8 +812,12 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		backendBody["messages"] = normalizeRoles(bm)
 	}
 	if s.desensitize {
+		/* 全角色脱敏：不只 system/developer——11128 是「内容指纹」拦截，指纹词出现在
+		   user/assistant/tool 里同样触发（2026-09-12 实证：ZCode 会话历史里引用了
+		   报错原文与 Claude Code 模板句，64 条消息、零 system，每条请求都被拦）。
+		   零宽插入对模型阅读无影响；黑名单模板句的括号注解按 fingerprintRules 删除。 */
 		backendBody = DesensitizeBody(backendBody,
-			[]string{"system", "developer"}, true, true, true)
+			[]string{"system", "developer", "user", "assistant", "tool"}, true, true, true)
 	}
 	// INTL 特化：国际版 11128 为「首条消息必须是 system」的结构校验——
 	// 客户端消息里没有 system 时自动在最前补一条最小中性 system；已有 system 不动。

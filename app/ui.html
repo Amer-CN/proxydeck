@@ -5763,7 +5763,9 @@ var PT_I18N = {
   }
   /* 管道探针表一行：名称/当前值/基准值/匹配状态（quick 无基准值列显示 —）。
      探针没测成 ≠ 值不匹配：「失败」如实换「未测成（原因）」；「不匹配 ✗」只给
-     真比对出差异的探针；跨渠道跳过的网关报错措辞探针单独标「跨渠道跳过」。 */
+     真比对出差异的探针；跨渠道跳过的网关报错措辞探针单独标「跨渠道跳过」；
+     当前侧正常但基准侧没测成/缺失的探针（comparable=false）标「基准侧未测成」，
+     绝不显示成「不匹配 ✗」（条目假红，终审第 37 轮）。 */
   function probeRowHtml(p, cmp) {
     var title = PROBE_TITLES[p.name] || p.name;
     var statusTxt = p.status === 'ok' ? '正常' : (p.status === 'unstable' ? '不稳定' : '未测成');
@@ -5775,6 +5777,7 @@ var PT_I18N = {
     if (cmp) {
       if (cmp.status === 'skip') { matchTxt = '跨渠道跳过'; matchCls = 'warn'; }
       else if (cmp.status !== 'ok') { matchTxt = statusTxt; matchCls = 'warn'; }
+      else if (!cmp.comparable) { matchTxt = '基准侧未测成'; matchCls = 'warn'; }
       else if (cmp.match) { matchTxt = '匹配 ✓'; matchCls = 'pass'; }
       else { matchTxt = '不匹配 ✗'; matchCls = 'fail'; }
     }
@@ -7141,11 +7144,10 @@ var PT_I18N = {
     if (fbSel && fbSel.closest('.pt-row')) fbSel.closest('.pt-row').style.display = regionName === 'cn' ? '' : 'none';
     var hy4Row = $('cbHy4Banner');
     if (hy4Row) hy4Row.style.display = 'none';
-    /* 脱敏行如实显示：国内版插件带 --desensitize；国际版默认不脱敏（开关保留未启用） */
+    /* 脱敏行如实显示：两区插件都带 --desensitize，默认均开启（2026-09-12 用户裁决：
+       国际版同样按内容指纹拦 11128，不脱敏根本用不了） */
     var desVal = $('cbDesVal');
-    if (desVal) desVal.textContent = regionName === 'cn'
-      ? '已开启 · system/tools 零宽脱敏防审核误拦'
-      : '已关闭 · 国际版默认不脱敏';
+    if (desVal) desVal.textContent = '已开启 · system/tools 零宽脱敏防审核误拦';
     plog(V, 'sys', regionName === 'intl'
       ? '已切到国际版 · www.codebuddy.ai（8789）· 含免费模型 · 点火目标 codebuddy-intl'
       : '已切到国内版 · copilot.tencent.com（8787）· 点火目标 codebuddy');
@@ -7517,10 +7519,8 @@ var PT_I18N = {
     /* tj 屏健康检查灯已改「账号矩阵」（数据在 loadTuanjieAccounts/renderTuanjieMatrix）；
        cb 屏可用模型灯已改「模型探测」（loadPluginModels 写）+「脱敏防护」（常亮） */
     if (V.mode === 'cb') {
-      /* 脱敏防护是 CN 专属（--desensitize 只挂在国内版插件上）；国际版常灭，
-         尾字如实标「关」，状态灯随区域 */
-      if (cbRegion === 'intl') PTApp.dot('cbMask', false, true, '关');
-      else PTApp.dot('cbMask', true, false, '开启');
+      /* 脱敏防护两区都常亮（--desensitize 国内/国际插件都挂，2026-09-12 起） */
+      PTApp.dot('cbMask', true, false, '开启');
     }
     /* comate 屏灯：zulu 托管随相位；免费限速运行时常亮（免费档上游限速是常态） */
     if (V.mode === 'comate') {

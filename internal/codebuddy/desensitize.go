@@ -206,8 +206,10 @@ func compactHarnessMessage(role string, content any) string {
 func desensitizeMessage(m map[string]any, roles map[string]bool, harnessUser, compact bool) map[string]any {
 	role, _ := m["role"].(string)
 	should := roles[role]
-	if role == "user" && harnessUser {
-		should = looksLikeHarnessUser(m["content"])
+	// user 角色：除 roleSet 命中外，"像 harness 注入的上下文"也要处理（OR，不是覆盖）——
+	// 2026-09-12 修：原先此处是覆盖，导致把 user 加进 roles 也不生效
+	if role == "user" && harnessUser && looksLikeHarnessUser(m["content"]) {
+		should = true
 	}
 	if !should {
 		return m
