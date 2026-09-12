@@ -2648,7 +2648,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.11.0</span>
+                    <span class="v ver" id="etchVer">v3.12.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3281,13 +3281,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.11.0">v3.11.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.12.0">v3.12.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.11.0</div>
+                    <div class="s" id="buildNo">v3.12.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.11.0</span>
+                  <span class="pt-val" id="verChip">v3.12.0</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -8416,6 +8416,14 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.12.0', date: '2026-09-12', groups: [
+      { label: '🚀 新功能', items: [
+        'WorkBuddy 账号池：多个账号自动轮着用，打穿额度自动切',
+        '注水检测支持多官方锚：与任一锚一致即算一致',
+        'TokenRouter 接入为远端官方锚点渠道' ] },
+      { label: '✨ 体验优化', items: [
+        '账号池甲板区：看成员、重新扫描、提前恢复',
+        'hy4 兜底配置行隐藏，限流状态灯保留' ] } ] },
     { v: 'v3.11.0', date: '2026-09-12', groups: [
       { label: '🐛 Bug 修复', items: [
         '对话里引用过报错原文就再也发不出消息，已修好',
@@ -9310,7 +9318,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.11.0';
+  var UI_CUR = 'v3.12.0';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
