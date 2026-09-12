@@ -2993,30 +2993,36 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     if (!box) return;
                     var all = (d && d.accounts) || [];
                     /* removed 卡排最后（其余保持 mtime 新→旧），整卡减光；
-                       计数 X/Y 口径：X = 未冷却+未失效+启用+未移除，Y = 未移除 */
-                    var accs = all.filter(function (a) { return !a.removed; })
-                      .concat(all.filter(function (a) { return a.removed; }));
-                    var ok = accs.filter(function (a) { return !a.cooling && !a.dead && a.enabled && !a.removed; }).length;
-                    var total = accs.filter(function (a) { return !a.removed; }).length;
+                       计数 X/Y 口径：X = 未冷却+未失效+启用+未移除，Y = 未移除。
+                       兼容旧后端：Snapshot 无 enabled/removed 字段（v3.13.0 前）
+                       时按 启用+未移除 处理（字段缺失 ≠ 停用/移除）。 */
+                    var accs = all.filter(function (a) { return a.removed !== true; })
+                      .concat(all.filter(function (a) { return a.removed === true; }));
+                    var usable = function (a) { return !a.cooling && !a.dead && a.enabled !== false && a.removed !== true; };
+                    var ok = accs.filter(usable).length;
+                    var total = accs.filter(function (a) { return a.removed !== true; }).length;
                     if (cnt) cnt.textContent = total ? (ok + '/' + total + ' 可用') : '';
                     if (!accs.length) {
                       box.innerHTML = '<div class="pt-models-empty">未发现登录账号——在桌面端登录后点重新扫描</div>';
                       return;
                     }
                     /* 复用团结账号矩阵的 mx-card 卡片语言，字段全表对齐 mxCardHtml：
-                       LED/昵称/#uid/状态徽章/进行中 N/调用次数/最近使用/登录文件/
-                       动作区。徽章优先级（取一）：已移除 → 凭据失效(401) → 已停用 →
+                       LED/昵称/#uid/状态徽章/进行中 N/调用次数/最近使用/动作区
+                       （登录文件行已删：对用户无意义）。
+                       徽章优先级（取一）：已移除 → 凭据失效(401) → 已停用 →
                        冷却中·至 … → 可用；进行中 N 与状态徽章同行（ink 底，团结同款）。
                        动作区按状态出按钮：removed → 恢复；其余 → 停用/启用 + 移除，
                        cooling 且非 dead/removed 再加「提前恢复」（清冷却不复活死号）。
                        样式类全为既有 CSS，本块零新增样式。 */
                     box.innerHTML = '<div class="mx-grid">' + accs.map(function (a) {
-                      var off = a.dead || a.cooling || !a.enabled || a.removed;
-                      var badge = a.removed
+                      var isOff = a.removed === true;
+                      var isDisabled = a.enabled === false;
+                      var off = a.dead || a.cooling || isDisabled || isOff;
+                      var badge = isOff
                         ? '<span class="acc-tag expired">已移除</span>'
                         : a.dead
                           ? '<span class="acc-tag fail">凭据失效（401）</span>'
-                          : !a.enabled
+                          : isDisabled
                             ? '<span class="acc-tag expired">已停用</span>'
                             : a.cooling
                               ? '<span class="acc-tag" style="background:#e8b34b">冷却中 · 至 ' + accEsc(accFmt(a.limited_until)) + '</span>'
@@ -3026,9 +3032,9 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                       var lastUsed = a.last_used
                         ? '最近 ' + accEsc(String(a.last_used).slice(5, 16).replace('T', ' '))
                         : '未使用';
-                      var acts = a.removed
+                      var acts = isOff
                         ? '<button type="button" class="ibtn2" data-acc-restore="' + accEsc(a.uid) + '">恢复</button>'
-                        : '<button type="button" class="ibtn2" data-acc-toggle="' + accEsc(a.uid) + '" data-on="' + (a.enabled ? '1' : '0') + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
+                        : '<button type="button" class="ibtn2" data-acc-toggle="' + accEsc(a.uid) + '" data-on="' + (isDisabled ? '0' : '1') + '">' + (isDisabled ? '启用' : '停用') + '</button>' +
                           '<button type="button" class="ibtn2" data-acc-remove="' + accEsc(a.uid) + '">移除</button>' +
                           ((a.cooling && !a.dead) ? '<button type="button" class="ibtn2" data-acc-cool="' + accEsc(a.uid) + '">提前恢复</button>' : '');
                       return '<div class="mx-card' + (off ? ' off' : '') + '">' +
@@ -3037,7 +3043,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                         '<span class="mx-uid">#' + accEsc(a.uid_short || '') + '</span></div>' +
                         '<div class="mx-badges">' + badge + '</div>' +
                         '<div class="mx-meta"><span>调用 <b>' + (a.use_count || 0) + '</b> 次</span><span>' + lastUsed + '</span></div>' +
-                        '<div class="mx-meta"><span>登录文件 <b>' + accEsc(a.file || '—') + '</b></span></div>' +
                         '<div class="mx-act">' + acts + '</div></div>';
                     }).join('') + '</div>';
                   }
