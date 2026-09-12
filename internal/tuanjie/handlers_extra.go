@@ -421,9 +421,10 @@ func (s *Server) waterHistory() []waterHistoryEntry {
 
 // handleWaterProbe 注水检测（action 字段分发）：
 //   - GET ?history=1：返回检测历史（最近 20 条）
-	//   - GET ?channels=1：返回六渠道列表（含各渠道 models，3s 缓存）
-//   - check（前端唯一入口）：一键全流程——有基准直接比对出报告；
-//     无基准自动采集官方基准后同渠道比对自检（报告标注首次检测）；
+//   - GET ?channels=1：返回八渠道列表（含各渠道 models，3s 缓存）
+//   - check（前端唯一入口）：一键全流程——按模型查官方基准（与渠道无关）：
+//     官方渠道有基准直接比对；无基准自动采集后标注「本次建基准，非判定」；
+//     非官方渠道查不到官方基准 → 「无法判定（缺官方基准）」，不采集不写库；
 //     channel 缺省 tuanjie，非 tuanjie 渠道探针直打该渠道本地端点
 //   - quick（默认，兼容旧调用）：现有金丝雀探针（漂移+答题）+ 第一层管道探针入结果
 //   - deep：第一层 + 第二层分布采样 + 与基准库比对（综合灯色）
@@ -445,6 +446,10 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	// 检测动作（check/quick/deep/baseline）入口清零成本与 429 限流计数——
+	// 限流早停计数按"一次检测"为窗口，绝不带上一次检测的残余（上次检测若
+	// 在限流中止，残留计数会让本次 legacy 动作误早停）
+	resetProbeCost()
 	var req struct {
 		Action       string `json:"action"` // check | quick | deep | baseline（缺省=quick，旧调用兼容）
 		UserID       string `json:"user_id"`
@@ -501,12 +506,62 @@ func (s *Server) handleWaterProbe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "action": "quick", "results": []*WaterProbeResult{res}, "probes": probes})
 }
 
+// writeRateLimitedCheck 渠道限流早停报告（2026-09-12 bai 实测回归修复）：
+// 429 累计超阈值即终止本次检测——不再逐个请求慢慢退避（60 采样 ×3 并发 ×
+// ~26 秒退避曾把 check 拖满十分钟以上、客户端 540 秒超时放弃）。结论
+// grey「渠道限流」，各检测项如实写明因限流未完成；不写库、不产出任何
+// 判定、不跑金丝雀。probes/dist 为已收到的部分（采集路径中止时为 nil）。
+func (s *Server) writeRateLimitedCheck(w http.ResponseWriter, channel, model, account string, probes []probeResult, dist *distResult, firstTime bool, checkStart time.Time) {
+	if probes == nil {
+		probes = []probeResult{} // 与「无官方基准」路径同形态（前端按数组渲染探针徽章）
+	}
+	at := time.Now().Format("2006-01-02 15:04:05")
+	report := map[string]any{
+		"model":   model,
+		"channel": channel,
+		"account": account,
+		"at":      at,
+		"verdict": map[string]any{"light": "grey", "score": 0, "reason": "渠道限流（HTTP 429），本次检测未完成，请稍后重试"},
+		"items": []waterReportItem{
+			{Name: "身份指纹", Result: "—", Detail: "因渠道限流（HTTP 429）未完成：管道探针提前中止，未做比对"},
+			{Name: "权重指纹", Result: "—", Detail: "因渠道限流（HTTP 429）未完成：分布采样提前中止，未统计比对"},
+			{Name: "能力答题", Result: "—", Detail: "因渠道限流（HTTP 429）未完成：本次未答题（检测已提前中止）"},
+			{Name: "基准状态", Result: "—", Detail: "因渠道限流（HTTP 429）未完成：本次未写库、未产出判定"},
+		},
+		"first_time": firstTime,
+	}
+	s.pushWaterHistory(waterHistoryEntry{At: at, Channel: channel, Model: model, Account: account, Light: "grey", Score: 0})
+	reqs, promptTok, compTok := probeCostSnapshot()
+	writeJSON(w, map[string]any{
+		"ok": true, "action": "check", "report": report,
+		"probes": probes, "probe_compare": []probeCompare{},
+		"dist": dist, "dist_similarity": distSimilarity{}, "canary": nil,
+		"cost": map[string]any{
+			"requests":          reqs,
+			"prompt_tokens":     promptTok,
+			"completion_tokens": compTok,
+			"elapsed":           math.Round(time.Since(checkStart).Seconds()*10) / 10,
+		},
+	})
+}
+
 // handleWaterCheck action=check：一键全流程出报告。
-//   - 有基准：跑金丝雀 + 管道探针 + 分布采样（N=60）+ CompareToBaseline
-//   - 无基准：先 CollectBaseline（无感自动采集）再同渠道跑一遍比对自检，
-//     报告标注 first_time=true（本次为新模型首次检测，基准已自动采集）
+//   - 基准归属（第 39 轮多锚）：官方锚按「规范化模型名|来源渠道」多锚存储，
+//     同一模型可有多条不同渠道的官方锚（团结 / Comate / Qoder / TokenRouter）；
+//     比对走 CompareAgainstAnchors——与任一锚一致即视为一致，reason 点名
+//     匹配锚；锚间不一致只作独立提示（anchorConflictNote），不参与灯色。
+//   - 非官方渠道（bai/command/workbuddy）：查该模型的官方锚并比对（跨渠道
+//     比对时网关报错措辞探针自动跳过）；查不到 → 结论「无法判定（缺官方
+//     基准）」grey，不采集、不写库（非官方渠道不能自建基准）。
+//   - 官方渠道：有合格锚 → 比对；无 → CollectBaseline 自动采集后标注
+//     「本次建基准，非判定」grey（不再第二遍跑探针自比自）。
 //   - channel：缺省 tuanjie（走账号池 fetchKeyWithToken 换 key 直探上游）；
-//     非 tuanjie 渠道探针直打该渠道本地端点（probeTarget），不走账号池。
+//     其余渠道探针直打该渠道端点（probeTarget，本地 BaseURL 或远端渠道），
+//     不走账号池。
+//   - 限流早停（2026-09-12 回归修复）：429 累计超阈值（rateLimitStorm）时
+//     探针/采样提前中止，直接给 grey「渠道限流」报告收尾——不跑金丝雀、
+//     不比对、不写库、不产出任何判定；CollectBaseline 路径限流中止同样
+//     返回错误、不落盘（绝不再逐个请求慢慢退避挂十分钟）。
 //
 // 响应：{ok, action:"check", report:{model,channel,account,at,verdict:{light,
 // score,reason}, items:[{name,result,detail}...], first_time}, probes,
@@ -520,6 +575,42 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 	}
 	if channel == "" {
 		channel = "tuanjie"
+	}
+
+	// 基准归属：按模型取全部官方锚（多锚，键 = 模型|渠道）
+	anchors := s.baselines.GetAnchors(model)
+	firstTime := len(anchors) == 0
+
+	// 非官方渠道 + 无官方锚 → 无法判定：不采集、不写库、不白烧探针
+	if firstTime && !isStrongChannel(channel) {
+		at := time.Now().Format("2006-01-02 15:04:05")
+		reason := "无法判定（缺官方基准）：模型 " + model + " 在官方渠道（团结 / Comate / Qoder / TokenRouter）尚无基准，" +
+			"非官方渠道不采集、不自建基准——请先在官方渠道对该模型检测一次"
+		report := map[string]any{
+			"model":   model,
+			"channel": channel,
+			"account": account,
+			"at":       at,
+			"verdict":  map[string]any{"light": "grey", "score": 0, "reason": reason},
+			"items": []waterReportItem{
+				{Name: "基准状态", Result: "—", Detail: "无官方基准：无法判定该渠道是否注水（该渠道非官方链路，不能自建基准）"},
+			},
+			"first_time": false,
+		}
+		s.pushWaterHistory(waterHistoryEntry{At: at, Channel: channel, Model: model, Account: account, Light: "grey", Score: 0})
+		reqs, promptTok, compTok := probeCostSnapshot()
+		writeJSON(w, map[string]any{
+			"ok": true, "action": "check", "report": report,
+			"probes": []probeResult{}, "probe_compare": []probeCompare{},
+			"dist": nil, "dist_similarity": distSimilarity{}, "canary": nil,
+			"cost": map[string]any{
+				"requests":          reqs,
+				"prompt_tokens":     promptTok,
+				"completion_tokens": compTok,
+				"elapsed":           math.Round(time.Since(checkStart).Seconds()*10) / 10,
+			},
+		})
+		return
 	}
 
 	// 构造探针 target：tuanjie 走账号池换 key；其余渠道走本地端点
@@ -547,51 +638,66 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 		target = t
 	}
 
-	base := s.baselines.Get(channel, model)
-	firstTime := base == nil
-
 	var (
 		probes  []probeResult
 		dist    *distResult
 		cmps    []probeCompare
 		sim     distSimilarity
 		verdict overallVerdict
+		base    *Baseline // 报告用锚：首次=新采锚；比对=匹配锚（择优那条）
 	)
 	if firstTime {
-		// 无基准：先自动采集官方基准（无感模式），再同渠道比对自检
+		// 官方渠道无锚：自动采集官方锚（质量门槛在 CollectBaseline 内，
+		// 不过关直接报错）。本次即锚采集，非判定——不再跑第二遍探针自比自
 		bl, blErr := s.baselines.CollectBaseline(r.Context(), target, channel, model, account, samples)
 		if blErr != nil {
+			if rateLimitStorm() {
+				// 限流早停：采集已中止且未落盘——grey 报告如实收尾，
+				// 不产出任何判定（collect 过程数据不回传，probes/dist 留空）
+				s.writeRateLimitedCheck(w, channel, model, account, nil, nil, true, checkStart)
+				return
+			}
 			writeJSON(w, map[string]any{"ok": false, "msg": blErr.Error()})
 			return
 		}
-		probes = RunPipelineProbes(r.Context(), target, model)
-		dist = collectDistSamples(r.Context(), target, model, samples)
-		cmps, sim, verdict = CompareToBaseline(bl, probes, dist)
 		base = bl
-		verdict.Light = "grey"
-		verdict.Label = "首次"
-		verdict.Reason = plainVerdictReason("grey", isStrongChannel(channel))
+		probes, dist = bl.Probes, bl.Dist
+		verdict = overallVerdict{Light: "grey", Label: "首次", Reason: plainVerdictReason("grey")}
 	} else {
 		probes = RunPipelineProbes(r.Context(), target, model)
 		dist = collectDistSamples(r.Context(), target, model, samples)
-		cmps, sim, verdict = CompareToBaseline(base, probes, dist)
-		verdict.Reason = plainVerdictReason(verdict.Light, isStrongChannel(channel))
+		if rateLimitStorm() {
+			// 限流早停：立刻终止本次检测（不跑金丝雀、不比对、不产出任何判定），
+			// 已收到的部分探针/采样如实随报告返回
+			s.writeRateLimitedCheck(w, channel, model, account, probes, dist, false, checkStart)
+			return
+		}
+		var matched *Baseline
+		cmps, sim, verdict, matched = CompareAgainstAnchors(anchors, probes, dist, channel)
+		base = matched // ④锚来源/自报名与②分布展示按匹配锚
+		// grey（样本不足/探针无效）保留 CompareToBaseline 的人话原因；
+		// green/yellow/red 换一句话结论（专业词只进折叠详情）+ 点名匹配锚
+		// （多锚：用户得知道结论从哪来）——但跨渠道跳过/未测成限定语必须保留
+		// （probeCoverageSuffix），一句话结论把它们吞掉就成了假绿/假红
+		if verdict.Light != "grey" {
+			suffix := ""
+			if p := anchorMatchPhrase(verdict.Light, matched); p != "" {
+				suffix = "（" + p + "）"
+			}
+			verdict.Reason = plainVerdictReason(verdict.Light) + suffix + probeCoverageSuffix(cmps)
+		}
 	}
 
-	// 上游 402 预算拦截检测：LiteLLM 团队预算受限（Max budget -1 异常）时
-	// 所有探针都会带 Budget exceeded 错误——此时如实显示"账号被网关限制"，
-	// 绝不能再判"疑似注水"（此前 38261 账号被 402 拦截时就误报过红灯）。
-	// 多数探针（≥3/8）命中 402 预算错误即判网关限制——finish_* 等探针
-	// 在 402 下只报"缺失"不会带 Budget 字样，全探针判定太严会漏判
+	// 上游 402 预算拦截（第 33 轮按 HTTP 状态码判定，不再扫错误文本——429
+	// 空响应体曾让文本扫描失效）：多数探针（≥3/8）带 402 状态码即判网关
+	// 限制，如实显示"账号被网关限制"，绝不再判"疑似注水"
 	hitBudget := 0
 	for _, p := range probes {
-		txt := p.Value + p.Note
-		if strings.Contains(txt, "Budget has been exceeded") || strings.Contains(txt, "`402`") || strings.Contains(txt, "402") {
+		if p.HTTPStatus == http.StatusPaymentRequired {
 			hitBudget++
 		}
 	}
-	quotaBlocked := hitBudget >= 3
-	if quotaBlocked {
+	if hitBudget >= 3 {
 		verdict.Light = "grey"
 		verdict.Score = 0
 		verdict.Reason = "账号在网关侧被预算限制（402 Budget exceeded）——非注水信号，请到团结侧恢复或更换账号"
@@ -610,12 +716,19 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 
 	// 指纹误报降级（2026-08-30 codely-basic 案例）：上游多变体随机路由/模板
 	// 按天平移会让 tokenizer 指纹整批漂移，但分词器本身没换（当时原始 token
-	// 逐位一致已证）——仅 tokenizer 系探针不匹配、分布形状仍高度相似、金丝雀
-	// 全对时，判"疑似模板漂移"（黄灯复测）而非"注水嫌疑"（红灯）。
-	if verdict.Light == "red" && canary != nil && canary.Pass && sim.Cosine >= 0.9 {
+	// 逐位一致已证）——仅 tokenizer 系探针不匹配、偏离呈整批同量平移、金丝雀
+	// 全对时，判"疑似模板漂移"（黄灯复测）而非"注水嫌疑"（红灯）。漂移形状
+	// 判据（本轮新增）：换模型同样能造出「仅 tokenizer 偏离 + 金丝雀全对」——
+	// 实测 KIMI-K3（26/29/58/55）冒充 GLM-5.3-FLASH（26/35/57/63）时偏离项
+	// delta −6/−8 不一致，必须区分两种成因（tokenizerBatchShift），不得让跨
+	// 厂商偷换借本护栏软放行。分布相似度是参考项（判档线
+	// 落在同模型自比噪声带内），不参与降级判定：同样的 tokenizer 偏离不得因
+	// 一次噪声抽样在红/黄之间随机翻转——第 33 轮只摘除了 dist 缺失场景的
+	// cosine≥0.9 要求，本条把 dist 可用时也一并摘除。
+	if verdict.Light == "red" && canary != nil && canary.Pass {
 		tokMis, otherMis := 0, 0
 		for _, c := range cmps {
-			if c.Status == "ok" && !c.Match {
+			if c.Comparable && !c.Match { // 只有真正可比的探针才可能计偏离（基准侧未测成的不算）
 				if strings.HasPrefix(c.Name, "tokenizer_") {
 					tokMis++
 				} else {
@@ -624,24 +737,39 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 			}
 		}
 		if tokMis > 0 && otherMis == 0 {
-			verdict.Light, verdict.Label = "yellow", "疑似模板漂移"
-			verdict.Reason = "仅 " + itoa(tokMis) + " 项 tokenizer 指纹漂移，但分布形状相似度 " +
-				formatPct(sim.Cosine*100) + "、金丝雀全对——更像上游模板变动，建议复测而非判注水"
+			// 偏离形状必须呈整批同量平移（真·模板变动）才降级；换模型形状
+			// （delta 不一致/非数值不可判定）保持 red
+			if uniform, shift := tokenizerBatchShift(cmps); uniform {
+				verdict.Light, verdict.Label = "yellow", "疑似模板漂移"
+				// 覆写后保留 coverage 限定语（终审第 37 轮）：跳过/未测成项被吞掉，
+				// 一句话结论就声称得比实际测到的多。分布相似度不再写进 reason——
+				// 参考项不是降级证据
+				verdict.Reason = "tokenizer 指纹 " + itoa(tokMis) + " 项整批同量平移 " +
+					fmt.Sprintf("%+d", shift) + "、金丝雀全对——更像上游模板变动，建议复测而非判注水" +
+					probeCoverageSuffix(cmps)
+			}
 		}
 	}
 
 	// 金丝雀错答回灌（第 32 轮）：探针/分布判 green 但金丝雀答错 ≥2 时降级
 	// （错答 ≥2 降 yellow、=3 降 red），只在 green 时降——本就 red/yellow 不动。
-	verdict = applyCanaryFeedback(verdict, channel, canary)
+	verdict = applyCanaryFeedback(verdict, canary, cmps)
 
 	at := time.Now().Format("2006-01-02 15:04:05")
+	items := buildWaterReportItems(channel, canary, cmps, sim, base, firstTime)
+	// 锚间一致性独立提示（第 39 轮多锚）：官方锚之间打架只如实提示（点名渠道
+	// 与项数），绝不参与灯色——不能把「锚之间不一致」误判成「被测渠道注水」；
+	// 无可提示时不占位。
+	if note := anchorConflictNote(anchors); note != "" {
+		items = append(items, waterReportItem{Name: "锚点一致性", Result: "ℹ", Detail: note})
+	}
 	report := map[string]any{
 		"model":      model,
 		"channel":    channel,
 		"account":    account,
 		"at":         at,
 		"verdict":    map[string]any{"light": verdict.Light, "score": verdict.Score, "reason": verdict.Reason},
-		"items":      buildWaterReportItems(channel, canary, cmps, sim, base, firstTime),
+		"items":      items,
 		"first_time": firstTime,
 	}
 	s.pushWaterHistory(waterHistoryEntry{At: at, Channel: channel, Model: model, Account: account, Light: verdict.Light, Score: verdict.Score})
@@ -662,32 +790,63 @@ func (s *Server) handleWaterCheck(w http.ResponseWriter, r *http.Request, channe
 }
 
 // plainVerdictReason 综合灯 → 一句话人话结论（专业词只进折叠详情）。
-// 基准口径按渠道 strong 标记诚实化（第 32 轮）：strong 渠道=「官方链路基准」
-// （凭证链完整、指纹源自厂商），弱渠道=「首测锚定（无官方链路，弱判）」。
-func plainVerdictReason(light string, strong bool) string {
-	term := "官方链路基准"
-	if !strong {
-		term = "首测锚定（无官方链路，弱判）"
-	}
+// 基准口径（第 33 轮）统一为「官方基准 / 无官方基准」：库内基准只来自官方
+// 渠道（tuanjie/comate/qoder），任何渠道检测都是与该模型的官方基准比对，
+// 不再区分官方/非官方口径。
+func plainVerdictReason(light string) string {
 	switch light {
 	case "green":
 		return "模型一致，未发现注水"
 	case "yellow":
 		return "有轻微偏差，建议复测"
 	case "red":
-		return "指纹与" + term + "不符，疑似注水"
+		return "指纹与官方基准不符，疑似注水"
 	default:
-		return "已自动采集" + term + "并完成首次检测"
+		return "本次建基准，非判定（官方基准已自动采集，再次检测起可比对判定）"
 	}
+}
+
+// probeCoverageSuffix 探针比对里「没测到」的限定语：跨渠道跳过项数、
+// 未测成（unstable/error）项数与基准侧未测成/缺失项数（当前侧 ok 但基准侧
+// 没测成，Comparable=false——终审第 37 轮补第三类）。一句话结论若把它们
+// 吞掉，「8 项里只测成 2 项」会被说成「模型一致，未发现注水」（假绿，
+// 终审第 36 轮）。
+func probeCoverageSuffix(cmps []probeCompare) string {
+	skipped, untested, baseMiss := 0, 0, 0
+	for _, c := range cmps {
+		switch {
+		case c.Status == "skip":
+			skipped++
+		case c.Comparable:
+			// 已计入比对，无需限定
+		case c.Status == "ok":
+			baseMiss++ // 当前侧 ok、基准侧未测成/缺失
+		default:
+			untested++ // 当前侧 unstable/error
+		}
+	}
+	s := ""
+	if skipped > 0 {
+		s += "；报错原文探针 " + itoa(skipped) + " 项跨渠道不可比，已跳过"
+	}
+	if untested > 0 {
+		s += "；" + itoa(untested) + " 项探针未测成/无法归一化，未计入比对"
+	}
+	if baseMiss > 0 {
+		s += "；" + itoa(baseMiss) + " 项探针基准侧未测成/缺失，未计入比对"
+	}
+	return s
 }
 
 // applyCanaryFeedback 金丝雀错答回灌（纯函数，可单测；第 32 轮裁决）：
 // 探针/分布判 green 但金丝雀答错 ≥2 的，此前直接绿灯放行（回执绿但
 // 「能力答题 ✖」证据矛盾的根因）。错答 ≥2 降 yellow、=3 降 red，reason
 // 补错答说明；只在 green 时降级（本就 red/yellow 不动——取更严者）。
-// 错答数只统计实际作答的题（tuanjie 走 ProbeAccount 不记 repeat 题的作答，
-// 缺题不算错答），文案分母 3 = 金丝雀题库总题数。
-func applyCanaryFeedback(v overallVerdict, channel string, canary *WaterProbeResult) overallVerdict {
+// 错答数只统计实际作答的题（未作答不算错答；tuanjie 走 ProbeAccount 不记
+// repeat 题的作答，缺题不算错答），文案分母 3 = 金丝雀题库总题数。
+// cmps 供 probeCoverageSuffix（终审第 37 轮）：reason 覆写后必须保留
+// 「跳过 N 项 / 未测成 N 项」限定语，否则一句话结论声称的比实际测到的多。
+func applyCanaryFeedback(v overallVerdict, canary *WaterProbeResult, cmps []probeCompare) overallVerdict {
 	if v.Light != "green" || canary == nil {
 		return v
 	}
@@ -702,94 +861,151 @@ func applyCanaryFeedback(v overallVerdict, channel string, canary *WaterProbeRes
 	}
 	if wrong >= 3 {
 		v.Light, v.Label = "red", "显著偏差"
-		v.Reason = plainVerdictReason("red", isStrongChannel(channel)) + "（金丝雀全错）"
+		v.Reason = plainVerdictReason("red") + "（金丝雀全错）" + probeCoverageSuffix(cmps)
 		return v
 	}
 	v.Light, v.Label = "yellow", "轻微偏差"
-	v.Reason = plainVerdictReason("yellow", isStrongChannel(channel)) + "（金丝雀错答 " + itoa(wrong) + "/3）"
+	v.Reason = plainVerdictReason("yellow") + "（金丝雀错答 " + itoa(wrong) + "/3）" + probeCoverageSuffix(cmps)
 	return v
 }
 
 // waterReportItem 一个人话检测项（前端直接渲染）。
 type waterReportItem struct {
 	Name   string `json:"name"`
-	Result string `json:"result"` // ✔ | ✖ | ⚠ | — | 🆕
+	Result string `json:"result"` // ✔ | ✖ | ⚠ | — | 🆕 | ℹ（ℹ=参考项，不参与判定）
 	Detail string `json:"detail"`
 }
 
 // buildWaterReportItems 组装四个人话检测项（纯函数，可单测）：
 // ①身份指纹（管道探针比对）②权重指纹（分布相似度+众数）③能力答题（金丝雀）
-// ④基准状态（有基准=采样时间+账号；无=首次自动采集说明）。文案带渠道人话名。
+// ④基准状态。文案口径（第 33 轮）统一「官方基准 / 无官方基准」——基准只
+// 认官方渠道采集，比对对象是官方基准本身，不再按目标渠道换口径（修 ①「无法
+// 与 X 渠道官方基准比对」与 ④「官方基准已自动采集」的矛盾）。
 func buildWaterReportItems(channel string, canary *WaterProbeResult, cmps []probeCompare, sim distSimilarity, base *Baseline, firstTime bool) []waterReportItem {
 	items := make([]waterReportItem, 0, 4)
-	chName := channelNameOf(channel) + "渠道"
 
-	// ①身份指纹：tokenizer 4 值 + 错误文本 + finish_reason 与基准比对
+	// ①身份指纹：tokenizer 4 值 + 错误文本 + finish_reason 与官方基准比对。
+	// 按实际可比项数如实陈述（终审第 36 轮）：分词器未测成、报错原文跨渠道
+	// 跳过时绝不能写「全部一致」——可比项不足就如实写「可比 N 项一致」。
+	// 统计口径与 CompareToBaseline 对齐（终审第 37 轮·条目假红）：只有双方都
+	// ok 的探针（Comparable）才算可比、才可能计偏离——基准侧 error/缺失时
+	// Match 是零值 false，绝不能当「偏离官方基准」；未纳入比对的项按
+	// 「基准侧未测成 / 未测成 / 跨渠道跳过」三类如实分开说，不混为一谈。
 	comparable, mismatch := 0, 0
+	skipN, baseMissN, untestedN := 0, 0, 0
 	for _, c := range cmps {
-		if c.Status == "ok" {
+		switch {
+		case c.Status == "skip":
+			skipN++
+		case c.Comparable:
 			comparable++
 			if !c.Match {
 				mismatch++
 			}
+		case c.Status == "ok":
+			baseMissN++ // 当前侧 ok、基准侧未测成/缺失
+		default:
+			untestedN++ // 当前侧 unstable/error
 		}
+	}
+	var restParts []string
+	if baseMissN > 0 {
+		restParts = append(restParts, strconv.Itoa(baseMissN)+" 项基准侧未测成/缺失")
+	}
+	if untestedN > 0 {
+		restParts = append(restParts, strconv.Itoa(untestedN)+" 项未测成/无法归一化")
+	}
+	if skipN > 0 {
+		restParts = append(restParts, strconv.Itoa(skipN)+" 项跨渠道跳过")
+	}
+	restNote := ""
+	if len(restParts) > 0 {
+		restNote = "；其余 " + strings.Join(restParts, "、") + "，未纳入比对"
 	}
 	switch {
+	case firstTime:
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "—", Detail: "官方基准本次自动采集，本次未做比对（非判定）"})
 	case comparable == 0:
-		items = append(items, waterReportItem{Name: "身份指纹", Result: "—", Detail: "探针值缺失（unstable/error 过多），无法与" + chName + "官方基准比对"})
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "—", Detail: "探针值缺失（unstable/error 过多），无法与官方基准比对"})
+	case mismatch == 0 && comparable < len(cmps):
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "⚠",
+			Detail: "可比 " + strconv.Itoa(comparable) + " 项管道指纹与官方基准一致" + restNote})
 	case mismatch == 0:
-		items = append(items, waterReportItem{Name: "身份指纹", Result: "✔", Detail: "管道指纹（分词器 / 报错原文 / 完停词）与" + chName + "官方基准全部一致"})
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "✔", Detail: "管道指纹（分词器 / 报错原文 / 完停词）与官方基准全部一致"})
 	case mismatch == 1:
-		items = append(items, waterReportItem{Name: "身份指纹", Result: "⚠", Detail: "1 项管道指纹偏离" + chName + "官方基准，其余一致"})
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "⚠",
+			Detail: "1 项管道指纹偏离官方基准，其余可比 " + strconv.Itoa(comparable-mismatch) + " 项一致" + restNote})
 	default:
-		items = append(items, waterReportItem{Name: "身份指纹", Result: "✖", Detail: strconv.Itoa(mismatch) + " 项管道指纹偏离" + chName + "官方基准（疑似换模型）"})
+		items = append(items, waterReportItem{Name: "身份指纹", Result: "✖",
+			Detail: strconv.Itoa(mismatch) + " 项管道指纹偏离官方基准（疑似换模型），其余可比 " + strconv.Itoa(comparable-mismatch) + " 项一致" + restNote})
 	}
 
-	// ②权重指纹：分布相似度百分比 + 众数比对（双方样本不足则不可比）
+	// ②权重指纹（第 38 轮起为参考项）：分布相似度判档线（≥96/≥90）实测落在
+	// 抽样噪声带内（同模型隔天自比仅 0.535、两个真不同模型可达 0.981），当前
+	// 样本量下不具判别力——只展示相似度数字，不打 ✔/✖，不参与判定
 	distReady := base != nil && base.Dist != nil && !base.Dist.Insufficient && sim.Cosine > 0
-	if !distReady {
-		items = append(items, waterReportItem{Name: "权重指纹", Result: "—", Detail: "分布有效样本不足 40，无法统计比对"})
-	} else {
+	switch {
+	case firstTime:
+		items = append(items, waterReportItem{Name: "权重指纹", Result: "—", Detail: "官方基准本次采集（分布未比对，非判定）"})
+	case !distReady:
+		items = append(items, waterReportItem{Name: "权重指纹", Result: "—",
+			Detail: "分布有效样本不足 40，无法统计比对（参考项，不参与判定）"})
+	default:
 		pct := math.Round(sim.Overall * 100)
-		switch {
-		case pct >= 96:
-			items = append(items, waterReportItem{Name: "权重指纹", Result: "✔",
-				Detail: fmt.Sprintf("分布相似度 %d%%（众数 %d vs 基准 %d），与官方基准一致", int(pct), sim.ModeA, sim.ModeB)})
-		case pct >= 90:
-			items = append(items, waterReportItem{Name: "权重指纹", Result: "⚠",
-				Detail: fmt.Sprintf("分布相似度 %d%%（众数 %d vs 基准 %d），有轻微偏差", int(pct), sim.ModeA, sim.ModeB)})
-		default:
-			items = append(items, waterReportItem{Name: "权重指纹", Result: "✖",
-				Detail: fmt.Sprintf("分布相似度 %d%%（众数 %d vs 基准 %d），显著偏离官方基准", int(pct), sim.ModeA, sim.ModeB)})
-		}
+		items = append(items, waterReportItem{Name: "权重指纹", Result: "ℹ",
+			Detail: fmt.Sprintf("分布相似度 %d%%（众数 %d vs 基准 %d），参考项，不参与判定（同模型自比噪声即达 0.55，判档线在噪声带内）",
+				int(pct), sim.ModeA, sim.ModeB)})
 	}
 
 	// ③能力答题：金丝雀答题对错（repeat 题只采 tokenizer 指纹无 answer，
-	// 已并入①身份指纹，这里只数有答案的算术/常识两题）
+	// 已并入①身份指纹，这里只数有答案的算术/常识两题）。未作答 ≠ 答错：
+	// 显示「未作答（上游未返回正文）」而非「与预期不符」
 	if canary == nil {
 		items = append(items, waterReportItem{Name: "能力答题", Result: "⚠", Detail: "金丝雀答题未完成（网络或上游异常），未纳入本次判定"})
 	} else {
-		var wrong []string
+		var wrong, noAns []string
 		for _, q := range canaryQuestions[1:] {
+			if canary.Unanswered != nil && canary.Unanswered[q.ID] != "" {
+				noAns = append(noAns, q.Title)
+				continue
+			}
 			if !canary.Answers[q.ID] {
 				wrong = append(wrong, q.Title)
 			}
 		}
-		if len(wrong) == 0 {
+		switch {
+		case len(wrong) == 0 && len(noAns) == 0:
 			items = append(items, waterReportItem{Name: "能力答题", Result: "✔", Detail: "金丝雀答题（算术 / 常识）全部答对"})
-		} else {
+		case len(wrong) == 0:
+			items = append(items, waterReportItem{Name: "能力答题", Result: "⚠",
+				Detail: "金丝雀答题：「" + strings.Join(noAns, "」「") + "」未作答（上游未返回正文），未纳入本次判定"})
+		case len(noAns) == 0:
 			items = append(items, waterReportItem{Name: "能力答题", Result: "✖",
 				Detail: "金丝雀答题有错：「" + strings.Join(wrong, "」「") + "」与预期不符"})
+		default:
+			items = append(items, waterReportItem{Name: "能力答题", Result: "✖",
+				Detail: "金丝雀答题有错：「" + strings.Join(wrong, "」「") + "」与预期不符；「" +
+					strings.Join(noAns, "」「") + "」未作答（上游未返回正文）"})
 		}
 	}
 
-	// ④基准状态：有基准=采样时间+账号；无=首次自动采集说明
+	// ④基准状态：有官方锚=采样时间+来源渠道+账号（多锚存储下显示匹配锚）；
+	// 登记名与上游自报名不一致时如实显示（名实核对）；首次=本次建基准说明
 	switch {
 	case firstTime:
-		items = append(items, waterReportItem{Name: "基准状态", Result: "🆕", Detail: "新模型首次检测：官方基准已自动采集（本次即基准）"})
+		items = append(items, waterReportItem{Name: "基准状态", Result: "🆕", Detail: "官方基准已自动采集（本次建基准，非判定；再次检测起可比对判定）"})
 	case base != nil:
-		items = append(items, waterReportItem{Name: "基准状态", Result: "✔",
-			Detail: "官方基准采样于 " + base.SampledAt + "（账号 " + base.Account + "）"})
+		src := "（账号 " + base.Account + "）"
+		if base.Channel != "" {
+			src = "（来源渠道 " + channelNameOf(base.Channel) + "，账号 " + base.Account + "）"
+		}
+		detail := "官方基准采样于 " + base.SampledAt + src
+		// 登记名 vs 上游自报名（第 39 轮）：大小写/路由前缀差异不算不一致
+		// （normalizeModelName 同名），真名实不符才提示
+		if base.ReturnedModel != "" && normalizeModelName(base.ReturnedModel) != normalizeModelName(base.Model) {
+			detail += "；该锚点登记为 " + base.Model + "，上游自报 " + base.ReturnedModel
+		}
+		items = append(items, waterReportItem{Name: "基准状态", Result: "✔", Detail: detail})
 	default:
 		items = append(items, waterReportItem{Name: "基准状态", Result: "—", Detail: "无官方基准"})
 	}
@@ -825,16 +1041,17 @@ func (s *Server) handleWaterDeepOrBaseline(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// action=deep：第一层 + 第二层 + 基准比对
+	// action=deep：第一层 + 第二层 + 官方锚比对（多锚：模型|渠道 键，与任一锚
+	// 一致即一致，reason 点名匹配锚）
 	probes := RunPipelineProbes(r.Context(), tgt, model)
 	dist := collectDistSamples(r.Context(), tgt, model, samples)
-	base := s.baselines.Get("tuanjie", model)
-	cmps, sim, verdict := CompareToBaseline(base, probes, dist)
+	anchors := s.baselines.GetAnchors(model)
+	cmps, sim, verdict, _ := CompareAgainstAnchors(anchors, probes, dist, "tuanjie")
 	writeJSON(w, map[string]any{
 		"ok": true, "action": "deep", "model": model, "user_id": userID,
 		"probes": probes, "probe_compare": cmps,
 		"dist": dist, "dist_similarity": sim,
 		"verdict":      verdict,
-		"has_baseline": base != nil,
+		"has_baseline": len(anchors) > 0,
 	})
 }

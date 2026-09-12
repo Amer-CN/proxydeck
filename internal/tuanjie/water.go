@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -40,15 +41,16 @@ var canaryQuestions = []struct {
 
 // WaterProbeResult 单账号单模型的探针结果。
 type WaterProbeResult struct {
-	UserID    string          `json:"user_id"`
-	Model     string          `json:"model"`
-	Pass      bool            `json:"pass"`
-	PromptTok int             `json:"prompt_tokens"` // 本次指纹
-	BaseTok   int             `json:"base_tokens"`   // 历史基线（0=首次无基线）
-	DriftPct  float64         `json:"drift_pct"`     // 指纹漂移百分比
-	Answers   map[string]bool `json:"answers"`       // 各题对错
-	Detail    string          `json:"detail,omitempty"`
-	At        string          `json:"at"`
+	UserID     string              `json:"user_id"`
+	Model      string              `json:"model"`
+	Pass       bool                `json:"pass"`
+	PromptTok  int                 `json:"prompt_tokens"` // 本次指纹
+	BaseTok    int                 `json:"base_tokens"`   // 历史基线（0=首次无基线）
+	DriftPct   float64             `json:"drift_pct"`     // 指纹漂移百分比
+	Answers    map[string]bool     `json:"answers"`       // 各题对错（仅实际作答的题）
+	Unanswered map[string]string   `json:"unanswered,omitempty"` // 未作答各题及原因（网络/上游错误、空正文重试后仍空）——不算答错
+	Detail     string              `json:"detail,omitempty"`
+	At         string              `json:"at"`
 }
 
 // passiveEvent 被动观测记录（模型名不符）。
@@ -166,43 +168,72 @@ func (w *WaterCheck) PassiveEvents() []passiveEvent {
 
 // ProbeAccountTarget 金丝雀探针的渠道无关版：按 probeTarget 发题（多渠道
 // 注水检测用）。tuanjie 渠道请继续用 ProbeAccount（含账号漂移基线记账）。
+// 未作答语义（第 33 轮）：网络/上游错误、空正文（思考型预算全烧 reasoning、
+// 加大预算 800 重试一次仍空）→ 记独立字段 Unanswered，不再写进 Answers——
+// 没作答不是答错；Pass 要求全部作答且全对。
 func (w *WaterCheck) ProbeAccountTarget(ctx context.Context, target *probeTarget, userID, model string) (*WaterProbeResult, error) {
-	result := &WaterProbeResult{UserID: userID, Model: model, Answers: map[string]bool{},
-		At: time.Now().Format("2006-01-02 15:04:05")}
+	result := &WaterProbeResult{UserID: userID, Model: model,
+		Answers:    map[string]bool{},
+		Unanswered: map[string]string{},
+		At:         time.Now().Format("2006-01-02 15:04:05")}
 	for _, q := range canaryQuestions {
-		pt, _, _, answer, errText, err := probeCall(ctx, target, model,
-			[]map[string]any{{"role": "user", "content": q.Prompt}}, nil)
-		if err != nil {
-			result.Answers[q.ID] = false
-			result.Detail = errText
-			if result.PromptTok == 0 {
-				result.PromptTok = pt
-			}
+		msgs := []map[string]any{{"role": "user", "content": q.Prompt}}
+		pt, _, st, fin, answer, te, err := probeCall(ctx, target, model, msgs, nil)
+		switch {
+		case err != nil:
+			result.Unanswered[q.ID] = "未作答（上游请求失败：" + err.Error() + "）"
+			continue
+		case st != 200:
+			result.Unanswered[q.ID] = "未作答（上游未返回正文：" + firstNonEmpty(te, "HTTP "+itoa(st)) + "）"
 			continue
 		}
 		if q.ID == canaryQuestions[0].ID {
-			result.PromptTok = pt // 指纹题：只记 prompt_tokens
-			result.Answers[q.ID] = containsCI(answer, q.Expect)
-			continue
+			result.PromptTok = pt // 指纹题：只记 prompt_tokens（usage 与正文无关）
+		}
+		if fin == "length" && answer == "" {
+			// 思考型预算耗尽正文未出：加大预算重试一次（首次预算维持原值）
+			_, _, st2, fin2, answer2, te2, err2 := probeCall(ctx, target, model, msgs,
+				map[string]any{"max_tokens": 800})
+			if err2 == nil && st2 == 200 && !(fin2 == "length" && answer2 == "") {
+				fin, answer = fin2, answer2
+			} else {
+				result.Unanswered[q.ID] = "未作答（上游未返回正文：" + firstNonEmpty(te2, "重试未返回正文") + "）"
+				continue
+			}
 		}
 		result.Answers[q.ID] = containsCI(answer, q.Expect)
 	}
+	// 判定：作答题全对且无未作答才算过；detail 按实情拼（错答/未作答分开说）
+	result.Pass = len(result.Answers) > 0 && len(result.Unanswered) == 0
 	for _, ok := range result.Answers {
 		if !ok {
 			result.Pass = false
 			break
 		}
 	}
-	if result.Pass {
-		result.Detail = ""
-	} else if result.Detail == "" {
-		result.Detail = "金丝雀答题有错误"
+	if !result.Pass {
+		var parts []string
+		for _, ok := range result.Answers {
+			if !ok {
+				parts = append(parts, "金丝雀答题有错误")
+				break
+			}
+		}
+		if len(result.Unanswered) > 0 {
+			parts = append(parts, itoa(len(result.Unanswered))+" 题未作答（上游未返回正文）")
+		}
+		if len(parts) == 0 {
+			parts = append(parts, "金丝雀答题有错误")
+		}
+		result.Detail = strings.Join(parts, "；")
 	}
 	return result, nil
 }
 
 // ProbeAccount 对单账号跑金丝雀探针（直连上游，不经轮询）。
 // model 通常探测 GLM-5.3（最贵的、最可能被注水的）。
+// 未作答语义（第 33 轮）：网络/上游错误、空正文（加大预算 800 重试一次
+// 仍空）→ 记独立字段 Unanswered，不再算进 Answers——没作答不是答错。
 func (w *WaterCheck) ProbeAccount(ctx context.Context, accessToken, userID, model string) (*WaterProbeResult, error) {
 	// 直连换取该账号的 cli_api_key（独立请求，不动 Client 缓存）
 	key, err := fetchKeyWithToken(ctx, accessToken)
@@ -210,25 +241,36 @@ func (w *WaterCheck) ProbeAccount(ctx context.Context, accessToken, userID, mode
 		return nil, fmt.Errorf("换取 key 失败: %w", err)
 	}
 
-	result := &WaterProbeResult{UserID: userID, Model: model, Answers: map[string]bool{},
-		At: time.Now().Format("2006-01-02 15:04:05")}
+	result := &WaterProbeResult{UserID: userID, Model: model,
+		Answers:    map[string]bool{},
+		Unanswered: map[string]string{},
+		At:         time.Now().Format("2006-01-02 15:04:05")}
 
-	// 指纹题（repeat）：只关心 prompt_tokens
-	fp, err := probeOnce(ctx, key, model, canaryQuestions[0].Prompt, false)
+	// 指纹题（repeat）：只关心 prompt_tokens（usage 与正文无关，正文空不影响指纹）
+	fp, err := probeOnce(ctx, key, model, canaryQuestions[0].Prompt, false, 0)
 	if err != nil {
 		return nil, err
 	}
 	result.PromptTok = fp.promptTokens
 
-	// 其余题：答案比对
+	// 其余题：答案比对；空正文（length 且空）加大预算重试一次，仍空 → 未作答
 	for _, q := range canaryQuestions[1:] {
-		r, err := probeOnce(ctx, key, model, q.Prompt, false)
+		r, err := probeOnce(ctx, key, model, q.Prompt, false, 0)
 		if err != nil {
-			result.Answers[q.ID] = false
-			result.Detail = err.Error()
+			result.Unanswered[q.ID] = "未作答（上游请求失败：" + err.Error() + "）"
 			continue
 		}
-		result.Answers[q.ID] = containsCI(r.answer, q.Expect)
+		answer := r.answer
+		if r.finish == "length" && answer == "" {
+			r2, err2 := probeOnce(ctx, key, model, q.Prompt, false, 800)
+			if err2 == nil && !(r2.finish == "length" && r2.answer == "") {
+				answer = r2.answer
+			} else {
+				result.Unanswered[q.ID] = "未作答（上游未返回正文）"
+				continue
+			}
+		}
+		result.Answers[q.ID] = containsCI(answer, q.Expect)
 	}
 
 	// 指纹基线比对
@@ -249,7 +291,8 @@ func (w *WaterCheck) ProbeAccount(ctx context.Context, accessToken, userID, mode
 	w.save()
 	w.mu.Unlock()
 
-	// 判定：指纹漂移超阈值 或 任一题答错 → 注水嫌疑
+	// 判定：指纹漂移超阈值 或 任一作答题答错 → 注水嫌疑；未作答不算答错，
+	// 但有未作答时本次金丝雀不算干净通过（测不了≠通过）
 	fingerprintOK := result.BaseTok == 0 || result.DriftPct <= fingerprintDriftPct
 	answersOK := true
 	for _, ok := range result.Answers {
@@ -257,7 +300,7 @@ func (w *WaterCheck) ProbeAccount(ctx context.Context, accessToken, userID, mode
 			answersOK = false
 		}
 	}
-	result.Pass = fingerprintOK && answersOK
+	result.Pass = fingerprintOK && answersOK && len(result.Unanswered) == 0 && len(result.Answers) > 0
 	if !result.Pass {
 		reason := ""
 		if !fingerprintOK {
@@ -269,24 +312,37 @@ func (w *WaterCheck) ProbeAccount(ctx context.Context, accessToken, userID, mode
 			}
 			reason += "金丝雀答题有错误"
 		}
+		if len(result.Unanswered) > 0 {
+			if reason != "" {
+				reason += "；"
+			}
+			reason += itoa(len(result.Unanswered)) + " 题未作答（上游未返回正文）"
+		}
 		result.Detail = reason
 	}
 	return result, nil
 }
 
-// probeOnce 发一次最小请求（stream=false），返回 prompt_tokens 和回答文本。
-func probeOnce(ctx context.Context, cliKey, model, prompt string, stream bool) (struct {
+// probeOnce 发一次最小请求（stream=false），返回 prompt_tokens、finish_reason
+// 和回答文本。maxTokens>0 时才带 max_tokens（0=上游默认；空正文加大预算重试
+// 用 800）。先判状态码再解析正文——429 空体不再被吞成裸 "EOF"。
+func probeOnce(ctx context.Context, cliKey, model, prompt string, stream bool, maxTokens int) (struct {
 	promptTokens int
+	finish       string
 	answer       string
 }, error) {
 	var out struct {
 		promptTokens int
+		finish       string
 		answer       string
 	}
 	body := map[string]any{
 		"model":    model,
 		"stream":   stream,
 		"messages": []map[string]any{{"role": "user", "content": prompt}},
+	}
+	if maxTokens > 0 {
+		body["max_tokens"] = maxTokens
 	}
 	b, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
@@ -307,12 +363,17 @@ func probeOnce(ctx context.Context, cliKey, model, prompt string, stream bool) (
 		return out, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		return out, fmt.Errorf("上游 %d", resp.StatusCode)
+	}
 	var rr struct {
 		Usage struct {
 			PromptTokens int `json:"prompt_tokens"`
 		} `json:"usage"`
 		Choices []struct {
-			Message struct {
+			FinishReason string `json:"finish_reason"`
+			Message      struct {
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
@@ -321,11 +382,9 @@ func probeOnce(ctx context.Context, cliKey, model, prompt string, stream bool) (
 	if err := json.NewDecoder(resp.Body).Decode(&rr); err != nil {
 		return out, err
 	}
-	if resp.StatusCode != http.StatusOK {
-		return out, fmt.Errorf("上游 %d", resp.StatusCode)
-	}
 	out.promptTokens = rr.Usage.PromptTokens
 	if len(rr.Choices) > 0 {
+		out.finish = rr.Choices[0].FinishReason
 		out.answer = rr.Choices[0].Message.Content
 	}
 	return out, nil

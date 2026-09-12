@@ -9,18 +9,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 // 探针成本累加器：统计一次检测的真实开销（请求数 / token 数），
 // handleWaterCheck 入口 resetProbeCost 清零、出口 probeCostSnapshot 读数
-// 组装进响应 cost 字段。probeCall 每次调用 requests+1（请求失败也计），
+// 组装进响应 cost 字段。probeCall 每次真实请求 requests+1（失败与重试都计），
 // 解析出 usage 后累加 prompt/completion。三计数用 atomic，并发检测会互相
 // 混计——当前检测均为单飞场景，可接受。
 var (
@@ -29,11 +31,12 @@ var (
 	probeCostCompletionTok atomic.Int64
 )
 
-// resetProbeCost 清零成本累加器（每次检测入口调用）。
+// resetProbeCost 清零成本累加器与 429 限流计数（每次检测入口调用）。
 func resetProbeCost() {
 	probeCostRequests.Store(0)
 	probeCostPromptTokens.Store(0)
 	probeCostCompletionTok.Store(0)
+	probe429Count.Store(0)
 }
 
 // probeCostSnapshot 读取当前累加值（requests, prompt_tokens, completion_tokens）。
@@ -41,18 +44,66 @@ func probeCostSnapshot() (requests, promptTokens, completionTokens int64) {
 	return probeCostRequests.Load(), probeCostPromptTokens.Load(), probeCostCompletionTok.Load()
 }
 
+// probe429Count 限流早停计数：probeCall 每收到一次 429 响应 +1（含退避重试的
+// 每次尝试）。与 probeCost* 同风格（检测入口 resetProbeCost 清零、检测中途
+// 读数）。2026-09-12 bai 实测回归：渠道限流时每个请求都按 2s/6s/18s 退避，
+// 60 采样 ×3 并发把 check 拖满十分钟以上、客户端 540 秒超时放弃——确认渠道
+// 正在限流就必须立刻终止本次检测剩余请求，而不是逐个请求慢慢退避。
+var probe429Count atomic.Int64
+
+// rateLimitStormThreshold 限流风暴判定阈值：一次检测内累计 ≥6 次 429 即视为
+// 渠道正在限流（瞬时 429 单请求退避重试仍可能成功；累计 6 次说明重试也无济
+// 于事，再发只是空转）。测试可注入调高以覆盖「不早停」路径，生产勿改。
+var rateLimitStormThreshold int64 = 6
+
+// rateLimitStorm 本次检测 429 累计是否已达限流风暴阈值。
+func rateLimitStorm() bool {
+	return probe429Count.Load() >= rateLimitStormThreshold
+}
+
 // probeTimeout 单个探针请求超时（max_tokens 极小，正常秒级返回；慢渠道
 // workbuddy 实测单请求可达 90s+，2026-08-25 提到 120s 覆盖）。
 const probeTimeout = 120 * time.Second
+
+// probeRetryBackoff 429/5xx 退避重试间隔（≤3 次：2s/6s/18s）。测试可注入
+// 缩短值，生产勿改——one-api 网关限流是分钟级窗口，太密的重试只是空转。
+var probeRetryBackoff = []time.Duration{2 * time.Second, 6 * time.Second, 18 * time.Second}
+
+// probeTransport 探针请求的 HTTP 传输层（默认智能代理探测；单测注入计数
+// RoundTripper 用——类型必须显式为接口，否则测试替身塞不进去）。
+var probeTransport http.RoundTripper = smartProxyTransport
 
 // probeTarget 一次探针要打到哪、带什么头：渠道端点 + 静态请求头 + 渠道名。
 // 动态头（团结的 X-Codely-Signature / x-litellm-session-id 每请求现算）由
 // requestHeaders 按 Channel 现场构造；本地渠道（command/workbuddy/bai）的头
 // 全部静态，直接进 Headers 即可。
+// returnedModel（第 39 轮）：上游响应 model 字段的自报名（probeCall 解析回填，
+// 最后一次非空值生效）——采集锚点时记进 Baseline.ReturnedModel 作名实核对
+// 元数据；同一 target 内探针/采样串行调用，无并发写（加锁纯为稳妥）。
 type probeTarget struct {
 	BaseURL string
 	Headers map[string]string
 	Channel string
+
+	mu            sync.Mutex
+	returnedModel string
+}
+
+// setReturnedModel 记录上游自报模型名（空值不覆盖——错误响应常无 model 字段）。
+func (t *probeTarget) setReturnedModel(m string) {
+	if m == "" {
+		return
+	}
+	t.mu.Lock()
+	t.returnedModel = m
+	t.mu.Unlock()
+}
+
+// returnedModelOf 读取上游自报模型名（未收到过任何带 model 字段的响应 = 空串）。
+func (t *probeTarget) returnedModelOf() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.returnedModel
 }
 
 // tuanjieTarget 构造团结渠道探针目标（cli_api_key 走账号池换取；签名头、
@@ -94,18 +145,36 @@ var tokenizerProbeTexts = []struct{ Name, Text string }{
 
 // probeResult 单个探针的结构化结果：value 为指纹值（token 数/错误文本/
 // finish_reason），Status 取 ok/unstable/error（缺失信号如实标 unstable）。
+// HTTPStatus 记录非 200 响应的上游状态码（402 预算守卫按状态码判定，不再
+// 扫错误文本）。
 type probeResult struct {
-	Name   string `json:"name"`
-	Value  string `json:"value"`
-	Status string `json:"status"` // ok | unstable | error
-	Note   string `json:"note,omitempty"`
+	Name       string `json:"name"`
+	Value      string `json:"value"`
+	Status     string `json:"status"` // ok | unstable | error
+	Note       string `json:"note,omitempty"`
+	HTTPStatus int    `json:"http_status,omitempty"`
 }
+
+// aProbeOutlierDeviation "a" 单字符基准的离群剔除阈值：3 次采样的中位数与
+// 最小值偏差超过它 → 该批 tokenizer 探针整批标 unstable「无法归一化」。
+// 实测正常 "a"≈13 tokens、被污染运行报 ~88（偏差 75）。本阈值只刻画 "a"
+// 三次采样内部的离群容差：取 12 远低于污染偏差（75），正常采样（同一单
+// 字符文本、三次取值几乎一致）触及不到它，污染运行（整批报 ~88）则显著
+// 越过——由此把被污染的批整批挡在归一化之外。
+const aProbeOutlierDeviation = 12
 
 // probeCall 对单渠道+模型发一次裸请求（无 system prompt），带自定义参数。
 // 请求打到哪、带什么头全部由 target 决定；返回
-// (promptTokens, completionTokens, finishReason, content, errorText, err)。
-func probeCall(ctx context.Context, target *probeTarget, model string, msgs []map[string]any, extra map[string]any) (promptTokens, completionTokens int, finish, content, errText string, err error) {
-	probeCostRequests.Add(1) // 成本统计：每次调用计一（失败也计）
+// (promptTokens, completionTokens, httpStatus, finishReason, content, errText, err)。
+//   - 先判 resp.StatusCode 再解析正文（第 33 轮）：one-api 网关限流回
+//     HTTP 429 + Content-Length: 0，先 Decode 会把 429 吞成裸 "EOF"。
+//   - 非 200：note 带 HTTP 状态码与原始错误体（JSON error 字段原样脱敏 =
+//     指纹口径，与既有基准兼容；空体/非 JSON 体也如实带状态码，如
+//     「HTTP 429（空响应体）」），err 为 nil——这是上游响应不是传输失败。
+//   - HTTP 200 + 空正文：err 为「HTTP 200（空响应体）」，如实带状态码，
+//     绝不回裸 "EOF"。
+//   - 429/5xx 退避重试 ≤3 次（2s/6s/18s），重试耗尽如实返回最后一次状态码。
+func probeCall(ctx context.Context, target *probeTarget, model string, msgs []map[string]any, extra map[string]any) (promptTokens, completionTokens int, status int, finish, content, errText string, err error) {
 	// max_tokens 按模型自适应：思考型模型（deepseek/GLM-5.3 等会先出
 	// reasoning_content）8 个预算全烧在推理段、content 恒空——给 96 保
 	// content 出得来（GLM-5.3 采基准实测 96 出数率约 7/8）。非思考模型
@@ -130,55 +199,91 @@ func probeCall(ctx context.Context, target *probeTarget, model string, msgs []ma
 		body[k] = v
 	}
 	b, _ := json.Marshal(body)
-	req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost,
-		target.BaseURL+"/v1/chat/completions", strings.NewReader(string(b)))
-	if reqErr != nil {
-		return 0, 0, "", "", "", reqErr
-	}
-	for k, vs := range target.requestHeaders("/v1/chat/completions") {
-		for _, v := range vs {
-			req.Header.Add(k, v)
+	client := &http.Client{Timeout: probeTimeout, Transport: probeTransport}
+	for attempt := 0; ; attempt++ {
+		probeCostRequests.Add(1) // 成本统计：每次真实请求计一（失败/重试也计）
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost,
+			target.BaseURL+"/v1/chat/completions", strings.NewReader(string(b)))
+		if reqErr != nil {
+			return 0, 0, 0, "", "", "", reqErr
 		}
-	}
-	client := &http.Client{Timeout: probeTimeout, Transport: smartProxyTransport}
-	resp, doErr := client.Do(req)
-	if doErr != nil {
-		return 0, 0, "", "", "", doErr
-	}
-	defer resp.Body.Close()
-	var rr struct {
-		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-		} `json:"usage"`
-		Choices []struct {
-			FinishReason string `json:"finish_reason"`
-			Message      struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Error json.RawMessage `json:"error"`
-	}
-	if decErr := json.NewDecoder(resp.Body).Decode(&rr); decErr != nil {
-		return 0, 0, "", "", "", decErr
-	}
-	errText = ""
-	if resp.StatusCode != http.StatusOK {
-		// 上游错误体原样抓取（scrub 后截断）
-		errText = scrubErrorText(string(rr.Error))
-		if errText == "" {
-			errText = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		for k, vs := range target.requestHeaders("/v1/chat/completions") {
+			for _, v := range vs {
+				req.Header.Add(k, v)
+			}
 		}
+		resp, doErr := client.Do(req)
+		if doErr != nil {
+			return 0, 0, 0, "", "", "", doErr
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			probe429Count.Add(1) // 限流早停计数：每次 429 响应 +1（含退避重试的每次尝试）
+		}
+		// 429/5xx 退避重试（请求体每轮重建）
+		if (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500) &&
+			attempt < len(probeRetryBackoff) {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+			resp.Body.Close()
+			select {
+			case <-time.After(probeRetryBackoff[attempt]):
+			case <-ctx.Done():
+				return 0, 0, 0, "", "", "", ctx.Err()
+			}
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			// 原始错误体：JSON error 字段原样脱敏（指纹口径与既有基准兼容）；
+			// 空/非 JSON 体也要带状态码——绝不回裸 "EOF"
+			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			var ej struct {
+				Error json.RawMessage `json:"error"`
+			}
+			if json.Unmarshal(raw, &ej) == nil && len(ej.Error) > 0 && string(ej.Error) != "null" {
+				errText = scrubErrorText(string(ej.Error))
+			} else if t := strings.TrimSpace(string(raw)); t != "" {
+				errText = fmt.Sprintf("HTTP %d（%s）", resp.StatusCode, scrubErrorText(t))
+			} else {
+				errText = fmt.Sprintf("HTTP %d（空响应体）", resp.StatusCode)
+			}
+			return 0, 0, resp.StatusCode, "", "", errText, nil
+		}
+		var rr struct {
+			Usage struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+			} `json:"usage"`
+			Model string `json:"model"`
+			Choices []struct {
+				FinishReason string `json:"finish_reason"`
+				Message      struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			} `json:"choices"`
+		}
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		// HTTP 200 + 空正文：如实带状态码说明，绝不回裸 io.EOF（Decode 空
+		// 流即裸 EOF，曾被原样写进探针 note / UI 徽章——终审第 36 轮残余）
+		if strings.TrimSpace(string(raw)) == "" {
+			return 0, 0, resp.StatusCode, "", "", "", fmt.Errorf("HTTP %d（空响应体）", resp.StatusCode)
+		}
+		if decErr := json.Unmarshal(raw, &rr); decErr != nil {
+			return 0, 0, resp.StatusCode, "", "", "", decErr
+		}
+		promptTokens = rr.Usage.PromptTokens
+		completionTokens = rr.Usage.CompletionTokens
+		probeCostPromptTokens.Add(int64(promptTokens)) // 成本统计：usage 解析成功才累加
+		probeCostCompletionTok.Add(int64(completionTokens))
+		// 上游自报模型名（第 39 轮名实核对）：请求按登记名发出，响应 model 字段
+		// 是上游真正跑的模型名——记进 target（采集锚点时落 Baseline.ReturnedModel）。
+		// 远端渠道名实不符的实例：TokenRouter 请求 z-ai/glm-5.3-free、自报 glm-5.3。
+		target.setReturnedModel(rr.Model)
+		if len(rr.Choices) > 0 {
+			finish = rr.Choices[0].FinishReason
+			content = rr.Choices[0].Message.Content
+		}
+		return promptTokens, completionTokens, resp.StatusCode, finish, content, "", nil
 	}
-	promptTokens = rr.Usage.PromptTokens
-	completionTokens = rr.Usage.CompletionTokens
-	probeCostPromptTokens.Add(int64(promptTokens)) // 成本统计：usage 解析成功才累加
-	probeCostCompletionTok.Add(int64(completionTokens))
-	if len(rr.Choices) > 0 {
-		finish = rr.Choices[0].FinishReason
-		content = rr.Choices[0].Message.Content
-	}
-	return
 }
 
 // scrubRe 需要从错误文本里抹掉的易变成分（每次请求都不同，留下游 DNA）。
@@ -206,6 +311,14 @@ func scrubErrorText(s string) string {
 //   - finish_reason 词汇 ×2：max_tokens=400 正常 stop + max_tokens=6 强制截断
 //
 // 同文本双发 token 数不一致 → unstable（多主机路由迹象）。
+// "a" 基准 3 次采样取中位数；归一化判据（第 34 轮）：value = 文本 token 数 −
+// "a" token 数必须为正整数，任一 ≤0 → 该批 tokenizer 探针整批 unstable
+// 「无法归一化」，不参与比对、不写进基准（存量污染 -57/-48/-26/-20 即
+// "a" 全次报 ~88 所致，中位数与最小值判据对全污染采样结构性失效）。
+//
+// 限流早停（2026-09-12 回归修复）：429 累计达 rateLimitStormThreshold 即视为
+// 渠道限流风暴——探针循环提前 break、未发出的探针不再发，已收到的部分如实
+// 返回（error 429 项），由调用方按「因限流中止」收尾，绝不逐个请求慢慢退避。
 func RunPipelineProbes(ctx context.Context, target *probeTarget, model string) []probeResult {
 	var out []probeResult
 
@@ -214,35 +327,49 @@ func RunPipelineProbes(ctx context.Context, target *probeTarget, model string) [
 	// 整批指纹随机平移、制造假漂移（2026-08-30 codely-basic 误报红灯即此因）。
 	var aSamples []int
 	for i := 0; i < 3; i++ {
-		_, aTok, _, _, _, aErr := probeCall(ctx, target, model,
+		if rateLimitStorm() {
+			break // 渠道限流风暴：剩余 "a" 采样不再发（早停）
+		}
+		aTokOne, _, _, _, _, _, aErr := probeCall(ctx, target, model,
 			[]map[string]any{{"role": "user", "content": "a"}}, nil)
-		if aErr == nil && aTok > 0 {
-			aSamples = append(aSamples, aTok)
+		if aErr == nil && aTokOne > 0 {
+			aSamples = append(aSamples, aTokOne)
 		}
 	}
 	aTok := 0
+	aUnstable := false
 	if len(aSamples) > 0 {
 		sort.Ints(aSamples)
 		aTok = aSamples[len(aSamples)/2]
+		if aTok-aSamples[0] > aProbeOutlierDeviation {
+			aUnstable = true
+		}
 	}
-
 	for _, t := range tokenizerProbeTexts {
+		if rateLimitStorm() {
+			break // 渠道限流风暴：后面的 tokenizer 探针不再发（早停）
+		}
 		msgs := []map[string]any{{"role": "user", "content": t.Text}}
-		tok1, _, _, _, te1, e1 := probeCall(ctx, target, model, msgs, nil)
-		tok2, _, _, _, te2, e2 := probeCall(ctx, target, model, msgs, nil)
+		tok1, _, st1, _, _, te1, e1 := probeCall(ctx, target, model, msgs, nil)
+		tok2, _, st2, _, _, te2, e2 := probeCall(ctx, target, model, msgs, nil)
 		switch {
 		case e1 != nil || e2 != nil:
-			out = append(out, probeResult{Name: t.Name, Status: "error",
-				Note: firstErrText(e1, e2)})
+			out = append(out, probeResult{Name: t.Name, Status: "error", Note: firstErrText(e1, e2)})
 		case tok1 <= 0 || tok2 <= 0:
-			// usage 缺失：无错误 = 渠道不报 usage（unstable）；有上游错误文本
-			// （如 402 Budget exceeded）就保留——它是渠道被限的确凿信号，
-			// 丢了会让 402 被误判成"疑似注水"
-			note, st := "usage 缺失（prompt_tokens=0）", "unstable"
-			if te1 != "" || te2 != "" {
-				note, st = firstNonEmpty(te1, te2), "error"
+			// usage 缺失：无错误 = 渠道不报 usage（unstable）；有上游错误
+			// （HTTP 状态码 + 错误体，如 402 预算、429 限流）就保留——它是
+			// 渠道被限的确凿信号，丢了会让 402 被误判成"疑似注水"
+			note, st, hst := "usage 缺失（prompt_tokens=0）", "unstable", 0
+			if te1 != "" {
+				note, st, hst = te1, "error", st1
+			} else if te2 != "" {
+				note, st, hst = te2, "error", st2
 			}
-			out = append(out, probeResult{Name: t.Name, Status: st, Note: note})
+			out = append(out, probeResult{Name: t.Name, Status: st, Note: note, HTTPStatus: hst})
+		case aUnstable:
+			// "a" 基准离群（整批平移污染源）：无法归一化，绝不把偏差值入库
+			out = append(out, probeResult{Name: t.Name, Status: "unstable",
+				Note: fmt.Sprintf("a 基准采样离群（中位数 %d vs 最小 %d），无法归一化", aTok, aSamples[0])})
 		case aTok <= 0:
 			// "a" 基准三次全失败但文本探针成功（罕见）：无法归一化，如实标
 			// unstable，绝不能把原始 token 数当归一化值入库（会污染基准库）
@@ -251,44 +378,72 @@ func RunPipelineProbes(ctx context.Context, target *probeTarget, model string) [
 		case tok1 != tok2:
 			out = append(out, probeResult{Name: t.Name, Value: fmt.Sprintf("%d", tok1-aTok),
 				Status: "unstable", Note: fmt.Sprintf("双发不一致 %d vs %d（多主机路由？）", tok1, tok2)})
+		case tok1-aTok < 1:
+			// 归一化物理判据（第 34 轮）：value = 文本 token 数 − "a" token 数，
+			// 不可能为负或 0。3 次采样全部被污染（如 "a" 报 88/88/88，中位数判据
+			// 结构性失效）时正是此形态——整批标 unstable「无法归一化」，绝不入库。
+			out = append(out, probeResult{Name: t.Name, Status: "unstable",
+				Note: fmt.Sprintf("归一化值 %d 非正整数（a 基准 %d vs 文本 %d），无法归一化", tok1-aTok, aTok, tok1)})
 		default:
 			out = append(out, probeResult{Name: t.Name, Value: fmt.Sprintf("%d", tok1-aTok), Status: "ok"})
 		}
 	}
 
-	// 错误探针 1：temperature=2.0 抓校验报错原文（scrub 后）
-	_, _, _, _, errText, e := probeCall(ctx, target, model,
+	// 错误探针 1：temperature=2.0 抓校验报错原文（scrub 后）。
+	// 限流风暴：错误探针 1 不再发（早停）
+	if rateLimitStorm() {
+		return out
+	}
+	// 只有参数校验类响应（400/422）的报错原文才是网关/厂商措辞指纹；
+	// 其余非 200（429/5xx/402 限流预算、401/403 鉴权、404 未找到等）是
+	// 渠道状态信号、不是模型指纹，如实标 error 带状态码——两条鉴权错误
+	// 措辞不同曾被当成指纹 mismatch 判红灯（假红，终审第 36 轮）。
+	_, _, st, _, _, errText, e := probeCall(ctx, target, model,
 		[]map[string]any{{"role": "user", "content": "hello"}},
 		map[string]any{"temperature": 2.0})
 	switch {
 	case e != nil:
 		out = append(out, probeResult{Name: "error_temp2", Status: "error", Note: e.Error()})
-	case errText == "":
+	case st == 200:
 		out = append(out, probeResult{Name: "error_temp2", Status: "unstable", Note: "未返回错误文本"})
+	case st == http.StatusBadRequest || st == http.StatusUnprocessableEntity:
+		out = append(out, probeResult{Name: "error_temp2", Value: errText, Status: "ok", HTTPStatus: st})
 	default:
-		out = append(out, probeResult{Name: "error_temp2", Value: errText, Status: "ok"})
+		out = append(out, probeResult{Name: "error_temp2", Status: "error", Note: errText, HTTPStatus: st})
 	}
 
 	// 错误探针 2：max_tokens=10^9 抓拒绝信息（真实输出上限是厂商 DNA）
-	_, _, _, _, errText2, e2 := probeCall(ctx, target, model,
+	// 限流风暴：错误探针 2 不再发（早停）
+	if rateLimitStorm() {
+		return out
+	}
+	_, _, st2, _, _, errText2, e2 := probeCall(ctx, target, model,
 		[]map[string]any{{"role": "user", "content": "hello"}},
 		map[string]any{"max_tokens": 1000000000})
 	switch {
 	case e2 != nil:
 		out = append(out, probeResult{Name: "error_maxtok", Status: "error", Note: e2.Error()})
-	case errText2 == "":
+	case st2 == 200:
 		out = append(out, probeResult{Name: "error_maxtok", Status: "unstable", Note: "未返回错误文本"})
+	case st2 == http.StatusBadRequest || st2 == http.StatusUnprocessableEntity:
+		out = append(out, probeResult{Name: "error_maxtok", Value: errText2, Status: "ok", HTTPStatus: st2})
 	default:
-		out = append(out, probeResult{Name: "error_maxtok", Value: errText2, Status: "ok"})
+		out = append(out, probeResult{Name: "error_maxtok", Status: "error", Note: errText2, HTTPStatus: st2})
 	}
 
 	// finish_reason 词汇 1：max_tokens=400 正常说完 → 期望 stop
-	_, _, fin1, _, _, e3 := probeCall(ctx, target, model,
+	// 限流风暴：finish 探针 1 不再发（早停）
+	if rateLimitStorm() {
+		return out
+	}
+	_, _, st3, fin1, _, te3, e3 := probeCall(ctx, target, model,
 		[]map[string]any{{"role": "user", "content": "回复一个字：好"}},
 		map[string]any{"max_tokens": 400})
 	switch {
 	case e3 != nil:
 		out = append(out, probeResult{Name: "finish_stop", Status: "error", Note: e3.Error()})
+	case st3 != 200:
+		out = append(out, probeResult{Name: "finish_stop", Status: "error", Note: te3, HTTPStatus: st3})
 	case fin1 == "":
 		out = append(out, probeResult{Name: "finish_stop", Status: "unstable", Note: "finish_reason 缺失"})
 	default:
@@ -296,12 +451,18 @@ func RunPipelineProbes(ctx context.Context, target *probeTarget, model string) [
 	}
 
 	// finish_reason 词汇 2：max_tokens=6 强制截断 → 期望 length
-	_, _, fin2, _, _, e4 := probeCall(ctx, target, model,
+	// 限流风暴：finish 探针 2 不再发（早停）
+	if rateLimitStorm() {
+		return out
+	}
+	_, _, st4, fin2, _, te4, e4 := probeCall(ctx, target, model,
 		[]map[string]any{{"role": "user", "content": "写一篇五百字的散文，主题是秋天。"}},
 		map[string]any{"max_tokens": 6})
 	switch {
 	case e4 != nil:
 		out = append(out, probeResult{Name: "finish_length", Status: "error", Note: e4.Error()})
+	case st4 != 200:
+		out = append(out, probeResult{Name: "finish_length", Status: "error", Note: te4, HTTPStatus: st4})
 	case fin2 == "":
 		out = append(out, probeResult{Name: "finish_length", Status: "unstable", Note: "finish_reason 缺失"})
 	default:

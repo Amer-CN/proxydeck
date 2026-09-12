@@ -23,6 +23,10 @@ import (
 //   - workbuddy：本地 8787，无鉴权头
 //   - bai：本地 8891，Bearer=渠道配置 key（tuanjie-water-channels.json）
 //   - comate/qoder：zulu 引擎本地端点（8786/8785），无鉴权头
+//   - tokenrouter：远端官方锚点渠道（api.tokenrouter.com，OpenAI 兼容），
+//     Bearer=渠道配置 key；本地端口字段对它无意义、留零值，探针/模型列表
+//     全走 BaseURL 的 HTTP(S) 调用（fetchLocalModels 按 BaseURL 拼 /v1/models，
+//     无任何按本地端口拨测的路径）
 type waterChannelDef struct {
 	ID         string
 	Name       string
@@ -31,22 +35,26 @@ type waterChannelDef struct {
 	BearerFrom string // "" | "config" | "api-key.txt"
 }
 
-// waterChannels 内置六渠道（顺序即 channels 列表顺序）。
+// waterChannels 内置八渠道（顺序即 channels 列表顺序）。
 var waterChannels = []waterChannelDef{
 	{ID: "tuanjie", Name: "团结", Port: 8788},
 	{ID: "command", Name: "Command", Port: 55990, BaseURL: "http://127.0.0.1:55990", BearerFrom: "api-key.txt"},
 	{ID: "workbuddy", Name: "WorkBuddy", Port: 8787, BaseURL: "http://127.0.0.1:8787"},
+	{ID: "workbuddy-intl", Name: "WorkBuddy Intl", Port: 8789, BaseURL: "http://127.0.0.1:8789"},
 	{ID: "bai", Name: "B.ai", Port: 8891, BaseURL: "http://127.0.0.1:8891", BearerFrom: "config"},
 	{ID: "comate", Name: "Comate", Port: 8786, BaseURL: "http://127.0.0.1:8786"},
 	{ID: "qoder", Name: "Qoder", Port: 8785, BaseURL: "http://127.0.0.1:8785"},
+	{ID: "tokenrouter", Name: "TokenRouter", BaseURL: "https://api.tokenrouter.com", BearerFrom: "config"},
 }
 
 // isStrongChannel 官方链路渠道判定（第 32 轮基准口径诚实化）：tuanjie 走账号池
 // 官方上游、comate/qoder 为厂商 zulu 引擎本地端点——凭证链完整、指纹源自厂商，
-// 基准口径=「官方链路基准」；其余渠道（command/workbuddy/bai）无官方链路，
-// 基准=「首测锚定（弱判）」。
+// 基准口径=「官方链路基准」；tokenrouter 为远端官方锚点渠道（OpenAI 兼容聚合
+// 官方模型，实测其 GLM-5.3 归一化指纹与团结官方逐位一致，第 39 轮起纳入锚点
+// 来源）；其余渠道（command/workbuddy/bai）无官方链路，不自采基准、不参与
+// 判定，检测时一律与官方锚比对（第 33 轮口径）。
 func isStrongChannel(id string) bool {
-	return id == "tuanjie" || id == "comate" || id == "qoder"
+	return id == "tuanjie" || id == "comate" || id == "qoder" || id == "tokenrouter"
 }
 
 // channelInfo 渠道在 channels 列表里的呈现（GUI 双下拉数据源）。
@@ -55,7 +63,7 @@ type channelInfo struct {
 	Name    string   `json:"name"`
 	Port    int      `json:"port"`
 	OK      bool     `json:"ok"`
-	Strong  bool     `json:"strong"`             // 官方链路渠道（tuanjie/comate/qoder），其余=首测锚定（弱判）
+	Strong  bool     `json:"strong"`             // 官方链路渠道（tuanjie/comate/qoder），其余不自采基准、检测一律对官方基准
 	NeedKey bool     `json:"need_key,omitempty"` // 该渠道需 key 且未配置（前端显示输入框）
 	Models  []string `json:"models,omitempty"`
 	Note    string   `json:"note,omitempty"`
@@ -140,7 +148,7 @@ var (
 	channelsCacheAt time.Time
 )
 
-// handleChannels GET /water-probe?channels=1：六渠道列表（含各自 models）。
+// handleChannels GET /water-probe?channels=1：八渠道列表（含各自 models）。
 func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 	channelsCacheMu.Lock()
 	fresh := time.Since(channelsCacheAt) < 3*time.Second && channelsCache != nil
@@ -175,7 +183,8 @@ func (s *Server) buildChannels(ctx context.Context) []channelInfo {
 	return out
 }
 
-// fetchChannelModels 按渠道拿模型列表：团结走账号池上游；本地渠道直接打端点。
+// fetchChannelModels 按渠道拿模型列表：团结走账号池上游；其余渠道（本地端点
+// 与远端 BaseURL 渠道，如 tokenrouter）直接按 BaseURL 打 /v1/models。
 func (s *Server) fetchChannelModels(ctx context.Context, c waterChannelDef, keys map[string]string) ([]string, string) {
 	if c.ID == "tuanjie" {
 		return s.fetchTuanjieModels(ctx)
@@ -215,9 +224,10 @@ func (s *Server) fetchTuanjieModels(ctx context.Context) ([]string, string) {
 	return models, ""
 }
 
-// fetchLocalModels 本地渠道模型：GET {base}/v1/models（Bearer 视渠道定义）。
+// fetchLocalModels 本地/远端渠道模型：GET {base}/v1/models（Bearer 视渠道定义）。
 // 注意渠道定义 BaseURL 不带 /v1（探针层也按此约定），这里必须补全——
 // 漏 /v1 会 404（command/workbuddy 模型列表曾因此显示不出的根因）。
+// 远端渠道（tokenrouter 等）同样只按 BaseURL 走 HTTP，无任何本地端口拨测。
 func fetchLocalModels(ctx context.Context, c waterChannelDef, keys map[string]string) ([]string, string) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/v1/models", nil)
 	if err != nil {
@@ -228,7 +238,7 @@ func fetchLocalModels(ctx context.Context, c waterChannelDef, keys map[string]st
 	case "config":
 		key := keys[c.ID]
 		if key == "" {
-			return nil, "B.ai 渠道未配置 key，请在 tuanjie-water-channels.json 配置"
+			return nil, channelNameOf(c.ID) + " 渠道未配置 key，请在 tuanjie-water-channels.json 配置"
 		}
 		req.Header.Set("Authorization", "Bearer "+key)
 	case "api-key.txt":
@@ -264,7 +274,8 @@ func fetchLocalModels(ctx context.Context, c waterChannelDef, keys map[string]st
 }
 
 // channelTarget 按渠道构造探针 target（tuanjie 由调用方走账号池，返回 nil）。
-// 本地渠道从注册表 + 密钥配置构造；bai 未配置 key 返回明确引导错误。
+// 本地/远端渠道从注册表 + 密钥配置构造；BearerFrom=config 的渠道未配置 key
+// 时返回按渠道名明确的引导错误。
 func (s *Server) channelTarget(channel string) (*probeTarget, error) {
 	if channel == "" || channel == "tuanjie" {
 		return nil, nil
@@ -284,7 +295,7 @@ func (s *Server) channelTarget(channel string) (*probeTarget, error) {
 	case "config":
 		key := LoadChannelKeys()[channel]
 		if key == "" {
-			return nil, fmt.Errorf("B.ai 渠道未配置 key，请在 tuanjie-water-channels.json 配置")
+			return nil, fmt.Errorf("%s 渠道未配置 key，请在 tuanjie-water-channels.json 配置", channelNameOf(channel))
 		}
 		headers["Authorization"] = "Bearer " + key
 	case "api-key.txt":

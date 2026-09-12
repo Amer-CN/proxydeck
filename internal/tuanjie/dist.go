@@ -37,8 +37,10 @@ type distResult struct {
 	Counts      []int     `json:"counts"`      // 1..355 各数字出现次数
 	Valid       int       `json:"valid"`       // 有效样本数（解析出 1..355 的）
 	Invalid     int       `json:"invalid"`     // 无效样本数（越界/非数字）
+	Unanswered  int       `json:"unanswered"`  // 未作答数（空正文/上游未返回正文，加大预算重试后仍未出）
 	Stats       distStats `json:"stats"`
 	Insufficient bool     `json:"insufficient"` // 有效样本 < 40
+	RateLimited bool      `json:"rate_limited,omitempty"` // 因渠道限流（429 累计超阈值）提前中止：采样未完成，不可用于比对/落盘
 }
 
 // distSimilarity 两分布的相似度得分：余弦 + JS 散度合成 distribScore、
@@ -88,9 +90,15 @@ func parseDistAnswer(s string) int {
 }
 
 // collectDistSamples 并发采样（并发克制：concurrency 3，别把账号打出限流）。
-// 探针裸发（无 system prompt），temperature=1.0。max_tokens 取 96 而非
+// 探针裸发（无 system prompt），temperature=1.0。max_tokens 首次取 96 而非
 // hlwy 的 10：GLM-5.3 等思考型模型推理段常吃掉几十 token，10 会把预算全烧在
 // reasoning_content 上、content 恒空（实测 64 出数字率约 1/2，96 约 7/8）。
+// 空正文（finish_reason=length 且 content=""，预算全烧推理段）不再记"无效
+// 样本"：自动加大预算（512）重试一次；仍空 → 计「未作答」。上游非 200
+// （限流/预算拦截等）同样计「未作答」——那是没作答，不是答错。
+// 限流早停（2026-09-12 回归修复）：429 累计超阈值（rateLimitStorm）时提前
+// 停止投递剩余采样（已投递的 goroutine 收尾即可），结果标 RateLimited——
+// 绝不逐个请求慢慢退避把检测拖成十分钟以上。
 func collectDistSamples(ctx context.Context, target *probeTarget, model string, n int) *distResult {
 	if n < 1 {
 		n = 1
@@ -99,7 +107,7 @@ func collectDistSamples(ctx context.Context, target *probeTarget, model string, 
 		n = distMaxSamples
 	}
 	counts := make([]int, distBuckets+1) // 下标 1..355
-	valid, invalid := 0, 0
+	valid, invalid, unanswered := 0, 0, 0
 	var mu sync.Mutex
 	sem := make(chan struct{}, 3) // 并发 3
 	var wg sync.WaitGroup
@@ -109,8 +117,12 @@ func collectDistSamples(ctx context.Context, target *probeTarget, model string, 
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			_, _, _, content, _, e := probeCall(ctx, target, model,
-				[]map[string]any{{"role": "user", "content": distPrompt}},
+			// 渠道限流风暴：剩余采样不再投递（已投递的 goroutine 收尾即可）
+			if rateLimitStorm() {
+				return
+			}
+			msgs := []map[string]any{{"role": "user", "content": distPrompt}}
+			_, _, st, fin, content, te, e := probeCall(ctx, target, model, msgs,
 				map[string]any{"temperature": 1.0, "max_tokens": 96})
 			if e != nil {
 				mu.Lock()
@@ -118,6 +130,27 @@ func collectDistSamples(ctx context.Context, target *probeTarget, model string, 
 				log.Printf("[tuanjie] dist 采样失败: %v", e)
 				mu.Unlock()
 				return
+			}
+			if st != 200 {
+				mu.Lock()
+				unanswered++
+				log.Printf("[tuanjie] dist 样本未作答（上游 %s）", te)
+				mu.Unlock()
+				return
+			}
+			if fin == "length" && content == "" {
+				// 思考型预算耗尽正文未出：加大预算重试一次（首次预算 96 不变）
+				_, _, st2, fin2, content2, te2, e2 := probeCall(ctx, target, model, msgs,
+					map[string]any{"temperature": 1.0, "max_tokens": 512})
+				if e2 == nil && st2 == 200 && !(fin2 == "length" && content2 == "") {
+					fin, content = fin2, content2
+				} else {
+					mu.Lock()
+					unanswered++
+					log.Printf("[tuanjie] dist 样本未作答（加大预算重试仍空: %s）", te2)
+					mu.Unlock()
+					return
+				}
 			}
 			v := parseDistAnswer(content)
 			mu.Lock()
@@ -132,9 +165,10 @@ func collectDistSamples(ctx context.Context, target *probeTarget, model string, 
 		}()
 	}
 	wg.Wait()
-	res := &distResult{Counts: counts[1:], Valid: valid, Invalid: invalid}
+	res := &distResult{Counts: counts[1:], Valid: valid, Invalid: invalid, Unanswered: unanswered}
 	res.Stats = distStatsOf(counts)
 	res.Insufficient = valid < 40
+	res.RateLimited = rateLimitStorm() // 因限流提前中止（探针阶段就触发时采样一轮都不投递）
 	return res
 }
 
