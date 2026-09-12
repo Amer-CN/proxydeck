@@ -2647,7 +2647,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.13.1</span>
+                    <span class="v ver" id="etchVer">v3.14.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3346,13 +3346,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.13.1">v3.13.1</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.14.0">v3.14.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.13.1</div>
+                    <div class="s" id="buildNo">v3.14.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.13.1</span>
+                  <span class="pt-val" id="verChip">v3.14.0</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -8568,6 +8568,14 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.14.0', date: '2026-09-13', groups: [
+      { label: '🚀 新功能', items: [
+        '种子卫兵补桌面端轨道，npm 桌面双盯',
+        '团结单账号配额用尽自动禁用，报错改中文' ] },
+      { label: '✨ 体验优化', items: [
+        '设置甲板补齐七语，修语言切换键名打回',
+        '拨杆支持键盘方向键，连按不重复拉取',
+        '切甲板回页首，屏面删去 hy4 与脱敏两行' ] } ] },
     { v: 'v3.13.1', date: '2026-09-12', groups: [
       { label: '✨ 体验优化', items: [
         '账号池区改成团结主列表同款长条，看着顺眼了' ] } ] },
@@ -9483,7 +9491,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.13.1';
+  var UI_CUR = 'v3.14.0';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   var cbQuotaUserId = ''; // WorkBuddy 积分面板选中的账号（空串=默认最新号；区域感知：切区后失效重选）
   function verCmp(a, b) {
