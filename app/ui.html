@@ -2612,7 +2612,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="cbProbe"><span>模型探测</span><b></b></span>
                     <span class="pt-dot" data-dot="cbMask"><span>脱敏防护</span><b></b></span>
-                    <span class="pt-dot" data-dot="cbHy4"><span>hy4 兜底</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -2948,11 +2947,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <div class="s" data-i18n="app.s.copy">点击复制</div>
                   </div>
                   <span class="pt-val click" id="cbEndpoint">http://127.0.0.1:8787/v1</span>
-                </div></div>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label"><div class="t" data-i18n="app.desensitize">脱敏</div></div>
-                  <span class="pt-val" id="cbDesVal">已开启 · system/tools 零宽脱敏防审核误拦</span>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-subhead"><span class="pt-silk sm">账号池 · Accounts</span>
@@ -7331,10 +7325,6 @@ var PT_I18N = {
     if (fbSel && fbSel.closest('.pt-row')) fbSel.closest('.pt-row').style.display = regionName === 'cn' ? '' : 'none';
     var hy4Row = $('cbHy4Banner');
     if (hy4Row) hy4Row.style.display = 'none';
-    /* 脱敏行如实显示：两区插件都带 --desensitize，默认均开启（2026-09-12 用户裁决：
-       国际版同样按内容指纹拦 11128，不脱敏根本用不了） */
-    var desVal = $('cbDesVal');
-    if (desVal) desVal.textContent = '已开启 · system/tools 零宽脱敏防审核误拦';
     plog(V, 'sys', regionName === 'intl'
       ? '已切到国际版 · www.codebuddy.ai（8789）· 含免费模型 · 点火目标 codebuddy-intl'
       : '已切到国内版 · copilot.tencent.com（8787）· 点火目标 codebuddy');
@@ -8323,14 +8313,12 @@ var PT_I18N = {
         sel.disabled = true;
       }
     }
-    PTApp.dot('cbHy4', on && cbRegion === 'cn'); /* 兜底 CN 专属：国际版不点灯（不参与 failover） */
   }
   /* 轮询路径静默（插件未启动时不刷 err 日志）；手动路径 silent=false */
   async function loadCbFailover(V, silent) {
     if (cbRegion === 'intl') { /* 国际版无 failover（CN 专属）：不空打 8789，收状态条即可 */
       var banner2 = $('cbHy4Banner');
       if (banner2) banner2.style.display = 'none';
-      PTApp.dot('cbHy4', false);
       return;
     }
     try {
