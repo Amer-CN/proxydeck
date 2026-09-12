@@ -3099,9 +3099,19 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     /* 区域切换后重拉（第二期复审 P2）：cbRegionApply 切区只改 #cbEndpoint 文案，
                        不通知本列表，会停在旧区域的池。真实切换控件是拨杆 [data-gear="cbRegion"]
                        （无 id，无 cbRegionApply 按钮），click 在引擎改完端点文案后派发，再留
-                       200ms 等同 tick 的 refreshPluginView 跑完。元素不存在则静默不绑。 */
+                       200ms 等同 tick 的 refreshPluginView 跑完。元素不存在则静默不绑。
+                       键盘路径（拨杆聚焦后方向键）走引擎 keydown → gearSelect，不派发 click，
+                       故 keydown 与 click 并列监听（引擎代码一行不动）。 */
                     var rg = document.querySelector('[data-gear="cbRegion"]');
-                    if (rg) rg.addEventListener('click', function () { setTimeout(accLoad, 200); });
+                    if (rg) {
+                      rg.addEventListener('click', function () { setTimeout(accLoad, 200); });
+                      rg.addEventListener('keydown', function (ev) {
+                        if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' ||
+                            ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+                          setTimeout(accLoad, 200);
+                        }
+                      });
+                    }
                     /* 进入 WorkBuddy 页签时拉一次（引擎全局接口，注册进 modeListeners） */
                     if (window.PTApp && window.PTApp.onModeChange) {
                       window.PTApp.onModeChange(function (m) { if (m === 'cb') accLoad(); });
