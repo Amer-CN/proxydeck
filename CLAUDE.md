@@ -151,15 +151,29 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   stream_options/tools/tool_choice、超大消息。协议角色差异（gemini 系角色 vs OpenAI
   角色）疑似存在未实锤。
 - **种子卫兵（v3.8.5 上线）**：封号轴 = 签名 → 盯官方种子即盯封号轴。
-  internal/tuanjie/seedcheck.go 双层监控：①本机 bundle/gemini.js 特征扫描
-  （种子 hex + X-Codely-Signature 头名）；②npm registry 在线核对——每小时查
-  latest 版本号，**版本变了才下载新包验特征（约 16MB 一次性），没变零下载**。
+  internal/tuanjie/seedcheck.go 双层监控：①本机发行件特征扫描（种子 hex +
+  X-Codely-Signature 头名）；②npm registry 在线核对——每小时查 latest 版本号，
+  **版本变了才下载新包验特征（约 16MB 一次性），没变零下载**。
   任一层特征消失 → /health `seed_alert=true` + GUI 警示条；字段
   seed_alert/seed_signal/seed_latest/seed_online；网络故障只记状态不误报。
   2026-09-04 实测：rc.58 种子与签名算法逐字段一致、registry latest=rc.58。
   旁证链：种子真轮换 → 全线 401 → 连续 3 次触发 judgment_alert（client 自动换 key
   不掩盖告警）；⚠ team_model_access_denied 的 401 同样推高计数（潜在误报源）；
   探针/水印旁路的 401 不进告警链；告警状态只反映在 /health 与 GUI，不写日志文件。
+- **⚠ 两条版本轨道（2026-09-13 补，桌面端 2.0.9 更新时发现）**：官方 CLI 在本机
+  有**两条独立版本轨道**，卫兵**两条都盯**（localCliSources 多源扫描，任一份特征
+  消失即告警、signal 带来源名）：
+  1. **npm 轨道**（rc.x）：`%APPDATA%\npm\node_modules\@unity-china\codely-cli\bundle\gemini.js`
+     ——反代 UA 的版本号就取自这里（client.go detectLocalCliVersion）
+  2. **桌面端轨道**（release.x）：团结 Cowork 内置 `cli\bin\win32-x64\codely.exe`
+     （203MB 编译产物，分块流式扫描，三条轨道共 ~120ms）——**npm 上根本没有
+     release 轨道**，只随安装包分发；路径取注册表卸载表项 InstallLocation
+     （用户可装任意盘），兜底 `%LOCALAPPDATA%\Programs\Tuanjie Cowork`
+  两条轨道版本号不同步（2026-09-13 实测：npm=rc.58/registry latest=rc.60、
+  桌面端=release.57），**只盯 npm 会漏掉桌面端先轮换种子的情况**——这正是本项
+  补丁的动机（原先只扫 npm，桌面端轨道完全没被监控）。
+  注意 `app\resource\core\bin\win32-x64\codely-binary.exe` 是 Node 运行时壳、
+  **不含签名特征**，不能列入候选（列了会因「文件在但特征缺失」误告警）。
 - **凭证纪律**：tuanjie-accounts.json.bak-* 内含有效 JWT，gitignore 已补通配
   （2026-09-04，ebaf3c9）；账号备份文件一律不准进 git。
 
@@ -414,8 +428,13 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   均已删除（代码零引用；此前 09-10 不入库裁决的执行）。
 - 实测记录（2026-09-06 两轮全量）：结论已并入上文模型情报与坑 14/15/16；
   唯一未覆盖：B.AI 6-8M 字符级 WAF 极端量级（判定不值得复现）
-- 下一版待办：② hy4 键盘可达性（拨杆同位置同问题，用户未要求补，先记账）。
-  ① 键盘重拉已在 c16d086 落地。新坑/结论随时按惯例入册
+- 下一版待办：① 种子卫兵双轨道扫描**代码已改完待发版**（2026-09-13，改动只在
+  internal/tuanjie/seedcheck.go + 新增 desktop_path_{windows,other}.go，单测已过、
+  测试端口 18788 实测生效）；**尚未换装到运行中的 8788**（换装要断服务，需用户确认）。
+  换装走腾位法（ren 旧 exe → 新 exe 落位 → 只重启 GUI）。新构建在仓库根
+  `ProxyDeck-seedguard.exe`（v3.11.0 口径，12.5MB，与现版同参数）。
+  ② hy4 键盘可达性（拨杆同位置同问题，用户未要求补，先记账）。
+  键盘重拉已在 c16d086 落地。新坑/结论随时按惯例入册
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
   出口 IP 计，共享网络易撞墙，撞后负缓存 10 分钟）
 - ZCode 侧模型配置：tuanjie provider（8788）配了 codely 系（core 即 GLM-5.3
@@ -465,3 +484,22 @@ git push myrepo HEAD:main            # 推送（remote 名是 myrepo 不是 orig
 如需变更（官方发新版 CLI、签名算法迭代），必须先逆向新版源码实证、再改，改后必须用
 真实流量 200 验证并提交。历史教训：56574 账号 401 被封发生在签名/UA 未对齐时期，
 对齐后新账号流量稳定 200 未被扫。
+
+**2026-09-13 三轨道复核（桌面端 2.0.9 更新触发的例行核验，结论：无需改动）**：
+对三条线各自逆向 + 实测，八项红线**逐字一致**，未发现任何需适配项——
+- **桌面端 2.0.9 内置 CLI**（`release.57`，203MB 编译产物）：种子 hex / 两层 HMAC /
+  `["v1",path,ts].join("\n")` / `v1.<ts>.<base64url>` / 头名 / UA 模板
+  （`` `codely-cli/${ver} (win32; x64)` ``）/ 头集合 `{UA, x-litellm-session-id}` /
+  metadata 四字段 / `########` 分隔符 / `stream_options:{include_usage:true}` /
+  `parallel_tool_calls:true` / 换 key 端点 —— 全一致
+- **npm rc.58**（本机全局，反代 UA 来源）与 **npm rc.60**（registry latest，9/9 发布）：
+  同上全一致；rc.60 对 rc.58 的 diff 只有 OAuth 内部路由改名与一处 `buildToolParams`
+  空数组提前返回（官方收紧，非新增信号）
+- **实测**：本地 8788 真实流量 200；用官方算法独立复算签名直连上游 200；
+  **UA 无版本门槛**（release.57 / rc.58 / rc.60 三个版本号直连全 200）
+- 两个「看着像雷、实测无事」的点：①新版换 key 多带 `?teamId=<当前组织ID>`，
+  同账号 A/B 实测**拿到同一把 key**（反代不带此参数无影响）；②`oauth_creds.json`
+  的 `cli_api_key` 改为 AES 加密存储（`iv:密文`），但反代只用 `access_token` 现换
+  key、不读该字段，无影响
+- **次一级差异（非凭证链，未处理）**：客户端发 `tools: []` 时反代补
+  `parallel_tool_calls` 而 rc.60 官方不发（实际客户端不发空数组，影响可忽略）

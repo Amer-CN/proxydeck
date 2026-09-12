@@ -293,3 +293,156 @@ func TestSeedCheckCombine(t *testing.T) {
 		})
 	}
 }
+
+// TestScanCliSources 多源扫描（纯函数）：①全部未装→cli_not_found 非告警；
+// ②两个源都命中→ok 且 signal 标明已核来源；③npm 正常但桌面端特征消失→告警
+// 且 signal 带来源名（这是本次改动的核心场景：只盯 npm 会漏掉桌面端轨道）。
+func TestScanCliSources(t *testing.T) {
+	okBody := "var cfg={signingSeedHex:\"" + codelySigningSeedHex + "\"};req.headers[\"" + seedFeatureHeaderName + "\"]=sig;"
+	seedGoneBody := strings.ReplaceAll(okBody, codelySigningSeedHex, strings.Repeat("ab", 32))
+
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatalf("写假发行件失败: %v", err)
+		}
+		return p
+	}
+	okNpm := write("gemini.js", okBody)
+	okDesktop := write("codely.exe", okBody)
+	badDesktop := write("codely_bad.exe", seedGoneBody)
+	missing := filepath.Join(dir, "nope.exe")
+
+	t.Run("全部未装→cli_not_found", func(t *testing.T) {
+		active, signal := scanCliSources([]seedSource{{label: "npm CLI", path: missing}})
+		if active || signal != "cli_not_found" {
+			t.Fatalf("= (%v,%q)，要 (false,cli_not_found)", active, signal)
+		}
+	})
+
+	t.Run("两源都命中→ok并标明来源", func(t *testing.T) {
+		active, signal := scanCliSources([]seedSource{
+			{label: "npm CLI", path: okNpm},
+			{label: "桌面端 CLI", path: okDesktop},
+		})
+		if active {
+			t.Fatalf("不应告警，signal=%q", signal)
+		}
+		if !strings.Contains(signal, "npm CLI") || !strings.Contains(signal, "桌面端 CLI") {
+			t.Fatalf("signal 应标明两条来源，得到 %q", signal)
+		}
+	})
+
+	t.Run("npm正常但桌面端特征消失→告警带来源名", func(t *testing.T) {
+		active, signal := scanCliSources([]seedSource{
+			{label: "npm CLI", path: okNpm},
+			{label: "桌面端 CLI", path: badDesktop},
+		})
+		if !active {
+			t.Fatal("桌面端特征消失应告警")
+		}
+		if !strings.HasPrefix(signal, "桌面端 CLI：") {
+			t.Fatalf("signal 应以来源名开头，得到 %q", signal)
+		}
+	})
+
+	t.Run("桌面端未装不影响npm结论", func(t *testing.T) {
+		active, signal := scanCliSources([]seedSource{
+			{label: "npm CLI", path: okNpm},
+			{label: "桌面端 CLI", path: missing},
+		})
+		if active {
+			t.Fatalf("不应告警，signal=%q", signal)
+		}
+	})
+}
+
+// TestLabelDesktopSources 桌面端候选去重 + 打标签（纯函数）：
+// ①只有一份安装→label 不加后缀（signal 干净）；
+// ②多份安装→**全部**带位置后缀且互不相同（对称，不许一条裸标签一条带后缀）；
+// ③同一发行件路径出现两次→只留一份且按「只有一份」处理。
+func TestLabelDesktopSources(t *testing.T) {
+	sep := string(filepath.Separator)
+	dirD := filepath.Join("D:"+sep, "Program Files (x86)")
+	dirC := filepath.Join("C:"+sep, "Users", "u", "AppData", "Local", "Programs", "Tuanjie Cowork")
+	exe := func(dir string) string { return filepath.Join(dir, "cli", "bin", "win32-x64", "codely.exe") }
+
+	t.Run("只有一份→不加后缀", func(t *testing.T) {
+		got := labelDesktopSources([]desktopCand{{dir: dirD, path: exe(dirD)}})
+		if len(got) != 1 || got[0].label != "桌面端 CLI" {
+			t.Fatalf("label = %+v，要单条且 label 为「桌面端 CLI」（无后缀）", got)
+		}
+		if got[0].path != exe(dirD) {
+			t.Fatalf("path = %q，要 %q", got[0].path, exe(dirD))
+		}
+	})
+
+	t.Run("多份→全部带后缀且可区分", func(t *testing.T) {
+		got := labelDesktopSources([]desktopCand{{dir: dirD, path: exe(dirD)}, {dir: dirC, path: exe(dirC)}})
+		if len(got) != 2 {
+			t.Fatalf("候选数 = %d，要 2（%+v）", len(got), got)
+		}
+		want := map[string]string{
+			exe(dirD): "桌面端 CLI(" + installHint(dirD) + ")",
+			exe(dirC): "桌面端 CLI(" + installHint(dirC) + ")",
+		}
+		seen := make(map[string]bool)
+		for _, s := range got {
+			if s.label == "桌面端 CLI" {
+				t.Fatalf("多份安装时 label 不许无后缀：%+v", got)
+			}
+			if s.label != want[s.path] {
+				t.Fatalf("path %q 的 label = %q，要 %q", s.path, s.label, want[s.path])
+			}
+			if seen[s.label] {
+				t.Fatalf("label 重复不可区分：%+v", got)
+			}
+			seen[s.label] = true
+		}
+	})
+
+	t.Run("同一路径去重→按只有一份处理", func(t *testing.T) {
+		got := labelDesktopSources([]desktopCand{{dir: dirD, path: exe(dirD)}, {dir: dirD, path: exe(dirD)}})
+		if len(got) != 1 || got[0].label != "桌面端 CLI" {
+			t.Fatalf("= %+v，要去重后单条且无后缀", got)
+		}
+	})
+
+	t.Run("空路径候选丢弃", func(t *testing.T) {
+		got := labelDesktopSources([]desktopCand{{dir: "", path: ""}, {dir: dirD, path: exe(dirD)}})
+		if len(got) != 1 || got[0].label != "桌面端 CLI" {
+			t.Fatalf("= %+v，要丢弃空路径后单条无后缀", got)
+		}
+	})
+}
+
+// TestContainsSeedFeaturesStreaming 流式特征核对：跨块边界的命中不能漏
+// （200MB 级发行件分块读，needle 落在块边界上是必须覆盖的路径）。
+func TestContainsSeedFeaturesStreaming(t *testing.T) {
+	chunk := 1 << 20 // 与实现里的 chunkSize 一致
+	cases := []struct {
+		name     string
+		body     string
+		wantSeed bool
+		wantHdr  bool
+	}{
+		{name: "两特征齐在小文件", body: codelySigningSeedHex + "|" + seedFeatureHeaderName, wantSeed: true, wantHdr: true},
+		{name: "种子跨块边界", body: strings.Repeat("x", chunk-5) + codelySigningSeedHex + strings.Repeat("y", 10) + seedFeatureHeaderName, wantSeed: true, wantHdr: true},
+		{name: "头名跨块边界", body: strings.Repeat("x", chunk-3) + seedFeatureHeaderName + strings.Repeat("y", 10) + codelySigningSeedHex, wantSeed: true, wantHdr: true},
+		{name: "只有种子", body: strings.Repeat("x", chunk+7) + codelySigningSeedHex, wantSeed: true, wantHdr: false},
+		{name: "两特征都没有", body: strings.Repeat("z", chunk*2+13), wantSeed: false, wantHdr: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sf, hf, err := containsSeedFeatures(strings.NewReader(tc.body))
+			if err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			if sf != tc.wantSeed || hf != tc.wantHdr {
+				t.Fatalf("特征 = (%v,%v)，要 (%v,%v)", sf, hf, tc.wantSeed, tc.wantHdr)
+			}
+		})
+	}
+}

@@ -2,6 +2,7 @@ package tuanjie
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -19,10 +20,17 @@ import (
 
 // 种子卫兵：官方人员确认封禁轴心是 session 签名，我们的签名种子硬编码逆向自
 // 官方 CLI（client.go codelySigningSeedHex）。官方发新版轮换种子/改签名方案时
-// 本机已装 CLI 的 bundle 会先变——周期核对 bundle/gemini.js 里两个特征串
-// （签名种子 hex 与 header 名 X-Codely-Signature）是否仍存在：任一消失即置告警
-// （/health seed_alert + GUI 警示条），核验恢复命中自动解除。
-// 扫不到 bundle（未装 CLI / 读失败）不算告警，只记非告警状态，避免误报。
+// 本机已装 CLI 的发行件会先变——周期核对其中两个特征串（签名种子 hex 与 header
+// 名 X-Codely-Signature）是否仍存在：任一消失即置告警（/health seed_alert +
+// GUI 警示条），核验恢复命中自动解除。
+// 扫不到（未装 CLI / 读失败）不算告警，只记非告警状态，避免误报。
+//
+// 官方 CLI 在本机有两条**独立版本轨道**，两条都要盯（只盯一条会漏）：
+//  1. npm 用户级全局安装：bundle/gemini.js（rc.x 轨道，如 1.0.0-rc.58）
+//  2. 团结 Cowork 桌面端内置：cli/bin/win32-x64/codely.exe（release.x 轨道，
+//     如 1.0.0-release.57；2026-09-13 桌面端 2.0.9 实测）
+// 两条轨道版本号不同步、发布时间也不同步——官方若只在桌面端轮换种子，
+// 只扫 npm 的卫兵会一直显示绿灯。任一文件特征消失即告警，signal 带来源名。
 // 在线层（第二保险）：本机 CLI 永不更新时上面的扫描永远只看旧包——每轮先查
 // npm registry 的 dist-tags.latest，版本号有变化才下载该版本 tgz、解出
 // bundle/gemini.js 做同样的特征核验（官方当前真实在用的签名方案）。在线层
@@ -65,34 +73,162 @@ type seedAlert struct {
 	checkedVersion string // 已完成特征核验的版本号（内存即可，重启后首验重建基线）
 }
 
-// localCliBundlePaths 本机官方 CLI bundle（gemini.js）候选路径。与
-// detectLocalCliVersion 的候选逻辑对齐（APPDATA 环境变量与 home\AppData\Roaming\npm
-// 两个 npm 用户级全局安装位置），拼上 bundle/gemini.js 子路径。
-// 注：路径解析在此独立实现，不改动 client.go。
-func localCliBundlePaths() []string {
-	var candidates []string
-	if appdata := os.Getenv("APPDATA"); appdata != "" {
-		candidates = append(candidates, filepath.Join(appdata, "npm", "node_modules", "@unity-china", "codely-cli", "bundle", "gemini.js"))
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		candidates = append(candidates, filepath.Join(home, "AppData", "Roaming", "npm", "node_modules", "@unity-china", "codely-cli", "bundle", "gemini.js"))
-	}
-	return candidates
+// seedSource 一个待核验的官方 CLI 发行件：label 用于告警文案（标明哪条轨道
+// 出的问题，GUI 警示条直接可读），path 为文件路径。
+type seedSource struct {
+	label string
+	path  string
 }
 
-// checkBundleSeedFeatures 核对 bundle 文件里的两个签名特征串：签名种子 hex 与
+// desktopCand 桌面端轨道的一个安装候选：dir 是安装目录（用于 label 消歧），
+// path 是发行件路径（用于去重与扫描）。
+type desktopCand struct {
+	dir  string
+	path string
+}
+
+// labelDesktopSources 桌面端候选去重 + 打标签（纯函数，可单测）：同一发行件
+// 路径只留一份；**去重后只剩一份时 label 不加后缀**（signal 更干净），
+// **多于一份时全部加盘符后缀**（installHint）——两边对称，否则告警文案里
+// 一条是「桌面端 CLI」、一条是「桌面端 CLI(C:)」，分不清哪个是哪个。
+func labelDesktopSources(cands []desktopCand) []seedSource {
+	seen := make(map[string]bool, len(cands))
+	uniq := make([]desktopCand, 0, len(cands))
+	for _, c := range cands {
+		if c.path == "" || seen[c.path] {
+			continue
+		}
+		seen[c.path] = true
+		uniq = append(uniq, c)
+	}
+	out := make([]seedSource, 0, len(uniq))
+	for _, c := range uniq {
+		label := "桌面端 CLI"
+		if len(uniq) > 1 {
+			label += "(" + installHint(c.dir) + ")"
+		}
+		out = append(out, seedSource{label: label, path: c.path})
+	}
+	return out
+}
+
+// localCliSources 本机官方 CLI 发行件候选（两条独立版本轨道，见文件头注释）。
+// npm 轨道路径与 detectLocalCliVersion 的候选对齐（APPDATA 与 home\AppData\
+// Roaming\npm 两个用户级全局安装位置）；桌面端轨道路径取注册表卸载表项的
+// InstallLocation（用户可装到任意盘，实测 D:\Program Files (x86)），再兜底
+// LOCALAPPDATA\Programs\Tuanjie Cowork 默认位置。
+// 注：路径解析在此独立实现，不改动 client.go。
+func localCliSources() []seedSource {
+	var out []seedSource
+	seen := make(map[string]bool)
+	add := func(label, p string) {
+		if p == "" || seen[p] {
+			return
+		}
+		seen[p] = true
+		out = append(out, seedSource{label: label, path: p})
+	}
+
+	// 轨道 1：npm 用户级全局安装（rc.x），发行件是 bundle/gemini.js。
+	if appdata := os.Getenv("APPDATA"); appdata != "" {
+		add("npm CLI", filepath.Join(appdata, "npm", "node_modules", "@unity-china", "codely-cli", "bundle", "gemini.js"))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		add("npm CLI", filepath.Join(home, "AppData", "Roaming", "npm", "node_modules", "@unity-china", "codely-cli", "bundle", "gemini.js"))
+	}
+
+	// 轨道 2：团结 Cowork 桌面端内置（release.x），发行件是编译后的
+	// cli/bin/win32-x64/codely.exe。注意 app/resource/core/bin/win32-x64/
+	// codely-binary.exe 是 Node 运行时壳、不含签名特征，不能列入候选
+	// （列了会因「文件在但特征缺失」误告警）。
+	// 先收齐候选再统一去重打标签（不能边遍历边判断——那样第一个必然无后缀）。
+	var cands []desktopCand
+	if loc := readCoworkInstallLocation(); loc != "" {
+		cands = append(cands, desktopCand{dir: loc, path: filepath.Join(loc, "cli", "bin", "win32-x64", "codely.exe")})
+	}
+	if local := os.Getenv("LOCALAPPDATA"); local != "" {
+		d := filepath.Join(local, "Programs", "Tuanjie Cowork")
+		cands = append(cands, desktopCand{dir: d, path: filepath.Join(d, "cli", "bin", "win32-x64", "codely.exe")})
+	}
+	for _, s := range labelDesktopSources(cands) {
+		add(s.label, s.path)
+	}
+	return out
+}
+
+// installHint 从安装目录提取短标识用于 label 消歧：优先盘符（D:），
+// 无盘符（UNC/相对路径）时退回目录末段，都取不到就返回空串。
+func installHint(dir string) string {
+	if v := filepath.VolumeName(dir); v != "" {
+		return strings.TrimSuffix(v, ":") + ":"
+	}
+	if base := filepath.Base(filepath.Clean(dir)); base != "." && base != string(filepath.Separator) {
+		return base
+	}
+	return ""
+}
+
+// readCoworkInstallLocation 读团结 Cowork 桌面端安装目录（注册表）。非 Windows
+// 平台始终返回空串（与 readWindowsProxy 同款约定）。
+func readCoworkInstallLocation() string {
+	if regReadCoworkInstallLocation == nil {
+		return ""
+	}
+	return regReadCoworkInstallLocation()
+}
+
+// checkBundleSeedFeatures 核对发行件里的两个签名特征串：签名种子 hex 与
 // 签名头名，各自独立返回是否命中；读文件失败返回错误。纯函数（只读入参文件），
 // 供种子卫兵后台循环与单测共用。
 func checkBundleSeedFeatures(path string) (seedFound, headerFound bool, err error) {
-	b, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return false, false, err
 	}
-	s := string(b)
-	return strings.Contains(s, codelySigningSeedHex), strings.Contains(s, seedFeatureHeaderName), nil
+	defer f.Close()
+	return containsSeedFeatures(f)
 }
 
-// scanSeedBundle 扫单个 bundle 路径：scanned=false 表示文件不存在或读失败
+// containsSeedFeatures 流式核对两个特征串，内存有界：桌面端发行件是 200MB 级
+// 二进制（整读进内存没必要，每小时一轮也吃 200MB 峰值）。分块读、块间保留
+// needle 长度-1 的重叠，保证跨块命中不漏；两特征都命中即提前返回。
+func containsSeedFeatures(r io.Reader) (seedFound, headerFound bool, err error) {
+	needles := [2]string{codelySigningSeedHex, seedFeatureHeaderName}
+	found := [2]bool{}
+	overlap := len(codelySigningSeedHex) - 1
+	if n := len(seedFeatureHeaderName) - 1; n > overlap {
+		overlap = n
+	}
+	const chunkSize = 1 << 20
+	chunk := make([]byte, chunkSize)
+	window := make([]byte, 0, chunkSize+overlap)
+	for {
+		n, rerr := r.Read(chunk)
+		if n > 0 {
+			window = append(window, chunk[:n]...)
+			for i, needle := range needles {
+				if !found[i] && bytes.Contains(window, []byte(needle)) {
+					found[i] = true
+				}
+			}
+			if found[0] && found[1] {
+				return true, true, nil
+			}
+			// 末尾 overlap 字节留到下一块（跨块命中），其余丢弃。
+			if len(window) > overlap {
+				window = append(window[:0], window[len(window)-overlap:]...)
+			}
+		}
+		if rerr != nil {
+			if rerr == io.EOF {
+				return found[0], found[1], nil
+			}
+			return false, false, rerr
+		}
+	}
+}
+
+// scanSeedBundle 扫单个发行件路径：scanned=false 表示文件不存在或读失败
 // （未装 CLI / 权限问题）——不算告警，与「文件在但特征消失」严格区分。
 func scanSeedBundle(path string) (scanned, seedFound, headerFound bool) {
 	if _, err := os.Stat(path); err != nil {
@@ -103,6 +239,29 @@ func scanSeedBundle(path string) (scanned, seedFound, headerFound bool) {
 		return false, false, false
 	}
 	return true, sf, hf
+}
+
+// scanCliSources 扫全部候选发行件：任一个「文件在但特征消失」即告警
+// （signal 带来源名，便于分辨是哪条轨道变的）；全部扫不到（未装）记
+// cli_not_found，非告警。纯函数（只读入参路径的文件），可单测。
+func scanCliSources(srcs []seedSource) (active bool, signal string) {
+	scannedAny := false
+	scannedLabels := make([]string, 0, len(srcs))
+	for _, src := range srcs {
+		scanned, sf, hf := scanSeedBundle(src.path)
+		if !scanned {
+			continue
+		}
+		scannedAny = true
+		scannedLabels = append(scannedLabels, src.label)
+		if a, sig := evalSeedScan(scanned, sf, hf); a {
+			return true, src.label + "：" + sig
+		}
+	}
+	if !scannedAny {
+		return false, "cli_not_found"
+	}
+	return false, "ok（已核 " + strings.Join(scannedLabels, "+") + "）"
 }
 
 // evalSeedScan 把一次扫描结果映射为卫兵状态（纯函数，可单测）：
@@ -389,19 +548,11 @@ func combineSeedAlerts(localActive bool, localSignal string, onlineActive bool, 
 	}
 }
 
-// runSeedGuardCheck 扫一轮：先本机官方 CLI bundle（既有逻辑），再 registry
-// 在线核对，合成后更新告警状态。本机层取第一个扫得到的候选路径，全部扫不到
-// 按 cli_not_found 处理（非告警）。
+// runSeedGuardCheck 扫一轮：先本机官方 CLI 发行件（两条轨道全扫），再 registry
+// 在线核对，合成后更新告警状态。本机层任一发行件特征消失即告警（signal 带
+// 来源名），全部扫不到按 cli_not_found 处理（非告警）。
 func (s *Server) runSeedGuardCheck(ctx context.Context) {
-	localActive, localSignal := false, "cli_not_found"
-	for _, p := range localCliBundlePaths() {
-		scanned, sf, hf := scanSeedBundle(p)
-		if !scanned {
-			continue
-		}
-		localActive, localSignal = evalSeedScan(scanned, sf, hf)
-		break
-	}
+	localActive, localSignal := scanCliSources(localCliSources())
 	onlineActive, onlineSignal := s.checkSeedRegistry(ctx, seedRegistryPackumentURL)
 	active, signal := combineSeedAlerts(localActive, localSignal, onlineActive, onlineSignal)
 	s.applySeedAlert(active, signal)
