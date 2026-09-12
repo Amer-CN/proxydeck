@@ -291,8 +291,27 @@ func (c *Credential) buildHeaders(s *sessionInfo) http.Header {
 // INTL 特化（NoRefresh）：国际版是独立 Keycloak realm，代理侧刷新会被拒——
 // 每次调用重读 auth 文件（桌面端自己更新 token），过期就如实报错。
 func (c *Credential) Headers(ctx context.Context) (http.Header, error) {
+	return c.headersFor(ctx, "")
+}
+
+// HeadersFor 按指定 auth 文件取请求头（账号池选号后切换凭据）：path 与当前
+// 不同时切换并清 cached/mtime，复用 loadIfStale/refresh 全套现有逻辑；path
+// 为空 = 当前文件（与 Headers 完全一致）。简报给出的两种最小改法里选了
+// 「Headers 接受 path 参数」这一种：切换与读取必须在同一次加锁内完成，
+// 若拆成 SetPath + 两次加锁的 Headers，并发请求各持不同账号时会互相串号。
+func (c *Credential) HeadersFor(ctx context.Context, path string) (http.Header, error) {
+	return c.headersFor(ctx, path)
+}
+
+// headersFor Headers/HeadersFor 的公共实现（单锁内完成切文件 + 读取 + 刷新）。
+func (c *Credential) headersFor(ctx context.Context, path string) (http.Header, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if path != "" && path != c.path {
+		c.path = path
+		c.cached = nil
+		c.mtime = time.Time{}
+	}
 	if err := c.loadIfStale(); err != nil {
 		return nil, err
 	}

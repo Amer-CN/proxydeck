@@ -6,6 +6,7 @@
 //   GET  /v1/models             动态探测的可用模型（1h 缓存）
 //   GET  /model/info            模型元数据（Agent 填写指南：上下文/最大输出/思考级别）
 //   GET/POST /v1/failover       hy4 限流兜底开关 + fallback 模型（GUI 甲板）
+//   GET/POST /v1/accounts       账号池管理（看池 / rescan / 提前恢复冷却号）
 //   POST /v1/chat/completions   OpenAI Chat（流式透传 / 非流式聚合）
 package codebuddy
 
@@ -32,7 +33,8 @@ import (
 // Server 是 CodeBuddy 转发的本地服务。
 type Server struct {
 	cred        *Credential
-	region      Region // CN（默认，行为与引入区域前逐字节一致）/ INTL
+	pool        *AccountPool // 双区账号池（auth 目录只读扫描入池，429/6004 自动换号）
+	region      Region       // CN（默认，行为与引入区域前逐字节一致）/ INTL
 	desensitize bool
 	client      *http.Client
 	ln          net.Listener
@@ -92,9 +94,16 @@ func NewServer(desensitize bool) (*Server, error) {
 // 11128，2026-09-12 用户裁决"不脱敏根本用不了"；plugins.go 的 INTL 插件定义已带
 // --desensitize）。
 func NewServerForRegion(region Region, desensitize bool) (*Server, error) {
+	// 账号池：扫描 auth 目录里该区域的全部登录态（只读）。目录里一个可用号
+	// 都没有 → 与旧逻辑同一句报错，不新花样。
+	missing := fmt.Errorf("未找到 %s 区域的 CodeBuddy/WorkBuddy 登录文件，请先在桌面端完成登录", region)
+	pool := NewAccountPool(region)
+	if pool == nil {
+		return nil, missing
+	}
 	c := NewCredential("", region)
 	if c.Path() == "" {
-		return nil, fmt.Errorf("未找到 %s 区域的 CodeBuddy/WorkBuddy 登录文件，请先在桌面端完成登录", region)
+		return nil, missing
 	}
 	// 凭据文件内容也可能与期望区域不符（极端：目录里只有一个异域文件）——
 	// 读取 domain 复核一次，不符即报错，不许跨区域回退。
@@ -103,6 +112,7 @@ func NewServerForRegion(region Region, desensitize bool) (*Server, error) {
 	}
 	s := &Server{
 		cred:        c,
+		pool:        pool,
 		region:      region,
 		desensitize: desensitize,
 		client:      &http.Client{Timeout: 0}, // 流式长连接不设总超时
@@ -151,6 +161,7 @@ func (s *Server) Start(host, port string) error {
 	mux.HandleFunc("/model/info", s.handleModelInfo)
 	mux.HandleFunc("/v1/stats", s.handleStats)
 	mux.HandleFunc("/v1/failover", s.handleFailover)
+	mux.HandleFunc("/v1/accounts", s.handleAccounts)
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
@@ -429,6 +440,48 @@ func (s *Server) handleFailover(w http.ResponseWriter, r *http.Request) {
 		// 响应体与 GET 同构补 hy4_limit：GUI 切开关后立即用 POST 响应渲染状态字，
 		// 缺该字段会短暂显示错误的「未限流」，等 3 秒轮询才纠正。
 		writeJSON(w, map[string]any{"enabled": cfg.enabled, "fallback": cfg.fallback, "hy4_limit": s.hy4LimitState()})
+	default:
+		writeErr(w, 405, "method not allowed")
+	}
+}
+
+// handleAccounts /v1/accounts：账号池管理（GUI 甲板「账号池」区）。
+// GET → {ok:true, accounts:[…Snapshot…], region}；
+// POST {"action":"rescan"} → 重扫并返回新 Snapshot；
+// POST {"action":"clear_cool","uid":"<完整uid>"} → 提前解除冷却，返回 {ok:bool}。
+// region 用 s.region（INTL/CN 同一端点、各自实例各自池，无需参数）。
+// 日志只打 rescan 前后池大小与 clear_cool 的 uidShort，不打印 token/完整 uid。
+func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
+	if s.pool == nil { // 零值 Server 守卫（同 handleChat），能起服务必有池
+		writeErr(w, 500, "account pool unavailable")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, map[string]any{"ok": true, "accounts": s.pool.Snapshot(), "region": string(s.region)})
+	case http.MethodPost:
+		var body struct {
+			Action string `json:"action"`
+			UID    string `json:"uid"`
+		}
+		b, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if err := json.Unmarshal(b, &body); err != nil {
+			writeErr(w, 400, "bad json: "+err.Error())
+			return
+		}
+		switch body.Action {
+		case "rescan":
+			before := s.pool.Size()
+			s.pool.Rescan(s.region)
+			log.Printf("[codebuddy] 账号池 rescan region=%s: %d → %d 个号", s.region, before, s.pool.Size())
+			writeJSON(w, map[string]any{"ok": true, "accounts": s.pool.Snapshot(), "region": string(s.region)})
+		case "clear_cool":
+			ok := s.pool.ClearCool(body.UID)
+			log.Printf("[codebuddy] 账号池 clear_cool uid=%s ok=%v", uidShort(body.UID), ok)
+			writeJSON(w, map[string]any{"ok": ok})
+		default:
+			writeErr(w, 400, "unknown action: "+body.Action)
+		}
 	default:
 		writeErr(w, 405, "method not allowed")
 	}
@@ -722,8 +775,12 @@ var resetTimeRe = regexp.MustCompile(`(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})`)
 
 // parseQuotaReset 从上游 429 报文提取限流重置时间（上游报 UTC+8，按固定东八区
 // 解析）。非配额类 429 或解析不出时点返回零值（调用方不触发故障转移，如实透传）。
+// 关键字三族：CN 配额 "Quota exceeded"、CN 6004 中文 "频率限制"、INTL 6004
+// 英文 "frequency limit"（大小写不敏感——国际版报文是 "usage exceeds
+// frequency limit"，不含前两族关键字，不扩展则换号永不触发）。
 func parseQuotaReset(body string) time.Time {
-	if !strings.Contains(body, "Quota exceeded") && !strings.Contains(body, "频率限制") {
+	if !strings.Contains(body, "Quota exceeded") && !strings.Contains(body, "频率限制") &&
+		!strings.Contains(strings.ToLower(body), "frequency limit") {
 		return time.Time{}
 	}
 	m := resetTimeRe.FindStringSubmatch(body)
@@ -829,7 +886,18 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	hdr, err := s.cred.Headers(r.Context())
+	// 账号池选号（双区各建各的池）：跳过冷却中的号、轮询推进；全池冷却 →
+	// Pick 返回 nil，沿用当前凭据原样请求（上游 429 将如实透传，不编造响应）。
+	// 零值 Server（无池）行为不变。每请求打一行日志：用的哪个号（uid 前 8 位）。
+	var acc *Account
+	var accPath string
+	if s.pool != nil {
+		if a := s.pool.Pick(); a != nil {
+			acc, accPath = a, a.AuthPath
+			log.Printf("[codebuddy] 账号池选号 uid=%s(%s)", uidShort(a.UID), a.Nickname)
+		}
+	}
+	hdr, err := s.cred.HeadersFor(r.Context(), accPath)
 	if err != nil {
 		writeErr(w, 502, err.Error())
 		return
@@ -857,6 +925,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 	start := time.Now()
 	var resp *http.Response
+	accountResent := false // 账号级换号重发只允许一次（免费池一般就 2 个号）
+	hy4Tripped := false    // hy4 模型级兜底重放只允许一次（恒 429 下防 trip→429→trip 死循环）
 	for attempt := 0; ; attempt++ {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
 			s.cfg().BaseURL+"/v2/chat/completions", mustJSONReader(backendBody))
@@ -881,14 +951,45 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(string(errBody), "11128") {
 			log.Printf("[codebuddy] 11128 为内容指纹拦截（第三方 Agent system 模板句/品牌词常见），对照 desensitize.go 指纹清洗表排查，body 预览: %s", truncate(string(errBody), 200))
 		}
+		// 账号级轮换（CN/INTL 一视同仁）：429 且报文是配额/频控族（6004 系列，
+		// 含国际版英文 "frequency limit"）→ 当前号记冷却，同请求内换下一个可用
+		// 号重发一次（最多 1 次；重发再 429 落到下方 hy4 兜底或如实透传，不循环）。
+		// 其他 4xx/5xx（11128/11101/11134 等）保持现有行为，不碰。
+		if resp.StatusCode == http.StatusTooManyRequests && s.pool != nil && acc != nil {
+			if until := parseQuotaReset(string(errBody)); !until.IsZero() {
+				s.pool.MarkLimited(acc.UID, until)
+				if !accountResent {
+					if next := s.pool.Pick(); next != nil {
+						nhdr, nerr := s.cred.HeadersFor(r.Context(), next.AuthPath)
+						if nerr != nil {
+							writeErr(w, 502, nerr.Error())
+							return
+						}
+						log.Printf("[codebuddy] 账号 %s 限流至 %s，换号 %s(%s) 重发本次请求",
+							uidShort(acc.UID), until.Format("01-02 15:04:05"), uidShort(next.UID), next.Nickname)
+						hdr, acc = nhdr, next
+						accountResent = true
+						continue
+					}
+				}
+			}
+		}
 		// hy4-preview 撞配额 429：兜底开启时记限流窗口并立刻用 fallback 重放本次
-		// 请求（仅首跳触发，重放自身失败如实透传，不循环）；fallback 请求不触发；
+		// 请求（最多 1 次，重放自身失败如实透传，不循环）；fallback 请求不触发；
 		// 兜底关闭 → 不记窗口不重放，429 如实透传。INTL 不参与（国内专属逻辑）。
-		if attempt == 0 && resp.StatusCode == http.StatusTooManyRequests && s.region == RegionCN {
+		// 守卫含 accountResent：先账号轮换，换号重发仍 429 才轮到 hy4 模型兜底
+		//（两层正交，模型级 fallback 逻辑本身不动）。
+		// 双保险防死循环（第二轮审查驳回项，旧守卫 attempt==0||accountResent 对
+		// trip 后的下一轮 429 不设防）：① hy4Tripped——兜底重放只允许一次；
+		// ② fallback 自指（cfg.fallback == hy4Primary）时拒绝 trip——那等于把
+		// model 改写成它自己原地重放，恒 429 下无限 continue。
+		if !hy4Tripped && cfg.fallback != hy4Primary && (attempt == 0 || accountResent) &&
+			resp.StatusCode == http.StatusTooManyRequests && s.region == RegionCN {
 			if d := failoverDecide(cfg, sentModel, false, resp.StatusCode, string(errBody)); d.trip {
 				s.hy4Trip(d.until)
 				backendBody["model"] = cfg.fallback
 				sentModel = cfg.fallback
+				hy4Tripped = true
 				log.Printf("[codebuddy] hy4-preview 限流至 %s，切换 %s 并重放本次请求",
 					d.until.Format("01-02 15:04"), cfg.fallback)
 				continue
