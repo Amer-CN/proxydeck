@@ -1156,6 +1156,35 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		if retryAfter != "-" {
 			w.Header().Set("Retry-After", retryAfter)
 		}
+		// 单账号路径 402：与池路径同款治理——标记本地账号配额用尽（选号自动绕过、
+		// GUI 出 402 徽章），返回可读中文；上游原始报错拼在尾部供排查。
+		// resetAt 异步查官网 5h 窗口（失败零值=不参与自动恢复），与池路径一致。
+		if resp.StatusCode == http.StatusPaymentRequired {
+			if acc := s.pool.LocalAccount(); acc != nil {
+				uid := acc.UserID
+				go func() {
+					tok, terr := acc.effectiveAccessToken()
+					if terr != nil {
+						s.pool.MarkBudgetExceeded(uid)
+						return
+					}
+					_, resetAt, ok := parseQuota5h(s.client.FetchQuotaFor(context.Background(), tok))
+					if !ok {
+						resetAt = time.Time{}
+					}
+					s.pool.MarkBudgetExceededAt(uid, resetAt)
+				}()
+				s.activity.Add("error", "本地账号 "+uid+" 配额用尽，自动禁用", model, uid, 0, 0, 402)
+				log.Printf("[tuanjie] account=%s 402 budget_exceeded 已禁用（单账号路径）", uid)
+			}
+			msg := "该团结账号上游配额已用尽（budget_exceeded），已自动禁用该账号；请稍后重试或检查账号池"
+			if len(errBody) > 0 {
+				msg += "。上游原始报错: " + truncate(string(errBody), 300)
+			}
+			s.noteUpstreamError(resp.StatusCode, string(errBody))
+			writeErr(w, resp.StatusCode, msg)
+			return
+		}
 		s.noteUpstreamError(resp.StatusCode, string(errBody))
 		writeErr(w, resp.StatusCode, string(errBody))
 		return

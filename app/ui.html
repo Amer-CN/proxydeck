@@ -551,7 +551,7 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 .pt-license-self-test {
   position: absolute; inset: 0 6px; display: flex; flex-direction: column;
   justify-content: center; align-items: stretch; gap: 12px;
-  opacity: 0; transition: opacity 220ms ease-in-out;
+  opacity: 0; transition: opacity 220ms ease-in-out; pointer-events: none;
 }
 
 .pt-license-self-test .pt-silk { color: var(--pt-sc-ink2); }
@@ -2385,7 +2385,7 @@ body.pt-try { background: var(--pt-paper); }
 .pt-sc-body.testing .pt-license-self-test { opacity: 1; }
 .pt-license-self-test { position: absolute; inset: 6px; display: flex; flex-direction: column;
   justify-content: center; align-items: stretch; gap: 12px;
-  opacity: 0; transition: opacity 220ms ease-in-out; z-index: 2; }
+  opacity: 0; transition: opacity 220ms ease-in-out; z-index: 2; pointer-events: none; }
 /* 拖拽跟手：handle 过渡只在非拖拽时生效（原版 .dragging 同款） */
 .pt-activation.dragging .handle { transition: none; }
 .pt-sc-body .pt-dots { flex-direction: column; }
@@ -2515,11 +2515,11 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <i data-mode="tj"><span>TUANJIE</span></i>
                   <i data-mode="cb"><span>WORKBUDDY</span></i>
                   <i data-mode="qoder"><span>QODER</span></i>
-                  <i data-mode="set"><span>设置</span></i>
+                  <i data-mode="set"><span data-i18n="app.settings">设置</span></i>
                   <i data-mode="cmd"><span>COMMAND</span></i>
                   <i data-mode="bai"><span>B.AI</span></i>
-                  <i data-mode="media"><span>媒体路由</span></i>
-                  <i data-mode="water"><span>注水检测</span></i>
+                  <i data-mode="media"><span data-i18n="app.key.mediaDrum">媒体路由</span></i>
+                  <i data-mode="water"><span data-i18n="app.key.waterDrum">注水检测</span></i>
                 </span>
               </span>
             </div>
@@ -2703,7 +2703,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
             <button type="button" class="pt-key" role="radio" data-mode="cmd" aria-checked="true"><span class="dual-key"><b>COMMAND</b><i>⇄ B.AI</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="tj" aria-checked="false" tabindex="-1"><span class="dual-key"><b>TUANJIE</b><i>⇄ COMATE</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="cb" aria-checked="false" tabindex="-1"><span class="dual-key"><b>WORKBUDDY</b><i>⇄ QODER</i></span></button>
-            <button type="button" class="pt-key" role="radio" data-mode="set" aria-checked="false" tabindex="-1"><span>设置</span></button>
+            <button type="button" class="pt-key" role="radio" data-mode="set" aria-checked="false" tabindex="-1"><span data-i18n="app.settings">设置</span></button>
           </div>
 
           <!-- ========== 甲板传送带 ========== -->
@@ -3104,11 +3104,17 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                        故 keydown 与 click 并列监听（引擎代码一行不动）。 */
                     var rg = document.querySelector('[data-gear="cbRegion"]');
                     if (rg) {
-                      rg.addEventListener('click', function () { setTimeout(accLoad, 200); });
+                      /* 去抖：click 与方向键连按只排一个 200ms 重拉，避免重复 accLoad */
+                      var accReloadTimer = null;
+                      var accReloadSoon = function () {
+                        if (accReloadTimer) clearTimeout(accReloadTimer);
+                        accReloadTimer = setTimeout(accLoad, 200);
+                      };
+                      rg.addEventListener('click', accReloadSoon);
                       rg.addEventListener('keydown', function (ev) {
                         if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' ||
                             ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
-                          setTimeout(accLoad, 200);
+                          accReloadSoon();
                         }
                       });
                     }
@@ -3269,35 +3275,35 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
 
                 <!-- 媒体转路由：引擎级功能，识图请求自动改路由到识图模型（当前生效于团结链路）。
                      收成单入口：识图模型选择/自定义服务商/模型管理都进子页面（openMediaReroutePage）。 -->
-                <div class="pt-subhead"><span class="pt-silk sm">媒体转路由 · Media Reroute</span>
-                  <span class="pt-val">识图请求自动改路由到识图模型 · 当前生效于团结链路</span></div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.media.head">媒体转路由 · Media Reroute</span>
+                  <span class="pt-val" data-i18n="app.media.headVal">识图请求自动改路由到识图模型 · 当前生效于团结链路</span></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
-                    <div class="t">媒体转路由</div>
-                    <div class="s">识图模型选择 · 自定义服务商与模型管理 · 识图请求自动改路由到识图模型（团结 codely-vl 或自定义服务商里配置的模型）· 生效于团结链路</div>
+                    <div class="t" data-i18n="app.media.head">媒体转路由</div>
+                    <div class="s" data-i18n="app.media.desc">识图模型选择 · 自定义服务商与模型管理 · 识图请求自动改路由到识图模型（团结 codely-vl 或自定义服务商里配置的模型）· 生效于团结链路</div>
                   </div>
-                  <button type="button" class="ibtn2" id="tjMediaBtn" title="媒体转路由：识图模型选择 + 自定义服务商/模型管理（OpenAI 兼容第三方源）"> ⇗ 管理…</button>
+                  <button type="button" class="ibtn2" id="tjMediaBtn" data-i18n="app.media.manage" title="媒体转路由：识图模型选择 + 自定义服务商/模型管理（OpenAI 兼容第三方源）"> ⇗ 管理…</button>
                 </div></div>
                 <div class="pt-div"></div>
 
                 <!-- 链路诊断：外网延迟测试（手动点击）——本机端口健康读数已去掉（无诊断价值） -->
-                <div class="pt-subhead"><span class="pt-silk sm">链路诊断 · Diagnostics</span></div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.diag.head">链路诊断 · Diagnostics</span></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
-                    <div class="t">外网延迟测试</div>
-                    <div class="s">HTTP/HTTPS 延迟 · 走代理链路 · 手动点击探测</div>
+                    <div class="t" data-i18n="app.diag.latTitle">外网延迟测试</div>
+                    <div class="s" data-i18n="app.diag.latDesc">HTTP/HTTPS 延迟 · 走代理链路 · 手动点击探测</div>
                   </div>
-                  <input class="pt-field" id="latProxy" placeholder="代理地址 · 留空自动探测本地代理" spellcheck="false" autocomplete="off">
+                  <input class="pt-field" id="latProxy" data-i18n-attr="placeholder:app.diag.proxy" placeholder="代理地址 · 留空自动探测本地代理" spellcheck="false" autocomplete="off">
                   <button type="button" class="ibtn2" id="latTestBtn" data-i18n="app.btn.latency">测延迟</button>
                 </div></div>
-                <div class="pt-lat" id="latResult"><span class="lat-idle">HTTP/HTTPS 延迟 · 走代理链路</span></div>
+                <div class="pt-lat" id="latResult"><span class="lat-idle" data-i18n="app.diag.latIdle">HTTP/HTTPS 延迟 · 走代理链路</span></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
-                    <div class="t">注水检测</div>
-                    <div class="s">金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型 · 检测团结账号池 · 生效于团结链路</div>
+                    <div class="t" data-i18n="app.water.title">注水检测</div>
+                    <div class="s" data-i18n="app.water.desc">金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型 · 检测团结账号池 · 生效于团结链路</div>
                   </div>
-                  <button type="button" class="ibtn2" id="tjWaterBtn" title="金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型">☌ 注水检测</button>
+                  <button type="button" class="ibtn2" id="tjWaterBtn" data-i18n="app.water.btn" title="金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型">☌ 注水检测</button>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -3306,7 +3312,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <div class="s" data-i18n="app.s.autostart">登录 Windows 后无窗口自动点火（软件统一，非按代理单独）。</div>
                   </div>
                   <button type="button" class="pt-sw" role="switch" aria-checked="false" data-sw="autostart"
-                          aria-label="开机自启"><span class="i"></span><span class="o"></span><span class="k"></span></button>
+                          aria-label="开机自启" data-i18n-attr="aria-label:app.dot.autostart"><span class="i"></span><span class="o"></span><span class="k"></span></button>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row">
@@ -3337,7 +3343,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <div class="s" data-i18n="app.s.sound">操作每个控件时的轻微咔哒声——开关、挡位、按键与拨杆。</div>
                   </div>
                   <div class="pt-knob" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="2" aria-valuenow="1"
-                       aria-label="界面音效">
+                       aria-label="界面音效" data-i18n-attr="aria-label:app.dot.sound">
                     <button type="button" class="cap" tabindex="-1" aria-hidden="true"><span class="dot" style="--az:60"></span></button>
                     <button type="button" class="d" data-set="2" tabindex="-1" aria-hidden="true">2</button>
                     <button type="button" class="d cur" data-set="1" tabindex="-1" aria-hidden="true">1</button>
@@ -3385,8 +3391,8 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <button type="button" class="pt-lever" id="powerLever">
                   <span class="slot" aria-hidden="true"><span class="h"></span></span>
                   <span class="ticks" aria-hidden="true">
-                    <span class="run">运行</span>
-                    <span class="quit">退出</span>
+                    <span class="run" data-i18n="app.pw.run">运行</span>
+                    <span class="quit" data-i18n="app.pw.quit">退出</span>
                   </span>
                   <span class="pt-label">
                     <span class="t" data-i18n="app.quit">彻底关机</span>
@@ -4323,6 +4329,10 @@ var PT_I18N = {
     st.mode = m;
     noteFace(m);
     paint();
+    /* 切甲板滚动回顶：.pt-deck-scroll 的 scrollTop 是 DOM 残留（无刻意记忆设计），
+       二次进入停在上次位置会让甲板头部区块（媒体转路由/链路诊断等）整屏不可见 */
+    var dk = document.querySelector('.pt-deck[data-deck="' + m + '"] .pt-deck-scroll');
+    if (dk) dk.scrollTop = 0;
     play('modeChange');
     modeListeners.forEach(function (f) { try { f(m); } catch (e) {} });
     /* 第 30 轮：键面翻面后蓝灯跟随当前面（noteFace 改了 on-alt → 灯须重算） */
@@ -8449,7 +8459,24 @@ var PT_I18N = {
     'app.changelog': { zh: '更新日志', 'zh-hant': '更新日誌', en: 'Changelog', de: 'Änderungen', ja: '更新履歴', fr: 'Journal', es: 'Novedades' },
     'app.s.changelog': { zh: '本版本改了什么，一目了然', 'zh-hant': '本版本改了什麼，一目瞭然', en: 'What changed in this version', de: 'Was sich in dieser Version geändert hat', ja: 'このバージョンの変更点', fr: 'Les changements de cette version', es: 'Los cambios de esta versión' },
     'app.btn.changelog': { zh: '查看…', 'zh-hant': '查看…', en: 'View…', de: 'Ansehen…', ja: '見る…', fr: 'Voir…', es: 'Ver…' },
-    'app.upd.title':     { zh: '尚未检查', 'zh-hant': '尚未檢查', en: 'Not checked yet', de: 'Noch nicht geprüft', ja: '未チェック', fr: 'Non vérifié', es: 'Sin comprobar' }
+    'app.upd.title':     { zh: '尚未检查', 'zh-hant': '尚未檢查', en: 'Not checked yet', de: 'Noch nicht geprüft', ja: '未チェック', fr: 'Non vérifié', es: 'Sin comprobar' },
+    'app.key.mediaDrum': { zh: '媒体路由', 'zh-hant': '媒體路由', en: 'Media Route', de: 'Medienroute', ja: 'メディアルーティング', fr: 'Route média', es: 'Ruta de medios' },
+    'app.key.waterDrum': { zh: '注水检测', 'zh-hant': '注水檢測', en: 'Canary Probe', de: 'Kanarien-Test', ja: 'カナリア検査', fr: 'Sonde canari', es: 'Prueba canaria' },
+    'app.media.head':    { zh: '媒体转路由', 'zh-hant': '媒體轉路由', en: 'Media Reroute', de: 'Medien-Umleitung', ja: 'メディア振り分け', fr: 'Redirection média', es: 'Redirección de medios' },
+    'app.media.headVal': { zh: '识图请求自动改路由到识图模型 · 当前生效于团结链路', 'zh-hant': '識圖請求自動改路由到識圖模型 · 當前生效於團結鏈路', en: 'Vision requests auto-reroute to the vision model · Active on the Tuanjie link', de: 'Bildanfragen werden automatisch zum Bildmodell umgeleitet · Aktiv auf der Tuanjie-Verbindung', ja: '画像リクエストを画像モデルへ自動振り分け・現在は団結リンクが対象', fr: 'Les requêtes vision sont reroutées vers le modèle vision · Actif sur le lien Tuanjie', es: 'Las peticiones de visión se redirigen al modelo de visión · Activo en el enlace Tuanjie' },
+    'app.media.desc':    { zh: '识图模型选择 · 自定义服务商与模型管理 · 识图请求自动改路由到识图模型（团结 codely-vl 或自定义服务商里配置的模型）· 生效于团结链路', 'zh-hant': '識圖模型選擇 · 自定義服務商與模型管理 · 識圖請求自動改路由到識圖模型（團結 codely-vl 或自定義服務商裡配置的模型）· 生效於團結鏈路', en: 'Vision model picker · Custom providers and model management · Vision requests auto-reroute to the vision model (Tuanjie codely-vl or a custom provider model) · Active on the Tuanjie link', de: 'Bildmodell-Wahl · Eigene Anbieter und Modellverwaltung · Bildanfragen werden automatisch zum Bildmodell umgeleitet (Tuanjie codely-vl oder Modell eines eigenen Anbieters) · Aktiv auf der Tuanjie-Verbindung', ja: '画像モデル選択・カスタムプロバイダとモデル管理・画像リクエストを画像モデルへ自動振り分け（団結 codely-vl またはカスタムプロバイダのモデル）・団結リンクが対象', fr: 'Choix du modèle vision · Fournisseurs et gestion de modèles personnalisés · Les requêtes vision sont reroutées vers le modèle vision (codely-vl Tuanjie ou modèle dun fournisseur personnalisé) · Actif sur le lien Tuanjie', es: 'Elección del modelo de visión · Proveedores personalizados y gestión de modelos · Las peticiones de visión se redirigen al modelo de visión (codely-vl de Tuanjie o modelo de un proveedor personalizado) · Activo en el enlace Tuanjie' },
+    'app.media.manage':  { zh: ' ⇗ 管理…', 'zh-hant': ' ⇗ 管理…', en: ' ⇗ Manage…', de: ' ⇗ Verwalten…', ja: ' ⇗ 管理…', fr: ' ⇗ Gérer…', es: ' ⇗ Gestionar…' },
+    'app.diag.head':     { zh: '链路诊断', 'zh-hant': '鏈路診斷', en: 'Diagnostics', de: 'Diagnose', ja: '診断', fr: 'Diagnostic', es: 'Diagnóstico' },
+    'app.diag.latTitle': { zh: '外网延迟测试', 'zh-hant': '外網延遲測試', en: 'Latency Test', de: 'Latenztest', ja: 'レイテンシ測定', fr: 'Test de latence', es: 'Prueba de latencia' },
+    'app.diag.latDesc':  { zh: 'HTTP/HTTPS 延迟 · 走代理链路 · 手动点击探测', 'zh-hant': 'HTTP/HTTPS 延遲 · 走代理鏈路 · 手動點擊探測', en: 'HTTP/HTTPS latency · via proxy path · manual probe', de: 'HTTP/HTTPS-Latenz · über den Proxy-Pfad · manueller Test', ja: 'HTTP/HTTPS レイテンシ・プロキシ経由・手動クリックで測定', fr: 'Latence HTTP/HTTPS · via le proxy · sondage manuel', es: 'Latencia HTTP/HTTPS · vía proxy · sondeo manual' },
+    'app.diag.latIdle':  { zh: 'HTTP/HTTPS 延迟 · 走代理链路', 'zh-hant': 'HTTP/HTTPS 延遲 · 走代理鏈路', en: 'HTTP/HTTPS latency · via proxy path', de: 'HTTP/HTTPS-Latenz · über den Proxy-Pfad', ja: 'HTTP/HTTPS レイテンシ・プロキシ経由', fr: 'Latence HTTP/HTTPS · via le proxy', es: 'Latencia HTTP/HTTPS · vía proxy' },
+    'app.diag.proxy':    { zh: '代理地址 · 留空自动探测本地代理', 'zh-hant': '代理地址 · 留空自動探測本地代理', en: 'Proxy address · leave empty to auto-detect local proxy', de: 'Proxy-Adresse · leer lassen für automatische Erkennung', ja: 'プロキシアドレス・空欄でローカルプロキシを自動検出', fr: 'Adresse du proxy · vide = détection auto du proxy local', es: 'Dirección del proxy · vacío = detectar proxy local automáticamente' },
+    'app.water.title':   { zh: '注水检测', 'zh-hant': '注水檢測', en: 'Canary Probe', de: 'Kanarien-Test', ja: 'カナリア検査', fr: 'Sonde canari', es: 'Prueba canaria' },
+    'app.water.desc':    { zh: '金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型 · 检测团结账号池 · 生效于团结链路', 'zh-hant': '金絲雀探針：指紋漂移+答題，識別上游是否換便宜模型 · 檢測團結賬號池 · 生效於團結鏈路', en: 'Canary probe: fingerprint drift + quiz to detect upstream model swaps · checks the Tuanjie account pool · active on the Tuanjie link', de: 'Kanarien-Test: Fingerabdruck-Drift und Quiz erkennen Upstream-Modelltausch · prüft den Tuanjie-Accountpool · aktiv auf der Tuanjie-Verbindung', ja: 'カナリア探針：指紋ドリフト+クイズで上流の安いモデルへの差し替えを検出・団結アカウントプールを検査・団結リンクが対象', fr: 'Sonde canari : derive d empreinte et quiz pour detecter un remplacement du modele amont · verifie le pool de comptes Tuanjie · actif sur le lien Tuanjie', es: 'Sonda canaria: deriva de huella y cuestionario detectan cambios de modelo aguas arriba · comprueba el pool de cuentas Tuanjie · activo en el enlace Tuanjie' },
+    'app.water.btn':     { zh: '☌ 注水检测', 'zh-hant': '☌ 注水檢測', en: '☌ Canary Probe', de: '☌ Kanarien-Test', ja: '☌ カナリア検査', fr: '☌ Sonde canari', es: '☌ Prueba canaria' },
+    'app.ver.installed': { zh: '已安装版本', 'zh-hant': '已安裝版本', en: 'Installed version', de: 'Installierte Version', ja: 'インストール済みバージョン', fr: 'Version installée', es: 'Versión instalada' },
+    'app.pw.run':         { zh: '运行', 'zh-hant': '運行', en: 'Run', de: 'Läuft', ja: '稼働', fr: 'Marche', es: 'Activo' },
+    'app.pw.quit':        { zh: '退出', 'zh-hant': '退出', en: 'Exit', de: 'Beenden', ja: '終了', fr: 'Quitter', es: 'Salir' }
   };
   var I18N = (typeof PT_I18N !== 'undefined') ? PT_I18N : {};
   var UI_LANG_CODE = ['zh', 'zh-hant', 'en', 'de', 'ja', 'fr', 'es'];
@@ -8486,6 +8513,13 @@ var PT_I18N = {
   function applyI18n() {
     $$('[data-i18n]').forEach(function (el) {
       el.textContent = t(el.getAttribute('data-i18n'));
+    });
+    /* 键面缓存重置：paint() 首次渲染把 .pt-key 键名存进 dataset.origLabel 并回写，
+       不清缓存则切换语言后被旧键名打回（设置→Settings→设置） */
+    $$('.pt-key[data-mode]').forEach(function (k) { delete k.dataset.origLabel; });
+    /* 铭牌 aria-label = 译名 + 蚀刻版本（版本号不进字典，随蚀刻值走） */
+    $$('.pt-nameplate').forEach(function (np) {
+      np.setAttribute('aria-label', t('app.ver.installed') + ' ' + (np.textContent || '').trim());
     });
     $$('[data-i18n-attr]').forEach(function (el) {
       var spec = el.getAttribute('data-i18n-attr');

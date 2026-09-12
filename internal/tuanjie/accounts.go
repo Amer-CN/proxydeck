@@ -428,6 +428,19 @@ func (p *AccountPool) EnsureLocalAccount() bool {
 	return true
 }
 
+// LocalAccount 返回池内本地账号（Source=local，即 ~/.codely-cli 登录态）；
+// 单账号路径 402 治理取 UID/token 用。池未含本地账号时返回 nil。
+func (p *AccountPool) LocalAccount() *Account {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, a := range p.accounts {
+		if a.Source == "local" {
+			return a
+		}
+	}
+	return nil
+}
+
 // Remove 删除账号。
 func (p *AccountPool) Remove(userID string) bool {
 	p.mu.Lock()
