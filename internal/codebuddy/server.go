@@ -2,11 +2,11 @@
 //
 // 端点：
 //   GET  /health                诊断（auth 文件/账号/token 状态）
-//   GET  /quota                 官方积分快照（get-user-resource，5min 缓存）
+//   GET  /quota                 官方积分快照（get-user-resource，5min 缓存；?uid= 选账号）
 //   GET  /v1/models             动态探测的可用模型（1h 缓存）
 //   GET  /model/info            模型元数据（Agent 填写指南：上下文/最大输出/思考级别）
 //   GET/POST /v1/failover       hy4 限流兜底开关 + fallback 模型（GUI 甲板）
-//   GET/POST /v1/accounts       账号池管理（看池 / rescan / 提前恢复冷却号）
+//   GET/POST /v1/accounts       账号池管理（看池 / rescan / 提前恢复 / 停用启用 / 移除恢复）
 //   POST /v1/chat/completions   OpenAI Chat（流式透传 / 非流式聚合）
 package codebuddy
 
@@ -44,6 +44,9 @@ type Server struct {
 	probeMu   sync.Mutex
 	probeAt   time.Time
 	probeList []string
+
+	quotaMu    sync.Mutex             // 积分缓存锁（按账号分键，5 分钟 TTL）
+	quotaCache map[string]*quotaEntry // uid → 积分快照（空 uid 键 "_default"）；每实例各一份 map，CN/INTL 两实例天然隔离（修串区）
 
 	startedAt  time.Time // 运行时长展示
 	statsMu    sync.Mutex
@@ -215,13 +218,22 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-// handleQuota 返回官方积分快照（GUI 积分卡用）。refresh=1 强制实时（手动刷新按钮）。
+// handleQuota 返回官方积分快照（GUI 积分卡用）。?uid= 指定账号（空 = 池内
+// mtime 最新号）；未知 uid 如实 source:none，err 只给 uid 前 8 位（不打完整 uid）。
+// refresh=1 强制实时（手动刷新按钮），与 uid 可组合。
 func (s *Server) handleQuota(w http.ResponseWriter, r *http.Request) {
+	uid := r.URL.Query().Get("uid")
+	if uid != "" && s.pool != nil {
+		if _, _, _, ok := s.pool.PathOf(uid); !ok {
+			writeJSON(w, &Quota{Source: "none", Err: "账号不在池中: " + uidShort(uid)})
+			return
+		}
+	}
 	if r.URL.Query().Get("refresh") == "1" {
-		writeJSON(w, s.FetchQuotaForce(r.Context()))
+		writeJSON(w, s.FetchQuotaForce(r.Context(), uid))
 		return
 	}
-	writeJSON(w, s.FetchQuota(r.Context()))
+	writeJSON(w, s.FetchQuota(r.Context(), uid))
 }
 
 // handleStats 返回消耗统计 + 运行时长（GUI 视图用）。
@@ -448,9 +460,13 @@ func (s *Server) handleFailover(w http.ResponseWriter, r *http.Request) {
 // handleAccounts /v1/accounts：账号池管理（GUI 甲板「账号池」区）。
 // GET → {ok:true, accounts:[…Snapshot…], region}；
 // POST {"action":"rescan"} → 重扫并返回新 Snapshot；
-// POST {"action":"clear_cool","uid":"<完整uid>"} → 提前解除冷却，返回 {ok:bool}。
+// POST {"action":"clear_cool","uid":"<完整uid>"} → 提前解除冷却，返回 {ok:bool}；
+// POST {"action":"toggle","uid":"<完整uid>","enabled":bool} → 手动停用/启用；
+// POST {"action":"remove","uid":"<完整uid>"} → 移出账号池（不碰 auth 文件）；
+// POST {"action":"restore","uid":"<完整uid>"} → 恢复被移出的号。
+// 后四个 action 找不到 uid 返回 {ok:false}；GUI 拿到响应后重拉快照就地刷新。
 // region 用 s.region（INTL/CN 同一端点、各自实例各自池，无需参数）。
-// 日志只打 rescan 前后池大小与 clear_cool 的 uidShort，不打印 token/完整 uid。
+// 日志只打 rescan 前后池大小与各 action 的 uidShort，不打印 token/完整 uid。
 func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	if s.pool == nil { // 零值 Server 守卫（同 handleChat），能起服务必有池
 		writeErr(w, 500, "account pool unavailable")
@@ -461,8 +477,9 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "accounts": s.pool.Snapshot(), "region": string(s.region)})
 	case http.MethodPost:
 		var body struct {
-			Action string `json:"action"`
-			UID    string `json:"uid"`
+			Action  string `json:"action"`
+			UID     string `json:"uid"`
+			Enabled bool   `json:"enabled"` // action=toggle 的目标态（GUI 回传取反值）
 		}
 		b, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err := json.Unmarshal(b, &body); err != nil {
@@ -478,6 +495,18 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		case "clear_cool":
 			ok := s.pool.ClearCool(body.UID)
 			log.Printf("[codebuddy] 账号池 clear_cool uid=%s ok=%v", uidShort(body.UID), ok)
+			writeJSON(w, map[string]any{"ok": ok})
+		case "toggle":
+			ok := s.pool.Toggle(body.UID, body.Enabled)
+			log.Printf("[codebuddy] 账号池 toggle uid=%s enabled=%v ok=%v", uidShort(body.UID), body.Enabled, ok)
+			writeJSON(w, map[string]any{"ok": ok})
+		case "remove":
+			ok := s.pool.Remove(body.UID)
+			log.Printf("[codebuddy] 账号池 remove uid=%s ok=%v", uidShort(body.UID), ok)
+			writeJSON(w, map[string]any{"ok": ok})
+		case "restore":
+			ok := s.pool.Restore(body.UID)
+			log.Printf("[codebuddy] 账号池 restore uid=%s ok=%v", uidShort(body.UID), ok)
 			writeJSON(w, map[string]any{"ok": ok})
 		default:
 			writeErr(w, 400, "unknown action: "+body.Action)
@@ -886,17 +915,27 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 账号池选号（双区各建各的池）：跳过冷却中的号、轮询推进；全池冷却 →
-	// Pick 返回 nil，沿用当前凭据原样请求（上游 429 将如实透传，不编造响应）。
-	// 零值 Server（无池）行为不变。每请求打一行日志：用的哪个号（uid 前 8 位）。
+	// 账号池选号（双区各建各的池）：跳过冷却/停用/移除/凭据失效的号、轮询推进；
+	// 全不可用 → Pick 返回 nil，沿用当前凭据原样请求（上游 429 将如实透传，不
+	// 编造响应）。零值 Server（无池）行为不变。每请求打一行日志：用的哪个号
+	//（uid 前 8 位）。选中即 Touch（UseCount/LastUsed，调用 N 次/最近）+ IncLoad
+	//（进行中 N）；请求结束（含错误路径）defer 释放，401/429 换号分支先 Dec 旧号
+	// 再绑新号，保证任意退出路径 inflight 归零。
 	var acc *Account
 	var accPath string
 	if s.pool != nil {
 		if a := s.pool.Pick(); a != nil {
 			acc, accPath = a, a.AuthPath
+			s.pool.Touch(acc.UID)
+			s.pool.IncLoad(acc.UID)
 			log.Printf("[codebuddy] 账号池选号 uid=%s(%s)", uidShort(a.UID), a.Nickname)
 		}
 	}
+	defer func() {
+		if acc != nil {
+			s.pool.DecLoad(acc.UID)
+		}
+	}()
 	hdr, err := s.cred.HeadersFor(r.Context(), accPath)
 	if err != nil {
 		writeErr(w, 502, err.Error())
@@ -926,6 +965,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	var resp *http.Response
 	accountResent := false // 账号级换号重发只允许一次（免费池一般就 2 个号）
+	deadResent := 0        // 凭据失效(401/403)换号重发计数，上限 = 池大小（全死防循环）
 	hy4Tripped := false    // hy4 模型级兜底重放只允许一次（恒 429 下防 trip→429→trip 死循环）
 	for attempt := 0; ; attempt++ {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
@@ -951,6 +991,32 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(string(errBody), "11128") {
 			log.Printf("[codebuddy] 11128 为内容指纹拦截（第三方 Agent system 模板句/品牌词常见），对照 desensitize.go 指纹清洗表排查，body 预览: %s", truncate(string(errBody), 200))
 		}
+		// 账号凭据失效轮换（401/403）：token 被官方吊销≠本地可判过期（死号的
+		// expiresAt 未到期、CN 刷新路径对它也不触发，本地预检不可靠，以上游
+		// 401 为准）→ MarkDead 当前号（无限期，复活只靠 rescan），Pick 换下一个
+		// 非死号、HeadersFor 重建头后重发本次请求。换号有界：最多换池大小次；
+		// Pick 返回 nil（全死）→ 不 continue，落到下方 writeErr 把 401/403 如实
+		// 透传。401 不是配额信号：不记 hy4 限流窗口、不触发模型 fallback
+		//（hy4Tripped 逻辑不参与）；11128/11101/11134 等其他 4xx 仍不碰。
+		if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && s.pool != nil && acc != nil {
+			s.pool.MarkDead(acc.UID)
+			if deadResent < s.pool.Size() {
+				if next := s.pool.Pick(); next != nil {
+					nhdr, nerr := s.cred.HeadersFor(r.Context(), next.AuthPath)
+					if nerr != nil {
+						writeErr(w, 502, nerr.Error())
+						return
+					}
+					log.Printf("[codebuddy] 账号 %s 凭据失效(401)，换 %s 重发", uidShort(acc.UID), uidShort(next.UID))
+					s.pool.DecLoad(acc.UID) // 旧号释放进行中计数
+					s.pool.Touch(next.UID)
+					s.pool.IncLoad(next.UID)
+					hdr, acc = nhdr, next
+					deadResent++
+					continue
+				}
+			}
+		}
 		// 账号级轮换（CN/INTL 一视同仁）：429 且报文是配额/频控族（6004 系列，
 		// 含国际版英文 "frequency limit"）→ 当前号记冷却，同请求内换下一个可用
 		// 号重发一次（最多 1 次；重发再 429 落到下方 hy4 兜底或如实透传，不循环）。
@@ -967,6 +1033,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 						}
 						log.Printf("[codebuddy] 账号 %s 限流至 %s，换号 %s(%s) 重发本次请求",
 							uidShort(acc.UID), until.Format("01-02 15:04:05"), uidShort(next.UID), next.Nickname)
+						s.pool.DecLoad(acc.UID) // 旧号释放进行中计数
+						s.pool.Touch(next.UID)
+						s.pool.IncLoad(next.UID)
 						hdr, acc = nhdr, next
 						accountResent = true
 						continue

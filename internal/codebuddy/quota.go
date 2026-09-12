@@ -12,9 +12,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sort"
-	"sync"
 	"time"
 )
 
@@ -29,6 +29,8 @@ type Quota struct {
 	Packs      int         `json:"packs"`      // 未过期包数
 	Active     ActivePack  `json:"active"`     // 当前消耗中的包（used/size）
 	NearestEnd NearestPack `json:"nearestEnd"` // 最近过期提醒
+	UID        string      `json:"uid"`        // 本次快照属于哪个账号（完整 uid；GUI 副行显示"谁的积分"）
+	Nickname   string      `json:"nickname"`   // 账号昵称（默认号也填）
 	Source     string      `json:"source"`     // live / cache / none
 	Err        string      `json:"err,omitempty"`
 }
@@ -60,73 +62,116 @@ type account struct {
 	CycleCapacitySize   float64 `json:"CycleCapacitySize"`
 }
 
-// quotaCache 包级缓存（5 分钟 TTL，模式同 tuanjie/quota.go，独立实现）。
-type quotaCache struct {
-	mu sync.Mutex
+// quotaEntry 单账号的缓存条目（快照 + 写入时点）。
+type quotaEntry struct {
 	q  *Quota
 	at time.Time
 }
 
-var qc quotaCache
+// quotaDefaultKey 默认号（不带 uid 的查询）的缓存键。
+const quotaDefaultKey = "_default"
 
 const quotaTTL = 5 * time.Minute
 
-// FetchQuota 拉取官方积分快照（带 5 分钟缓存）。
-func (s *Server) FetchQuota(ctx context.Context) *Quota {
-	qc.mu.Lock()
-	if qc.q != nil && time.Since(qc.at) < quotaTTL {
-		q := *qc.q
+// quotaCacheKey uid → 缓存键（空 uid 用固定键；真实 uid 来自桌面端，
+// 不会撞 "_default" 字面量）。
+func quotaCacheKey(uid string) string {
+	if uid == "" {
+		return quotaDefaultKey
+	}
+	return uid
+}
+
+// quotaResolve uid → auth 文件路径 + 账号信息。uid 空 = 默认号：池内 mtime 最新
+//（建池新→旧排序，第一号=当前最新登录，与旧行为"绑 mtime 最新文件"语义一致）；
+// 非空按完整 uid 精确查（不碰 uidShort 前缀）。未知 uid ok=false——积分是按账号
+// 看的，静默回退别的号比报错更糟。
+func (s *Server) quotaResolve(uid string) (path, nickname, uidOut string, ok bool) {
+	if s.pool == nil {
+		return "", "", "", true // 零值 Server（无池）：沿用当前凭据文件（旧行为）
+	}
+	if uid == "" {
+		return s.pool.NewestPath()
+	}
+	return s.pool.PathOf(uid)
+}
+
+// FetchQuota 拉取指定账号的官方积分快照（带 5 分钟缓存；uid 空 = 默认号）。
+// 命中缓存返回 source:"cache"；失败回退该 uid 自己的缓存（绝不串号）。
+func (s *Server) FetchQuota(ctx context.Context, uid string) *Quota {
+	key := quotaCacheKey(uid)
+	s.quotaMu.Lock()
+	e := s.quotaCache[key]
+	if e != nil && time.Since(e.at) < quotaTTL {
+		q := *e.q
 		q.Source = "cache"
-		qc.mu.Unlock()
+		s.quotaMu.Unlock()
 		return &q
 	}
-	qc.mu.Unlock()
+	s.quotaMu.Unlock()
+	return s.fetchQuotaFresh(ctx, uid, key)
+}
 
-	q, err := s.fetchQuotaLive(ctx)
+// FetchQuotaForce 强制实时拉取指定账号（手动刷新按钮用），绕过缓存并回写。
+// 失败时回退该 uid 自己的缓存，与 FetchQuota 同口径。
+func (s *Server) FetchQuotaForce(ctx context.Context, uid string) *Quota {
+	return s.fetchQuotaFresh(ctx, uid, quotaCacheKey(uid))
+}
+
+// quotaHTTPError 官方积分接口的非 200 响应（typed error：上游状态码可判定，
+// 不再从错误字符串里猜）。401/403 = 凭据失效——与聊天路径同一信号，调用方
+// 据此 MarkDead（手动刷新积分 = 免费验活）。
+type quotaHTTPError struct {
+	status int
+	body   string
+}
+
+func (e *quotaHTTPError) Error() string {
+	return fmt.Sprintf("官方积分接口 HTTP %d: %s", e.status, truncate(e.body, 200))
+}
+
+// fetchQuotaFresh 实拉一次并回写缓存；失败回退该 key 自己的缓存。
+// FetchQuota（TTL 过期后）与 FetchQuotaForce（绕过 TTL）共用同一套拉取/回退口径。
+// 积分路径 401/403 标死（与矩阵观感一致）：quotaResolve 在本入口把查询 uid 解析
+// 成实际选中的号（默认查询空 uid → 池内最新号，uidOut 即真实 uid），上游 401/403
+// 时 MarkDead 落到它——聊天流量之外的免费验活通道。缓存键仍按调用方口径
+//（默认号固定 "_default"），与既有按账号分键/回退语义互不影响。
+func (s *Server) fetchQuotaFresh(ctx context.Context, uid, key string) *Quota {
+	path, nick, uidOut, ok := s.quotaResolve(uid)
+	if !ok {
+		return &Quota{Source: "none", Err: "账号不在池中: " + uidShort(uid)}
+	}
+	q, err := s.fetchQuotaLive(ctx, path)
 	if err != nil {
-		qc.mu.Lock()
-		cached := qc.q
-		qc.mu.Unlock()
-		if cached != nil {
-			cp := *cached
+		if he, isHTTP := err.(*quotaHTTPError); isHTTP && s.pool != nil && uidOut != "" &&
+			(he.status == http.StatusUnauthorized || he.status == http.StatusForbidden) {
+			s.pool.MarkDead(uidOut)
+			log.Printf("[codebuddy] 账号 %s 积分查询 HTTP %d，标记凭据失效（手动刷新积分=免费验活）",
+				uidShort(uidOut), he.status)
+		}
+		s.quotaMu.Lock()
+		e := s.quotaCache[key]
+		s.quotaMu.Unlock()
+		if e != nil {
+			cp := *e.q
 			cp.Source = "cache"
 			cp.Err = err.Error()
 			return &cp
 		}
 		return &Quota{Source: "none", Err: err.Error()}
 	}
-	qc.mu.Lock()
-	qc.q = q
-	qc.at = time.Now()
-	qc.mu.Unlock()
-	return q
-}
-
-// FetchQuotaForce 强制实时拉取（手动刷新按钮用），绕过缓存并回写。
-// 失败时回退缓存，与 FetchQuota 同口径。
-func (s *Server) FetchQuotaForce(ctx context.Context) *Quota {
-	q, err := s.fetchQuotaLive(ctx)
-	if err != nil {
-		qc.mu.Lock()
-		cached := qc.q
-		qc.mu.Unlock()
-		if cached != nil {
-			cp := *cached
-			cp.Source = "cache"
-			cp.Err = err.Error()
-			return &cp
-		}
-		return &Quota{Source: "none", Err: err.Error()}
+	q.UID, q.Nickname = uidOut, nick
+	s.quotaMu.Lock()
+	if s.quotaCache == nil {
+		s.quotaCache = map[string]*quotaEntry{}
 	}
-	qc.mu.Lock()
-	qc.q = q
-	qc.at = time.Now()
-	qc.mu.Unlock()
+	s.quotaCache[key] = &quotaEntry{q: q, at: time.Now()}
+	s.quotaMu.Unlock()
 	return q
 }
 
-func (s *Server) fetchQuotaLive(ctx context.Context) (*Quota, error) {
-	hdr, err := s.cred.Headers(ctx)
+func (s *Server) fetchQuotaLive(ctx context.Context, path string) (*Quota, error) {
+	hdr, err := s.cred.HeadersFor(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +199,7 @@ func (s *Server) fetchQuotaLive(ctx context.Context) (*Quota, error) {
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("官方积分接口 HTTP %d: %s", resp.StatusCode, truncate(string(b), 200))
+		return nil, &quotaHTTPError{resp.StatusCode, string(b)}
 	}
 	var out struct {
 		Code int    `json:"code"`

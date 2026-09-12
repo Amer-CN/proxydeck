@@ -37,3 +37,6 @@ codebuddy-failover.json
 # 国际版（8789）同款运行态文件（v3.10.8 引入；`*-stats.json` 与上行精确名都盖不住 -intl）
 codebuddy-stats-intl.json
 codebuddy-failover-intl.json
+# 账号池停用/移出状态文件（CN/INTL 两实例各一份，运行态不进 git）
+codebuddy-pool.json
+codebuddy-pool-intl.json
