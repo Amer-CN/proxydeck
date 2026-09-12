@@ -2956,6 +2956,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-subhead"><span class="pt-silk sm">账号池 · Accounts</span>
+                  <span class="pt-val" id="cbAccCount"></span>
                   <button type="button" class="ibtn2" id="cbAccRescan">↻ 重新扫描</button></div>
                 <div id="cbAccounts"><div class="pt-models-empty">// 插件启动后自动拉取</div></div>
                 <script>
@@ -2987,24 +2988,33 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   }
                   function accRender(d) {
                     var box = document.getElementById('cbAccounts');
+                    var cnt = document.getElementById('cbAccCount');
                     if (!box) return;
                     var accs = (d && d.accounts) || [];
+                    var ok = accs.filter(function (a) { return !a.cooling; }).length;
+                    if (cnt) cnt.textContent = accs.length ? (ok + '/' + accs.length + ' 可用') : '';
                     if (!accs.length) {
                       box.innerHTML = '<div class="pt-models-empty">未发现登录账号——在桌面端登录后点重新扫描</div>';
                       return;
                     }
-                    box.innerHTML = accs.map(function (a) {
+                    /* 复用团结账号矩阵的 mx-card 卡片语言（LED/徽章/元信息/操作），
+                       与 8788 甲板视觉同源；字段映射：LED+off=冷却、acc-tag=状态、
+                       mx-meta=登录文件。样式类全为既有 CSS，本块零新增样式。 */
+                    box.innerHTML = '<div class="mx-grid">' + accs.map(function (a) {
                       var badge = a.cooling
-                        ? '<span style="color:#F2A61B;font-weight:600">冷却中 · 至 ' + accEsc(accFmt(a.limited_until)) + '</span>'
-                        : '<span style="color:#3ecf8e;font-weight:600">可用</span>';
+                        ? '<span class="acc-tag" style="background:#e8b34b">冷却中 · 至 ' + accEsc(accFmt(a.limited_until)) + '</span>'
+                        : '<span class="acc-tag" style="background:#3ecf8e">可用</span>';
                       var btn = a.cooling
-                        ? '<button type="button" class="ibtn2" data-acc-uid="' + accEsc(a.uid) + '">提前恢复</button>'
+                        ? '<div class="mx-act"><button type="button" class="ibtn2" data-acc-uid="' + accEsc(a.uid) + '">提前恢复</button></div>'
                         : '';
-                      return '<div style="display:flex;align-items:center;gap:10px;padding:5px 0;font-size:12px;min-width:0">' +
-                        '<b style="font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40%">' + accEsc(a.nickname || a.uid_short || '?') + '</b>' +
-                        '<span style="font-family:var(--pt-font-disp);color:var(--pt-ink2)">' + accEsc(a.uid_short || '') + '</span>' +
-                        badge + '<span style="flex:1 1 auto"></span>' + btn + '</div>';
-                    }).join('');
+                      return '<div class="mx-card' + (a.cooling ? ' off' : '') + '">' +
+                        '<div class="mx-top"><span class="mx-led' + (a.cooling ? ' off' : '') + '"></span>' +
+                        '<span class="mx-name">' + accEsc(a.nickname || a.uid_short || '?') + '</span>' +
+                        '<span class="mx-uid">#' + accEsc(a.uid_short || '') + '</span></div>' +
+                        '<div class="mx-badges">' + badge + '</div>' +
+                        '<div class="mx-meta"><span>登录文件 <b>' + accEsc(a.file || '—') + '</b></span></div>' +
+                        btn + '</div>';
+                    }).join('') + '</div>';
                   }
                   async function accPull(opts) {
                     try {
