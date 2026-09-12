@@ -2920,7 +2920,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <div id="cbHy4Detail" style="margin-top:2px"></div></div>
                 </div>
                 <div class="pt-div"></div>
-                <div class="pt-row">
+                <div class="pt-row row-retired" style="display:none">
                   <div class="pt-rowline">
                     <div class="pt-label"><div class="t">hy4 限流兜底</div></div>
                     <span class="pt-val" data-val="cbHy4">—</span>
@@ -2934,7 +2934,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <p class="pt-notice">开启后 8787 在 hy4-preview 撞配额 429 时自动切换 fallback 并按上游重置时点计时，关闭时 429 如实透传。当前 <b data-val="cbHy4State">—</b></p>
                 </div>
                 <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
+                <div class="pt-row row-retired" style="display:none"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t">限流切换模型</div>
                     <div class="s">hy4-preview 撞配额 429 时自动切换到的 fallback 模型</div>
@@ -2954,6 +2954,116 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-label"><div class="t" data-i18n="app.desensitize">脱敏</div></div>
                   <span class="pt-val" id="cbDesVal">已开启 · system/tools 零宽脱敏防审核误拦</span>
                 </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-subhead"><span class="pt-silk sm">账号池 · Accounts</span>
+                  <button type="button" class="ibtn2" id="cbAccRescan">↻ 重新扫描</button></div>
+                <div id="cbAccounts"><div class="pt-models-empty">// 插件启动后自动拉取</div></div>
+                <script>
+                /* WorkBuddy 账号池区（第二期）：看池 / 重新扫描 / 提前恢复冷却号。
+                   自包含块——本文件的引擎与业务层脚本都在其后解析，绑定一律推迟到
+                   DOMContentLoaded；不做 3 秒轮询（账号池状态变化慢，无在线/离线灯）。
+                   端口跟随当前区域：cbRegionApply 按区域改写 #cbEndpoint 文案，
+                   每次拉取实时解析该端口（默认 8787）。 */
+                (function () {
+                  'use strict';
+                  function accEsc(s) {
+                    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                    });
+                  }
+                  function accPort() {
+                    var el = document.getElementById('cbEndpoint');
+                    var m = el ? String(el.textContent).match(/127\.0\.0\.1:(\d+)/) : null;
+                    return m ? m[1] : '8787';
+                  }
+                  function accFmt(ts) { /* MM-dd HH:mm（徽章「冷却中 · 至 …」用） */
+                    function p(n) { return (n < 10 ? '0' : '') + n; }
+                    var d = new Date(ts);
+                    return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+                  }
+                  function accOffline() {
+                    var box = document.getElementById('cbAccounts');
+                    if (box) box.innerHTML = '<div class="pt-models-empty">// 插件启动后自动拉取</div>';
+                  }
+                  function accRender(d) {
+                    var box = document.getElementById('cbAccounts');
+                    if (!box) return;
+                    var accs = (d && d.accounts) || [];
+                    if (!accs.length) {
+                      box.innerHTML = '<div class="pt-models-empty">未发现登录账号——在桌面端登录后点重新扫描</div>';
+                      return;
+                    }
+                    box.innerHTML = accs.map(function (a) {
+                      var badge = a.cooling
+                        ? '<span style="color:#F2A61B;font-weight:600">冷却中 · 至 ' + accEsc(accFmt(a.limited_until)) + '</span>'
+                        : '<span style="color:#3ecf8e;font-weight:600">可用</span>';
+                      var btn = a.cooling
+                        ? '<button type="button" class="ibtn2" data-acc-uid="' + accEsc(a.uid) + '">提前恢复</button>'
+                        : '';
+                      return '<div style="display:flex;align-items:center;gap:10px;padding:5px 0;font-size:12px;min-width:0">' +
+                        '<b style="font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40%">' + accEsc(a.nickname || a.uid_short || '?') + '</b>' +
+                        '<span style="font-family:var(--pt-font-disp);color:var(--pt-ink2)">' + accEsc(a.uid_short || '') + '</span>' +
+                        badge + '<span style="flex:1 1 auto"></span>' + btn + '</div>';
+                    }).join('');
+                  }
+                  async function accPull(opts) {
+                    try {
+                      var r = await fetch('http://127.0.0.1:' + accPort() + '/v1/accounts', opts);
+                      accRender(await r.json());
+                    } catch (e) { accOffline(); }
+                  }
+                  function accLoad() { return accPull(); }
+                  async function accRescan() {
+                    var btn = document.getElementById('cbAccRescan');
+                    if (btn) btn.disabled = true;
+                    await accPull({
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'rescan' })
+                    });
+                    if (btn) btn.disabled = false;
+                  }
+                  async function accClearCool(uid) {
+                    try {
+                      await fetch('http://127.0.0.1:' + accPort() + '/v1/accounts', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'clear_cool', uid: uid })
+                      });
+                    } catch (e) {}
+                    accLoad(); /* 徽章立即回「可用」，不轮询 */
+                  }
+                  function accBind() {
+                    var rs = document.getElementById('cbAccRescan');
+                    if (rs) rs.onclick = accRescan;
+                    var box = document.getElementById('cbAccounts');
+                    if (box) box.addEventListener('click', function (ev) {
+                      var t = ev.target && ev.target.closest ? ev.target.closest('[data-acc-uid]') : null;
+                      if (t) accClearCool(t.getAttribute('data-acc-uid'));
+                    });
+                    /* 统计区「↻ 刷新」连带重拉账号池（addEventListener 与其积分刷新 onclick 并存，不覆盖） */
+                    var rf = document.getElementById('cbRefresh');
+                    if (rf) rf.addEventListener('click', accLoad);
+                    /* 区域切换后重拉（第二期复审 P2）：cbRegionApply 切区只改 #cbEndpoint 文案，
+                       不通知本列表，会停在旧区域的池。真实切换控件是拨杆 [data-gear="cbRegion"]
+                       （无 id，无 cbRegionApply 按钮），click 在引擎改完端点文案后派发，再留
+                       200ms 等同 tick 的 refreshPluginView 跑完。元素不存在则静默不绑。 */
+                    var rg = document.querySelector('[data-gear="cbRegion"]');
+                    if (rg) rg.addEventListener('click', function () { setTimeout(accLoad, 200); });
+                    /* 进入 WorkBuddy 页签时拉一次（引擎全局接口，注册进 modeListeners） */
+                    if (window.PTApp && window.PTApp.onModeChange) {
+                      window.PTApp.onModeChange(function (m) { if (m === 'cb') accLoad(); });
+                    }
+                  }
+                  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', accBind);
+                  else accBind();
+                })();
+                </script>
+                <style>
+                /* hy4 两行永久退役（第二期复审 P2）：区域切换引擎（cbRegionApply）切回国内版时
+                   会把 .pt-row 的内联 display 置 ''，2923/2937 行的 inline none 被抹掉后行复活。
+                   row-retired 类 + !important 让级联永远判 none，引擎 JS（7242/7244）一行不动。 */
+                .pt-row.row-retired { display: none !important; }
+                </style>
+                <div class="pt-div"></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
                   <button type="button" class="ibtn2" id="cbRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
@@ -3439,9 +3549,9 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="fx-msg" data-fx-msg>
                     <p>— 本次检测方案 —</p>
                     <p>① 管道探针 8 项：tokenizer 计数、错误文本格式、finish_reason 形态逐项与基准比对。</p>
-                    <p>② 分布采样 60 次：token 频次统计，计算与基准分布的余弦相似度。</p>
+                    <p>② 分布采样 60 次：token 频次统计，计算与基准分布的余弦相似度（参考项，不参与判定）。</p>
                     <p>③ 金丝雀答题 3 题：算术、常识、复述，验证推理能力未被替换。</p>
-                    <p>④ 综合判定：探针 + 分布 + 金丝雀三源交叉，低于阈值即报注水嫌疑。</p>
+                    <p>④ 综合判定：探针 + 金丝雀交叉判定，低于阈值即报注水嫌疑；分布相似度仅作参考展示。</p>
                   </div>
                 </div>
                 <div class="fx-minfo-clip">
@@ -5938,7 +6048,8 @@ var PT_I18N = {
     setScReadout('wtScVerdict', '未检测', '');
     setScReadout('wtScSim', '—', '');
   }
-  /* 分布指纹卡：相似度百分比+判定档+众数/均值统计 */
+  /* 分布指纹卡：相似度百分比+众数/均值统计（参考项，不参与判定——判档线落在
+     同模型自比的抽样噪声带内，只展示数字） */
   function renderWaterDist(dist, sim) {
     if (!dist) return '<div class="if-empty">// 本次未采样分布</div>';
     var rows = '';
@@ -5946,7 +6057,8 @@ var PT_I18N = {
       rows += '<div class="if-row"><span class="m">分布相似度</span>' +
         '<span class="u">cos=' + (sim.cosine || 0).toFixed(3) + ' · JS散度=' + (sim.js_divergence || 0).toFixed(3) + '</span>' +
         '<span class="u">综合=' + ((sim.overall || 0) * 100).toFixed(1) + '%（众数分 ' + ((sim.mode_score || 0) * 100).toFixed(0) + '%）</span>' +
-        '<span class="u">众数 ' + (sim.mode_a || '?') + ' vs 基准 ' + (sim.mode_b || '?') + '</span></div>';
+        '<span class="u">众数 ' + (sim.mode_a || '?') + ' vs 基准 ' + (sim.mode_b || '?') + '</span>' +
+        '<span class="u">参考项，不参与判定（同模型自比噪声即达 0.55，判档线在噪声带内）</span></div>';
     }
     if (dist.stats) {
       rows += '<div class="if-row"><span class="m">本次统计</span>' +
@@ -6244,7 +6356,7 @@ var PT_I18N = {
       return '<div class="fx-report">' +
         '<div class="fx-rsec"><p class="fx-rsec-h">① 检测项<small>ITEMS</small></p>' + itemsHtml + costHtml + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">② 管道探针<small>PIPELINE PROBES</small></p>' + probesHtml + '</div>' +
-        '<div class="fx-rsec"><p class="fx-rsec-h">③ 分布指纹<small>DISTRIBUTION</small></p>' + distHtml + weakNote + '</div>' +
+        '<div class="fx-rsec"><p class="fx-rsec-h">③ 分布指纹（参考项，不参与判定）<small>DISTRIBUTION</small></p>' + distHtml + weakNote + '</div>' +
         '<div class="fx-rsec"><p class="fx-rsec-h">④ 金丝雀<small>CANARY</small></p>' + canaryHtml + '</div>' +
         histSec +
         '</div>';
