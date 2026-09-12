@@ -2958,9 +2958,10 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <div class="pt-subhead"><span class="pt-silk sm">账号池 · Accounts</span>
                   <span class="pt-val" id="cbAccCount"></span>
                   <button type="button" class="ibtn2" id="cbAccRescan">↻ 重新扫描</button></div>
+                <p class="pt-silk" id="cbAccHint" style="margin:0 0 6px">添加账号：在 WorkBuddy 桌面端登录该账号，然后点「↻ 重新扫描」自动入池。停用/移除 只影响代理轮换，不动桌面端的登录文件。</p>
                 <div id="cbAccounts"><div class="pt-models-empty">// 插件启动后自动拉取</div></div>
                 <script>
-                /* WorkBuddy 账号池区（第二期）：看池 / 重新扫描 / 提前恢复冷却号。
+                /* WorkBuddy 账号池区（第三期）：看池 / 重新扫描 / 提前恢复 / 停用启用 / 移除恢复。
                    自包含块——本文件的引擎与业务层脚本都在其后解析，绑定一律推迟到
                    DOMContentLoaded；不做 3 秒轮询（账号池状态变化慢，无在线/离线灯）。
                    端口跟随当前区域：cbRegionApply 按区域改写 #cbEndpoint 文案，
@@ -2990,30 +2991,54 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     var box = document.getElementById('cbAccounts');
                     var cnt = document.getElementById('cbAccCount');
                     if (!box) return;
-                    var accs = (d && d.accounts) || [];
-                    var ok = accs.filter(function (a) { return !a.cooling; }).length;
-                    if (cnt) cnt.textContent = accs.length ? (ok + '/' + accs.length + ' 可用') : '';
+                    var all = (d && d.accounts) || [];
+                    /* removed 卡排最后（其余保持 mtime 新→旧），整卡减光；
+                       计数 X/Y 口径：X = 未冷却+未失效+启用+未移除，Y = 未移除 */
+                    var accs = all.filter(function (a) { return !a.removed; })
+                      .concat(all.filter(function (a) { return a.removed; }));
+                    var ok = accs.filter(function (a) { return !a.cooling && !a.dead && a.enabled && !a.removed; }).length;
+                    var total = accs.filter(function (a) { return !a.removed; }).length;
+                    if (cnt) cnt.textContent = total ? (ok + '/' + total + ' 可用') : '';
                     if (!accs.length) {
                       box.innerHTML = '<div class="pt-models-empty">未发现登录账号——在桌面端登录后点重新扫描</div>';
                       return;
                     }
-                    /* 复用团结账号矩阵的 mx-card 卡片语言（LED/徽章/元信息/操作），
-                       与 8788 甲板视觉同源；字段映射：LED+off=冷却、acc-tag=状态、
-                       mx-meta=登录文件。样式类全为既有 CSS，本块零新增样式。 */
+                    /* 复用团结账号矩阵的 mx-card 卡片语言，字段全表对齐 mxCardHtml：
+                       LED/昵称/#uid/状态徽章/进行中 N/调用次数/最近使用/登录文件/
+                       动作区。徽章优先级（取一）：已移除 → 凭据失效(401) → 已停用 →
+                       冷却中·至 … → 可用；进行中 N 与状态徽章同行（ink 底，团结同款）。
+                       动作区按状态出按钮：removed → 恢复；其余 → 停用/启用 + 移除，
+                       cooling 且非 dead/removed 再加「提前恢复」（清冷却不复活死号）。
+                       样式类全为既有 CSS，本块零新增样式。 */
                     box.innerHTML = '<div class="mx-grid">' + accs.map(function (a) {
-                      var badge = a.cooling
-                        ? '<span class="acc-tag" style="background:#e8b34b">冷却中 · 至 ' + accEsc(accFmt(a.limited_until)) + '</span>'
-                        : '<span class="acc-tag" style="background:#3ecf8e">可用</span>';
-                      var btn = a.cooling
-                        ? '<div class="mx-act"><button type="button" class="ibtn2" data-acc-uid="' + accEsc(a.uid) + '">提前恢复</button></div>'
-                        : '';
-                      return '<div class="mx-card' + (a.cooling ? ' off' : '') + '">' +
-                        '<div class="mx-top"><span class="mx-led' + (a.cooling ? ' off' : '') + '"></span>' +
+                      var off = a.dead || a.cooling || !a.enabled || a.removed;
+                      var badge = a.removed
+                        ? '<span class="acc-tag expired">已移除</span>'
+                        : a.dead
+                          ? '<span class="acc-tag fail">凭据失效（401）</span>'
+                          : !a.enabled
+                            ? '<span class="acc-tag expired">已停用</span>'
+                            : a.cooling
+                              ? '<span class="acc-tag" style="background:#e8b34b">冷却中 · 至 ' + accEsc(accFmt(a.limited_until)) + '</span>'
+                              : '<span class="acc-tag" style="background:#3ecf8e">可用</span>';
+                      var load = a.inflight || 0;
+                      if (load > 0) badge += ' <span class="acc-tag" style="background:var(--pt-ink)">进行中 ' + load + '</span>';
+                      var lastUsed = a.last_used
+                        ? '最近 ' + accEsc(String(a.last_used).slice(5, 16).replace('T', ' '))
+                        : '未使用';
+                      var acts = a.removed
+                        ? '<button type="button" class="ibtn2" data-acc-restore="' + accEsc(a.uid) + '">恢复</button>'
+                        : '<button type="button" class="ibtn2" data-acc-toggle="' + accEsc(a.uid) + '" data-on="' + (a.enabled ? '1' : '0') + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
+                          '<button type="button" class="ibtn2" data-acc-remove="' + accEsc(a.uid) + '">移除</button>' +
+                          ((a.cooling && !a.dead) ? '<button type="button" class="ibtn2" data-acc-cool="' + accEsc(a.uid) + '">提前恢复</button>' : '');
+                      return '<div class="mx-card' + (off ? ' off' : '') + '">' +
+                        '<div class="mx-top"><span class="mx-led' + (off ? ' off' : '') + '"></span>' +
                         '<span class="mx-name">' + accEsc(a.nickname || a.uid_short || '?') + '</span>' +
                         '<span class="mx-uid">#' + accEsc(a.uid_short || '') + '</span></div>' +
                         '<div class="mx-badges">' + badge + '</div>' +
+                        '<div class="mx-meta"><span>调用 <b>' + (a.use_count || 0) + '</b> 次</span><span>' + lastUsed + '</span></div>' +
                         '<div class="mx-meta"><span>登录文件 <b>' + accEsc(a.file || '—') + '</b></span></div>' +
-                        btn + '</div>';
+                        '<div class="mx-act">' + acts + '</div></div>';
                     }).join('') + '</div>';
                   }
                   async function accPull(opts) {
@@ -3032,22 +3057,34 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     });
                     if (btn) btn.disabled = false;
                   }
-                  async function accClearCool(uid) {
+                  async function accAction(body) {
                     try {
                       await fetch('http://127.0.0.1:' + accPort() + '/v1/accounts', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'clear_cool', uid: uid })
+                        body: JSON.stringify(body)
                       });
                     } catch (e) {}
-                    accLoad(); /* 徽章立即回「可用」，不轮询 */
+                    accLoad(); /* 与既有 rescan/clear_cool 同款就地刷新（不轮询） */
                   }
                   function accBind() {
                     var rs = document.getElementById('cbAccRescan');
                     if (rs) rs.onclick = accRescan;
                     var box = document.getElementById('cbAccounts');
                     if (box) box.addEventListener('click', function (ev) {
-                      var t = ev.target && ev.target.closest ? ev.target.closest('[data-acc-uid]') : null;
-                      if (t) accClearCool(t.getAttribute('data-acc-uid'));
+                      var t = ev.target && ev.target.closest
+                        ? ev.target.closest('[data-acc-toggle],[data-acc-remove],[data-acc-restore],[data-acc-cool]') : null;
+                      if (!t) return;
+                      var uid = t.getAttribute('data-acc-toggle') || t.getAttribute('data-acc-remove') ||
+                        t.getAttribute('data-acc-restore') || t.getAttribute('data-acc-cool');
+                      if (t.hasAttribute('data-acc-toggle')) {
+                        accAction({ action: 'toggle', uid: uid, enabled: t.getAttribute('data-on') !== '1' });
+                      } else if (t.hasAttribute('data-acc-remove')) {
+                        accAction({ action: 'remove', uid: uid });
+                      } else if (t.hasAttribute('data-acc-restore')) {
+                        accAction({ action: 'restore', uid: uid });
+                      } else {
+                        accAction({ action: 'clear_cool', uid: uid }); /* 徽章立即回「可用」 */
+                      }
                     });
                     /* 统计区「↻ 刷新」连带重拉账号池（addEventListener 与其积分刷新 onclick 并存，不覆盖） */
                     var rf = document.getElementById('cbRefresh');
@@ -3076,6 +3113,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <div class="pt-div"></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
+                  <select id="cbQuotaUser" style="display:none;margin-right:6px;font-size:12px;padding:2px 4px;background:var(--pt-bg);color:var(--pt-ink);border:1px solid var(--pt-line);border-radius:4px"></select>
                   <button type="button" class="ibtn2" id="cbRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
                 <div class="pt-grid">
                   <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
@@ -7591,6 +7629,43 @@ var PT_I18N = {
         else renderTuanjieQuotaCache(V);
       }
       if (mode === 'cb') {
+        /* 积分面板账号选择器（对齐 tjQuotaUser）：填充时机与下方账号池块共用触发点
+           （进页签/点火/切区都会跑 refreshPluginView('cb')），fetch 各发各的、两块解耦 */
+        (async function () {
+          var sel = $('cbQuotaUser');
+          if (!sel) return;
+          try {
+            var d = await (await fetch('http://127.0.0.1:' + V.port + '/v1/accounts')).json();
+            var accs = d.accounts || [];
+            if (accs.length <= 1) { /* ≤1 号无切换可言：收起下拉；区域感知——选中号失效重选 */
+              sel.style.display = 'none';
+              cbQuotaUserId = accs.length ? accs[0].uid : '';
+              return;
+            }
+            sel.style.display = '';
+            var prev = sel.value;
+            /* 死号/停用号追加后缀（从 /v1/accounts 的 dead/enabled 字段取）：
+               选中死号时积分面板显示凭据失效态（loadCodebuddyQuota 渲染 err 分支） */
+            sel.innerHTML = accs.map(function (a) {
+              var mark = a.dead ? ' · 凭据失效' : (!a.enabled ? ' · 已停用' : '');
+              return '<option value="' + escHtml(a.uid) + '">' +
+                escHtml((a.nickname || a.uid_short || '?') + ' · ' + (a.uid_short || '') + mark) + '</option>';
+            }).join('');
+            /* 保持上次选择；CN/INTL 两套账号互不相通，切区后旧 uid 不在新池里即失效
+               重选（首次/切区默认池内第一个号=mtime 最新登录） */
+            if (prev && accs.some(function (a) { return a.uid === prev; })) {
+              sel.value = prev;
+            } else {
+              sel.value = accs[0].uid;
+            }
+            cbQuotaUserId = sel.value;
+            renderCodebuddyQuotaCache(V); /* 选中账号的缓存立刻上屏（不拉官网） */
+            sel.onchange = function () {
+              cbQuotaUserId = sel.value;
+              loadCodebuddyQuota(V, false); /* 切账号拉一次，走后端 5 分钟缓存，不 force */
+            };
+          } catch (e) {}
+        })();
         /* WorkBuddy 积分同规矩：拉杆启动后拉一次 + 手动刷新，轮询不打官网 */
         if (justIgnited) loadCodebuddyQuota(V, false);
         else renderCodebuddyQuotaCache(V);
@@ -7977,26 +8052,54 @@ var PT_I18N = {
     }
   }
 
-  /* WorkBuddy 积分：拉杆启动后拉一次 + 「↻ 刷新」手动拉，轮询不打官网（与团结同规矩）。
+  /* WorkBuddy 积分：拉杆启动后拉一次 + 「↻ 刷新」手动拉/切账号拉，轮询不打官网（与团结同规矩）。
      成功响应存 localStorage，GUI 打开时只画缓存。force=true 跳过后端 5 分钟缓存。
-     缓存键按区域分开：国内版沿用原键（老用户零变化），国际版独立键——
-     防止两区积分互串屏。 */
-  function cbQuotaCacheKey() { return cbRegion === 'intl' ? 'cbQuotaCache_intl' : 'cbQuotaCache'; }
+     缓存键按 区域+账号 分键：CN/INTL 两区、区内多号互不串屏；旧键 cbQuotaCache /
+     cbQuotaCache_intl 不迁移不读取——首查一次即回填，无兼容层。 */
+  function cbQuotaCacheKey(uid) {
+    return 'cbQuotaCache_' + (cbRegion === 'intl' ? 'intl' : 'cn') + '_' + (uid || cbQuotaUserId || '_default');
+  }
   async function loadCodebuddyQuota(V, force) {
+    var params = [];
+    if (cbQuotaUserId) params.push('uid=' + encodeURIComponent(cbQuotaUserId));
+    if (force) params.push('refresh=1');
+    var qs = params.length ? '?' + params.join('&') : '';
     try {
-      var q2 = await (await fetch('http://127.0.0.1:' + V.port + '/quota' + (force ? '?refresh=1' : ''))).json();
-      if (!q2 || q2.source === 'none') return; /* 无凭据：保持现状，不覆盖缓存画面 */
-      try { localStorage.setItem(cbQuotaCacheKey(), JSON.stringify({ at: Date.now(), q: q2 })); } catch (e) {}
+      var q2 = await (await fetch('http://127.0.0.1:' + V.port + '/quota' + qs)).json();
+      if (!q2 || q2.source === 'none') {
+        /* 错误态如实上屏（选中死号 → 凭据失效态；其他错误 → 查询失败）；
+           彻底没有 err（真无凭据）保持现状，不覆盖缓存画面，也不写 localStorage */
+        if (q2 && q2.err) renderCodebuddyQuota(V, q2);
+        return;
+      }
+      /* 按响应里的账号 uid 落键：点火首查与下拉填充并发时请求可能没带 uid，
+         用响应 uid 落键保证首查回填后必然被 renderCodebuddyQuotaCache 读到 */
+      try { localStorage.setItem(cbQuotaCacheKey(q2.uid), JSON.stringify({ at: Date.now(), q: q2 })); } catch (e) {}
       renderCodebuddyQuota(V, q2);
     } catch (e) {}
   }
   function renderCodebuddyQuota(V, q2) {
     if (!q2 || q2.source === 'none') {
-      pSet(V, 'StPoints', '桌面端'); pSet(V, 'StPointsSub', '无公开 API · 官网查看');
+      /* source:none 细分（修"401 误显示无公开 API"的观感根因）：err 含 401 =
+         凭据失效（与账号矩阵死号徽章同口径）；其他错误如实给摘要；彻底没有
+         err（真无凭据）才保留旧文案 */
+      if (q2 && q2.err) {
+        var em = String(q2.err);
+        if (em.indexOf('401') >= 0) {
+          pSet(V, 'StPoints', '凭据失效（401）');
+          pSet(V, 'StPointsSub', '桌面端重新登录该账号后点刷新');
+        } else {
+          pSet(V, 'StPoints', '查询失败');
+          pSet(V, 'StPointsSub', em.slice(0, 80));
+        }
+      } else {
+        pSet(V, 'StPoints', '桌面端'); pSet(V, 'StPointsSub', '无公开 API · 官网查看');
+      }
       return;
     }
     pSet(V, 'StPoints', intFmt(q2.total));
-    pSet(V, 'StPointsSub', (q2.packs || 0) + ' 个资源包 · 官方数据');
+    /* 副行缀上账号名（"谁的积分"）——nickname 来自响应（后端按账号填），不读全局 */
+    pSet(V, 'StPointsSub', (q2.packs || 0) + ' 个资源包 · 官方数据' + (q2.nickname ? ' · ' + q2.nickname : ''));
     if (q2.active && q2.active.name) {
       var an = String(q2.active.name).length > 12 ? String(q2.active.name).slice(0, 12) + '…' : q2.active.name;
       pSet(V, 'StBudget', intFmt(q2.active.used) + '/' + intFmt(q2.active.size));
@@ -9333,6 +9436,7 @@ var PT_I18N = {
   /* ================= 更新检查 ================= */
   var UI_CUR = 'v3.12.1';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
+  var cbQuotaUserId = ''; // WorkBuddy 积分面板选中的账号（空串=默认最新号；区域感知：切区后失效重选）
   function verCmp(a, b) {
     var pa = (a || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
     var pb = (b || '').replace(/^v/i, '').split('.').map(function (n) { return parseInt(n, 10) || 0; });
