@@ -6,18 +6,18 @@ func TestExtract(t *testing.T) {
 	cases := []struct{ name, prompt, want string }{
 		{
 			"英文标记+反斜杠路径",
-			"[System]\nYou are a coding agent. Working directory: F:\\AIXM\\command\n[User]\nhi",
-			"F:\\AIXM\\command",
+			"[System]\nYou are a coding agent. Working directory: F:\\AIXM\\proxydeck\n[User]\nhi",
+			"F:\\AIXM\\proxydeck",
 		},
 		{
 			"中文标记+全角冒号",
-			"[System]\n工作目录：F:\\AIXM\\command\n[User]\nhi",
-			"F:\\AIXM\\command",
+			"[System]\n工作目录：F:\\AIXM\\proxydeck\n[User]\nhi",
+			"F:\\AIXM\\proxydeck",
 		},
 		{
 			"cwd 标记+正斜杠",
-			"[System]\ncwd: F:/AIXM/command\n[User]\nhi",
-			"F:/AIXM/command",
+			"[System]\ncwd: F:/AIXM/proxydeck\n[User]\nhi",
+			"F:/AIXM/proxydeck",
 		},
 		{
 			"不存在的路径必须拒绝（回落兜底）",

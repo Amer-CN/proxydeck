@@ -96,16 +96,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
    修掉「官方只在桌面端轮换种子会漏报」的盲区。~~ ✅ 已随 v3.14.0 发布，且用户当日
    彻底关机重启全量换装，后端已生效。
 2. hy4 键盘可达性（拨杆同位置同问题，用户未要求补，先记账）。
-3. 本地文件夹改名 `F:\AIXM\command` → `F:\AIXM\proxydeck`（2026-09-13 用户拍板，
-   名字统一最后一公里：go.mod / 远端 / exe 名早已是 proxydeck）。全库写死此路径
-   仅 3 处（`docs/fidelity-audit.md`、`internal/clientcwd/cwd_test.go`）改后 sed。
-   ⚠ 只能在发版换装重启窗口做：运行中进程锁目录，改前先停全部 ProxyDeck 进程；
-   改后在 ZCode 客户端重新打开新路径（旧会话挂在旧路径下），桌面快捷方式如有需同步。
-   → 进度（2026-09-13 随 v3.15.0 发版）：ProxyDeck 进程已全停，但 ZCode 宿主自身
-   锁目录（工作区 watcher），`mv` 报 Device or resource busy——发版已在旧路径完成，
-   改名待用户关闭 ZCode 后手动执行（关 ZCode → `mv F:\AIXM\command F:\AIXM\proxydeck`
-   → ZCode 重开新路径），随后会话补 sed 两文件（cwd_test 依赖目录真实存在，mv 前
-   sed 会让 go test 红，故不提前）。
+3. ~~本地文件夹改名 `F:\AIXM\command` → `F:\AIXM\proxydeck`。~~ ✅ 已完成（2026-09-13
+   20:13，计划任务链条：handle.exe 揪出 Comate 残留锁主 → 改名成功 → 新路径拉起反代
+   6/6 health 全绿 → ZCode 重启）。全库路径引用已同步（cwd_test 3 用例 6 处 +
+   fidelity-audit 1 处）。坑入册：ZCode 残留工具进程（Comate zulu-cli）的 CWD 是
+   隐形锁，CommandLine 匹配抓不到，须 handle.exe 扫句柄属主再精准清除。
 
 ## CHANGELOG 行文规范（2026-08-31 定，用户裁决）
 

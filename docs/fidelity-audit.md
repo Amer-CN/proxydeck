@@ -1,7 +1,7 @@
 # pomme-ui 传真机复刻 · 忠实度判定说明书
 
 > 用途：以后任何「这样做到底对不对」「这玩意是不是我们自己编的」的争论，先查本文。
-> 参照物：`F:\AIXM\pomme-ui`（原版）。被审物：`F:\AIXM\command\app\ui.html` 里的传真机（`--fax` 独立浮窗，body.fax-standalone 模式；页内 fxOverlay 弹层为旧形态）。
+> 参照物：`F:\AIXM\pomme-ui`（原版）。被审物：`F:\AIXM\proxydeck\app\ui.html` 里的传真机（`--fax` 独立浮窗，body.fax-standalone 模式；页内 fxOverlay 弹层为旧形态）。
 > 本文所有断言都有代码出处（文件:行号），出处失效时以重新 grep 为准，不以记忆为准。
 
 ---
