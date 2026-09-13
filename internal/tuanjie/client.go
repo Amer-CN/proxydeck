@@ -181,8 +181,31 @@ func accessTokenFP() (string, bool) {
 	return fmt.Sprintf("%d-%d", b.ModTime().UnixNano(), b.Size()), true
 }
 
-// loadAccessToken 读取本地登录态。
+// tokenCache 本地登录态内容缓存（指纹 = oauth_creds.json 的 mtime+size）：
+// /accounts 轮询每 3s 一次、本地账号每笔转发都要取 token，原来每次都 ReadFile+解析；
+// 桌面端切号会重写该文件，指纹变了才重读（accessTokenFP 同款口径）。
+// 读缓存与读文件之间存在改写窗口时，最多把新内容记到旧指纹下——
+// 桌面端改写必然伴随指纹变化，下一调用即发现失配自然重读，自愈。
+var (
+	tokenCacheMu  sync.Mutex
+	tokenCacheFP  string
+	tokenCacheOk  bool
+	tokenCacheVal string
+)
+
+// loadAccessToken 读取本地登录态（文件未变时回缓存）。
 func loadAccessToken() (string, error) {
+	fp, ok := accessTokenFP()
+	if !ok {
+		return "", errors.New("读取团结登录态失败（请先登录团结 Cowork 桌面端）")
+	}
+	tokenCacheMu.Lock()
+	if tokenCacheOk && tokenCacheFP == fp {
+		v := tokenCacheVal
+		tokenCacheMu.Unlock()
+		return v, nil
+	}
+	tokenCacheMu.Unlock()
 	b, err := os.ReadFile(oauthCredsPath())
 	if err != nil {
 		return "", fmt.Errorf("读取团结登录态失败（请先登录团结 Cowork 桌面端）: %w", err)
@@ -194,6 +217,9 @@ func loadAccessToken() (string, error) {
 	if c.AccessToken == "" {
 		return "", errors.New("oauth_creds.json 里没有 access_token")
 	}
+	tokenCacheMu.Lock()
+	tokenCacheFP, tokenCacheOk, tokenCacheVal = fp, true, c.AccessToken
+	tokenCacheMu.Unlock()
 	return c.AccessToken, nil
 }
 

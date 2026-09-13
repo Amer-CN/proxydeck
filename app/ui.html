@@ -4307,9 +4307,11 @@ var PT_I18N = {
       var cell = cells[ci]; ci++;
       if (!cell) return;
       cell.style.setProperty('--d', +ch);
-      $$('span', cell).forEach(function (s) {
-        s.classList.toggle('cur', parseFloat(s.style.getPropertyValue('--v')) === +ch);
-      });
+      /* buildOdo 的 span 顺序固定（v=-1..10 → 索引 0..11），数字命中条件可按
+         索引直接算：索引 k 的数字 = (k+9)%10。免掉逐 span 读 --v 的 12 次
+         样式读取（uptime 每秒滚动一次，原每格 12 读 + 12 切换纯属白烧） */
+      var kids = cell.children, d = +ch;
+      for (var k = 0; k < kids.length; k++) kids[k].classList.toggle('cur', d === (k + 9) % 10);
     });
   }
 
@@ -4994,11 +4996,19 @@ var PT_I18N = {
      故直接探上游 whoami（免费端点）。状态不变一律静默——只在失效/恢复时出声，
      避免 30 分钟一次的心跳刷屏。lastKeyProbe 记忆上次状态（含首次 SYS 已写过）。 */
   var lastKeyProbe = '';
+  var keyProbeRetry = 0;
   function probeStoredKey() {
     if (!HAS_BRIDGE) return;
     call('ProbeKey').then(function (r) {
       if (!r || !r.status) return;
       var st = r.status;
+      /* 探测已下沉 Go 后台（原同步 10s 会把 UI 线程整个拖死）：
+         pending = 后台探着，2s 后重查，最多 5 次（探测超时 10s 内） */
+      if (st === 'pending') {
+        if (keyProbeRetry < 5) { keyProbeRetry++; setTimeout(probeStoredKey, 2000); }
+        return;
+      }
+      keyProbeRetry = 0;
       if (st === 'unauthorized' && lastKeyProbe !== 'unauthorized') {
         logInto($('logStream'), 'err', '存储的 CommandCode key 探活失败（401）——请到设置页更换或清空');
         toast('err', 'API Key 已失效', '探活返回 401，请更换或清空');
@@ -7330,6 +7340,7 @@ var PT_I18N = {
   var _tjPollBusy = false;
   setInterval(function () {
     if (_tjPollBusy) return;                       /* 上一 tick 未完成不叠加 */
+    if (document.hidden) return;
     if (!(curMode === 'tj' || curMode === 'water' || $('mxGrid'))) return;
     _tjPollBusy = true;
     Promise.allSettled([
@@ -7751,7 +7762,7 @@ var PT_I18N = {
 
   var _psBusy = false;
   async function pollState() {
-    if (_psBusy) return;   /* 上一 tick 未完成不叠加（端口挂起时请求与闭包堆积） */
+    if (_psBusy || document.hidden) return;   /* 上一 tick 未完成不叠加（端口挂起时请求与闭包堆积） */
     _psBusy = true;
     try {
       var st = await call('GetState');
@@ -7983,7 +7994,7 @@ var PT_I18N = {
   }
   var _klBusy = false;
   async function refreshKeyLights() {
-    if (_klBusy) return;   /* 上一 tick 未完成不叠加 */
+    if (_klBusy || document.hidden) return;   /* 上一 tick 未完成不叠加 */
     _klBusy = true;
     try {
       if (typeof window.ccLiveSnapshot === 'function') {
@@ -9584,7 +9595,17 @@ var PT_I18N = {
       try { localStorage.setItem('latProxy', proxy); } catch (e) {}
       btn.disabled = true; btn.textContent = '测中…';
       res.innerHTML = '<span class="lat-idle">正在探测 3 个目标' + (proxy ? '（经 ' + esc(proxy) + '）' : '') + '…</span>';
-      var r = await call('LatencyTest', proxy);
+      /* 探测已下沉 Go 后台（原同步最坏分钟级，探测期间整窗冻结）：
+         testing = 后台跑着，800ms 轮询取结果（探测期间界面可正常操作） */
+      var r = null;
+      for (var i = 0; i < 90; i++) {
+        r = await call('LatencyTest', proxy);
+        if (r && r.msg === 'testing') {
+          await new Promise(function (ok) { setTimeout(ok, 800); });
+          continue;
+        }
+        break;
+      }
       if (!r || !r.ok || !r.targets || !r.targets.length) {
         res.innerHTML = '<span class="lat-t err"><b>探测失败</b></span>';
       } else {
@@ -9831,7 +9852,11 @@ var PT_I18N = {
 
   /* ================= 轮询启动 ================= */
   var curMode = 'cmd';
+  /* 窗口隐藏（最小化/被盖住）时全部轮询停摆——后台不渲染却照常打端口纯属空转；
+     切回前台由 visibilitychange 立即补一轮，不干等 tick。计时类（一键更新进度、
+     hy4 倒计时）不受影响，照常跑。uptime 计数由 /health 的 uptimeSec 重进时重同步。 */
   setInterval(function () {
+    if (document.hidden) return;
     if (S.phase === 'running' || S.phase === 'external') S.uptime++;
     if (curMode === 'cmd') paintCmdOdo();
   }, 1000);
@@ -9839,6 +9864,16 @@ var PT_I18N = {
   /* 存储 key 探活：30 分钟一次（状态不变静默，见 probeStoredKey） */
   setInterval(probeStoredKey, 30 * 60 * 1000);
   /* 官网用量不再周期刷新：拉杆启动/首次运行/手动按钮各触发一次（refreshStats(true)） */
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    pollState();
+    refreshKeyLights();
+    if (curMode !== 'cmd') refreshPluginView(curMode);
+    if (curMode === 'tj' || curMode === 'water' || $('mxGrid')) {
+      loadTuanjieAccounts(); loadTuanjieInflight(); loadTuanjieActivity();
+    }
+  });
 
   PTApp.onModeChange(function (m) {
     hideModelTip();
@@ -9853,7 +9888,7 @@ var PT_I18N = {
 
   var _ppBusy = false;
   var _pluginPoll = setInterval(function () {
-    if (_ppBusy || curMode === 'cmd') return;   /* 上一 tick 未完成不叠加 */
+    if (_ppBusy || curMode === 'cmd' || document.hidden) return;   /* 上一 tick 未完成不叠加 */
     _ppBusy = true;
     Promise.resolve(refreshPluginView(curMode)).then(
       function () { _ppBusy = false; },

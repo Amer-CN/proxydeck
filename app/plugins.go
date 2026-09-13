@@ -253,15 +253,9 @@ func (a *app) pluginStart(id string) error {
 	st.lastErr = ""
 	st.mu.Unlock()
 
-	// 等待就绪（原生秒起；uvicorn 较慢，给足 15s）
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		if httpOK(a.pluginHealthURL(*d)) {
-			return nil
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
-	// 启动超时不算失败：可能健康检查路径不同，留给面板状态灯判断
+	// 不再同步等就绪：本方法在 WebView2 UI 线程的串行 bind 队列里执行，
+	// 原先最长 15s 的就绪轮询会把整窗冻死（原生后端秒起，等它纯属白冻）。
+	// 就绪状态交给 pluginList 的 3s 探活：启动中显示 starting，健康后亮 running。
 	return nil
 }
 

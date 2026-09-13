@@ -14,6 +14,8 @@ func TestUsageStatsPersistAcrossRestart(t *testing.T) {
 	s := NewUsageStats(file)
 	s.Record("deepseek/deepseek-v4-flash", 1000, 500, 9000, 200)
 	s.Record("deepseek/deepseek-v4-flash", 2000, 800, 12000, 0)
+	// Record 落盘已节流（≥2s 一次，热路径不再每笔写盘）：模拟重启前显式冲刷
+	s.Flush()
 
 	// Simulate restart: new instance loading the same file.
 	s2 := NewUsageStats(file)

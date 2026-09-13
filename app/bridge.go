@@ -318,6 +318,14 @@ var (
 // 公共镜像时有失效（2026-09-08 实测 mirror.ghproxy.com 已死），哪个挂了改这里。
 var updateMirrorCandidates = []string{"https://ghfast.top", "https://gh-proxy.com"}
 
+// keyProbeCache 存储 key 探活结果缓存：bind 只读，真探在后台 goroutine（见 ccProbeKey）。
+var (
+	keyProbeMu     sync.Mutex
+	keyProbeCached string
+	keyProbeAt     time.Time
+	keyProbeBusy   bool
+)
+
 // 官网用量缓存：bind 读缓存，后台 goroutine 只在前端触发（usageRefreshCh）时
 // 刷新一次——拉杆启动/手动刷新各触发一次，不做周期轮询（官网 429 限流教训）。
 var (
@@ -331,6 +339,9 @@ var (
 // 注意：Go 默认读环境变量代理，不读 Windows 系统代理设置；用户若用 Clash 等
 // 系统级代理，请把 "打开系统代理" 与 "设置环境变量" 都打开，或手动设 ALL_PROXY。
 var httpClientProbe = &http.Client{Timeout: 6 * time.Second}
+
+// httpClientLocal 打本地代理核心的写接口（校准等）：3s 足够，防止无超时挂死 bind 队列。
+var httpClientLocal = &http.Client{Timeout: 3 * time.Second}
 
 func httpGetSlow(url string) (string, bool) {
 	resp, err := httpClientSlow.Get(url)
@@ -516,6 +527,10 @@ func (a *app) bindAll(w webview.WebView) {
 	// 立即保存 API Key 到 api-key.txt（无需等点火）。
 	_ = w.Bind("ccSaveKey", func(key string) string {
 		key = strings.TrimSpace(key)
+		// key 变了探活缓存立即失效：前端保存后会立刻重探，不能吃到旧 key 的状态
+		keyProbeMu.Lock()
+		keyProbeCached = ""
+		keyProbeMu.Unlock()
 		if key == "" {
 			if err := os.Remove(a.keyFile()); err != nil && !os.IsNotExist(err) {
 				return jsonErr(err)
@@ -532,23 +547,44 @@ func (a *app) bindAll(w webview.WebView) {
 	// 存储 key 探活（2026-09-13）：key 注入转发发生在 headless 子进程，主进程拿不到
 	// 它的 401，故 GUI 进程自己持有 key 直打上游 whoami（免费端点，零生成计费）。
 	// 只回状态字与状态码：不回 key、不回上游响应体，避免泄漏进前端日志。
+	// 探测在后台 goroutine（ccUsage 同款范式）：ProbeKey 超时 10s，同步探会拖死
+	// WebView2 的串行 bind 队列（UI 线程）——断网时 GUI 一启动就整窗冻结。
+	// 结果缓存 25 分钟（略短于前端 30 分钟复查周期，保证每轮复查都真探）；
+	// 换 key/清 key（ccSaveKey）立即失效。无可用结果时回 pending，前端 2s 后重查。
 	_ = w.Bind("ccProbeKey", func() string {
-		key := strings.TrimSpace(a.apiKey)
-		if key == "" {
-			if b, err := os.ReadFile(a.keyFile()); err == nil {
-				key = strings.TrimSpace(string(b))
-			}
+		keyProbeMu.Lock()
+		cached, at, busy := keyProbeCached, keyProbeAt, keyProbeBusy
+		fresh := cached != "" && time.Since(at) < 25*time.Minute
+		if !fresh && !busy {
+			keyProbeBusy = true
 		}
-		out := map[string]any{"status": "nokey", "httpCode": 0}
-		if key != "" {
-			status, code, err := proxy.ProbeKey(proxy.DefaultBaseURL, key)
-			out["status"], out["httpCode"] = status, code
-			if err != nil {
-				out["detail"] = "网络错误: " + err.Error()
-			}
+		keyProbeMu.Unlock()
+		if fresh {
+			return cached
 		}
-		b, _ := json.Marshal(out)
-		return string(b)
+		if !busy {
+			go func() {
+				key := strings.TrimSpace(a.apiKey)
+				if key == "" {
+					if b, err := os.ReadFile(a.keyFile()); err == nil {
+						key = strings.TrimSpace(string(b))
+					}
+				}
+				out := map[string]any{"status": "nokey", "httpCode": 0}
+				if key != "" {
+					status, code, err := proxy.ProbeKey(proxy.DefaultBaseURL, key)
+					out["status"], out["httpCode"] = status, code
+					if err != nil {
+						out["detail"] = "网络错误: " + err.Error()
+					}
+				}
+				b, _ := json.Marshal(out)
+				keyProbeMu.Lock()
+				keyProbeCached, keyProbeAt, keyProbeBusy = string(b), time.Now(), false
+				keyProbeMu.Unlock()
+			}()
+		}
+		return `{"status":"pending"}`
 	})
 	// 版本更新检查 + 下载统计：查 GitHub Releases 全部版本，汇总所有 assets 的
 	// 累计下载量（匿名：GitHub 官方计数，不含任何用户信息）。
@@ -689,8 +725,10 @@ func (a *app) bindAll(w webview.WebView) {
 			}
 		}
 		// 通过代理核心写入校准（stats.json 同目录）
-		// GUI 与代理是独立进程，这里直接调用代理的 /v1/calibration 接口
-		resp, err := http.PostForm(a.baseURL()+"/v1/calibration",
+		// GUI 与代理是独立进程，这里直接调用代理的 /v1/calibration 接口。
+		// 走 3s 超时本地客户端：http.PostForm 的默认客户端无超时，核心挂起时
+		// bind（UI 线程）会被无限拖住
+		resp, err := httpClientLocal.PostForm(a.baseURL()+"/v1/calibration",
 			map[string][]string{"model": {model}, "tokens": {v}})
 		if err != nil {
 			return jsonErr(err)
@@ -734,111 +772,34 @@ func (a *app) bindAll(w webview.WebView) {
 	// HTTP/HTTPS 延迟测试：GET 请求计时（走代理链路，非 ICMP ping）。
 	// proxyAddr 可选：填 http://127.0.0.1:7890 这类地址时强制走该代理；留空时
 	// 先探测常见本地代理端口，找到可用的自动使用（并返回 detected），否则走环境代理/直连。
+	// 探测在后台 goroutine（ccUsage 同款范式）：候选代理 6 个 × 4s 加 3 目标 × 2 次 × 6s，
+	// 最坏分钟级——同步探会把 WebView2 的串行 bind 队列（UI 线程）整个拖死。
+	// 进行中回 {"ok":false,"msg":"testing"}，前端 800ms 轮询；完成后结果保留 3 秒
+	// 等前端取走（取走即清空，保证再次点击必出新测量）。
 	_ = w.Bind("ccLatencyTest", func(proxyAddr string) string {
-		type probe struct{ name, url string }
-		targets := []probe{
-			{"CommandCode API", "https://api.commandcode.ai"},
-			{"GitHub", "https://api.github.com"},
-			{"国内 · 百度", "https://www.baidu.com"},
+		latTestMu.Lock()
+		if latTestBusy {
+			latTestMu.Unlock()
+			return `{"ok":false,"msg":"testing"}`
 		}
-		type result struct {
-			Name string `json:"name"`
-			URL  string `json:"url,omitempty"`
-			MS   int    `json:"ms"`
-			OK   bool   `json:"ok"`
-			Err  string `json:"err,omitempty"`
+		if latTestResult != "" && latTestReq == proxyAddr && time.Since(latTestAt) < 3*time.Second {
+			r := latTestResult
+			latTestResult = ""
+			latTestMu.Unlock()
+			return r
 		}
-		// 探测可用代理：显式地址优先；否则尝试常见 Clash/梯子端口
-		detected := ""
-		var client *http.Client
-		if addr := strings.TrimSpace(proxyAddr); addr != "" {
-			pu, err := url.Parse(addr)
-			if err != nil {
-				b, _ := json.Marshal(map[string]any{"ok": false, "msg": "代理地址格式错误: " + err.Error()})
-				return string(b)
-			}
-			client = &http.Client{
-				Timeout:   2000 * time.Millisecond,
-				Transport: &http.Transport{Proxy: http.ProxyURL(pu)},
-			}
-		} else {
-			// 候选端口：Clash 混合端口 7897/7890、V2Ray 10808/10809、通用 8888/1080
-			// 按"已验证优先"排序：把当前探测到的端口放最前，减少首次失败浪费
-			candidates := []string{
-				"http://127.0.0.1:7897", "http://127.0.0.1:7890",
-				"http://127.0.0.1:10809", "http://127.0.0.1:10808",
-				"http://127.0.0.1:8888", "http://127.0.0.1:1080",
-			}
-			for _, c := range candidates {
-				pu, err := url.Parse(c)
-				if err != nil {
-					continue
-				}
-				probe := &http.Client{
-					Timeout:   4 * time.Second, // 梯子链路抖动大，留足余量
-					Transport: &http.Transport{Proxy: http.ProxyURL(pu)},
-				}
-				// 探测目标用国内站（百度）：链路抖动下，百度通 = 代理本身可用；
-				// CommandCode 慢/超时只是该链路慢，不代表代理不可用
-				resp, err := probe.Get("https://www.baidu.com")
-				if err == nil {
-					resp.Body.Close()
-					detected = c
-					client = &http.Client{
-						Timeout:   6 * time.Second, // 探测到的代理，测目标时也留足超时
-						Transport: &http.Transport{Proxy: http.ProxyURL(pu)},
-					}
-					break
-				}
-			}
-			if client == nil {
-				client = httpClientProbe // 无可用代理 → 环境代理/直连
-			}
-		}
-		results := make([]result, 0, len(targets))
-		for _, t := range targets {
-			r := result{Name: t.name, URL: t.url}
-			best := -1
-			var lastErr string
-			for attempt := 0; attempt < 2; attempt++ {
-				start := time.Now()
-				resp, err := client.Get(t.url)
-				if err == nil {
-					io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
-					resp.Body.Close()
-					ms := int(time.Since(start).Milliseconds())
-					if best < 0 || ms < best {
-						best = ms
-					}
-				} else {
-					lastErr = err.Error()
-				}
-			}
-			if best >= 0 {
-				r.MS, r.OK = best, true
-			} else {
-				r.Err = lastErr
-			}
-			results = append(results, r)
-		}
-		// 推理延迟（模型"卡不卡"的真实指标）：经本地代理 /v1/chat/completions 发 1-token 最小请求，
-		// 测首 token 时间（TTFB）。仅代理运行时可测。
-		a.mu.Lock()
-		running := a.running
-		a.mu.Unlock()
-		var inference *result
-		if running {
-			inf := result{Name: "模型推理", URL: a.baseURL() + "/v1/chat/completions"}
-			ms, err := measureFirstToken(a.baseURL(), a.apiKey)
-			if err == nil {
-				inf.MS, inf.OK = ms, true
-			} else {
-				inf.Err = err.Error()
-			}
-			inference = &inf
-		}
-		b, _ := json.Marshal(map[string]any{"ok": true, "targets": results, "detected": detected, "inference": inference})
-		return string(b)
+		latTestBusy = true
+		latTestReq = proxyAddr
+		latTestMu.Unlock()
+		go func() {
+			out := a.runLatencyTest(proxyAddr)
+			latTestMu.Lock()
+			latTestBusy = false
+			latTestResult = out
+			latTestAt = time.Now()
+			latTestMu.Unlock()
+		}()
+		return `{"ok":false,"msg":"testing"}`
 	})
 	_ = w.Bind("ccDismiss", func() string {
 		if err := os.WriteFile(a.noticeFile(), []byte("1"), 0o600); err != nil {
@@ -862,6 +823,124 @@ func (a *app) bindAll(w webview.WebView) {
 		windowCmd(uintptr(h), strings.TrimSpace(cmd))
 		return jsonOK("")
 	})
+}
+
+// latTestState 延迟测试后台状态：bind 瞬时返回，探测在 goroutine（见 ccLatencyTest）。
+var (
+	latTestMu     sync.Mutex
+	latTestBusy   bool
+	latTestReq    string
+	latTestResult string
+	latTestAt     time.Time
+)
+
+// runLatencyTest 跑一轮延迟探测（goroutine 内执行，不占 bind 队列）：
+// 候选代理探测 + 3 目标各 2 次取最优 + 推理 TTFB，结果 JSON 由 ccLatencyTest 缓存转发。
+func (a *app) runLatencyTest(proxyAddr string) string {
+	type probe struct{ name, url string }
+	targets := []probe{
+		{"CommandCode API", "https://api.commandcode.ai"},
+		{"GitHub", "https://api.github.com"},
+		{"国内 · 百度", "https://www.baidu.com"},
+	}
+	type result struct {
+		Name string `json:"name"`
+		URL  string `json:"url,omitempty"`
+		MS   int    `json:"ms"`
+		OK   bool   `json:"ok"`
+		Err  string `json:"err,omitempty"`
+	}
+	// 探测可用代理：显式地址优先；否则尝试常见 Clash/梯子端口
+	detected := ""
+	var client *http.Client
+	if addr := strings.TrimSpace(proxyAddr); addr != "" {
+		pu, err := url.Parse(addr)
+		if err != nil {
+			b, _ := json.Marshal(map[string]any{"ok": false, "msg": "代理地址格式错误: " + err.Error()})
+			return string(b)
+		}
+		client = &http.Client{
+			Timeout:   2000 * time.Millisecond,
+			Transport: &http.Transport{Proxy: http.ProxyURL(pu)},
+		}
+	} else {
+		// 候选端口：Clash 混合端口 7897/7890、V2Ray 10808/10809、通用 8888/1080
+		// 按"已验证优先"排序：把当前探测到的端口放最前，减少首次失败浪费
+		candidates := []string{
+			"http://127.0.0.1:7897", "http://127.0.0.1:7890",
+			"http://127.0.0.1:10809", "http://127.0.0.1:10808",
+			"http://127.0.0.1:8888", "http://127.0.0.1:1080",
+		}
+		for _, c := range candidates {
+			pu, err := url.Parse(c)
+			if err != nil {
+				continue
+			}
+			probe := &http.Client{
+				Timeout:   4 * time.Second, // 梯子链路抖动大，留足余量
+				Transport: &http.Transport{Proxy: http.ProxyURL(pu)},
+			}
+			// 探测目标用国内站（百度）：链路抖动下，百度通 = 代理本身可用；
+			// CommandCode 慢/超时只是该链路慢，不代表代理不可用
+			resp, err := probe.Get("https://www.baidu.com")
+			if err == nil {
+				resp.Body.Close()
+				detected = c
+				client = &http.Client{
+					Timeout:   6 * time.Second, // 探测到的代理，测目标时也留足超时
+					Transport: &http.Transport{Proxy: http.ProxyURL(pu)},
+				}
+				break
+			}
+		}
+		if client == nil {
+			client = httpClientProbe // 无可用代理 → 环境代理/直连
+		}
+	}
+	results := make([]result, 0, len(targets))
+	for _, t := range targets {
+		r := result{Name: t.name, URL: t.url}
+		best := -1
+		var lastErr string
+		for attempt := 0; attempt < 2; attempt++ {
+			start := time.Now()
+			resp, err := client.Get(t.url)
+			if err == nil {
+				io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+				resp.Body.Close()
+				ms := int(time.Since(start).Milliseconds())
+				if best < 0 || ms < best {
+					best = ms
+				}
+			} else {
+				lastErr = err.Error()
+			}
+		}
+		if best >= 0 {
+			r.MS, r.OK = best, true
+		} else {
+			r.Err = lastErr
+		}
+		results = append(results, r)
+	}
+	// 推理延迟（模型"卡不卡"的真实指标）：经本地代理 /v1/chat/completions 发 1-token 最小请求，
+	// 测首 token 时间（TTFB）。仅代理运行时可测。
+	a.mu.Lock()
+	running := a.running
+	a.mu.Unlock()
+	var inference *result
+	if running {
+		inf := result{Name: "模型推理", URL: a.baseURL() + "/v1/chat/completions"}
+		ms, err := measureFirstToken(a.baseURL(), a.apiKey)
+		if err == nil {
+			inf.MS, inf.OK = ms, true
+		} else {
+			inf.Err = err.Error()
+		}
+		inference = &inf
+	}
+	b, _ := json.Marshal(map[string]any{"ok": true, "targets": results, "detected": detected, "inference": inference})
+	return string(b)
 }
 
 /* ---------------- 一键更新流程（下载 → 校验 → 腾位替换 → 重启） ---------------- */

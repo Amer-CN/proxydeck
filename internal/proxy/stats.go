@@ -15,10 +15,12 @@ import (
 // proxy. It accumulates real usage reported by CommandCode in stream events
 // and persists to disk so counts survive proxy restarts.
 type UsageStats struct {
-	mu      sync.Mutex
-	file    string                `json:"-"`
-	Models  map[string]*ModelStat `json:"models"`
-	Started int64                 `json:"started"` // unix seconds
+	mu         sync.Mutex
+	file       string                `json:"-"`
+	Models     map[string]*ModelStat `json:"models"`
+	Started    int64                 `json:"started"` // unix seconds
+	lastSaveAt time.Time             // 节流落盘的上次写盘时刻
+	dirty      bool                  // 有未落盘的增量（Snapshot 读时兜底补写）
 }
 
 // ModelStat tracks token counts for one model.
@@ -78,7 +80,16 @@ func (s *UsageStats) Record(model string, input, output, cacheRead, cacheWrite i
 	ds.OutputTokens += output
 	ds.CacheReadTokens += cacheRead
 	ds.CacheWriteTokens += cacheWrite
-	s.save()
+	// 节流落盘：原来每笔请求完成都在锁内整表 marshal+写盘+改名，多路并发收尾时
+	// 在热路径上白付；现在距上次落盘 ≥2s 才写，Snapshot（GUI 3s 轮询读）发现
+	// 脏数据兜底补写。硬杀进程最多丢 2s 计数（本地统计本就是近似值，且有官网
+	// 校准覆盖总量）。
+	s.dirty = true
+	if time.Since(s.lastSaveAt) >= 2*time.Second {
+		s.lastSaveAt = time.Now()
+		s.dirty = false
+		s.saveLocked()
+	}
 }
 
 // Today returns aggregate usage for today across all models.
@@ -101,6 +112,13 @@ func (s *UsageStats) Today() (in, out, cacheRead, cacheWrite int64) {
 func (s *UsageStats) Snapshot() *UsageStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// 读时兜底：脏数据立即补写——GUI 每 3s 轮询 /v1/stats，保证 stats.json
+	// 始终近实时（ccStats 在核心离线时直接读这份文件）。
+	if s.dirty {
+		s.dirty = false
+		s.lastSaveAt = time.Now()
+		s.saveLocked()
+	}
 	out := &UsageStats{Started: s.Started, Models: map[string]*ModelStat{}}
 	for k, v := range s.Models {
 		c := *v
@@ -135,8 +153,28 @@ func (s *UsageStats) load() {
 	}
 }
 
-// save writes stats to disk atomically.
+// save writes stats to disk atomically (无锁路径用；load 首次运行写起点)。
 func (s *UsageStats) save() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastSaveAt = time.Now()
+	s.dirty = false
+	s.saveLocked()
+}
+
+// Flush 立即落盘未写的增量（调用方需要确定性持久化时用，如测试的模拟重启）。
+func (s *UsageStats) Flush() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dirty {
+		s.dirty = false
+		s.lastSaveAt = time.Now()
+		s.saveLocked()
+	}
+}
+
+// saveLocked writes stats to disk atomically（调用方持有 s.mu）。
+func (s *UsageStats) saveLocked() {
 	if s.file == "" {
 		return
 	}
