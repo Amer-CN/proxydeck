@@ -96,6 +96,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
    修掉「官方只在桌面端轮换种子会漏报」的盲区。~~ ✅ 已随 v3.14.0 发布，且用户当日
    彻底关机重启全量换装，后端已生效。
 2. hy4 键盘可达性（拨杆同位置同问题，用户未要求补，先记账）。
+3. 本地文件夹改名 `F:\AIXM\command` → `F:\AIXM\proxydeck`（2026-09-13 用户拍板，
+   名字统一最后一公里：go.mod / 远端 / exe 名早已是 proxydeck）。全库写死此路径
+   仅 3 处（`docs/fidelity-audit.md`、`internal/clientcwd/cwd_test.go`）改后 sed。
+   ⚠ 只能在发版换装重启窗口做：运行中进程锁目录，改前先停全部 ProxyDeck 进程；
+   改后在 ZCode 客户端重新打开新路径（旧会话挂在旧路径下），桌面快捷方式如有需同步。
 
 ## CHANGELOG 行文规范（2026-08-31 定，用户裁决）
 
