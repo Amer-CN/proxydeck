@@ -101,6 +101,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
    仅 3 处（`docs/fidelity-audit.md`、`internal/clientcwd/cwd_test.go`）改后 sed。
    ⚠ 只能在发版换装重启窗口做：运行中进程锁目录，改前先停全部 ProxyDeck 进程；
    改后在 ZCode 客户端重新打开新路径（旧会话挂在旧路径下），桌面快捷方式如有需同步。
+   → 进度（2026-09-13 随 v3.15.0 发版）：ProxyDeck 进程已全停，但 ZCode 宿主自身
+   锁目录（工作区 watcher），`mv` 报 Device or resource busy——发版已在旧路径完成，
+   改名待用户关闭 ZCode 后手动执行（关 ZCode → `mv F:\AIXM\command F:\AIXM\proxydeck`
+   → ZCode 重开新路径），随后会话补 sed 两文件（cwd_test 依赖目录真实存在，mv 前
+   sed 会让 go test 红，故不提前）。
 
 ## CHANGELOG 行文规范（2026-08-31 定，用户裁决）
 
