@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Amer-CN/proxydeck/internal/proxy"
 	"github.com/atotto/clipboard"
 	webview "github.com/webview/webview_go"
 )
@@ -527,6 +528,27 @@ func (a *app) bindAll(w webview.WebView) {
 		}
 		a.apiKey = key
 		return jsonOK("API Key 已保存")
+	})
+	// 存储 key 探活（2026-09-13）：key 注入转发发生在 headless 子进程，主进程拿不到
+	// 它的 401，故 GUI 进程自己持有 key 直打上游 whoami（免费端点，零生成计费）。
+	// 只回状态字与状态码：不回 key、不回上游响应体，避免泄漏进前端日志。
+	_ = w.Bind("ccProbeKey", func() string {
+		key := strings.TrimSpace(a.apiKey)
+		if key == "" {
+			if b, err := os.ReadFile(a.keyFile()); err == nil {
+				key = strings.TrimSpace(string(b))
+			}
+		}
+		out := map[string]any{"status": "nokey", "httpCode": 0}
+		if key != "" {
+			status, code, err := proxy.ProbeKey(proxy.DefaultBaseURL, key)
+			out["status"], out["httpCode"] = status, code
+			if err != nil {
+				out["detail"] = "网络错误: " + err.Error()
+			}
+		}
+		b, _ := json.Marshal(out)
+		return string(b)
 	})
 	// 版本更新检查 + 下载统计：查 GitHub Releases 全部版本，汇总所有 assets 的
 	// 累计下载量（匿名：GitHub 官方计数，不含任何用户信息）。

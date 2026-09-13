@@ -856,6 +856,36 @@ func msgsHaveSystem(msgs []any) bool {
 	return false
 }
 
+// normalizeToolChoice 把对象式 tool_choice 降级为字符串式。
+//
+// 2026-09-13 实测：腾讯后端 tool_choice 字段是 Go string，收到对象回 400
+//（"cannot unmarshal object into Go struct field Request.tool_choice of type string"，
+// plugins/codebuddy.log:4622 实录）。按 O​penAI 语义发对象式 tool_choice 的客户端
+//（{"type":"function","function":{"name":X}} 强制指定某函数）因此整条被拦。
+// 降级规则：type 为 auto/none/required 直接用该字符串；强制指定式（含 function 对象）
+// 降级为 "required"——保住「必须调工具」语义，具体调哪个由模型自选（不编造函数名）。
+// 已是字符串、其他怪值（数字/数组）一律原样；请求体没有 tools 却带 tool_choice 直接删。
+func normalizeToolChoice(body map[string]any) {
+	tc, ok := body["tool_choice"]
+	if !ok {
+		return
+	}
+	if _, ok := body["tools"]; !ok {
+		delete(body, "tool_choice")
+		return
+	}
+	m, ok := tc.(map[string]any)
+	if !ok {
+		return // 字符串式或其他怪值：原样透传
+	}
+	switch t, _ := m["type"].(string); t {
+	case "auto", "none", "required":
+		body["tool_choice"] = t
+	default:
+		body["tool_choice"] = "required"
+	}
+}
+
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -893,6 +923,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if _, ok := backendBody["stream_options"]; !ok {
 		backendBody["stream_options"] = map[string]any{"include_usage": true}
 	}
+	// 对象式 tool_choice → 字符串式（腾讯后端该字段是 string，见 normalizeToolChoice）
+	normalizeToolChoice(backendBody)
 	// developer → system（腾讯后端不认 developer，见 normalizeRoles）
 	if bm, ok := backendBody["messages"].([]any); ok {
 		backendBody["messages"] = normalizeRoles(bm)

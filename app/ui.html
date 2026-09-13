@@ -4900,6 +4900,28 @@ var PT_I18N = {
     setTimeout(function () { el.classList.add('out'); setTimeout(function () { el.remove(); }, 320); }, 2800);
   }
 
+  /* ---------------- 存储 key 探活（2026-09-13） ----------------
+     key 注入转发在 headless 子进程，GUI 拿不到它的 401；主进程自己持有 key，
+     故直接探上游 whoami（免费端点）。状态不变一律静默——只在失效/恢复时出声，
+     避免 30 分钟一次的心跳刷屏。lastKeyProbe 记忆上次状态（含首次 SYS 已写过）。 */
+  var lastKeyProbe = '';
+  function probeStoredKey() {
+    if (!HAS_BRIDGE) return;
+    call('ProbeKey').then(function (r) {
+      if (!r || !r.status) return;
+      var st = r.status;
+      if (st === 'unauthorized' && lastKeyProbe !== 'unauthorized') {
+        logInto($('logStream'), 'err', '存储的 CommandCode key 探活失败（401）——请到设置页更换或清空');
+        toast('err', 'API Key 已失效', '探活返回 401，请更换或清空');
+      } else if (st === 'ok' && lastKeyProbe === 'unauthorized') {
+        logInto($('logStream'), 'ok', '存储 key 已恢复有效');
+      } else if (st === 'ok' && !lastKeyProbe) {
+        logInto($('logStream'), 'sys', '存储 key 探活正常（每 30 分钟自动复查）');
+      }
+      lastKeyProbe = st;
+    });
+  }
+
   /* ---------------- 复制 ---------------- */
   function copyText(text, label) {
     return call('Copy', text).then(function (r) {
@@ -8211,7 +8233,12 @@ var PT_I18N = {
         var bbox = $(V.pfx + 'Bars');
         if (bbox) V.lastBarsKey = 'points|' + bs.map(function (x) { return x.label; }).join(';');
         renderBars(bbox, entries, 'points');
-        plog(V, 'net', '积分消耗 TOP 已装载 · ' + bs.length + ' 个来源（官方数据）');
+        /* 防抖：来源+积分没变化不写日志（轮询 3s 一刷，避免刷屏）。用独立键，不动 lastBarsKey */
+        var topKey = bs.map(function (s) { return s.label + ':' + Math.round(s.points || 0); }).join(',');
+        if (V.lastTopKey !== topKey) {
+          V.lastTopKey = topKey;
+          plog(V, 'net', '积分消耗 TOP 已装载 · ' + bs.length + ' 个来源（官方数据）');
+        }
       }
     } catch (e) {}
   }
@@ -9298,12 +9325,12 @@ var PT_I18N = {
     $('saveKeyBtn').onclick = async function () {
       var key = $('apiKey').value.trim();
       var r = await call('SaveKey', key);
-      if (r && r.ok) { logInto($('logStream'), 'ok', r.msg || 'Key 已保存'); toast('ok', 'Key 已保存', key ? '已写入 api-key.txt' : '已清除'); }
+      if (r && r.ok) { logInto($('logStream'), 'ok', r.msg || 'Key 已保存'); toast('ok', 'Key 已保存', key ? '已写入 api-key.txt' : '已清除'); probeStoredKey(); }
       else logInto($('logStream'), 'err', '保存 Key 失败: ' + ((r && r.msg) || '未知错误'));
     };
     $('apiKey').addEventListener('change', async function (e) {
       var r = await call('SaveKey', e.target.value.trim());
-      if (r && r.ok) logInto($('logStream'), 'ok', r.msg || 'Key 已自动保存');
+      if (r && r.ok) { logInto($('logStream'), 'ok', r.msg || 'Key 已自动保存'); probeStoredKey(); }
     });
 
     $('refreshStats').onclick = function () { refreshStats(true); logInto($('logStream'), 'sys', '手动刷新链路监测数据'); };
@@ -9607,6 +9634,8 @@ var PT_I18N = {
     if (curMode === 'cmd') paintCmdOdo();
   }, 1000);
   setInterval(pollState, 2500);
+  /* 存储 key 探活：30 分钟一次（状态不变静默，见 probeStoredKey） */
+  setInterval(probeStoredKey, 30 * 60 * 1000);
   /* 官网用量不再周期刷新：拉杆启动/首次运行/手动按钮各触发一次（refreshStats(true)） */
 
   PTApp.onModeChange(function (m) {
@@ -9661,6 +9690,7 @@ var PT_I18N = {
     logInto($('logStream'), 'sys', 'ProxyDeck ' + UI_CUR + ' 初始化完成');
     logInto($('logStream'), 'sys', HAS_BRIDGE ? 'WebView2 桥接已连接 · 代理核心待命' : '演示模式 · 无原生桥接');
     pollState();
+    probeStoredKey(); /* 存储 key 探活：页面初始化探一次（30 分钟周期见「轮询启动」） */
     if (HAS_BRIDGE) {
       (async function checkUpdate() {
         window._UPDATE = { latest: UI_CUR, url: '', dl_url: '', dl_size: 0 };

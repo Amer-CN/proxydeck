@@ -20,7 +20,12 @@ import (
 	"github.com/google/uuid"
 )
 
-const defaultBaseURL = "https://api.commandcode.ai"
+// DefaultBaseURL CommandCode 上游默认地址（GUI 侧 key 探活等外部调用方复用）。
+const DefaultBaseURL = "https://api.commandcode.ai"
+
+// defaultBaseURL 保留原名（本包内既有引用不动）。
+const defaultBaseURL = DefaultBaseURL
+
 const defaultTimeout = 300 * time.Second
 const debugLogLimit = 20000
 
