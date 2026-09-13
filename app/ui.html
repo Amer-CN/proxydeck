@@ -4188,21 +4188,32 @@ var PT_I18N = {
   }
   function sfxSchedule() { if (!sfxRaf) sfxRaf = requestAnimationFrame(sfxFrame); }
   /* Wheel 音量活动条（原版 §9 VU 照搬：每格 +0.22，1.65/s 衰减） */
-  var vuLevel = 0, vuLast = performance.now();
+  var vuLevel = 0, vuLast = performance.now(), vuRaf = 0, vuIdleMs = 0;
   var vuEls = $$('.sc-vu-wrap .pt-vu i');
   function vuFrame(now) {
+    vuRaf = 0;
     var dt = (now - vuLast) / 1000;
     vuLast = now;
     vuLevel = Math.max(0, vuLevel - 1.65 * dt);
     var lit = Math.round(vuLevel);
     vuEls.forEach(function (el, i) { el.classList.toggle('on', i < lit); });
-    requestAnimationFrame(vuFrame);
+    /* 空闲停表：电平衰到 0 且稳住 2s 就不再排帧——原来循环永不停止，
+       待机时每秒 720 次 classList.toggle 常驻占用渲染管线；下次滚轮喂灯再拉起 */
+    if (vuLevel <= 0) {
+      vuIdleMs += dt * 1000;
+      if (vuIdleMs >= 2000) return;
+    } else {
+      vuIdleMs = 0;
+    }
+    vuRaf = requestAnimationFrame(vuFrame);
   }
-  requestAnimationFrame(vuFrame);
+  function vuKick() { vuIdleMs = 0; if (!vuRaf) vuRaf = requestAnimationFrame(vuFrame); }
+  vuRaf = requestAnimationFrame(vuFrame);
 
   function onScrollDelta(dy, immediate) {
     if (dy === 0) return;
     vuLevel = Math.min(12, vuLevel + 0.22);   /* 原版 §9：滚轮每格喂一段 LED */
+    vuKick();
     if (waCtx && waCtx.state === 'suspended') {
       waCtx.resume().then(function () { tickFlush(); }).catch(function () {});
     }
@@ -4797,7 +4808,18 @@ var PT_I18N = {
     odo: function (key, text) {
       var el = (typeof key === 'string') ? $('[data-odo="' + key + '"]') : key;
       if (!el) return;
-      if (el.dataset.text !== text) { buildOdo(el, text); el.dataset.text = text; }
+      if (el.dataset.text !== text) {
+        /* 数字格位形相同（位数/分隔符没变）就走 setOdo 就地更新 --d：
+           uptime 每秒 +1，原来每次都整树重建 ~80 个 span，transform 滚动动画
+           因元素全新而永不播放；只有位形变了（小时位进位）才整树重建 */
+        var shape = function (t) { return String(t).replace(/\d/g, '#'); };
+        if (el.dataset.text != null && shape(text) === shape(el.dataset.text)) {
+          setOdo(el, text);
+        } else {
+          buildOdo(el, text);
+        }
+        el.dataset.text = text;
+      }
       else setOdo(el, text);
     },
     /* 屏体状态点：on / dim / 尾部读数 */
@@ -4936,8 +4958,13 @@ var PT_I18N = {
 
   /* ---------------- 日志（pomme 风格行） ---------------- */
   var LOG_LEVELS = { sys: 'SYS', ok: 'OK', err: 'ERR', net: 'NET', warn: 'WARN' };
-  function logInto(box, level, msg) {
+  function logInto(box, level, msg, opts) {
     if (!box) return;
+    /* 贴底才跟随：用户上翻看历史时新日志不再把视口拽回底部；
+       读 scrollHeight/write scrollTop 各只一次，不再每行强排。
+       opts.noScroll 供批量装载用（装载完统一回底一次） */
+    var stick = !opts || !opts.noScroll;
+    if (stick) stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
     var line = document.createElement('div');
     line.className = 'pt-log-line ' + level;
     var t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
@@ -4946,7 +4973,7 @@ var PT_I18N = {
     line.querySelector('.lm').textContent = String(msg);
     box.appendChild(line);
     while (box.children.length > 220) box.removeChild(box.firstChild);
-    box.scrollTop = box.scrollHeight;
+    if (stick) box.scrollTop = box.scrollHeight;
   }
 
   /* ---------------- Toast ---------------- */
@@ -5192,11 +5219,26 @@ var PT_I18N = {
 
   /* ================= 团结多账号池 + 进行中请求（学群友 Codely Relay） ================= */
   function escHtml(s) { return String(s).replace(/[<>&"]/g, function (c) { return {"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;"}[c]; }); }
+  /* /accounts tick 级共享缓存：账号池、矩阵弹窗、积分下拉同一 3s tick 各拉各的
+     （最多 3 次同请求），收敛为一 tick 一取。promise 缓存防并发重复；2.5s TTL
+     覆盖 3s 轮询间隔；POST 改动后先 tjAccountsReset() 再重拉，否则会读到旧数据。
+     失败即弃缓存，下 tick 允许重试，异常抛给消费方按原逻辑处理。 */
+  var _tjAccP = null, _tjAccAt = 0;
+  function tjAccounts() {
+    var now = Date.now();
+    if (_tjAccP && now - _tjAccAt < 2500) return _tjAccP;
+    _tjAccAt = now;
+    _tjAccP = fetch('http://127.0.0.1:8788/accounts', { signal: AbortSignal.timeout(3000) })
+      .then(function (r) { return r.json(); });
+    _tjAccP.catch(function () { _tjAccP = null; _tjAccAt = 0; });
+    return _tjAccP;
+  }
+  function tjAccountsReset() { _tjAccP = null; _tjAccAt = 0; }
   async function loadTuanjieAccounts() {
     var box = $('tjAccList');
     if (!box) return;
     try {
-      var d = await (await fetch("http://127.0.0.1:8788/accounts")).json();
+      var d = await tjAccounts();
       var rr = $('tjReroute');
       if (rr) {
         var n = d.media_reroutes || 0;
@@ -5213,7 +5255,8 @@ var PT_I18N = {
       /* 注水检测子页面的「被动观测」与本组轮询共用这次 /accounts（passive 同源） */
       if (d.ok) renderWaterPassive(d.passive);
       if (!d.ok || !d.accounts || !d.accounts.length) {
-        box.innerHTML = '<div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号启用多账号轮换</div>';
+        var emptyHtml = '<div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号启用多账号轮换</div>';
+        if (box.__sig !== emptyHtml) { box.__sig = emptyHtml; box.innerHTML = emptyHtml; }
         return;
       }
       var h = '';
@@ -5233,6 +5276,10 @@ var PT_I18N = {
           '<button type="button" class="ibtn2" data-acc-del="' + escHtml(a.user_id) + '">删</button>' +
           '</div></div>';
       });
+      /* 内容键没变（绝大多数 tick）跳过整块重建与按钮重挂——账号多时每 3s
+         一轮 DOM 销毁重建是纯浪费；h 已覆盖全部渲染字段（含状态/徽章/按钮字） */
+      if (box.__sig === h) return;
+      box.__sig = h;
       box.innerHTML = h;
       box.querySelectorAll('[data-acc-toggle]').forEach(function (b) {
         b.onclick = async function () {
@@ -5240,6 +5287,7 @@ var PT_I18N = {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "toggle", user_id: b.dataset.accToggle, enabled: b.dataset.on !== "true" })
           });
+          tjAccountsReset();
           loadTuanjieAccounts();
         };
       });
@@ -5249,6 +5297,7 @@ var PT_I18N = {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "remove", user_id: b.dataset.accDel })
           });
+          tjAccountsReset();
           loadTuanjieAccounts();
         };
       });
@@ -5517,6 +5566,7 @@ var PT_I18N = {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'setmodels', user_id: uid, models: checked })
       });
+      tjAccountsReset();
       closeModal(); /* 返回栈会重开账号池并重渲染，不必再单独刷一次 */
     };
   }
@@ -5524,7 +5574,7 @@ var PT_I18N = {
     var grid = $('mxGrid');
     if (!grid) return;
     try {
-      var d = await (await fetch("http://127.0.0.1:8788/accounts")).json();
+      var d = await tjAccounts();
       var accs = d.accounts || [];
       var onlineEl = $('mxOnline');
       if (onlineEl) {
@@ -5533,51 +5583,63 @@ var PT_I18N = {
       }
       /* 上屏「账号矩阵」灯与子页面 ONLINE 徽章同口径（enabled 且未 402） */
       PTApp.dot('tjMatrix', accs.length > 0, false, accs.length ? (accs.filter(function (a) { return a.enabled && !a.budget_exceeded; }).length + '/' + accs.length) : '单账号');
-      if (!accs.length) { grid.className = 'm-body'; grid.innerHTML = '<div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号后显示矩阵</div>'; return; }
+      var emptyHtml = '<div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号后显示矩阵</div>';
+      if (!accs.length) {
+        if (grid.__sig !== 'm-body|' + emptyHtml) { grid.__sig = 'm-body|' + emptyHtml; grid.className = 'm-body'; grid.innerHTML = emptyHtml; }
+        return;
+      }
       grid.className = 'mx-grid';
-      grid.innerHTML = accs.map(function (a) { return mxCardHtml(a); }).join('');
-      grid.querySelectorAll('[data-mx-toggle]').forEach(function (b) {
-        b.onclick = async function () {
-          await fetch("http://127.0.0.1:8788/accounts", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "toggle", user_id: b.dataset.mxToggle, enabled: b.dataset.on !== "true" })
-          });
-          renderTuanjieMatrix(); loadTuanjieAccounts();
-        };
-      });
-      grid.querySelectorAll('[data-mx-del]').forEach(function (b) {
-        b.onclick = async function () {
-          await fetch("http://127.0.0.1:8788/accounts", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "remove", user_id: b.dataset.mxDel })
-          });
-          renderTuanjieMatrix(); loadTuanjieAccounts();
-        };
-      });
-      /* 模型路由编辑：删除 / 添加 */
-      grid.querySelectorAll('[data-mx-mdel]').forEach(function (b) {
-        b.onclick = async function () {
-          var uid = b.dataset.mxMdel;
-          var mName = b.dataset.mxMname;
-          var acc = accs.find(function (x) { return x.user_id === uid; });
-          var cur = (acc && acc.models) || [];
-          var next = cur.filter(function (m) { return m !== mName; });
-          await fetch("http://127.0.0.1:8788/accounts", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "setmodels", user_id: uid, models: next })
-          });
-          renderTuanjieMatrix();
-        };
-      });
-      grid.querySelectorAll('[data-mx-madd]').forEach(function (b) {
-        b.onclick = function () {
-          var uid = b.dataset.mxMadd;
-          var acc = accs.find(function (x) { return x.user_id === uid; });
-          var cur = (acc && acc.models) || [];
-          openModelPicker(uid, cur);
-        };
-      });
-    } catch (e) { grid.className = 'm-body'; grid.innerHTML = '<div class="if-empty">// 读取失败（代理未启动？）</div>'; }
+      var gridHtml = accs.map(function (a) { return mxCardHtml(a); }).join('');
+      /* 内容键没变跳过整块重建与重绑（卡片上的进行中徽章/状态全部来自 d，sig 已覆盖） */
+      if (grid.__sig !== 'mx-grid|' + gridHtml) {
+        grid.__sig = 'mx-grid|' + gridHtml;
+        grid.innerHTML = gridHtml;
+        grid.querySelectorAll('[data-mx-toggle]').forEach(function (b) {
+          b.onclick = async function () {
+            await fetch("http://127.0.0.1:8788/accounts", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "toggle", user_id: b.dataset.mxToggle, enabled: b.dataset.on !== "true" })
+            });
+            tjAccountsReset();
+            renderTuanjieMatrix(); loadTuanjieAccounts();
+          };
+        });
+        grid.querySelectorAll('[data-mx-del]').forEach(function (b) {
+          b.onclick = async function () {
+            await fetch("http://127.0.0.1:8788/accounts", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "remove", user_id: b.dataset.mxDel })
+            });
+            tjAccountsReset();
+            renderTuanjieMatrix(); loadTuanjieAccounts();
+          };
+        });
+        /* 模型路由编辑：删除 / 添加 */
+        grid.querySelectorAll('[data-mx-mdel]').forEach(function (b) {
+          b.onclick = async function () {
+            var uid = b.dataset.mxMdel;
+            var mName = b.dataset.mxMname;
+            var acc = accs.find(function (x) { return x.user_id === uid; });
+            var cur = (acc && acc.models) || [];
+            var next = cur.filter(function (m) { return m !== mName; });
+            await fetch("http://127.0.0.1:8788/accounts", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "setmodels", user_id: uid, models: next })
+            });
+            tjAccountsReset();
+            renderTuanjieMatrix();
+          };
+        });
+        grid.querySelectorAll('[data-mx-madd]').forEach(function (b) {
+          b.onclick = function () {
+            var uid = b.dataset.mxMadd;
+            var acc = accs.find(function (x) { return x.user_id === uid; });
+            var cur = (acc && acc.models) || [];
+            openModelPicker(uid, cur);
+          };
+        });
+      }
+    } catch (e) { grid.className = 'm-body'; grid.__sig = null; grid.innerHTML = '<div class="if-empty">// 读取失败（代理未启动？）</div>'; }
   }
   function openTuanjieMatrix() {
     wideModal('<h3>账号矩阵 · MATRIX <span class="pt-val" id="mxOnline" style="margin-left:8px"></span></h3>' +
@@ -5856,7 +5918,7 @@ var PT_I18N = {
     var box = $('tjInflight');
     if (!box) return;
     try {
-      var d = await (await fetch("http://127.0.0.1:8788/inflight")).json();
+      var d = await (await fetch("http://127.0.0.1:8788/inflight", { signal: AbortSignal.timeout(3000) })).json();
       var reqs = d.requests || [];
       // 活跃计数徽章（挂在 subhead 上）
       if (!ifCount && box.previousElementSibling) {
@@ -5869,8 +5931,9 @@ var PT_I18N = {
       var loads = {};
       reqs.forEach(function (r) { if (r.user_id) loads[r.user_id] = (loads[r.user_id] || 0) + 1; });
       var loadTxt = Object.keys(loads).map(function (u) { return u + ':' + loads[u]; }).join('  ');
+      var h;
       if (reqs.length && loadTxt) {
-        box.innerHTML = '<div class="if-loads">负载 ' + escHtml(loadTxt) + '</div>' +
+        h = '<div class="if-loads">负载 ' + escHtml(loadTxt) + '</div>' +
           reqs.slice(0, 8).map(function (r) {
             var cls = r.idle > 60 ? 'crit' : (r.idle > 30 ? 'warn' : 'ok');
             return '<div class="if-row"><span class="led ' + cls + '"></span>' +
@@ -5881,9 +5944,9 @@ var PT_I18N = {
               '<span class="idle2 ' + cls + '">静 ' + r.idle.toFixed(0) + 's</span></div>';
           }).join('');
       } else if (!reqs.length) {
-        box.innerHTML = '<div class="if-empty">// 无进行中请求</div>';
+        h = '<div class="if-empty">// 无进行中请求</div>';
       } else {
-        box.innerHTML = reqs.slice(0, 8).map(function (r) {
+        h = reqs.slice(0, 8).map(function (r) {
           var cls = r.idle > 60 ? 'crit' : (r.idle > 30 ? 'warn' : 'ok');
           return '<div class="if-row"><span class="led ' + cls + '"></span>' +
             '<span class="m">' + escHtml(r.model) + '</span>' +
@@ -5893,6 +5956,8 @@ var PT_I18N = {
             '<span class="idle2 ' + cls + '">静 ' + r.idle.toFixed(0) + 's</span></div>';
         }).join('');
       }
+      /* 内容键没变（空闲期绝大多数 tick）跳过整块 innerHTML 重建 */
+      if (box.__sig !== h) { box.__sig = h; box.innerHTML = h; }
     } catch (e) {}
   }
   // 实时动态（学群友 ActivityLog：请求完成/402/中断的结构化事件流）
@@ -5900,10 +5965,14 @@ var PT_I18N = {
     var box = $('tjActivity');
     if (!box) return;
     try {
-      var d = await (await fetch("http://127.0.0.1:8788/activity?limit=40")).json();
+      var d = await (await fetch("http://127.0.0.1:8788/activity?limit=40", { signal: AbortSignal.timeout(3000) })).json();
       var evs = d.events || [];
-      if (!evs.length) { box.innerHTML = '<div class="if-empty">// 请求完成后动态显示</div>'; return; }
-      box.innerHTML = evs.slice(0, 12).map(function (e) {
+      if (!evs.length) {
+        var emptyHtml = '<div class="if-empty">// 请求完成后动态显示</div>';
+        if (box.__sig !== emptyHtml) { box.__sig = emptyHtml; box.innerHTML = emptyHtml; }
+        return;
+      }
+      var h = evs.slice(0, 12).map(function (e) {
         var tok = e.tokens ? ' · ' + (e.tokens > 10000 ? (e.tokens / 1000).toFixed(1) + 'K' : e.tokens) + ' tok' : '';
         var lat = e.latency_ms ? ' · ' + (e.latency_ms > 1000 ? (e.latency_ms / 1000).toFixed(1) + 's' : e.latency_ms + 'ms') : '';
         return '<div class="act-row ' + (e.kind || 'info') + '">' +
@@ -5911,6 +5980,8 @@ var PT_I18N = {
           '<span class="lv">' + (e.kind === 'ok' ? 'OK' : e.kind === 'error' ? 'ERR' : 'INFO') + '</span>' +
           '<span class="lm">' + escHtml(e.message) + tok + lat + '</span></div>';
       }).join('');
+      /* 内容键没变（无新事件时）跳过整块 innerHTML 重建 */
+      if (box.__sig !== h) { box.__sig = h; box.innerHTML = h; }
     } catch (e) {}
   }
   // 自动探测：从浏览器读团结登录态（CDP；探测不到时带调试参数拉起浏览器）
@@ -5934,6 +6005,7 @@ var PT_I18N = {
         if (r.ok) logInto($('logStream'), "ok", "账号池：已自动添加账号 " + (r.user_id || ""));
       } catch (e) { toast("err", "探测失败", String(e)); }
       btn.disabled = false; btn.textContent = "⚡ 自动探测";
+      tjAccountsReset();
       loadTuanjieAccounts();
         }, openTuanjieMatrix);
     };
@@ -6078,7 +6150,8 @@ var PT_I18N = {
         '<span class="t">' + escHtml(String(e.at || '').slice(5, 16)) + '</span>' +
         '</div>';
     }).join('');
-    box.innerHTML = pvHtml;
+    /* 内容键没变跳过整块 innerHTML 重建 */
+    if (box.__sig !== pvHtml) { box.__sig = pvHtml; box.innerHTML = pvHtml; }
   }
   /* 注水检测（第 3 轮驳回修正·最终轮）：设置甲板「☌ 注水检测」= 直接整屏打开传真机页（不再进旧注水甲板）。
      传真机待命态 ready（无 tab/无黑屏壳）；渠道/模型在纸上选，机载 TRANSMIT 开跑；「← 返回」/ Esc 关层回设置甲板。
@@ -7251,9 +7324,18 @@ var PT_I18N = {
   // 注水检测属主动低频操作，不进 3 秒轮询（被动观测随下面这组 /accounts 轮询顺带更新）。
   // 3 秒轮询（进行中面板要跟手；矩阵子页面开着时一并刷新它的进行中徽章；
   // tjMatrix 上屏灯数据只认 /accounts，随本组轮询走）
+  // 门控：消费方只在团结甲板（tjAccList/tjReroute/tjMatrix 灯）、注水子页
+  // （wtPassive/wtScPassive）或矩阵弹窗（mxGrid）可见时才有意义——其余甲板整组跳过，
+  // 插件未启动时也不再白打 3 个失败请求；进甲板/子页时由 onModeChange 即时刷一轮。
+  var _tjPollBusy = false;
   setInterval(function () {
-    loadTuanjieAccounts(); loadTuanjieInflight(); loadTuanjieActivity();
-    if ($('mxGrid')) renderTuanjieMatrix();
+    if (_tjPollBusy) return;                       /* 上一 tick 未完成不叠加 */
+    if (!(curMode === 'tj' || curMode === 'water' || $('mxGrid'))) return;
+    _tjPollBusy = true;
+    Promise.allSettled([
+      loadTuanjieAccounts(), loadTuanjieInflight(), loadTuanjieActivity(),
+      $('mxGrid') ? renderTuanjieMatrix() : null
+    ]).then(function () { _tjPollBusy = false; });
   }, 3000);
 
   /* 注意：本表同样供**进度条填充**取色（见 8109/8115/8276 的 renderBars entries），
@@ -7667,26 +7749,31 @@ var PT_I18N = {
     })), 'tokens');
   }
 
+  var _psBusy = false;
   async function pollState() {
-    var st = await call('GetState');
-    if (!st) return;
-    $('baseUrl').textContent = st.baseUrl || 'http://127.0.0.1:55990/v1';
-    S.uptime = st.uptime || 0;
-    if (st.external) setPhase('external');
-    else if (st.phase && st.phase !== S.phase) {
-      if (S.phase === 'starting' && st.phase === 'idle') { /* 点火失败已处理 */ }
-      setPhase(st.phase);
-    }
-    paintCmdOdo();
-    if (st.running && !S.modelsLoaded) {
-      S.modelsLoaded = true;
-      await loadModels();
-      refreshStats(true);
-    }
-    if (st.autostart !== S.autostart) { S.autostart = st.autostart; paintCmdDots(); }
-    if (st.apiKey && !$('apiKey').dataset.touched && !$('apiKey').value) $('apiKey').value = st.apiKey;
-    queueNotice('av', st.noticeDismissed === false);
-    queueNotice('close', st.closeHintDismissed === false);
+    if (_psBusy) return;   /* 上一 tick 未完成不叠加（端口挂起时请求与闭包堆积） */
+    _psBusy = true;
+    try {
+      var st = await call('GetState');
+      if (!st) return;
+      $('baseUrl').textContent = st.baseUrl || 'http://127.0.0.1:55990/v1';
+      S.uptime = st.uptime || 0;
+      if (st.external) setPhase('external');
+      else if (st.phase && st.phase !== S.phase) {
+        if (S.phase === 'starting' && st.phase === 'idle') { /* 点火失败已处理 */ }
+        setPhase(st.phase);
+      }
+      paintCmdOdo();
+      if (st.running && !S.modelsLoaded) {
+        S.modelsLoaded = true;
+        await loadModels();
+        refreshStats(true);
+      }
+      if (st.autostart !== S.autostart) { S.autostart = st.autostart; paintCmdDots(); }
+      if (st.apiKey && !$('apiKey').dataset.touched && !$('apiKey').value) $('apiKey').value = st.apiKey;
+      queueNotice('av', st.noticeDismissed === false);
+      queueNotice('close', st.closeHintDismissed === false);
+    } finally { _psBusy = false; }
   }
 
   /* ================= 插件通用 ================= */
@@ -7724,25 +7811,33 @@ var PT_I18N = {
           var sel = $('tjQuotaUser');
           if (!sel) return;
           try {
-            var d = await (await fetch('http://127.0.0.1:8788/accounts')).json();
+            var d = await tjAccounts();
             var accs = d.accounts || [];
             if (accs.length <= 1) { sel.style.display = 'none'; return; }
             sel.style.display = '';
-            var prev = sel.value;
-            sel.innerHTML = accs.map(function (a) {
-              var label = (a.username || a.user_id) + (a.source === 'local' ? ' (本地)' : '');
-              return '<option value="' + escHtml(a.user_id) + '">' + escHtml(label) + '</option>';
-            }).join('');
-            /* 保持上次选择；首次默认本地账号 */
-            if (prev && accs.some(function (a) { return a.user_id === prev; })) {
-              sel.value = prev;
-            } else if (!tjQuotaUserId) {
-              var local = accs.find(function (a) { return a.source === 'local'; });
-              if (local) sel.value = local.user_id;
-            } else {
-              sel.value = tjQuotaUserId;
+            /* 签名守卫：选项没变就不重建 <option>（每 3s 重建会打断展开中的下拉）；
+               值/选中态随 sel 保留，无需重设 */
+            var sig = accs.map(function (a) {
+              return a.user_id + '|' + (a.username || '') + '|' + (a.source || '');
+            }).join(';');
+            if (sel.__sig !== sig) {
+              sel.__sig = sig;
+              var prev = sel.value;
+              sel.innerHTML = accs.map(function (a) {
+                var label = (a.username || a.user_id) + (a.source === 'local' ? ' (本地)' : '');
+                return '<option value="' + escHtml(a.user_id) + '">' + escHtml(label) + '</option>';
+              }).join('');
+              /* 保持上次选择；首次默认本地账号 */
+              if (prev && accs.some(function (a) { return a.user_id === prev; })) {
+                sel.value = prev;
+              } else if (!tjQuotaUserId) {
+                var local = accs.find(function (a) { return a.source === 'local'; });
+                if (local) sel.value = local.user_id;
+              } else {
+                sel.value = tjQuotaUserId;
+              }
+              tjQuotaUserId = sel.value;
             }
-            tjQuotaUserId = sel.value;
             renderTuanjieQuotaCache(V); /* 选中账号的缓存立刻上屏（不拉官网） */
             sel.onchange = function () {
               tjQuotaUserId = sel.value;
@@ -7761,7 +7856,7 @@ var PT_I18N = {
           var sel = $('cbQuotaUser');
           if (!sel) return;
           try {
-            var d = await (await fetch('http://127.0.0.1:' + V.port + '/v1/accounts')).json();
+            var d = await (await fetch('http://127.0.0.1:' + V.port + '/v1/accounts', { signal: AbortSignal.timeout(3000) })).json();
             var accs = d.accounts || [];
             if (accs.length <= 1) { /* ≤1 号无切换可言：收起下拉；区域感知——选中号失效重选 */
               sel.style.display = 'none';
@@ -7769,22 +7864,29 @@ var PT_I18N = {
               return;
             }
             sel.style.display = '';
-            var prev = sel.value;
-            /* 死号/停用号追加后缀（从 /v1/accounts 的 dead/enabled 字段取）：
-               选中死号时积分面板显示凭据失效态（loadCodebuddyQuota 渲染 err 分支） */
-            sel.innerHTML = accs.map(function (a) {
-              var mark = a.dead ? ' · 凭据失效' : (!a.enabled ? ' · 已停用' : '');
-              return '<option value="' + escHtml(a.uid) + '">' +
-                escHtml((a.nickname || a.uid_short || '?') + ' · ' + (a.uid_short || '') + mark) + '</option>';
-            }).join('');
-            /* 保持上次选择；CN/INTL 两套账号互不相通，切区后旧 uid 不在新池里即失效
-               重选（首次/切区默认池内第一个号=mtime 最新登录） */
-            if (prev && accs.some(function (a) { return a.uid === prev; })) {
-              sel.value = prev;
-            } else {
-              sel.value = accs[0].uid;
+            /* 签名守卫：选项（含死号/停用后缀）没变就不重建，不打断展开中的下拉 */
+            var sig = accs.map(function (a) {
+              return a.uid + '|' + (a.nickname || '') + '|' + (a.uid_short || '') + '|' + (a.dead ? 'd' : '') + (a.enabled ? '' : 'x');
+            }).join(';');
+            if (sel.__sig !== sig) {
+              sel.__sig = sig;
+              var prev = sel.value;
+              /* 死号/停用号追加后缀（从 /v1/accounts 的 dead/enabled 字段取）：
+                 选中死号时积分面板显示凭据失效态（loadCodebuddyQuota 渲染 err 分支） */
+              sel.innerHTML = accs.map(function (a) {
+                var mark = a.dead ? ' · 凭据失效' : (!a.enabled ? ' · 已停用' : '');
+                return '<option value="' + escHtml(a.uid) + '">' +
+                  escHtml((a.nickname || a.uid_short || '?') + ' · ' + (a.uid_short || '') + mark) + '</option>';
+              }).join('');
+              /* 保持上次选择；CN/INTL 两套账号互不相通，切区后旧 uid 不在新池里即失效
+                 重选（首次/切区默认池内第一个号=mtime 最新登录） */
+              if (prev && accs.some(function (a) { return a.uid === prev; })) {
+                sel.value = prev;
+              } else {
+                sel.value = accs[0].uid;
+              }
+              cbQuotaUserId = sel.value;
             }
-            cbQuotaUserId = sel.value;
             renderCodebuddyQuotaCache(V); /* 选中账号的缓存立刻上屏（不拉官网） */
             sel.onchange = function () {
               cbQuotaUserId = sel.value;
@@ -7801,7 +7903,7 @@ var PT_I18N = {
            剩余量在官方 WASM 签名墙后，代理侧拿不到——不放假数字。 */
         (async function () {
           try {
-            var h = await (await fetch('http://127.0.0.1:' + V.port + '/health')).json();
+            var h = await (await fetch('http://127.0.0.1:' + V.port + '/health', { signal: AbortSignal.timeout(3000) })).json();
             var c = h.credits || {};
             PTApp.dot('qoderCredits', running, false, '累计 ' + (c.spent || 0));
             PTApp.dot('qoderQuota', running && !c.quotaExceeded, false, c.quotaExceeded ? '额度耗尽' : '正常');
@@ -7879,17 +7981,22 @@ var PT_I18N = {
       k.classList.toggle('key-live', !selected && on);
     });
   }
+  var _klBusy = false;
   async function refreshKeyLights() {
-    if (typeof window.ccLiveSnapshot === 'function') {
-      try {
-        var raw = await window.ccLiveSnapshot();
-        var r = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        if (r && r.ok && r.live) { lastLive = r.live; paintKeyLights(lastLive); return; }
-      } catch (e) { /* 桥失败静默：不报错 */ }
-      if (lastLive) paintKeyLights(lastLive);   /* 上次快照兜底 */
-      return;                                   /* 尚无快照（启动瞬间）：本轮不刷灯 */
-    }
-    paintKeyLights(null);                       /* 无桥回退：状态机相位点灯 */
+    if (_klBusy) return;   /* 上一 tick 未完成不叠加 */
+    _klBusy = true;
+    try {
+      if (typeof window.ccLiveSnapshot === 'function') {
+        try {
+          var raw = await window.ccLiveSnapshot();
+          var r = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (r && r.ok && r.live) { lastLive = r.live; paintKeyLights(lastLive); return; }
+        } catch (e) { /* 桥失败静默：不报错 */ }
+        if (lastLive) paintKeyLights(lastLive);   /* 上次快照兜底 */
+        return;                                   /* 尚无快照（启动瞬间）：本轮不刷灯 */
+      }
+      paintKeyLights(null);                       /* 无桥回退：状态机相位点灯 */
+    } finally { _klBusy = false; }
   }
   PTApp.refreshKeyLights = refreshKeyLights;   /* 第 30 轮：键面翻面后引擎侧调用 */
   setInterval(refreshKeyLights, 2500);
@@ -7926,7 +8033,7 @@ var PT_I18N = {
       var url = 'http://127.0.0.1:' + V.port + (isMatrix ? '/model/matrix' : '/v1/models');
       if (V.mode === 'tj') url += '?full=true';
       else if (isMatrix && refresh) url += '?refresh=1';
-      var r = await fetch(url);
+      var r = await fetch(url, { signal: AbortSignal.timeout(3000) });
       var d = await r.json();
       var ids = (d.data || []).map(function (m) { return m.id; });
       var mcEl = $(V.pfx + 'ModelCount'), mlBox = $(V.pfx + 'ModelList');
@@ -7990,7 +8097,7 @@ var PT_I18N = {
        3 秒一轮的轮询等于持续对境外无意义请求（同刚修掉的 /v1/models 空打） */
     if (V.mode === 'bai') return;
     try {
-      var r = await fetch('http://127.0.0.1:' + V.port + '/model/info');
+      var r = await fetch('http://127.0.0.1:' + V.port + '/model/info', { signal: AbortSignal.timeout(3000) });
       var list = await r.json();
       if (!Array.isArray(list) || !list.length) return;
       var sig = list.map(function (m) { return m.name + '|' + m.maxInput + '|' + m.maxOutput + '|' + (m.reasoning || ''); }).join('');
@@ -8101,8 +8208,16 @@ var PT_I18N = {
   }
 
   async function loadPluginStats(V, mode) {
+    var t0 = performance.now();
     try {
-      var h = await (await fetch('http://127.0.0.1:' + V.port + '/health')).json();
+      var res = await fetch('http://127.0.0.1:' + V.port + '/health', { signal: AbortSignal.timeout(3000) });
+      /* healthMs 直接取本次 /health 的网络耗时——原来为测延迟同一 tick 再打一遍
+         /health（每甲板每 3s 双份请求），现在一次请求两个用途 */
+      if (V.id !== 'tuanjie') {
+        V.healthMs = Math.round(performance.now() - t0);
+        pSet(V, 'StHealth', V.healthMs + ' ms');
+      }
+      var h = await res.json();
       if (typeof h.uptimeSec === 'number') {
         V.uptime = h.uptimeSec;
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
@@ -8135,7 +8250,7 @@ var PT_I18N = {
         var crEl = $('qoderStCredits');
         if (crEl) crEl.style.color = h.credits.quotaExceeded ? 'var(--danger, #c0392b)' : '';
       }
-    } catch (e) {}
+    } catch (e) { V.healthMs = null; }
     /* 团结/WorkBuddy 积分卡都不轮询——拉杆启动拉一次 + 手动刷新，轮询只留本地（官网 429 保护） */
     /* 消耗 TOP：团结由 loadTuanjieQuota（启动/手动刷新）渲染积分口径，
        轮询不再重复打官网；其余插件用本地 token 统计 */
@@ -8143,7 +8258,7 @@ var PT_I18N = {
       var entries = null, bmode = 'tokens';
       /* bai 也排除：本地无 /v1/stats，会被透传打到 api.b.ai（境外空请求），且 ba 甲板无消耗条 */
       if (V.id !== 'tuanjie' && V.id !== 'bai') {
-        var ds = await (await fetch('http://127.0.0.1:' + V.port + '/v1/stats')).json();
+        var ds = await (await fetch('http://127.0.0.1:' + V.port + '/v1/stats', { signal: AbortSignal.timeout(3000) })).json();
         var models = ds.models || {};
         entries = Object.keys(models).map(function (name) {
           var m = models[name];
@@ -8167,14 +8282,6 @@ var PT_I18N = {
     } catch (e) {
       var bw2 = $(V.pfx + 'Bars');
       if (bw2 && V.id !== 'tuanjie') bw2.innerHTML = '<div class="bars-empty">// 统计暂不可用</div>';
-    }
-    if (V.id !== 'tuanjie') {
-      var t0 = performance.now();
-      try {
-        await fetch('http://127.0.0.1:' + V.port + '/health');
-        V.healthMs = Math.round(performance.now() - t0);
-        pSet(V, 'StHealth', V.healthMs + ' ms');
-      } catch (e) { V.healthMs = null; }
     }
   }
 
@@ -8343,8 +8450,9 @@ var PT_I18N = {
         if (/err|重试|失败|status=[45]\d\d/.test(body)) level = 'err';
         else if (/status=200|dur=/.test(body)) level = 'ok';
         else if (/^stat model=/.test(body)) level = 'net';
-        logInto(box, level, body);
+        logInto(box, level, body, { noScroll: true });   /* 批量装载不逐行回底 */
       });
+      box.scrollTop = box.scrollHeight;
       V.logLoaded = true;
     }
   }
@@ -8363,7 +8471,7 @@ var PT_I18N = {
   }
   async function loadTuanjiePacing() {
     try {
-      var st = await (await fetch('http://127.0.0.1:8788/kimi-pacing')).json();
+      var st = await (await fetch('http://127.0.0.1:8788/kimi-pacing', { signal: AbortSignal.timeout(3000) })).json();
       renderTuanjiePacing(st);
     } catch (e) {}
   }
@@ -8436,7 +8544,7 @@ var PT_I18N = {
       return;
     }
     try {
-      var cfg = await (await fetch('http://127.0.0.1:' + V.port + '/v1/failover')).json();
+      var cfg = await (await fetch('http://127.0.0.1:' + V.port + '/v1/failover', { signal: AbortSignal.timeout(3000) })).json();
       renderCbFailover(cfg, V.modelIds || []);
     } catch (e) {
       if (!silent) plog(V, 'err', 'hy4 兜底配置读取失败（插件未启动？）');
@@ -9736,14 +9844,20 @@ var PT_I18N = {
     hideModelTip();
     curMode = m;
     /* 子页面模式（注水检测 / 媒体转路由）不是插件甲板，进页面时刷自己的数据 */
-    if (m === 'water') { loadWaterPage(); return; }
+    if (m === 'water') { loadWaterPage(); loadTuanjieAccounts(); return; } /* 被动观测数据同源 /accounts，即时刷一轮 */
     if (m === 'media') { loadMediaPage(); return; }
+    if (m === 'tj') { loadTuanjieAccounts(); loadTuanjieInflight(); loadTuanjieActivity(); } /* 进甲板即时刷，不等 3s tick */
     if (m !== 'cmd') refreshPluginView(m);
     else pollState();
   });
 
+  var _ppBusy = false;
   var _pluginPoll = setInterval(function () {
-    if (curMode !== 'cmd') refreshPluginView(curMode);
+    if (_ppBusy || curMode === 'cmd') return;   /* 上一 tick 未完成不叠加 */
+    _ppBusy = true;
+    Promise.resolve(refreshPluginView(curMode)).then(
+      function () { _ppBusy = false; },
+      function () { _ppBusy = false; });
   }, 3000);
 
   /* 运行时长跳动（插件） */

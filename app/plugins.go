@@ -132,33 +132,42 @@ func checkPluginDeps() error {
 }
 
 // pluginList 返回所有插件的状态 JSON（目录存在/运行/健康/端口/日志）。
+// 探活并行：本方法在 WebView2 UI 线程同步执行，串行探 6 个端口时单端口挂起
+// 最坏 6×1.5s，会把整窗拖死；并发后总耗时 ≈ 最慢一个端口。
+// 结果按索引写预分配 slice，输出结构与顺序与串行版完全一致。
 func (a *app) pluginList() []map[string]any {
 	states := a.pluginStates()
-	out := make([]map[string]any, 0, len(pluginDefs))
-	for _, d := range pluginDefs {
-		st := states[d.ID]
-		st.mu.Lock()
-		running := st.running
-		lastErr := st.lastErr
-		st.mu.Unlock()
-		script := a.pluginScript(d)
-		present := d.Native != "" // 原生插件内置于本 exe，恒为存在
-		if !present {
-			present = script != ""
-		}
-		// healthy 无条件查端口：外部启动的实例（终端/上次 GUI）同样识别为运行中，
-		// 否则视图会误判"未启动"，模型矩阵/日志全部不加载。
-		alive := present && httpOK(a.pluginHealthURL(d))
-		out = append(out, map[string]any{
-			"id": d.ID, "name": d.Name, "port": d.Port,
-			"native":  d.Native != "",
-			"dir":     filepath.Join("plugins", d.Dir),
-			"present": present,
-			"running": running, "healthy": alive,
-			"lastErr": lastErr, "log": filepath.Base(a.pluginLog(d)),
-			"url": fmt.Sprintf("http://127.0.0.1:%d/v1", d.Port),
-		})
+	out := make([]map[string]any, len(pluginDefs))
+	var wg sync.WaitGroup
+	for i, d := range pluginDefs {
+		wg.Add(1)
+		go func(i int, d pluginDef) {
+			defer wg.Done()
+			st := states[d.ID]
+			st.mu.Lock()
+			running := st.running
+			lastErr := st.lastErr
+			st.mu.Unlock()
+			script := a.pluginScript(d)
+			present := d.Native != "" // 原生插件内置于本 exe，恒为存在
+			if !present {
+				present = script != ""
+			}
+			// healthy 无条件查端口：外部启动的实例（终端/上次 GUI）同样识别为运行中，
+			// 否则视图会误判"未启动"，模型矩阵/日志全部不加载。
+			alive := present && httpOK(a.pluginHealthURL(d))
+			out[i] = map[string]any{
+				"id": d.ID, "name": d.Name, "port": d.Port,
+				"native":  d.Native != "",
+				"dir":     filepath.Join("plugins", d.Dir),
+				"present": present,
+				"running": running, "healthy": alive,
+				"lastErr": lastErr, "log": filepath.Base(a.pluginLog(d)),
+				"url": fmt.Sprintf("http://127.0.0.1:%d/v1", d.Port),
+			}
+		}(i, d)
 	}
+	wg.Wait()
 	return out
 }
 
