@@ -56,7 +56,7 @@
   --pp-hole: #CFC5A8; --pp-hole-hi: rgba(255, 255, 255, .95);   /* 走纸孔 + 孔下缘高光 */
   --pp-perf: #DDD5BE;                           /* 骑缝虚线 */
   --pp-rule: #D4CBB3;                           /* 纸上点线/虚线 */
-  --pp-ink: #34322C; --pp-fine: #8B8474;        /* 纸上墨色 */
+  --pp-ink: #34322C; --pp-fine: #6E675A;        /* 纸上墨色（低对比度修复：细字 #8B8474→#6E675A，5.08:1） */
   /* 倒计时滚筒（2026-08-06 所有者定：浅色模式浅筒深字，暗色模式深筒浅字）。
      两套不是"把颜色反过来"那么简单 —— 筒面受光、边缘曲率阴影、数字的浮雕方向
      三者都要跟着翻：浅筒上数字压深、高光在字下方；深筒上数字提亮、阴影在字下方。
@@ -199,6 +199,28 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
   --pt-ink2:         #A8A29A;
   --pt-hairline:     #413A32;
   --pt-accent:       #FF6B62;
+  /* 低对比度修复：彩字/彩底字色变量。暗色保留原亮色（暗底上本来就够读），
+     亮色在下方 .pt-try 覆盖块里换成加深版。只作文字色，底色/图形用途不动。 */
+  --pt-ok-ink:       #3ecf8e;
+  --pt-warn-ink:     #ffb300;
+  --pt-accent-ink:   #FF6B62;
+  /* vendor 分组头文字色（暗色保留原值；亮色在覆盖块里加深） */
+  --vendor-amber:    #ffb300;
+  --vendor-pink:     #ff6b9d;
+  --vendor-purple:   #b06bff;
+  --vendor-blue:     #4d8dff;
+  --vendor-fallback: #8a7f70;
+  --vendor-claude:   #ff9d6b;
+  --vendor-openai:   #6bff9d;
+  --vendor-codely:   #00d4ff;
+  --vendor-hy3:      #00ffa3;
+  --vendor-xai:      #d9ff6b;
+  --vendor-mimo:     #ff7a45;
+  --vendor-gemini:   #6bd9ff;
+  --vendor-auto:     #7c9dff;
+  /* 红底徽章（.acc-tag.fail / .budget）：暗色保持原 accent 亮底 + 深字 6.28:1 */
+  --pt-stamp-bg:     #FF6B62;
+  --pt-stamp-ink:    var(--pt-paper);
   --pt-knob:         #F3EEE6;
   --pt-cap-face:     #39332C;
   --pt-graphite:     #4A443C;
@@ -823,14 +845,16 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 .pt-stamp span { display: inline-block; padding: 5px 8px 4px 10px; border: 2.5px solid currentColor;
   border-radius: 6px; transform: rotate(-2.5deg); white-space: nowrap; }
 
-.pt-stamp.armed { cursor: pointer; border-color: var(--pt-accent); color: color-mix(in srgb, var(--pt-accent) 80%, transparent); }
+/* 低对比度修复：原 80% 半透明 accent 压浅甲板只有 2.83:1，去掉透明层吃加深色（4.69:1）。
+   边框仍用点缀色 --pt-accent（非文本用途不动）。 */
+.pt-stamp.armed { cursor: pointer; border-color: var(--pt-accent); color: var(--pt-accent-ink); }
 
 .pt-stamp.armed span { border-color: transparent; font-family: var(--pt-font-ui); font-size: 10.5px;
   font-weight: 600; letter-spacing: 1.3px; text-transform: none; transform: none; padding: 0; }
 
 .pt-stamp:active.armed { transform: translateY(1px); opacity: .75; }
 
-.pt-stamp.landing span { color: var(--pt-accent); animation: pt-stamp-land 280ms cubic-bezier(.2, 1.6, .4, 1); }
+.pt-stamp.landing span { color: var(--pt-accent-ink); animation: pt-stamp-land 280ms cubic-bezier(.2, 1.6, .4, 1); }
 
 @keyframes pt-stamp-land { from { transform: rotate(-2.5deg) scale(1.35); opacity: 0; } to { transform: rotate(-2.5deg) scale(1); opacity: 1; } }
 
@@ -951,7 +975,7 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 
 .pt-license-help { margin-bottom: 7px; }
 
-.pt-license-status.ok { color: var(--pt-accent); }
+.pt-license-status.ok { color: var(--pt-accent-ink); }
 
 .pt-service-plate {
   position: relative; display: flex; align-items: stretch; margin-top: 3px;
@@ -1411,8 +1435,8 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 /* 第 10 轮 REPORT 判定章：颜色随 verdict.light（真实/注水/存疑/无基准），无报告=灰「未 检 测」 */
 .fx-stamp.v-green { color: #2E8B57; border-color: #2E8B57; background: color-mix(in srgb, #2E8B57 5%, transparent); }
 .fx-stamp.v-red { color: #B23A2E; border-color: #B23A2E; background: color-mix(in srgb, #B23A2E 5%, transparent); }
-.fx-stamp.v-yellow { color: #B8860B; border-color: #B8860B; background: color-mix(in srgb, #B8860B 5%, transparent); }
-.fx-stamp.v-grey { color: #8B8474; border-color: #8B8474; background: color-mix(in srgb, #8B8474 5%, transparent); }
+.fx-stamp.v-yellow { color: #8A5F00; border-color: #8A5F00; background: color-mix(in srgb, #8A5F00 5%, transparent); }
+.fx-stamp.v-grey { color: #6E675A; border-color: #6E675A; background: color-mix(in srgb, #6E675A 5%, transparent); }
 [data-theme="dark"] .fx-stamp.v-green { color: #55D695; border-color: #55D695; background: color-mix(in srgb, #55D695 5%, transparent); }
 [data-theme="dark"] .fx-stamp.v-red { color: #F06A5E; border-color: #F06A5E; background: color-mix(in srgb, #F06A5E 5%, transparent); }
 [data-theme="dark"] .fx-stamp.v-yellow { color: #F2C94C; border-color: #F2C94C; background: color-mix(in srgb, #F2C94C 5%, transparent); }
@@ -1535,10 +1559,12 @@ body.fax-standalone .fx.report-page .fx-lamp-wrap { margin-left: auto; }
 .fx-report .if-row .led { flex: none; width: 8px; height: 8px; margin: auto 0; }
 .fx-report .acc-tag { font-size: 14px; letter-spacing: .3px; font-weight: 700; }
 .fx-report .if-empty { font-size: 13px; padding: 3px 1px; }
-/* ① 检测项：结果图标 = 关键判定值（14px 加粗，色块旁保留文字=色盲可辨） */
-.fx-report .acc-tag.pass { color: #2E8B57; }
-.fx-report .acc-tag.fail { color: #B23A2E; }
-.fx-report .acc-tag.warn { color: #B8860B; }
+/* ① 检测项：结果图标 = 关键判定值（14px 加粗，色块旁保留文字=色盲可辨）
+   低对比度修复：原为深字压同色系彩底（pass 2.13:1 / fail 1.53:1 / warn 2.01:1），
+   改为浅彩底 + 深字配对，色系不变、双主题通用（此处是纸面区，不吃主题变量）。 */
+.fx-report .acc-tag.pass { background: #D8F0E4; color: #137046; }
+.fx-report .acc-tag.fail { background: #F6DAD7; color: #A32E27; }
+.fx-report .acc-tag.warn { background: #F0E3BE; color: #6B4E00; }
 /* ③ 分布指纹：核心数字 = 关键值（15px 加粗），其余正文 13px */
 .fx-report .if-row .u b { font-weight: 700; color: var(--pp-ink); }
 
@@ -1610,8 +1636,13 @@ body.fax-standalone .fx.report-page .fx-lamp-wrap { margin-left: auto; }
 .fx-receipt dt { flex: none; width: 4.2em; color: var(--pp-ink); }   /* 官方：标签与值同深墨；第 41 轮 3.2→4.2em——「检测对象」四字在 14px 下折行 */
 .fx-receipt dd { margin: 0; flex: 1; text-align: right; font-family: var(--pt-mono-ui); font-weight: 400; font-variant-numeric: tabular-nums; color: var(--pp-ink); }   /* 官方：常规字重、统一深墨 */  /* 官方：值右对齐到统一右缘 */
 .fx-receipt [data-fx-r-result] { color: var(--fx-rcp-ok); }   /* 结果行「OK · 已送达」绿色强调 */
-.fx-receipt .thanks { margin: 4px 0 0; font-size: 12.5px; font-weight: 400; line-height: 1.5; color: #777776; }  /* 官方：感谢语中灰、常规字重 */
-.fx-receipt .tear-hint { margin: 3px 0 0; font-size: 10px; font-weight: 400; line-height: 1.5; color: #AAA9A0; }  /* 官方：提示行更小更淡 */
+.fx-receipt .thanks { margin: 4px 0 0; font-size: 12.5px; font-weight: 400; line-height: 1.5; color: #5E5E58; }  /* 官方：感谢语中灰、常规字重；低对比度修复 #777776(亮纸 3.88:1)→#5E5E58(5.65:1) */
+.fx-receipt .tear-hint { margin: 3px 0 0; font-size: 10px; font-weight: 400; line-height: 1.5; color: #6E675A; }  /* 官方：提示行更小更淡；低对比度修复 #AAA9A0(亮纸 2.05:1)→#6E675A(4.85:1) */
+/* 回执纸暗色是深色（--fx-rcp-1 #37322A）：上面两个深字色压上去会掉到 1.95/2.27:1。
+   按简报总原则「暗色保留原值」还原（#AAA9A0 on 深纸 5.38:1 达标；
+   #777776 原值 2.84:1 本就不达标，属暗色既有值，本次不动，见报告）。 */
+[data-theme="dark"] .fx-receipt .thanks { color: #777776; }
+[data-theme="dark"] .fx-receipt .tear-hint { color: #AAA9A0; }
 .fx-receipt .teeth {               /* 底边锯齿（撕纸边）— 官方截图：等腰大三角、约 31 齿。
                                       实现：clip-path polygon 单元素精确三角（弃 linear-gradient
                                       拼合——45°渐变线在非正方形格画不出等腰、双渐变衔接有混色缝、
@@ -1879,7 +1910,7 @@ body.pt-try { background: var(--pt-paper); }
 }
 .pt-chip:hover { transform: translateY(-1px); box-shadow: 0 2px 5px var(--pt-sh-18); color: var(--pt-ink); }
 .pt-chip:active { transform: translateY(0) scale(.96); }
-.pt-chip.copied { border-color: var(--pt-accent); color: var(--pt-accent);
+.pt-chip.copied { border-color: var(--pt-accent); color: var(--pt-accent-ink);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--pt-accent) 35%, transparent); }
 .pt-models-empty { color: var(--pt-ink2); font-size: 10px; line-height: 1.8; padding: 6px 2px; }
 
@@ -1923,7 +1954,7 @@ body.pt-try { background: var(--pt-paper); }
 .pt-dd .dd-item { padding: 7px 10px; cursor: pointer; color: var(--pt-ink); font-size: 10.5px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pt-dd .dd-item:hover { background: var(--pt-rc-06); }
-.pt-dd .dd-item.cur { color: var(--pt-accent); font-weight: 600; }
+.pt-dd .dd-item.cur { color: var(--pt-accent-ink); font-weight: 600; }
 .pt-dd .dd-empty { padding: 7px 10px; color: var(--pt-ink2); font-size: 10px; }
 
 /* ———— 版本铭牌（Update 区）———— */
@@ -1957,7 +1988,7 @@ body.pt-try { background: var(--pt-paper); }
 .toast .t-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
   background: currentColor; opacity: .4; transform-origin: left; animation: tbar 2.8s linear forwards; }
 .toast.ok .t-bar { color: var(--pt-sc-green); }
-.toast.err .t-bar { color: var(--pt-accent); }
+.toast.err .t-bar { color: var(--pt-accent-ink); }
 .toast.info .t-bar { color: #C08AFF; }
 @keyframes tbar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
@@ -2024,9 +2055,9 @@ body.pt-try { background: var(--pt-paper); }
 .pt-lat .lat-t { display: flex; align-items: baseline; gap: 6px; }
 .pt-lat .lat-t b { font-weight: 700; min-width: 44px; font-variant-numeric: tabular-nums; }
 .pt-lat .lat-t em { font-style: normal; opacity: .75; font-size: 9.5px; }
-.pt-lat .lat-t.ok b { color: var(--pt-sc-green); }
-.pt-lat .lat-t.bad b { color: #E0A62E; }
-.pt-lat .lat-t.err b { color: var(--pt-accent); }
+.pt-lat .lat-t.ok b { color: var(--pt-ok-ink); }
+.pt-lat .lat-t.bad b { color: var(--pt-warn-ink); }
+.pt-lat .lat-t.err b { color: var(--pt-accent-ink); }
 
 /* ———— 灵点余额（乙板）———— */
 .pt-subhead.b { margin-top: 6px; }
@@ -2104,6 +2135,29 @@ body.pt-try { background: var(--pt-paper); }
   /* 上屏随外观的 5 个暖色深底 → 中性 */
   --pt-sc-paper: #1A1A19;  --pt-sc-rim: #141413;  --pt-sc-well: #202020;
   --pt-sc-vuoff: #2E2E2C;  --pt-sc-odocell: #232322;
+  /* 低对比度修复：彩色文字在浅底上加深（暗色块里的原值不受影响）。
+     --pt-accent-ink 同时用于红底徽章的覆写，见下方 .acc-tag 规则。 */
+  --pt-ok-ink:       #147A4A;
+  --pt-warn-ink:     #8A5F00;
+  --pt-accent-ink:   #C0332B;
+  --vendor-amber:    #8A5F00;
+  --vendor-pink:     #B0335F;
+  --vendor-purple:   #6B34B8;
+  --vendor-blue:     #2B62C4;
+  --vendor-fallback: var(--pt-ink2);
+  /* vendor 未列组 8 条（裁决第 5 条）：亮色加深值，均实算 ≥4.5:1（底 = 甲板面 #EBEBE7） */
+  --vendor-claude:   #8A3D00;   /* 6.39:1（原 #ff9d6b 1.71:1） */
+  --vendor-openai:   #0B5D2E;   /* 6.71:1（原 #6bff9d 1.07:1） */
+  --vendor-codely:   #00618A;   /* 5.71:1（原 #00d4ff 1.48:1） */
+  --vendor-hy3:      #006B44;   /* 5.51:1（原 #00ffa3 1.11:1） */
+  --vendor-xai:      #5A6B00;   /* 4.97:1（原 #d9ff6b 1.05:1） */
+  --vendor-mimo:     #8A2E00;   /* 7.11:1（原 #ff7a45 2.16:1） */
+  --vendor-gemini:   #00618A;   /* 5.71:1（原 #6bd9ff 1.35:1） */
+  --vendor-auto:     #2B3E8A;   /* 8.14:1（原 #7c9dff 2.16:1） */
+  /* 红底徽章（.acc-tag.fail / .budget）：原 accent 底压字只有 3.51:1，加深一档保色系；
+     字用纯白（--pt-paper #F4F4F2 压上去只有 4.23:1，差 0.27 不达标）。暗色走暗色块原值。 */
+  --pt-stamp-bg:     #D63A31;
+  --pt-stamp-ink:    #FFFFFF;
 }
 
 /* ———— 圆角加大一圈（窗口四角受 Windows 限制最大 8px，机身内元素可调） ———— */
@@ -2160,7 +2214,7 @@ body.pt-try { background: var(--pt-paper); }
 .pm-tbl th { text-align: left; color: var(--pt-ink2); font-weight: 600;
   padding: 3px 6px; border-bottom: 1px solid var(--pt-ru-65); }
 .pm-tbl td { padding: 3px 6px; color: var(--pt-ink2); border-bottom: 1px solid var(--pt-ru-45); }
-.pm-tbl td.pm-name { color: var(--pt-accent); cursor: pointer;
+.pm-tbl td.pm-name { color: var(--pt-accent-ink); cursor: pointer;
   font-family: var(--pt-font-disp); }
 
 /* Wheel 音量活动条（原版 pt-vu 12 段，横排照搬）：挂上屏右侧空白处，随滚动点亮衰减 */
@@ -2183,8 +2237,8 @@ body.pt-try { background: var(--pt-paper); }
 .if-row .u { color: var(--pt-ink2); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
 .if-row .idle2 { min-width: 46px; text-align: right; }
 .if-row .idle2.ok { color: var(--pt-ink2); }
-.if-row .idle2.warn { color: #F2A61B; font-weight: 600; }
-.if-row .idle2.crit { color: var(--pt-accent); font-weight: 600; }
+.if-row .idle2.warn { color: var(--pt-warn-ink); font-weight: 600; }
+.if-row .idle2.crit { color: var(--pt-accent-ink); font-weight: 600; }
 .if-loads { font-size: 9.5px; color: var(--pt-ink2); padding: 2px 4px 4px;
   font-variant-numeric: tabular-nums; letter-spacing: .3px; }
 /* 实时动态行 */
@@ -2195,8 +2249,8 @@ body.pt-try { background: var(--pt-paper); }
   color: var(--pt-ink2); font-variant-numeric: tabular-nums; }
 .act-row .lt { flex: none; opacity: .8; }
 .act-row .lv { flex: none; width: 30px; font-weight: 700; font-size: 8.5px; letter-spacing: .5px; }
-.act-row.ok .lv { color: #4FD467; }
-.act-row.error .lv { color: var(--pt-accent); }
+.act-row.ok .lv { color: var(--pt-ok-ink); }
+.act-row.error .lv { color: var(--pt-accent-ink); }
 .act-row.info .lv { color: var(--pt-ink2); }
 .act-row .lm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--pt-ink2); }
 .act-row.ok .lm, .act-row.error .lm { color: var(--pt-ink); }
@@ -2216,17 +2270,22 @@ body.pt-try { background: var(--pt-paper); }
   padding: 7px 10px; border: 1px solid var(--pt-hairline); border-radius: 8px;
   background: linear-gradient(var(--pt-hi-40), transparent 35%), var(--pt-hatch);
 }
-.acc-row.off { opacity: .5; }
+.acc-row.off { opacity: .85; }
 .acc-row .a-name { font-size: 12px; font-weight: 650; color: var(--pt-ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .acc-row .a-meta { font-size: 9.5px; color: var(--pt-ink2); margin-top: 2px; }
-.acc-row .a-meta .warn { color: var(--pt-accent); font-weight: 600; }
+.acc-row .a-meta .warn { color: var(--pt-accent-ink); font-weight: 600; }
+/* 低对比度修复：.acc-tag 此前没有默认底色，凡是没被 .glm/.budget/.pass/.fail 命中、
+   又没写内联 background 的徽章（.warn 全文件无底色规则、弹窗模型 chip 是裸 .acc-tag）
+   字直接落纸底 ≈1.0:1，等于看不见。给基类补上深底浅字兜底（同 .expired 观感，
+   双主题实测 5.93:1 / 6.92:1）；下面各变体有底色的照旧覆盖，观感不变。 */
 .acc-tag {
   font-family: var(--pt-font-disp); font-size: 8.5px; font-weight: 600; letter-spacing: .5px;
-  border-radius: 3px; padding: 1.5px 5px; color: var(--pt-paper);
+  border-radius: 3px; padding: 1.5px 5px;
+  background: var(--pt-ink2); color: var(--pt-paper);
 }
-.acc-tag.glm { background: #ff6b9d; }
-.acc-tag.budget { background: var(--pt-accent); }
+.acc-tag.glm { background: #ff6b9d; color: #4A0E24; }
+.acc-tag.budget { background: var(--pt-stamp-bg); color: var(--pt-stamp-ink); }
 .acc-tag.expired { background: var(--pt-ink2); }
 
 /* 宽版模态（账号矩阵/自定义服务商子页面） */
@@ -2288,7 +2347,7 @@ body.pt-try { background: var(--pt-paper); }
 
 /* 自定义服务商刷新指示：/providers 冷启动要现查订阅与用量，给一条呼吸提示而不是空白等待 */
 .pv-busy { margin-left: 10px; font-family: var(--pt-font-ui); font-size: 11px; font-weight: 500;
-  letter-spacing: .3px; color: #F2A61B; animation: pvbreathe 1.2s ease-in-out infinite; }
+  letter-spacing: .3px; color: var(--pt-warn-ink); animation: pvbreathe 1.2s ease-in-out infinite; }
 @keyframes pvbreathe { 50% { opacity: .3; } }
 
 /* 账号矩阵子页面头部（自动探测/手动添加一行；注水检测已独立成子页面） */
@@ -2341,13 +2400,13 @@ body.pt-try { background: var(--pt-paper); }
 .if-row .m { color: var(--pt-ink); font-weight: 600; min-width: 70px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .if-row .t { margin-left: auto; }
-.if-row .idle { color: var(--pt-accent); font-weight: 600; }
+.if-row .idle { color: var(--pt-accent-ink); font-weight: 600; }
 .if-empty { color: var(--pt-ink2); font-size: 10.5px; line-height: 1.7; padding: 2px; }
 
 /* 注水检测子页面（行样式复用 if-row；题徽章用 acc-tag 变体） */
-.acc-tag.pass { background: #3ecf8e; }
-.acc-tag.fail { background: var(--pt-accent); }
-.if-row .detail { margin-left: auto; color: var(--pt-accent);
+.acc-tag.pass { background: #3ecf8e; color: #0B3D26; }
+.acc-tag.fail { background: var(--pt-stamp-bg); color: var(--pt-stamp-ink); }
+.if-row .detail { margin-left: auto; color: var(--pt-accent-ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
 .wt-sub { font-family: var(--pt-font-disp); font-size: 11px; font-weight: 700;
   letter-spacing: 1.5px; color: var(--pt-ink); margin: 14px 0 6px; }
@@ -2364,8 +2423,11 @@ body.pt-try { background: var(--pt-paper); }
 .cl-tag { font-family: var(--pt-font-disp); font-size: 12.5px; font-weight: 700;
   color: #fff; background: var(--pt-ink2); border-radius: 4px;
   padding: 2px 8px; letter-spacing: .5px; }
-/* 只有最新版用红色，其余低调灰 */
-.cl-ver:first-child .cl-tag { background: var(--pt-accent); }
+/* 只有最新版用红色，其余低调灰。
+   低对比度修复：原为白字压 --pt-accent（亮 3.87:1 / 暗 2.79:1 均不达标），
+   改与 .acc-tag.fail/.budget 同轨（底 --pt-stamp-bg + 字 --pt-stamp-ink）：
+   亮 4.66:1 / 暗 6.28:1。 */
+.cl-ver:first-child .cl-tag { background: var(--pt-stamp-bg); color: var(--pt-stamp-ink); }
 .cl-date { font-size: 11px; color: var(--pt-ink2); font-variant-numeric: tabular-nums; }
 .cl-arrow { margin-left: auto; font-size: 11px; color: var(--pt-ink2);
   transition: transform .2s ease; }
@@ -3023,8 +3085,8 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                           : isDisabled
                             ? '<span class="acc-tag expired">已停用</span>'
                             : a.cooling
-                              ? '<span class="acc-tag" style="background:#e8b34b">冷却至 ' + accEsc(accFmt(a.limited_until)) + '</span>'
-                              : '<span class="acc-tag" style="background:#3ecf8e">可用</span>';
+                              ? '<span class="acc-tag" style="background:#e8b34b;color:#3D2B00">冷却至 ' + accEsc(accFmt(a.limited_until)) + '</span>'
+                              : '<span class="acc-tag" style="background:#3ecf8e;color:#0B3D26">可用</span>';
                       var load = a.inflight || 0;
                       var meta = accEsc(a.nickname || a.uid_short || '?') + ' · #' + accEsc(a.uid_short || '') +
                         ' · 用 ' + (a.use_count || 0) + ' 次' +
@@ -5100,7 +5162,10 @@ var PT_I18N = {
     }, 1000);
   }
 
-  /* ---------------- 厂商配色与分组 ---------------- */
+  /* ---------------- 厂商配色与分组 ----------------
+     注意：本表(VENDOR_COLORS)与 PLUGIN_VENDOR_COLORS 是**进度条填充**的取色源
+     （vendorColor() → renderBars 的 .bar-fill background），属非文字用途，保持原值不动。
+     分组头「文字」色另走 VENDOR_HEAD_INK（见 renderModelChips 上方），不共用本表。 */
   var VENDOR_COLORS = { deepseek: '#4d8dff', moonshotai: '#b06bff', 'zai-org': '#ff6b9d',
     minimaxai: '#ffb300', qwen: '#00d4ff', stepfun: '#00ffa3', xiaomi: '#ff7a45', google: '#7c9dff' };
   function vendorOf(id) {
@@ -5117,6 +5182,8 @@ var PT_I18N = {
     stepfun: 'codely', qwen: 'codely', xiaomi: 'minimax', google: 'gemini', meta: 'openai',
     inclusionai: 'minimax', poolside: 'openai', sakana: 'openai',
     thinkingmachines: 'openai', nvidia: 'openai', tencent: 'hy3' };
+  /* vendorColor() 只喂进度条填充（.bar-fill 背景），属非文字用途：
+     整条链路（含兜底 #8a7f70）保持原值不动，分组头文字色见 VENDOR_HEAD_INK。 */
   function vendorColor(id) {
     var v = vendorOf(id);
     return PLUGIN_VENDOR_COLORS[v] || PLUGIN_VENDOR_COLORS[VENDOR_ALIAS[v]] ||
@@ -5381,7 +5448,7 @@ var PT_I18N = {
     var expCls = hrs > 72 ? 'ok' : hrs > 24 ? 'warn' : 'crit';
     var expPct = Math.max(2, Math.min(100, hrs / 720 * 100));
     var stateTag = a.budget_exceeded ? '<span class="acc-tag budget">配额用尽</span>'
-      : a.enabled ? '<span class="acc-tag" style="background:#3ecf8e">运行中</span>'
+      : a.enabled ? '<span class="acc-tag" style="background:#3ecf8e;color:#0B3D26">运行中</span>'
       : '<span class="acc-tag expired">已禁用</span>';
     var load = a.inflight || 0;
     var tags = stateTag
@@ -5559,7 +5626,7 @@ var PT_I18N = {
       '<button type="button" class="ibtn2" data-pv-edit="' + escHtml(p.name) + '" title="修改该服务商的 Base URL / API Key / API 格式（模型在卡片上增删）">改</button>' +
       '<button type="button" class="ibtn2" data-pv-del="' + escHtml(p.name) + '" title="删除该自定义服务商">删</button></div>' +
       '<div class="pv-models">' +
-      (p.ok ? '<span class="acc-tag" style="background:#3ecf8e">已连接</span>'
+      (p.ok ? '<span class="acc-tag" style="background:#3ecf8e;color:#0B3D26">已连接</span>'
             : '<span class="acc-tag budget">不可达</span>') + ' ' +
       protoTag +
       (p.sub && p.sub.has_payment_method ? '<span class="acc-tag glm">已绑支付</span> ' : '') +
@@ -6210,10 +6277,12 @@ var PT_I18N = {
       if (box) box.innerHTML = '<div class="if-empty">// 暂无检测记录（内存保留最近 20 条，重启 8788 清空）</div>';
       return;
     }
-    var colorMap = { green: '#3ecf8e', yellow: '#ffb300', red: '#ff5f5f' };
+    /* 低对比度修复：内联 style 里 var() 合法，交给 CSS 按主题求值（亮色加深/暗色原值），
+       JS 无需主题感知。 */
+    var colorMap = { green: 'var(--pt-ok-ink)', yellow: 'var(--pt-warn-ink)', red: 'var(--pt-accent-ink)' };
     var histHtml = h.slice(-10).reverse().map(function (x) {
       var led = x.verdict_light === 'green' ? 'ok' : x.verdict_light === 'red' ? 'crit' : 'warn';
-      var c = colorMap[x.verdict_light] || '#8a8f98';
+      var c = colorMap[x.verdict_light] || 'var(--pt-ink2)';
       return '<div class="if-row">' +
         '<span class="led ' + led + '"></span>' +
         '<span class="t">' + escHtml(String(x.at || '').slice(5, 16)) + '</span>' +
@@ -6455,10 +6524,11 @@ var PT_I18N = {
     /* 第 13 轮：检测历史块（REPORT 扳机「随附历史记录」）——复用甲板历史行模板（waterHist 会话数据） */
     function fxHistoryRowsHtml() {
       if (!waterHist.length) return '<div class="if-empty">// 暂无检测记录</div>';
-      var colorMap = { green: '#3ecf8e', yellow: '#ffb300', red: '#ff5f5f' };
+      /* 低对比度修复：同上，内联 style 用 CSS 变量按主题取值 */
+      var colorMap = { green: 'var(--pt-ok-ink)', yellow: 'var(--pt-warn-ink)', red: 'var(--pt-accent-ink)' };
       return waterHist.slice(-10).reverse().map(function (x) {
         var led = x.verdict_light === 'green' ? 'ok' : x.verdict_light === 'red' ? 'crit' : 'warn';
-        var c = colorMap[x.verdict_light] || '#8a8f98';
+        var c = colorMap[x.verdict_light] || 'var(--pt-ink2)';
         return '<div class="if-row">' +
           '<span class="led ' + led + '"></span>' +
           '<span class="t">' + (x.at || '').slice(5, 16) + '</span>' +
@@ -7186,9 +7256,23 @@ var PT_I18N = {
     if ($('mxGrid')) renderTuanjieMatrix();
   }, 3000);
 
+  /* 注意：本表同样供**进度条填充**取色（见 8109/8115/8276 的 renderBars entries），
+     属非文字用途，保持原值不动。分组头文字色另走 VENDOR_HEAD_INK。 */
   var PLUGIN_VENDOR_COLORS = { glm: '#ff6b9d', kimi: '#b06bff', deepseek: '#4d8dff', minimax: '#ffb300',
     hy3: '#00ffa3', hy: '#00ffa3', codely: '#00d4ff', auto: '#7c9dff', claude: '#ff9d6b', openai: '#6bff9d',
     gemini: '#6bd9ff', xai: '#d9ff6b', qwen: '#00d4ff', mimo: '#ff7a45' };
+  /* 低对比度修复：vendor 分组头是**文字**，亮色底上原亮色系只有 1.05–3.0:1。
+     单独一张只给表头用的映射（值 = CSS 变量，亮色加深/暗色原值），
+     与上面两张进度条取色表解耦，进度条观感一点不动。
+     别名由 VENDOR_ALIAS 兜（moonshotai→kimi、zai-org→glm、minimaxai→minimax、
+     stepfun/qwen→codely、google→gemini、meta/nvidia 等→openai、tencent→hy3）。
+     注：pluginVendorOf 把 hy3/hy4-preview 归一成 hy，故 hy 与 hy3 都要有键。 */
+  var VENDOR_HEAD_INK = { glm: 'var(--vendor-pink)', kimi: 'var(--vendor-purple)',
+    deepseek: 'var(--vendor-blue)', minimax: 'var(--vendor-amber)',
+    claude: 'var(--vendor-claude)', openai: 'var(--vendor-openai)',
+    codely: 'var(--vendor-codely)', hy3: 'var(--vendor-hy3)', hy: 'var(--vendor-hy3)',
+    xai: 'var(--vendor-xai)', mimo: 'var(--vendor-mimo)',
+    gemini: 'var(--vendor-gemini)', auto: 'var(--vendor-auto)' };
   function pluginVendorOf(id) {
     var s = (id.split('/')[0] || '').toLowerCase();
     var m = s.match(/^(glm|kimi|deepseek|minimax|hy\d|codely|auto)/);
@@ -7270,7 +7354,10 @@ var PT_I18N = {
     Object.keys(groups).sort().forEach(function (v) {
       var g = document.createElement('div');
       g.className = 'pt-vendor-g';
-      var gColor = colors[v] || colors[VENDOR_ALIAS[v]] || '#8a7f70';
+      /* 表头是文字：先查只给表头用的加深色表（VENDOR_HEAD_INK），命中即用；
+         未命中回落原色表（进度条那张，值不变），再兜底 --vendor-fallback。 */
+      var gColor = VENDOR_HEAD_INK[v] || VENDOR_HEAD_INK[VENDOR_ALIAS[v]] ||
+        colors[v] || colors[VENDOR_ALIAS[v]] || 'var(--vendor-fallback)';
       g.innerHTML = '<div class="pt-vendor-h" style="color:' + gColor + '">' + v.toUpperCase() + '</div>';
       var chips = document.createElement('div');
       chips.className = 'pt-chips';
