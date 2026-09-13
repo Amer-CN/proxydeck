@@ -297,11 +297,15 @@ var httpClient = &http.Client{Timeout: 1500 * time.Millisecond}
 var httpClientSlow = &http.Client{Timeout: 10 * time.Second}
 
 // 更新检查缓存：bind 立即返回缓存，网络刷新在后台 goroutine（不阻塞 bind 队列）。
-// updateCacheAt 记写入时刻：负缓存（限额失败）10 分钟过期重拉，成功缓存永久有效。
+// updateCacheAt 记写入时刻：成功缓存 30 分钟过期重拉（原「永久有效」实测翻车——
+// GUI 开着跨一次发版，本会话永远看到旧 latest，检测更新误报「已是最新」，
+// 2026-09-14 用户实测踩中）；负缓存（限额失败）10 分钟过期重拉。
 var (
-	updateCacheMu sync.Mutex
-	updateCache   string
-	updateCacheAt time.Time
+	updateCacheMu   sync.Mutex
+	updateCache     string
+	updateCacheAt   time.Time
+	updateRefreshCh = make(chan struct{}, 1) // 过期后由 bind 踢重拉（去重不叠加）
+	updateLastFetch time.Time                // 最近一次踢拉取的时刻（断网限频 30s）
 )
 
 // 一键更新流程状态：bind 只读写这几个字段并瞬时返回，真正的下载/替换在
@@ -595,107 +599,127 @@ func (a *app) bindAll(w webview.WebView) {
 	// 旧版下载量就"消失"了，用户会误以为没人用。累计下载才是真实反馈。
 	_ = w.Bind("ccCheckUpdate", func() string {
 		// 只读缓存（瞬时返回，不阻塞 WebView2 的串行 bind 队列）；
-		// 网络刷新由后台 goroutine 异步完成（见下方 releases 拉取）。
+		// 网络刷新由后台常驻 goroutine 异步完成（见下方 releases 拉取）。
+		// 保鲜期：成功缓存 30 分钟、负缓存 10 分钟，过期即清并踢后台重拉。
 		updateCacheMu.Lock()
 		cached, cacheAt := updateCache, updateCacheAt
+		ttl := 30 * time.Minute
+		if strings.Contains(cached, `"ok":false`) {
+			ttl = 10 * time.Minute
+		}
+		if cached != "" && time.Since(cacheAt) >= ttl {
+			updateCache = ""
+			cached = ""
+		}
 		updateCacheMu.Unlock()
 		if cached != "" {
-			// 负缓存（限额失败）10 分钟内直接命中，不再触发重拉
-			if strings.Contains(cached, `"ok":false`) && time.Since(cacheAt) > 10*time.Minute {
-				updateCacheMu.Lock()
-				updateCache = ""
-				updateCacheMu.Unlock()
-			} else {
-				return cached
+			return cached
+		}
+		// 首次/过期：踢后台重拉（通道去重；断网时限频 30s——前端 checking 每 2s
+		// 重试，不至把 gh CLI/匿名 API 打成连发）。
+		updateCacheMu.Lock()
+		canKick := time.Since(updateLastFetch) > 30*time.Second
+		if canKick {
+			updateLastFetch = time.Now()
+		}
+		updateCacheMu.Unlock()
+		if canKick {
+			select {
+			case updateRefreshCh <- struct{}{}:
+			default:
 			}
 		}
 		return `{"ok":false,"msg":"checking"}`
 	})
 	// 后台异步拉取 GitHub releases（不占 bind 队列；成功写缓存供前端重试读取）。
+	// 常驻循环：bind 发现缓存过期时踢一次（通道去重）——GUI 开着跨发版也能感知新版本。
 	// 通道优先级（第 46 轮实测教训：匿名 API 限额按出口 IP 计，共享 NAT/代理出口
 	// 极易 60/h 撞墙，更新检查整片失败）：
 	//   ①本机 gh CLI 已登录（gh api 认证限额 5000/h）→ 用它拉
 	//   ②gh 不存在/失败 → 匿名 HTTP 兜底；匿名 403 限额后负缓存 10 分钟，
 	//     防手动检查+每小时复查反复烧同一出口的额度
 	go func() {
-		const url = "https://api.github.com/repos/Amer-CN/proxydeck/releases?per_page=100"
-		type asset struct {
-			Name               string `json:"name"`
-			Download           int    `json:"download_count"`
-			BrowserDownloadURL string `json:"browser_download_url"`
-			Size               int64  `json:"size"`
-			Digest             string `json:"digest"` // GitHub API 自带，形如 sha256:<hex>（老 release 为空）
-		}
-		type rel struct {
-			TagName string  `json:"tag_name"`
-			HTMLURL string  `json:"html_url"`
-			Assets  []asset `json:"assets"`
-		}
-		fetchBody := func() (string, int) {
-			// ① gh CLI（已登录时限额 5000/h，共享出口不受匿名 60/h 连坐）
-			if out, err := hiddenCmd("gh", "api", "repos/Amer-CN/proxydeck/releases?per_page=100",
-				"--jq", ".").Output(); err == nil {
-				return string(out), http.StatusOK
+		for range updateRefreshCh {
+			const url = "https://api.github.com/repos/Amer-CN/proxydeck/releases?per_page=100"
+			type asset struct {
+				Name               string `json:"name"`
+				Download           int    `json:"download_count"`
+				BrowserDownloadURL string `json:"browser_download_url"`
+				Size               int64  `json:"size"`
+				Digest             string `json:"digest"` // GitHub API 自带，形如 sha256:<hex>（老 release 为空）
 			}
-			// ② 匿名 HTTP 兜底
-			resp, err := httpClientSlow.Get(url)
-			if err != nil {
-				log.Printf("[update] releases 拉取失败: %v", err)
-				return "", 0
+			type rel struct {
+				TagName string  `json:"tag_name"`
+				HTMLURL string  `json:"html_url"`
+				Assets  []asset `json:"assets"`
 			}
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				log.Printf("[update] releases 状态异常: %d", resp.StatusCode)
-				return "", resp.StatusCode
+			fetchBody := func() (string, int) {
+				// ① gh CLI（已登录时限额 5000/h，共享出口不受匿名 60/h 连坐）
+				if out, err := hiddenCmd("gh", "api", "repos/Amer-CN/proxydeck/releases?per_page=100",
+					"--jq", ".").Output(); err == nil {
+					return string(out), http.StatusOK
+				}
+				// ② 匿名 HTTP 兜底
+				resp, err := httpClientSlow.Get(url)
+				if err != nil {
+					log.Printf("[update] releases 拉取失败: %v", err)
+					return "", 0
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					log.Printf("[update] releases 状态异常: %d", resp.StatusCode)
+					return "", resp.StatusCode
+				}
+				b, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+				return string(b), http.StatusOK
 			}
-			b, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-			return string(b), http.StatusOK
-		}
-		body, status := fetchBody()
-		if status == http.StatusForbidden {
-			// 匿名限额：负缓存 10 分钟（updateCache 填 not-ok JSON，前端「暂时无法连接」
-			// 且不再重试；10 分钟由 cacheAt 判定过期重新拉）
+			body, status := fetchBody()
+			if status == http.StatusForbidden {
+				// 匿名限额：负缓存 10 分钟（updateCache 填 not-ok JSON，前端「暂时无法连接」
+				// 且不再重试；10 分钟由 cacheAt 判定过期重新拉）
+				updateCacheMu.Lock()
+				updateCache = `{"ok":false,"msg":"github rate limited"}`
+				updateCacheAt = time.Now()
+				updateCacheMu.Unlock()
+				continue
+			}
+			if status != http.StatusOK {
+				continue
+			}
+			var releases []rel
+			if json.NewDecoder(strings.NewReader(body)).Decode(&releases) != nil || len(releases) == 0 {
+				log.Printf("[update] releases 解析失败或为空")
+				continue
+			}
+			totalDownloads := 0
+			latest := releases[0] // GitHub 按时间倒序，第一个即最新
+			for _, rl := range releases {
+				for _, a := range rl.Assets {
+					totalDownloads += a.Download
+				}
+			}
+			// 一键更新用的直链：只认最新 release 里名字为 ProxyDeck.exe 的 asset
+			//（实测形态 https://github.com/Amer-CN/proxydeck/releases/download/vX.Y.Z/ProxyDeck.exe）。
+			// 老 release 没有该 asset 时留空串 → 前端「立即更新」退回打开网页的旧行为。
+			dlURL, dlSize, dlDigest := "", int64(0), ""
+			for _, as := range latest.Assets {
+				if as.Name == "ProxyDeck.exe" {
+					dlURL, dlSize, dlDigest = as.BrowserDownloadURL, as.Size, as.Digest
+					break
+				}
+			}
+			b, _ := json.Marshal(map[string]any{
+				"ok": true, "latest": latest.TagName, "url": latest.HTMLURL,
+				"downloads": totalDownloads, // 所有版本累计下载量
+				"dl_url":    dlURL,          // 新增：exe 直链（老前端忽略新字段，兼容）
+				"dl_size":   dlSize,         // 新增：exe 字节数（下载后校验用；0 = 未知不校验）
+				"dl_digest": dlDigest,       // 新增：asset digest（sha256:<hex>；空 = 老 release 无，沿用字节数校验）
+			})
 			updateCacheMu.Lock()
-			updateCache = `{"ok":false,"msg":"github rate limited"}`
-			updateCacheAt = time.Now()
+			updateCache = string(b)
+			updateCacheAt = time.Now() // 成功缓存同样记时，30 分钟保鲜（原缺失=跨发版失明根因之一）
 			updateCacheMu.Unlock()
-			return
 		}
-		if status != http.StatusOK {
-			return
-		}
-		var releases []rel
-		if json.NewDecoder(strings.NewReader(body)).Decode(&releases) != nil || len(releases) == 0 {
-			log.Printf("[update] releases 解析失败或为空")
-			return
-		}
-		totalDownloads := 0
-		latest := releases[0] // GitHub 按时间倒序，第一个即最新
-		for _, rl := range releases {
-			for _, a := range rl.Assets {
-				totalDownloads += a.Download
-			}
-		}
-		// 一键更新用的直链：只认最新 release 里名字为 ProxyDeck.exe 的 asset
-		//（实测形态 https://github.com/Amer-CN/proxydeck/releases/download/vX.Y.Z/ProxyDeck.exe）。
-		// 老 release 没有该 asset 时留空串 → 前端「立即更新」退回打开网页的旧行为。
-		dlURL, dlSize, dlDigest := "", int64(0), ""
-		for _, as := range latest.Assets {
-			if as.Name == "ProxyDeck.exe" {
-				dlURL, dlSize, dlDigest = as.BrowserDownloadURL, as.Size, as.Digest
-				break
-			}
-		}
-		b, _ := json.Marshal(map[string]any{
-			"ok": true, "latest": latest.TagName, "url": latest.HTMLURL,
-			"downloads": totalDownloads, // 所有版本累计下载量
-			"dl_url":    dlURL,          // 新增：exe 直链（老前端忽略新字段，兼容）
-			"dl_size":   dlSize,          // 新增：exe 字节数（下载后校验用；0 = 未知不校验）
-			"dl_digest": dlDigest,        // 新增：asset digest（sha256:<hex>；空 = 老 release 无，沿用字节数校验）
-		})
-		updateCacheMu.Lock()
-		updateCache = string(b)
-		updateCacheMu.Unlock()
 	}()
 	// 一键更新：触发（action="start"）启动后台 goroutine 立即返回；查询（action="status"）
 	// 返回进度。webview_go 的 Bind 按位置把 JS 参数 JSON 反序列化进 Go 参数（个数必须相等），
