@@ -9730,8 +9730,18 @@ var PT_I18N = {
           /* 1) 主代理停堆（杀 headless，55990） */
           try { await call('Stop'); } catch (e) {}
           S.userStopped = true;   /* 阻断自愈看门狗在退出瞬间拉起代理 */
-          /* 2) 插件进程全停（tuanjie / codebuddy / codebuddy-intl） */
-          var ids = ['tuanjie', 'codebuddy', 'codebuddy-intl'];
+          /* 2) 插件进程全停——清单从 PluginList（Go 侧插件注册表）现取，不再硬编码：
+             原清单只写了早期的 3 个插件，后加的 bai/comate/qoder 永远停不掉
+             （2026-09-14 用户实测踩中：彻底关机后 3 个后端存活）。PluginList 取不到
+             时兜底显式六项，关机宁多勿漏。 */
+          var ids = null;
+          try {
+            var plist = await call('PluginList');
+            if (Array.isArray(plist) && plist.length) {
+              ids = plist.map(function (p) { return p.id; });
+            }
+          } catch (e) {}
+          if (!ids) ids = ['tuanjie', 'codebuddy', 'codebuddy-intl', 'bai', 'comate', 'qoder'];
           for (var i = 0; i < ids.length; i++) {
             try { await call('PluginStop', ids[i]); } catch (e) {}
           }
