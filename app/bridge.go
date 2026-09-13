@@ -316,7 +316,10 @@ var (
 
 // updateMirrorCandidates 一键更新下载镜像链（按序尝试，全部失败回退直连）。
 // 公共镜像时有失效（2026-09-08 实测 mirror.ghproxy.com 已死），哪个挂了改这里。
-var updateMirrorCandidates = []string{"https://ghfast.top", "https://gh-proxy.com"}
+// 2026-09-14 无梯子直连实测：gh-proxy.com 12.5MB/15s（sha256 与 Release 逐字节一致）；
+// ghfast.top TCP 直连超时（连不上）——故 gh-proxy 置前，ghfast 留第二候选：
+// 排后面只在第一个失效时才被碰到，死着也不拖累日常更新（死镜像要吃满 ~30s 拨号超时才切下一个）。
+var updateMirrorCandidates = []string{"https://gh-proxy.com", "https://ghfast.top"}
 
 // keyProbeCache 存储 key 探活结果缓存：bind 只读，真探在后台 goroutine（见 ccProbeKey）。
 var (
