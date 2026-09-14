@@ -2709,7 +2709,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.15.4</span>
+                    <span class="v ver" id="etchVer">v3.16.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3417,13 +3417,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.15.4">v3.15.4</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.16.0">v3.16.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.15.4</div>
+                    <div class="s" id="buildNo">v3.16.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.15.4</span>
+                  <span class="pt-val" id="verChip">v3.16.0</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -8810,6 +8810,12 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.16.0', date: '2026-09-15', groups: [
+      { label: '🚀 新功能', items: [
+        '没额度的账号自动切走，智能体不再被 14018 炸停',
+        '耗尽账号标红，充完值点一下恢复' ] },
+      { label: '🐛 Bug 修复', items: [
+        '工具参数名不再被脱敏误删，GPT-6 类模型能正常调工具' ] } ] },
     { v: 'v3.15.4', date: '2026-09-14', groups: [
       { label: '🐛 Bug 修复', items: [
         '彻底关机现在真的全停：补上漏掉的三个后端' ] } ] },
@@ -9774,7 +9780,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.15.4';
+  var UI_CUR = 'v3.16.0';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   var cbQuotaUserId = ''; // WorkBuddy 积分面板选中的账号（空串=默认最新号；区域感知：切区后失效重选）
   function verCmp(a, b) {
