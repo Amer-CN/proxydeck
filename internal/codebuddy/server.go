@@ -886,6 +886,59 @@ func normalizeToolChoice(body map[string]any) {
 	}
 }
 
+// summarizeToolsForDiag 11129 结构诊断用：只提取 tools 定义与 tool_choice，
+// 不碰 messages（消息正文不进日志）、不碰认证头。返回 JSON 字符串，调用方
+// 负责截断长度。backendBody 为出站前实际发送的请求体（含脱敏后 tools）。
+func summarizeToolsForDiag(backendBody map[string]any) string {
+	tools, _ := backendBody["tools"].([]any)
+	summary := make([]any, 0, len(tools))
+	for i, raw := range tools {
+		tm, ok := raw.(map[string]any)
+		if !ok {
+			summary = append(summary, map[string]any{"index": i, "note": "non-object tool"})
+			continue
+		}
+		entry := map[string]any{"index": i}
+		if t, _ := tm["type"].(string); t != "" {
+			entry["type"] = t
+		}
+		if fn, ok := tm["function"].(map[string]any); ok {
+			if name, _ := fn["name"].(string); name != "" {
+				entry["name"] = name
+			}
+			if desc, _ := fn["description"].(string); desc != "" {
+				entry["description"] = desc
+			}
+			if params, ok := fn["parameters"]; ok && params != nil {
+				entry["parameters"] = params
+			} else {
+				entry["parameters"] = "missing"
+			}
+			if strict, ok := fn["strict"]; ok && strict != nil {
+				entry["strict"] = strict
+			}
+		} else {
+			// 非嵌套形态（如扁平 function）：有 name/parameters 就记
+			if name, _ := tm["name"].(string); name != "" {
+				entry["name"] = name
+			}
+			if params, ok := tm["parameters"]; ok && params != nil {
+				entry["parameters"] = params
+			}
+		}
+		summary = append(summary, entry)
+	}
+	out := map[string]any{"tool_count": len(tools), "tools": summary}
+	if tc, ok := backendBody["tool_choice"]; ok && tc != nil {
+		out["tool_choice"] = tc
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -1022,6 +1075,12 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		// 11128 专项诊断（2026-09-08 实锤为内容指纹拦截，固定前缀便于 grep）
 		if strings.Contains(string(errBody), "11128") {
 			log.Printf("[codebuddy] 11128 为内容指纹拦截（第三方 Agent system 模板句/品牌词常见），对照 desensitize.go 指纹清洗表排查，body 预览: %s", truncate(string(errBody), 200))
+		}
+		// 11129 结构诊断（2026-09-14 GPT-6 工具定义校验失败）：只记出站 tools 定义
+		// 与 tool_choice + 完整上游错误，不记 messages 正文、不记认证头，便于定位
+		// tools[0].parameters 里哪个字段不合法。转发行为不变。
+		if strings.Contains(string(errBody), "11129") || strings.Contains(string(errBody), "invalid_function_parameters") {
+			log.Printf("[codebuddy] 11129 工具定义校验失败 model=%s tools=%s err=%s", sentModel, truncate(summarizeToolsForDiag(backendBody), 8000), truncate(string(errBody), 4000))
 		}
 		// 账号凭据失效轮换（401/403）：token 被官方吊销≠本地可判过期（死号的
 		// expiresAt 未到期、CN 刷新路径对它也不触发，本地预检不可靠，以上游
