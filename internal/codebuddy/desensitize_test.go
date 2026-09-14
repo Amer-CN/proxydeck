@@ -3,8 +3,10 @@
 package codebuddy
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -147,5 +149,166 @@ func TestFailoverDefaultReasoningFallbackToMax(t *testing.T) {
 		if got != "max" {
 			t.Fatalf("%s: 缺字段/非法 default_reasoning 应回落 max, got %q", name, got)
 		}
+	}
+}
+
+// ZCode 本机 Agent 工具的参数结构（2026-09-14）：description 是必填参数，
+// 不是 parameters.properties 这一命名空间里的元数据。旧递归删除了该参数，
+// 却留下 required + additionalProperties:false，造成无可满足的出站 schema。
+const zcodeAgentToolFixture = `{
+  "type": "function",
+  "function": {
+    "name": "Agent",
+    "description": "Launch an agent",
+    "parameters": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "description": {"type": "string", "description": "Task summary"},
+        "prompt": {"type": "string", "description": "Task instructions"},
+        "subagent_type": {"type": "string"},
+        "run_in_background": {"type": "boolean"}
+      },
+      "required": ["description", "prompt"],
+      "additionalProperties": false
+    }
+  }
+}`
+
+func toolFixture(t *testing.T, text string) map[string]any {
+	t.Helper()
+	var out map[string]any
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestToolMetadataPreservesZCodeAgentParameters(t *testing.T) {
+	for _, model := range []string{"gpt-6-astra", "deepseek-v4.1-flash"} {
+		t.Run(model, func(t *testing.T) {
+			tool := toolFixture(t, zcodeAgentToolFixture)
+			body := map[string]any{"model": model, "tools": []any{tool}}
+			out := DesensitizeBody(body, nil, false, true, true)
+			fn := out["tools"].([]any)[0].(map[string]any)["function"].(map[string]any)
+			params := fn["parameters"].(map[string]any)
+			props := params["properties"].(map[string]any)
+			for _, raw := range params["required"].([]any) {
+				if _, ok := props[raw.(string)]; !ok {
+					t.Fatalf("required parameter %q was deleted by metadata stripping", raw)
+				}
+			}
+			if len(props) != 4 || params["additionalProperties"] != false {
+				t.Fatalf("tool contract changed: %#v", params)
+			}
+			want := toolFixture(t, zcodeAgentToolFixture)
+			wantFn := want["function"].(map[string]any)
+			delete(wantFn, "description")
+			wantProps := wantFn["parameters"].(map[string]any)["properties"].(map[string]any)
+			delete(wantProps["description"].(map[string]any), "description")
+			delete(wantProps["prompt"].(map[string]any), "description")
+			if !reflect.DeepEqual(out["tools"], []any{want}) {
+				t.Fatalf("only annotation strings may change: %#v", out["tools"])
+			}
+			if !reflect.DeepEqual(tool, toolFixture(t, zcodeAgentToolFixture)) {
+				t.Fatal("input tool was mutated")
+			}
+			if again := DesensitizeBody(out, nil, false, true, true); !reflect.DeepEqual(again, out) {
+				t.Fatal("metadata stripping must be idempotent")
+			}
+			if disabled := DesensitizeBody(body, nil, false, false, true); !reflect.DeepEqual(disabled, body) {
+				t.Fatal("tools=false must leave tool schemas unchanged")
+			}
+		})
+	}
+}
+
+func TestToolMetadataPreservesSchemaNames(t *testing.T) {
+	for _, keyword := range []string{"properties", "patternProperties", "$defs", "definitions", "dependentSchemas", "dependencies"} {
+		t.Run(keyword, func(t *testing.T) {
+			for _, strip := range []bool{false, true} {
+				named := map[string]any{
+					"description": map[string]any{"type": "string", "description": "Documentation"},
+					"title":       true, // Boolean schemas are also valid named entries.
+					"default":     map[string]any{"type": "string", "title": "Documentation"},
+				}
+				in := map[string]any{keyword: named}
+				got := desensitizeToolValue(in, strip).(map[string]any)[keyword].(map[string]any)
+				if len(got) != len(named) || got["title"] != true {
+					t.Fatalf("schema names must survive (strip=%v): %#v", strip, got)
+				}
+				for name, annotation := range map[string]string{"description": "description", "default": "title"} {
+					schema, ok := got[name].(map[string]any)
+					if !ok || schema["type"] != "string" {
+						t.Fatalf("named schema %q lost (strip=%v): %#v", name, strip, got)
+					}
+					_, hasAnnotation := schema[annotation]
+					if hasAnnotation == strip {
+						t.Fatalf("annotation handling wrong (strip=%v): %#v", strip, schema)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestToolMetadataPreservesLiteralValues(t *testing.T) {
+	for _, keyword := range []string{"const", "default", "enum", "examples"} {
+		t.Run(keyword, func(t *testing.T) {
+			for _, strip := range []bool{false, true} {
+				literal := map[string]any{"description": "OpenAI", "title": "Title", "properties": map[string]any{"description": "Literal"}}
+				var value any = literal
+				if keyword == "enum" || keyword == "examples" {
+					value = []any{literal}
+				}
+				in := map[string]any{"description": "Documentation", keyword: value}
+				got := desensitizeToolValue(in, strip).(map[string]any)
+				if !reflect.DeepEqual(got[keyword], value) {
+					t.Fatalf("%s is instance data, not schema metadata (strip=%v): %#v", keyword, strip, got[keyword])
+				}
+				// The returned tree must be independent even for unmodified literal data.
+				cloned := got[keyword]
+				if a, ok := cloned.([]any); ok {
+					cloned = a[0]
+				}
+				cloned.(map[string]any)["title"] = "Changed"
+				if literal["title"] != "Title" {
+					t.Fatal("literal data aliases the input")
+				}
+			}
+		})
+	}
+}
+
+func TestToolMetadataNestedSchemaAndReferences(t *testing.T) {
+	in := toolFixture(t, `{
+	  "type":"function","function":{"name":"nested","strict":false,"title":"Tool title",
+	    "parameters":{"type":"object","properties":{
+	      "title":{"type":"array","items":{"anyOf":[
+	        {"$ref":"#/$defs/description","description":"Reference annotation"},
+	        {"type":"object","properties":{"description":{"type":"string","title":"Field title"}},"required":["description"],"additionalProperties":false}
+	      ]}}
+	    },"required":["title"],"additionalProperties":false,
+	    "$defs":{"description":{"type":"string","description":"Definition annotation"}},
+	    "dependentRequired":{"description":["title"]}}
+	  }
+	}`)
+	want := toolFixture(t, `{
+	  "type":"function","function":{"name":"nested","strict":false,
+	    "parameters":{"type":"object","properties":{
+	      "title":{"type":"array","items":{"anyOf":[
+	        {"$ref":"#/$defs/description"},
+	        {"type":"object","properties":{"description":{"type":"string"}},"required":["description"],"additionalProperties":false}
+	      ]}}
+	    },"required":["title"],"additionalProperties":false,
+	    "$defs":{"description":{"type":"string"}},
+	    "dependentRequired":{"description":["title"]}}
+	  }
+	}`)
+	if got := desensitizeToolValue(in, true); !reflect.DeepEqual(got, want) {
+		t.Fatalf("nested schema contract changed: %#v", got)
+	}
+	if got := desensitizeToolValue(in, false); !reflect.DeepEqual(got, in) {
+		t.Fatalf("neutral annotations must remain when strip=false: %#v", got)
 	}
 }

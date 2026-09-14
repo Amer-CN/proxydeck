@@ -284,20 +284,38 @@ func DesensitizeBody(body map[string]any, roles []string, harnessUser, tools, st
 	return nb
 }
 
-// desensitizeToolValue 递归处理 tool 定义。
+// desensitizeToolValue 递归处理工具/schema 的说明元数据，而不是删除同名参数。
+// properties / $defs 等是「名称 → schema」字典：description、title 在这一层
+// 是用户定义的名称，必须保留。2026-09-14 ZCode Agent.description 被误删后，
+// required 仍要求它且 additionalProperties=false，导致 GPT 返回 400/11129。
+// const/default/enum/examples 是实例数据，不能当作 schema 注解修改。
 func desensitizeToolValue(v any, stripMeta bool) any {
 	switch t := v.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(t))
 		for k, item := range t {
-			switch {
-			case (k == "description" || k == "title") && stripMeta:
-				continue // 最强压缩：直接移除高风险描述字段
-			case (k == "description" || k == "title"):
-				if s, ok := item.(string); ok {
-					out[k] = DesensitizeText(s)
+			if k == "description" || k == "title" {
+				if text, ok := item.(string); ok {
+					if !stripMeta {
+						out[k] = DesensitizeText(text)
+					}
 					continue
 				}
+			}
+			switch k {
+			case "properties", "patternProperties", "$defs", "definitions", "dependentSchemas", "dependencies":
+				if schemas, ok := item.(map[string]any); ok {
+					named := make(map[string]any, len(schemas))
+					for name, schema := range schemas {
+						// 不把参数名/定义名当关键词；只处理其对应的 schema。
+						named[name] = desensitizeToolValue(schema, stripMeta)
+					}
+					out[k] = named
+					continue
+				}
+			case "const", "default", "enum", "examples", "dependentRequired":
+				out[k] = cloneToolValue(item)
+				continue
 			}
 			out[k] = desensitizeToolValue(item, stripMeta)
 		}
@@ -310,4 +328,24 @@ func desensitizeToolValue(v any, stripMeta bool) any {
 		return out
 	}
 	return v
+}
+
+// cloneToolValue 保留实例数据原值，同时维持工具清理不共享可变子树的约定。
+func cloneToolValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, item := range t {
+			out[k] = cloneToolValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, item := range t {
+			out[i] = cloneToolValue(item)
+		}
+		return out
+	default:
+		return v
+	}
 }
