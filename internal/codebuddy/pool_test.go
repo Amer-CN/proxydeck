@@ -833,3 +833,188 @@ func TestQuota401MarksDead(t *testing.T) {
 		}
 	})
 }
+
+// ===== 额度耗尽（14018）选号与轮换 =====
+
+// MarkExhausted/Pick：4 号池标耗尽 1 个 → 连 Pick 4 次全是剩下的 3 个；
+// 全耗尽 → Pick nil；未知 uid 静默不炸。
+func TestPoolMarkExhaustedSkip(t *testing.T) {
+	p := &AccountPool{accounts: []*Account{
+		{UID: "uid-a", Nickname: "A", AuthPath: "a.info", Enabled: true},
+		{UID: "uid-b", Nickname: "B", AuthPath: "b.info", Enabled: true},
+		{UID: "uid-c", Nickname: "C", AuthPath: "c.info", Enabled: true},
+		{UID: "uid-d", Nickname: "D", AuthPath: "d.info", Enabled: true},
+	}}
+	p.MarkExhausted("uid-b")
+	p.MarkExhausted("uid-nope") // 未知 uid：静默
+	for i := 0; i < 4; i++ {
+		if a := p.Pick(); a == nil || a.UID == "uid-b" {
+			t.Fatalf("耗尽号应被 Pick 跳过，第 %d 次不应选 uid-b: got %v", i, a)
+		}
+	}
+	// ClearExhausted 解标记 → 该号立刻回到轮询
+	if !p.ClearExhausted("uid-b") {
+		t.Fatal("ClearExhausted 已知 uid 应返回 true")
+	}
+	if p.ClearExhausted("uid-nope") {
+		t.Fatal("ClearExhausted 未知 uid 应返回 false")
+	}
+	seen := map[string]bool{}
+	for i := 0; i < 4; i++ {
+		seen[p.Pick().UID] = true
+	}
+	if !seen["uid-b"] {
+		t.Fatal("ClearExhausted 后 uid-b 应回到轮询")
+	}
+	// 全耗尽 → Pick nil（调用方如实透传，不编造）
+	p.MarkExhausted("uid-a")
+	p.MarkExhausted("uid-b")
+	p.MarkExhausted("uid-c")
+	p.MarkExhausted("uid-d")
+	if a := p.Pick(); a != nil {
+		t.Fatalf("全耗尽池 Pick 应返回 nil，got %s", a.UID)
+	}
+	// 快照带 exhausted 位（GUI 标红用）
+	for _, v := range p.Snapshot() {
+		if !v.Exhausted {
+			t.Fatalf("全耗尽后快照应全带 exhausted: %+v", v)
+		}
+	}
+}
+
+// isExhaustedBody：只认业务码 14018，不认文案；空串不炸。
+func TestIsExhaustedBody(t *testing.T) {
+	for _, body := range []string{
+		`{"code":14018,"msg":"Credits exhausted. Please visit ..."}`,
+		`{"code":"14018","msg":"anything"}`,
+		`error 14018 occurred`,
+	} {
+		if !isExhaustedBody(body) {
+			t.Fatalf("应判耗尽: %s", body)
+		}
+	}
+	for _, body := range []string{
+		"",
+		`{"code":11128,"message":"Illegal API invocation"}`,
+		`{"code":40100,"message":"token expired or revoked"}`,
+		`Quota exceeded, will reset at 2026-09-02 06:20:02`,
+	} {
+		if isExhaustedBody(body) {
+			t.Fatalf("不应判耗尽: %s", body)
+		}
+	}
+}
+
+func TestChat14018SwapExhaustedRetry(t *testing.T) {
+	// 双账号假 auth 目录（token 2100 年到期 → 不会触发刷新的网络调用）
+	dir := t.TempDir()
+	base := time.Now()
+	pa := writeAuthInfo(t, dir, "a.info", "www.codebuddy.cn", "uid-a", "A", base)
+	pb := writeAuthInfo(t, dir, "b.info", "www.codebuddy.cn", "uid-b", "B", base.Add(-time.Minute))
+
+	// 场景一：A 号 14018、B 号 200 → 客户端 200，上游各一次，A 被标耗尽
+	t.Run("retry-next-account", func(t *testing.T) {
+		var hitsA, hitsB atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("X-User-Id") == "uid-a" {
+				hitsA.Add(1)
+				w.WriteHeader(http.StatusBadRequest)
+				io.WriteString(w, `{"error":{"data":{"code":14018,"msg":"Credits exhausted. Please visit the link below to purchase add-on packs","requestId":"x"}}}`)
+				return
+			}
+			hitsB.Add(1)
+			w.Header().Set("Content-Type", "text/event-stream")
+			io.WriteString(w, `data: {"choices":[{"delta":{"content":"ok"}}]}`+"\n\n")
+			io.WriteString(w, `data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`+"\n\n")
+			io.WriteString(w, "data: [DONE]\n\n")
+		}))
+		defer srv.Close()
+
+		oldCfg := regionConfigs[RegionCN]
+		ov := oldCfg
+		ov.BaseURL = srv.URL
+		regionConfigs[RegionCN] = ov
+		t.Cleanup(func() { regionConfigs[RegionCN] = oldCfg })
+
+		s := &Server{
+			cred: NewCredential(pa, RegionCN),
+			pool: &AccountPool{accounts: []*Account{
+				{UID: "uid-a", Nickname: "A", AuthPath: pa, Enabled: true},
+				{UID: "uid-b", Nickname: "B", AuthPath: pb, Enabled: true},
+			}},
+			region: RegionCN,
+			client: srv.Client(),
+			stats:  map[string]*modelStat{},
+		}
+		rr := httptest.NewRecorder()
+		s.handleChat(rr, httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+			strings.NewReader(`{"model":"hy4-preview","messages":[{"role":"user","content":"hi"}]}`)))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("A 号 14018 后应换 B 号重发拿到 200，got %d body=%s", rr.Code, rr.Body.String())
+		}
+		if hitsA.Load() != 1 || hitsB.Load() != 1 {
+			t.Fatalf("上游应 A/B 各打一次: A=%d B=%d", hitsA.Load(), hitsB.Load())
+		}
+		for _, v := range s.pool.Snapshot() {
+			if v.UID == "uid-a" && !v.Exhausted {
+				t.Fatal("A 号 14018 后应被 MarkExhausted")
+			}
+			if v.UID == "uid-b" && (v.Exhausted || v.Dead) {
+				t.Fatal("B 号 200 不应被标耗尽/标死")
+			}
+		}
+	})
+
+	// 场景二：恒 14018（A、B 全耗尽）→ 上游报文如实透传；上游有界 = 池大小 2 发
+	t.Run("all-exhausted-passthrough", func(t *testing.T) {
+		var hits atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"error":{"data":{"code":14018,"msg":"Credits exhausted"}}}`)
+		}))
+		defer srv.Close()
+
+		oldCfg := regionConfigs[RegionCN]
+		ov := oldCfg
+		ov.BaseURL = srv.URL
+		regionConfigs[RegionCN] = ov
+		t.Cleanup(func() { regionConfigs[RegionCN] = oldCfg })
+
+		s := &Server{
+			cred: NewCredential(pa, RegionCN),
+			pool: &AccountPool{accounts: []*Account{
+				{UID: "uid-a", Nickname: "A", AuthPath: pa, Enabled: true},
+				{UID: "uid-b", Nickname: "B", AuthPath: pb, Enabled: true},
+			}},
+			region: RegionCN,
+			client: srv.Client(),
+			stats:  map[string]*modelStat{},
+		}
+		// 看门狗：换号逻辑若不终止，10 秒内必被逮住
+		done := make(chan int, 1)
+		go func() {
+			rr := httptest.NewRecorder()
+			s.handleChat(rr, httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+				strings.NewReader(`{"model":"hy4-preview","messages":[{"role":"user","content":"hi"}]}`)))
+			done <- rr.Code
+		}()
+		select {
+		case code := <-done:
+			if code != http.StatusBadRequest {
+				t.Fatalf("全耗尽可能 14018 报文如实透传, got %d", code)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("handleChat 未返回（疑似死循环），上游已被打 %d 次", hits.Load())
+		}
+		// 有界契约：2 号池全耗尽 = A、B 各打一次共 2 发（Pick nil 即停，不循环）
+		if n := hits.Load(); n != 2 {
+			t.Fatalf("上游请求数应为池大小 2 发, got %d", n)
+		}
+		for _, v := range s.pool.Snapshot() {
+			if !v.Exhausted {
+				t.Fatalf("全耗尽可能 14018 过的号都应被 MarkExhausted: %+v", v)
+			}
+		}
+	})
+}

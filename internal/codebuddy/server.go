@@ -461,6 +461,8 @@ func (s *Server) handleFailover(w http.ResponseWriter, r *http.Request) {
 // GET → {ok:true, accounts:[…Snapshot…], region}；
 // POST {"action":"rescan"} → 重扫并返回新 Snapshot；
 // POST {"action":"clear_cool","uid":"<完整uid>"} → 提前解除冷却，返回 {ok:bool}；
+// POST {"action":"clear_exhausted","uid":"<完整uid>"} → 解掉额度耗尽标记
+// （充值后手动点），返回 {ok:bool}；
 // POST {"action":"toggle","uid":"<完整uid>","enabled":bool} → 手动停用/启用；
 // POST {"action":"remove","uid":"<完整uid>"} → 移出账号池（不碰 auth 文件）；
 // POST {"action":"restore","uid":"<完整uid>"} → 恢复被移出的号。
@@ -495,6 +497,10 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		case "clear_cool":
 			ok := s.pool.ClearCool(body.UID)
 			log.Printf("[codebuddy] 账号池 clear_cool uid=%s ok=%v", uidShort(body.UID), ok)
+			writeJSON(w, map[string]any{"ok": ok})
+		case "clear_exhausted":
+			ok := s.pool.ClearExhausted(body.UID)
+			log.Printf("[codebuddy] 账号池 clear_exhausted uid=%s ok=%v", uidShort(body.UID), ok)
 			writeJSON(w, map[string]any{"ok": ok})
 		case "toggle":
 			ok := s.pool.Toggle(body.UID, body.Enabled)
@@ -802,6 +808,21 @@ func (s *Server) hy4Trip(until time.Time) {
 // resetTimeRe 上游 429 报文里的重置时点：「将在 2026-09-02 06:20:02 UTC+8 重置」。
 var resetTimeRe = regexp.MustCompile(`(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})`)
 
+// isExhaustedBody 判上游返回体是否为额度耗尽（14018）：只认业务码，不认文案
+// "Credits exhausted"（措辞会漂，码不会）。匹配两种形态：JSON 业务错体里的
+// code 字段（"code":14018 / "code":"14018"）和日志裸串里的 14018。
+// 注意：只做子串判，不做完整 JSON 解析——转发热路径上每字节都贵，误判代价
+// （换号）远小于漏判代价（客户端拿 14018 直接炸）。
+func isExhaustedBody(body string) bool {
+	if body == "" {
+		return false
+	}
+	if strings.Contains(body, "14018") {
+		return true
+	}
+	return false
+}
+
 // parseQuotaReset 从上游 429 报文提取限流重置时间（上游报 UTC+8，按固定东八区
 // 解析）。非配额类 429 或解析不出时点返回零值（调用方不触发故障转移，如实透传）。
 // 关键字三族：CN 配额 "Quota exceeded"、CN 6004 中文 "频率限制"、INTL 6004
@@ -1051,6 +1072,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	var resp *http.Response
 	accountResent := false // 账号级换号重发只允许一次（免费池一般就 2 个号）
 	deadResent := 0        // 凭据失效(401/403)换号重发计数，上限 = 池大小（全死防循环）
+	exhaustedResent := 0   // 额度耗尽(14018)换号重发计数，上限 = 池大小（全耗尽可能防循环）
 	hy4Tripped := false    // hy4 模型级兜底重放只允许一次（恒 429 下防 trip→429→trip 死循环）
 	for attempt := 0; ; attempt++ {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
@@ -1067,6 +1089,45 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if resp.StatusCode == http.StatusOK {
+			// 200 体里的 14018（腾讯 chat 系额度耗尽常以 200 业务错体回来，不走
+			// 下方非 200 分支）：Peek 头 64KB 判定（错体在流首行，正常内容流里
+			// 不会出现该业务码）。命中则本轮不 break，走换号（resp.Body 未消费，
+			// 交给下次循环的请求覆盖；本轮 resp 需关闭防泄漏）。
+			// 流式路径不做此检查（headers 一旦发出中途换号会撕裂客户端流）：
+			// 故只在客户端要非流式聚合时检查，流式 200 维持原行为。
+			if !clientWantsStream && s.pool != nil && acc != nil {
+				br := bufio.NewReader(resp.Body)
+				if head, _ := br.Peek(64 * 1024); isExhaustedBody(string(head)) {
+					resp.Body.Close()
+					s.pool.MarkExhausted(acc.UID)
+					if exhaustedResent < s.pool.Size() {
+						if next := s.pool.Pick(); next != nil {
+							nhdr, nerr := s.cred.HeadersFor(r.Context(), next.AuthPath)
+							if nerr != nil {
+								writeErr(w, 502, nerr.Error())
+								return
+							}
+							log.Printf("[codebuddy] 账号 %s 额度耗尽(14018@200)，换 %s 重发",
+								uidShort(acc.UID), uidShort(next.UID))
+							s.pool.DecLoad(acc.UID)
+							s.pool.Touch(next.UID)
+							s.pool.IncLoad(next.UID)
+							hdr, acc = nhdr, next
+							exhaustedResent++
+							continue
+						}
+					}
+					// 全耗尽（Pick nil 或计数到顶）：向客户端回 200 业务错体如实
+					// 透传需要原始 body——本轮 body 尚未消费，直接透传 resp 即可。
+					// 简单起见：重新拉取太贵；此处 body 头部已 peek 但未消费，
+					// 把 br 包装回 resp 交给下方聚合路径原样透传（result 里带错体）。
+					log.Printf("[codebuddy] 全池额度耗尽（%d 个号），如实透传 14018", s.pool.Size())
+					resp.Body.Close()
+					// 下方聚合路径需要可读 body：重建请求太贵，直接回固定错体
+					writeErr(w, 200, `{"code":14018,"msg":"Credits exhausted (all accounts in pool)"}`)
+					return
+				}
+			}
 			break
 		}
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -1081,6 +1142,35 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		// tools[0].parameters 里哪个字段不合法。转发行为不变。
 		if strings.Contains(string(errBody), "11129") || strings.Contains(string(errBody), "invalid_function_parameters") {
 			log.Printf("[codebuddy] 11129 工具定义校验失败 model=%s tools=%s err=%s", sentModel, truncate(summarizeToolsForDiag(backendBody), 8000), truncate(string(errBody), 4000))
+		}
+		// 账号额度耗尽轮换（上游 14018 Credits exhausted）：不同于 429 频控——
+		// 该号本周期无额度，换号是唯一解。判定用业务码 14018（不是文案 "Credits
+		// exhausted"，防措辞漂移），状态码不限（腾讯 chat 系既有 4xx 体也有
+		// 200 业务错体，两层都拦，见本函数尾 200 聚合检查）→ MarkExhausted 当前号
+		//（无限期，复活靠 rescan 或 GUI「额度恢复」），Pick 换下一个可用号重发。
+		// 换号有界：同一请求最多换池大小次（全耗尽可能 → 透传；日志明说剩 0 个可用），
+		// 防恒 14018 下无限 continue。计数与 Dead 分支独立（deadResent 只数 401，
+		// 互不占用），与 429 的 accountResent 独立（耗尽不是频控，不该占它的 1 次名额）。
+		if s.pool != nil && acc != nil && isExhaustedBody(string(errBody)) {
+			s.pool.MarkExhausted(acc.UID)
+			if exhaustedResent < s.pool.Size() {
+				if next := s.pool.Pick(); next != nil {
+					nhdr, nerr := s.cred.HeadersFor(r.Context(), next.AuthPath)
+					if nerr != nil {
+						writeErr(w, 502, nerr.Error())
+						return
+					}
+					log.Printf("[codebuddy] 账号 %s 额度耗尽(14018)，换 %s 重发", uidShort(acc.UID), uidShort(next.UID))
+					s.pool.DecLoad(acc.UID) // 旧号释放进行中计数
+					s.pool.Touch(next.UID)
+					s.pool.IncLoad(next.UID)
+					hdr, acc = nhdr, next
+					exhaustedResent++
+					continue
+				} else {
+					log.Printf("[codebuddy] 全池额度耗尽（%d 个号全标耗尽），如实透传 14018", s.pool.Size())
+				}
+			}
 		}
 		// 账号凭据失效轮换（401/403）：token 被官方吊销≠本地可判过期（死号的
 		// expiresAt 未到期、CN 刷新路径对它也不触发，本地预检不可靠，以上游

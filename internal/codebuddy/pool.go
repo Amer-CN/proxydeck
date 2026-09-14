@@ -31,11 +31,14 @@ type Account struct {
 	AuthPath     string    // *.info 文件路径（只读）
 	LimitedUntil time.Time // 6004 冷却到期时点；零值 = 可用
 	Dead         bool      // 凭据失效（上游 401/403）：无限期标记，Pick 永不再选；复活只靠 Rescan
-	Enabled      bool      // 手动停用开关（GUI「停用/启用」）；建池缺省 true
-	Removed      bool      // 从池中移出（GUI「移除」）：uid 键持久排除；恢复靠 Restore（可撤销）
-	UseCount     int64     // 调用次数（Pick 选中后由调用方 Touch 计数）
-	LastUsed     time.Time // 最近使用时点（Touch 维护）
-	Inflight     int64     // 进行中请求数（handleChat Inc/Dec，GUI「进行中 N」）
+	Exhausted    bool      // 额度耗尽（上游 14018 Credits exhausted）：无限期标记，Pick 永不再选；
+	// 复活靠 Rescan 或 GUI「清空耗尽」（ClearExhausted）——耗尽是花钱能补的临时态，
+	// 不是凭据坏死。复活后该号会立刻参与轮询，再次撞 14018 就再标回去。
+	Enabled  bool      // 手动停用开关（GUI「停用/启用」）；建池缺省 true
+	Removed  bool      // 从池中移出（GUI「移除」）：uid 键持久排除；恢复靠 Restore（可撤销）
+	UseCount int64     // 调用次数（Pick 选中后由调用方 Touch 计数）
+	LastUsed time.Time // 最近使用时点（Touch 维护）
+	Inflight int64     // 进行中请求数（handleChat Inc/Dec，GUI「进行中 N」）
 }
 
 // AccountPool 多账号轮询：单锁 + 切片 + 轮询指针（照抄 tuanjie 的并发模型）。
@@ -216,9 +219,10 @@ func (p *AccountPool) Size() int {
 }
 
 // Pick 轮询选一个可用号：跳过冷却中（LimitedUntil 未到期）、凭据失效
-//（Dead）、手动停用（!Enabled）、已移除（Removed）的号，轮询推进；全池
-// 不可用 → 返回 nil（调用方如实透传上游响应，不编造）。冷却到期自动可选
-//（懒判定，无后台恢复循环）；Dead 无限期不自动恢复；停用/移出只靠用户动作。
+//（Dead）、额度耗尽（Exhausted）、手动停用（!Enabled）、已移除（Removed）的号，
+// 轮询推进；全池不可用 → 返回 nil（调用方如实透传上游响应，不编造）。冷却到期
+// 自动可选（懒判定，无后台恢复循环）；Dead/Exhausted 无限期不自动恢复；
+// 停用/移出只靠用户动作。
 func (p *AccountPool) Pick() *Account {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -227,13 +231,13 @@ func (p *AccountPool) Pick() *Account {
 	for i := 0; i < n; i++ {
 		idx := (p.index + i) % n
 		a := p.accounts[idx]
-		if a.Dead || !a.Enabled || a.Removed || now.Before(a.LimitedUntil) {
+		if a.Dead || a.Exhausted || !a.Enabled || a.Removed || now.Before(a.LimitedUntil) {
 			continue
 		}
 		p.index = (idx + 1) % n
 		return a
 	}
-	log.Printf("[codebuddy] 账号池 %d 个号全部不可用（冷却/停用/移除/凭据失效），本次无可用号", n)
+	log.Printf("[codebuddy] 账号池 %d 个号全部不可用（冷却/停用/移除/凭据失效/额度耗尽），本次无可用号", n)
 	return nil
 }
 
@@ -249,6 +253,37 @@ func (p *AccountPool) MarkLimited(uid string, until time.Time) {
 			return
 		}
 	}
+}
+
+// MarkExhausted 额度耗尽标记（上游 14018 Credits exhausted）：该号本周期
+// 无额度≠凭据坏，独立标记（与 Dead 正交——死号也可能额度耗尽，同号双标
+// 允许）。Pick 永不再选；复活靠 Rescan 全量复位或 ClearExhausted（GUI「额度
+// 恢复」按钮 / 充值后手动清）。找不到 uid 静默（与 MarkDead/MarkLimited 同款）。
+func (p *AccountPool) MarkExhausted(uid string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, a := range p.accounts {
+		if a.UID == uid {
+			a.Exhausted = true
+			log.Printf("[codebuddy] 账号 %s 额度耗尽(14018)，入池但不再轮到它", uidShort(uid))
+			return
+		}
+	}
+}
+
+// ClearExhausted 解掉指定号的额度耗尽标记（GUI「额度恢复」按钮：充完值手动点，
+// 不猜测上游额度到账时点）。只清耗尽，不清 Dead——死号复活仍只靠 rescan。
+// uid 匹配用完整 uid；未知 uid 返回 false。
+func (p *AccountPool) ClearExhausted(uid string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, a := range p.accounts {
+		if a.UID == uid {
+			a.Exhausted = false
+			return true
+		}
+	}
+	return false
 }
 
 // MarkDead 凭据失效标记（上游 401/403）：token 被官方吊销不会自愈（重新登录
@@ -397,6 +432,7 @@ type AccountView struct {
 	LimitedUntil time.Time `json:"limited_until"`
 	Cooling      bool      `json:"cooling"`
 	Dead         bool      `json:"dead"`
+	Exhausted    bool      `json:"exhausted"`
 	Enabled      bool      `json:"enabled"`
 	Removed      bool      `json:"removed"`
 	UseCount     int64     `json:"use_count"`
@@ -424,6 +460,7 @@ func (p *AccountPool) Snapshot() []AccountView {
 			LimitedUntil: a.LimitedUntil,
 			Cooling:      now.Before(a.LimitedUntil),
 			Dead:         a.Dead,
+			Exhausted:    a.Exhausted,
 			Enabled:      a.Enabled,
 			Removed:      a.Removed,
 			UseCount:     a.UseCount,
@@ -437,8 +474,9 @@ func (p *AccountPool) Snapshot() []AccountView {
 // Rescan 按 NewAccountPool 的同套扫描逻辑重扫（GUI「重新扫描」按钮：桌面端刚
 // 登完号不用重启即可入池）。同 uid 命中则继承既有 LimitedUntil 冷却与
 // Enabled/Removed（停用/移出是用户意图，rescan 不得复活），新号零值冷却 +
-// 缺省启用；Dead 标记不继承——rescan 即复位，全部死号复活（凭据失效不会自愈，
-// 但重新登录落地新文件后应再实测，代价 = 死号可能再吃一枪 401 再标记）。
+// 缺省启用；Dead 与 Exhausted 标记不继承——rescan 即复位，全部死号/耗尽号复活
+//（凭据失效/额度耗尽不会自愈，但重新登录/充值落地新文件后应再实测，代价 = 死号
+// 可能再吃一枪 401、耗尽号可能再吃一枪 14018 再标记）。
 // 文件已删的号出池；rescan 后池内顺序重新按 mtime 排。扫描在锁外做（文件 IO），
 // 合并进池在锁内做。
 func (p *AccountPool) Rescan(region Region) {
