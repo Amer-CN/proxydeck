@@ -403,14 +403,14 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-09-15，v3.17.0 已发布，未提交）
+## 当前状态（2026-09-15，v3.17.0 已发布；bridge.go .old 清理待攒版）
 
 > **发版节奏自 2026-09-13 起改为攒版**（用户裁决，见上文「攒版发布」节）：
 > 各会话只提交不发版，待用户说「发版」时由那个会话统一升版本号并发。
 > 本节下方各版本条目保留作历史记录；**「下版（vX.Y.Z）」类预测已失效**——
 > 实际版本号在发版时按「本版内容最高档」现算。
 
-- **v3.17.0 已发布（2026-09-15，工作区未提交）**：团结矩阵去轮询 +
+- **v3.17.0 已发布（2026-09-15；commit db8dff1+exe 07d3ac1、tag+Release 已核验；工作区新增 bridge.go .old 清理待攒版）**：团结矩阵去轮询 +
   按账号看模型 + 矩阵只显示官方可调名 + 识图加 DeepSeek-V4.1-Flash +
   B.AI 补消耗统计 + token 显示中文。段位=次版本（新功能+界面变化）。
   ① 矩阵去 3 秒轮询（点火拉一次 + 点「↻ 刷新」才现拉，`/account-models`
@@ -474,11 +474,12 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck（remote 名 `myrepo`，
   不是 origin；`push_api.py` 里的 `REPO` 写的是改名前旧名 `command-code-proxy-tools`，
   GitHub 会重定向，能用但名字陈旧）
-- 服务现状（2026-09-15 01:3x 复核）：7 进程全在（1 GUI + 6 插件后端，
+- 服务现状（2026-09-15 本会话换装后复核）：7 进程全在（1 GUI + 6 插件后端，
   8785/8786/8787/8788/8789/8891 全部 health ok）；团结 seed 双轨道 ok
-  （npm rc.60 + 桌面端，registry latest=rc.60）；待用户双击根目录
-  **v3.17.0 新包**重启 GUI（后端是独立常驻子进程，关 GUI 不死；
-  后端要换包须逐个熄火再点火，拉杆只会接管复用）。
+  （npm rc.60 + 桌面端，registry latest=rc.60）；v3.17.0 新包已换装
+  （旧 GUI 已杀、新 GUI 已拉起，6 后端逐个熄火再点火换包全绿；核心 55990
+  按需点火，当前 idle）。后端是独立常驻子进程，关 GUI 不死；
+  后端要换包须逐个熄火再点火，拉杆只会接管复用。
   ⚠ 账号池 **Dead/冷却/调用计数是进程内存态**（重启清零），只有 Enabled/Removed 落盘；
   上游 reset 时点不落盘，重启丢一次无害。`codebuddy-pool(-intl).json` 现已 gitignore。
   **GUI 不持久化插件启动状态**（`plugins.go` 无写盘），
@@ -523,9 +524,8 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
 - `.work/` 现状：构建中间产物已清（2026-09-10 清掉 `pd3103*.exe`、`ProxyDeck.new/stripped.exe`），
-  exe 回滚副本按 `ProxyDeck.prev*.exe` 命名累积（`ProxyDeck.prev.exe`、
-  `ProxyDeck.prev-85693aa.exe`、`ProxyDeck.prev-dc548a8.exe`、2026-09-13 加的
-  `ProxyDeck.prev-v3131.exe` 等）；
+  exe 回滚副本按 `ProxyDeck.prev*.exe` 命名累积（2026-09-15 已按用户裁决清零：
+  不再保留旧包备份，有问题直接修）；
   另有已完成任务的简报（`current-task.md`、`task-*.md`）、探测语料与临时脚本等，
   全部 gitignore，可随时清；**清场需用户确认**（并发会话可能仍在用同名简报）
   简报 `current-task.md` 由下一任务重写；**并行会话改用 `task-<关键词>.md`**（已核
