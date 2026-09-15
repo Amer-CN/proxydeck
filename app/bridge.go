@@ -34,6 +34,9 @@ import (
 // 结构体定义见 app.go（公开版 / 完整版各一份：完整版多插件状态字段）。
 
 func newApp(host, port, key string) *app {
+	// 每次进程启动清一次腾位法留下的旧程序残骸（更新成功即删，见下方函数注释）。
+	cleanupOldExe()
+
 	a := &app{host: host, port: port, apiKey: key}
 	if a.apiKey == "" {
 		if b, err := os.ReadFile(a.keyFile()); err == nil {
@@ -47,10 +50,75 @@ func (a *app) keyFile() string       { return filepath.Join(exeDir(), "api-key.t
 func (a *app) statsFile() string     { return filepath.Join(exeDir(), "stats.json") }
 func (a *app) noticeFile() string    { return filepath.Join(exeDir(), "notice_dismissed.flag") }
 func (a *app) closeHintFile() string { return filepath.Join(exeDir(), "close_hint_dismissed.flag") }
+func (a *app) closeModeFile() string { return filepath.Join(exeDir(), "close_mode.txt") }
 func (a *app) baseURL() string       { return "http://" + net.JoinHostPort(a.host, a.port) }
 func (a *app) healthURL() string     { return a.baseURL() + "/health" }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+// closeMode 读盘上记住的关窗模式：tray / quit；文件缺席或内容不识别 = ask（每次询问）。
+// 落盘先例同 notice_dismissed.flag（flag 式存在性判定的升级版：这里要存三态值）。
+func (a *app) closeMode() string {
+	b, err := os.ReadFile(a.closeModeFile())
+	if err != nil {
+		return "ask"
+	}
+	switch strings.TrimSpace(string(b)) {
+	case "tray":
+		return "tray"
+	case "quit":
+		return "quit"
+	}
+	return "ask"
+}
+
+// setCloseMode 记住关窗模式：ask = 删掉记忆文件（回到每次询问），tray/quit = 写盘。
+func (a *app) setCloseMode(mode string) error {
+	if mode == "ask" {
+		if err := os.Remove(a.closeModeFile()); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	return os.WriteFile(a.closeModeFile(), []byte(mode), 0o600)
+}
+
+// applyCloseMode 执行关窗动作：tray=藏进托盘（托盘图标挂不上就不藏——藏了没图标
+// 等于把用户关在门外，错误如实回前端）；quit=先摘托盘图标再走原有关窗流程
+// （WM_CLOSE → Run() 返回 → defer w.Destroy()），不留孤儿图标。
+func (a *app) applyCloseMode(mode string, hwnd uintptr) string {
+	switch mode {
+	case "tray":
+		if hwnd == 0 {
+			return jsonErr(errors.New("窗口句柄不可用"))
+		}
+		if err := trayHide(hwnd); err != nil {
+			return jsonErr(err)
+		}
+		return jsonOK("已退到托盘")
+	case "quit":
+		trayQuit(hwnd)
+		return jsonOK("正在退出")
+	}
+	return jsonOK("")
+}
+
+// cleanupOldExe 删掉更新替换（腾位法）留在 exe 同目录的 ProxyDeck.exe.old，启动时调用一次。
+// 位置不写死：取 exeDir()（更新流程也按自身 exe 定位，两处同源）。Windows 上删除失败一律
+// 不重试——旧进程仍持有 .old（旧窗口尚未关完）或被占用时删不掉，文件留着无害，下次
+// 启动再清；失败不阻塞启动、不弹窗，只写日志（更新失败分支的 .old 手动放回提示不受影响：
+// 那条路径压根没跑成替换，进程也不是被更新拉起来的新进程）。
+func cleanupOldExe() {
+	p := filepath.Join(exeDir(), "ProxyDeck.exe.old")
+	if _, err := os.Stat(p); err != nil {
+		return // 无残骸（含正常启动路径）：不写日志不动作
+	}
+	if err := os.Remove(p); err != nil {
+		log.Printf("[update] 旧程序残骸删除失败（不影响使用，下次启动再清）：%v", err)
+		return
+	}
+	log.Printf("[update] 已清理旧程序残骸 %s", p)
+}
 
 // migrateLegacyStats 把旧版（bin\stats.json）的统计数据迁移到新位置，仅首次生效。
 func (a *app) migrateLegacyStats() {
@@ -444,6 +512,14 @@ func jsonErr(err error) string {
 }
 
 func (a *app) bindAll(w webview.WebView) {
+	// GUI 启动即常拉托盘线程：图标从进程起来就挂着（窗口可见时也在），进程退出前不摘。
+	// 启动失败只写日志（见 trayStartup），界面照常可用。
+	// 注水专线浮窗（--fax 子进程）不拉：它是独立小窗，给它挂图标 = 平白多一个托盘图标。
+	if !*flagFax {
+		if h := w.Window(); h != nil {
+			trayStartup(uintptr(h))
+		}
+	}
 	_ = w.Bind("ccGetState", func() string {
 		b, _ := json.Marshal(a.state())
 		return string(b)
@@ -842,13 +918,66 @@ func (a *app) bindAll(w webview.WebView) {
 	})
 	// 自绘窗口控制（无边框窗口的标题栏交互）：move=台肩拖拽 / min / max / close。
 	// 实现见 platform_windows.go 的 windowCmd。
+	// close 走 trayQuit：先摘托盘图标再发 WM_CLOSE（彻底关机拨杆、红灯「直接退出」等
+	// 所有经此桥的关窗都从这条走），不留孤儿图标。托盘没起过时 trayQuit 内部直接关窗。
 	_ = w.Bind("ccWindowCmd", func(cmd string) string {
 		h := w.Window()
 		if h == nil {
 			return jsonErr(errors.New("窗口句柄不可用"))
 		}
+		if strings.TrimSpace(cmd) == "close" {
+			trayQuit(uintptr(h))
+			return jsonOK("")
+		}
 		windowCmd(uintptr(h), strings.TrimSpace(cmd))
 		return jsonOK("")
+	})
+	/* 关窗退到托盘三桥（红灯行为）。设计：模式裁决与执行都放 Go 侧，前端只负责
+	   「ask 时弹窗」这一件事——红灯点击 → ccRequestClose 问模式：
+	     ask  → 回 {"ok":true,"mode":"ask"}，前端用 confirmModal 款式弹二选一
+	     tray/quit → 直接执行（藏窗 / 关窗），回 {"ok":true,"mode":...}，前端不动
+	   ccCloseChoice 是弹窗里选完的回执：mode=实际动作，remember=true 才落盘
+	   close_mode.txt（不勾选 = 只做这一次，下次照问）。 */
+	_ = w.Bind("ccRequestClose", func() string {
+		mode := a.closeMode()
+		if mode == "ask" {
+			return `{"ok":true,"mode":"ask"}`
+		}
+		h := w.Window()
+		if h == nil {
+			return jsonErr(errors.New("窗口句柄不可用"))
+		}
+		return a.applyCloseMode(mode, uintptr(h))
+	})
+	_ = w.Bind("ccCloseChoice", func(mode string, remember bool) string {
+		mode = strings.TrimSpace(mode)
+		if mode != "tray" && mode != "quit" {
+			return jsonErr(errors.New("未知关窗模式: " + mode))
+		}
+		if remember {
+			if err := a.setCloseMode(mode); err != nil {
+				return jsonErr(err)
+			}
+		}
+		h := w.Window()
+		if h == nil {
+			return jsonErr(errors.New("窗口句柄不可用"))
+		}
+		return a.applyCloseMode(mode, uintptr(h))
+	})
+	_ = w.Bind("ccCloseModeGet", func() string {
+		b, _ := json.Marshal(map[string]any{"ok": true, "mode": a.closeMode()})
+		return string(b)
+	})
+	_ = w.Bind("ccCloseModeSet", func(mode string) string {
+		mode = strings.TrimSpace(mode)
+		if mode != "ask" && mode != "tray" && mode != "quit" {
+			return jsonErr(errors.New("未知关窗模式: " + mode))
+		}
+		if err := a.setCloseMode(mode); err != nil {
+			return jsonErr(err)
+		}
+		return jsonOK("已保存")
 	})
 }
 

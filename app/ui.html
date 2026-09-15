@@ -3424,6 +3424,26 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <button type="button" class="d" data-set="0" tabindex="-1" aria-hidden="true">0</button>
                   </div>
                 </div></div>
+                <div class="pt-div"></div>
+                <!-- 关闭按钮行为：红灯点下去的三种走法，落盘 exe 同目录 close_mode.txt（同 flag 文件语义） -->
+                <div class="pt-row">
+                  <div class="pt-rowline">
+                    <div class="pt-label">
+                      <div class="t" data-i18n="app.close.title">关闭按钮行为</div>
+                      <div class="s" data-i18n="app.close.desc">红灯点下去怎么走 · 记住后不再每次问</div>
+                    </div>
+                  </div>
+                  <div class="pt-gear" style="--s:0;--c:3" data-gear="closeMode" data-count="3"
+                       role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="2"
+                       aria-label="关闭按钮行为" data-i18n-attr="aria-label:app.close.title">
+                    <div class="stops">
+                      <span class="cur" data-i18n="app.close.ask">每次询问</span>
+                      <span data-i18n="app.close.tray">退到托盘</span>
+                      <span data-i18n="app.close.quit">直接退出</span>
+                    </div>
+                    <div class="pt-rail"><i></i><i></i><i></i><span class="k"></span></div>
+                  </div>
+                </div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
                 <div class="pt-nameplate" aria-label="已安装版本 v3.17.0">v3.17.0</div>
@@ -4809,7 +4829,10 @@ var PT_I18N = {
     var lightClose = $('#lightClose'), lightMin = $('#lightMin'), lightMax = $('#lightMax');
     if (lightClose) lightClose.addEventListener('click', function () {
       play('keyPress');
-      windowCmd('close');
+      /* 红灯 = 关闭请求：关窗行为（每次询问 / 退到托盘 / 直接退出）由业务层与 Go 侧裁决
+         （见 window.PTCloseRequest）。业务层未就绪（无桥预览页）时回退原来的直接关窗。 */
+      if (typeof window.PTCloseRequest === 'function') window.PTCloseRequest();
+      else windowCmd('close');
     });
     if (lightMin) lightMin.addEventListener('click', function () {
       play('keyPress');
@@ -8808,7 +8831,17 @@ var PT_I18N = {
     'app.water.btn':     { zh: '☌ 注水检测', 'zh-hant': '☌ 注水檢測', en: '☌ Canary Probe', de: '☌ Kanarien-Test', ja: '☌ カナリア検査', fr: '☌ Sonde canari', es: '☌ Prueba canaria' },
     'app.ver.installed': { zh: '已安装版本', 'zh-hant': '已安裝版本', en: 'Installed version', de: 'Installierte Version', ja: 'インストール済みバージョン', fr: 'Version installée', es: 'Versión instalada' },
     'app.pw.run':         { zh: '运行', 'zh-hant': '運行', en: 'Run', de: 'Läuft', ja: '稼働', fr: 'Marche', es: 'Activo' },
-    'app.pw.quit':        { zh: '退出', 'zh-hant': '退出', en: 'Exit', de: 'Beenden', ja: '終了', fr: 'Quitter', es: 'Salir' }
+    'app.pw.quit':        { zh: '退出', 'zh-hant': '退出', en: 'Exit', de: 'Beenden', ja: '終了', fr: 'Quitter', es: 'Salir' },
+    'app.close.title':    { zh: '关闭按钮行为', 'zh-hant': '關閉按鈕行為', en: 'Close Button', de: 'Schließen-Taste', ja: '閉じるボタン', fr: 'Bouton fermer', es: 'Botón cerrar' },
+    'app.close.desc':     { zh: '红灯点下去怎么走 · 记住后不再每次问', 'zh-hant': '紅燈點下去怎麼走 · 記住後不再每次問', en: 'What the red light does · Stop asking once remembered', de: 'Was der rote Punkt tut · Nach dem Merken keine Rückfrage mehr', ja: '赤ランプの動作・記憶すると毎回聞かなくなる', fr: 'Ce que fait le feu rouge · Plus de question une fois mémorisé', es: 'Qué hace el punto rojo · Deja de preguntar al recordarlo' },
+    'app.close.ask':      { zh: '每次询问', 'zh-hant': '每次詢問', en: 'Ask', de: 'Fragen', ja: '毎回確認', fr: 'Demander', es: 'Preguntar' },
+    'app.close.tray':     { zh: '退到托盘', 'zh-hant': '退到托盤', en: 'Tray', de: 'Tray', ja: 'トレイ', fr: 'Tray', es: 'Bandeja' },
+    'app.close.quit':     { zh: '直接退出', 'zh-hant': '直接退出', en: 'Quit', de: 'Beenden', ja: '終了', fr: 'Quitter', es: 'Salir' },
+    'app.close.dlgTitle': { zh: '关闭窗口', 'zh-hant': '關閉視窗', en: 'Close Window', de: 'Fenster schließen', ja: 'ウィンドウを閉じる', fr: 'Fermer la fenêtre', es: 'Cerrar ventana' },
+    'app.close.dlgBody':  { zh: '关掉窗口后怎么办？代理以后台进程继续运行，随时从托盘叫回界面。', 'zh-hant': '關掉視窗後怎麼辦？代理以後台進程繼續運行，隨時從托盤叫回介面。', en: 'What should closing do? The proxy keeps running in the background; bring the UI back from the tray anytime.', de: 'Was soll das Schließen tun? Der Proxy läuft im Hintergrund weiter; die Oberfläche lässt sich jederzeit aus dem Tray holen.', ja: '閉じたあとどうしますか？プロキシはバックグラウンドで動き続け、トレイからいつでも戻せます。', fr: 'Que faire à la fermeture ? Le proxy continue en arrière-plan ; rouvrez l interface depuis la tray.', es: '¿Qué hacer al cerrar? El proxy sigue en segundo plano; recupera la interfaz desde la bandeja.' },
+    'app.close.remember': { zh: '记住选择', 'zh-hant': '記住選擇', en: 'Remember my choice', de: 'Auswahl merken', ja: '選択を記憶', fr: 'Se souvenir', es: 'Recordar' },
+    'app.close.toTray':   { zh: '退到托盘', 'zh-hant': '退到托盤', en: 'Minimize to Tray', de: 'In den Tray', ja: 'トレイへ', fr: 'Réduire dans la tray', es: 'A la bandeja' },
+    'app.close.exit':     { zh: '退出界面', 'zh-hant': '退出介面', en: 'Exit UI', de: 'UI beenden', ja: 'UI を終了', fr: 'Quitter l interface', es: 'Salir de la interfaz' }
   };
   var I18N = (typeof PT_I18N !== 'undefined') ? PT_I18N : {};
   var UI_LANG_CODE = ['zh', 'zh-hant', 'en', 'de', 'ja', 'fr', 'es'];
@@ -8906,6 +8939,83 @@ var PT_I18N = {
       onConfirm();
     };
   }
+
+  /* ================= 关窗退到托盘（红灯行为） =================
+     模式三态与 Go 侧 close_mode.txt 同源：ask=每次询问（文件缺席）、tray / quit=已记住。
+     红灯点击 → ccRequestClose 问 Go 要模式：ask 则弹窗二选一（附「记住选择」），
+     记住过则 Go 直接执行，前端不弹窗。Esc / ✕ / 点遮罩 = 取消（不关窗，同 confirmModal）。 */
+  var CLOSE_MODES = ['ask', 'tray', 'quit'];
+  function closeExecute(mode, remember) {
+    call('CloseChoice', mode, !!remember).then(function (r) {
+      if (r && r.ok) {
+        /* 记住过则同步设置区拨杆（口径同 initCloseMode：CLOSE_MODES 索引） */
+        if (remember) {
+          var i = CLOSE_MODES.indexOf(mode);
+          if (i >= 0) PTApp.gear('closeMode', i);
+        }
+        return;
+      }
+      logInto($('logStream'), 'err', '关窗动作失败: ' + ((r && r.msg) || '未知错误'));
+      toast('err', '关窗失败', (r && r.msg) || '未知错误');
+    });
+  }
+  function closeChoiceModal() {
+    /* 款式照 confirmModal：同 modal-mask / modal-box / m-body / acc-f-help / acc-f-actions */
+    var html = '<h3>' + escHtml(t('app.close.dlgTitle')) + '</h3><div class="m-body">' +
+      '<p class="acc-f-help" style="font-size:11.5px;margin:0 0 4px;line-height:1.8">' +
+      escHtml(t('app.close.dlgBody')) + '</p>' +
+      '<label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11.5px;color:var(--pt-ink2);cursor:pointer">' +
+      '<input type="checkbox" id="cfmRemember"> ' + escHtml(t('app.close.remember')) + '</label>' +
+      '<div class="acc-f-actions" style="margin-top:12px">' +
+      '<button type="button" class="ibtn2" id="cfmQuit">' + escHtml(t('app.close.exit')) + '</button>' +
+      '<button type="button" class="ibtn2 accent" id="cfmTray">' + escHtml(t('app.close.toTray')) + '</button>' +
+      '</div></div>';
+    openModal(html);
+    var remember = function () {
+      var cb = $('cfmRemember');
+      return !!(cb && cb.checked);
+    };
+    $('cfmQuit').onclick = function () {
+      var rm = remember();
+      document.querySelector('.modal-close').click();
+      closeExecute('quit', rm);
+    };
+    $('cfmTray').onclick = function () {
+      var rm = remember();
+      document.querySelector('.modal-close').click();
+      closeExecute('tray', rm);
+    };
+  }
+  /* 红灯统一入口（引擎层 initLedge 调用；无桥预览页退回原来的直接关窗）。
+     windowCmd 是引擎 IIFE 内的局部函数，业务层取不到——走 PTApp 导出的同名方法。 */
+  window.PTCloseRequest = function () {
+    if (!HAS_BRIDGE) { PTApp.windowCmd('close'); return; }
+    call('RequestClose').then(function (r) {
+      if (!r || !r.ok) { PTApp.windowCmd('close'); return; } /* 桥异常：不把用户卡在窗口里 */
+      if (r.mode === 'ask') closeChoiceModal();
+      /* tray / quit 已由 Go 侧直接执行，前端不再动作 */
+    });
+  };
+  /* 设置区三档：0=每次询问 / 1=退到托盘 / 2=直接退出（可改回记住过的选择） */
+  PTApp.onGear('closeMode', function (i) {
+    var mode = CLOSE_MODES[i] || 'ask';
+    return call('CloseModeSet', mode).then(function (r) {
+      if (r && r.ok) {
+        logInto($('logStream'), 'sys', '关闭按钮行为已设为：' + t('app.close.' + mode));
+        return true;
+      }
+      logInto($('logStream'), 'err', '关闭按钮行为保存失败: ' + ((r && r.msg) || '未知错误'));
+      toast('err', '保存失败', (r && r.msg) || '未知错误');
+      return false;
+    });
+  });
+  (function initCloseMode() {
+    if (!HAS_BRIDGE) return;
+    call('CloseModeGet').then(function (r) {
+      var i = CLOSE_MODES.indexOf(r && r.mode);
+      if (i >= 0) PTApp.gear('closeMode', i);
+    });
+  })();
 
   /* ================= 更新日志（与仓库 CHANGELOG.md 同源） ================= */
   /* 更新日志数据（结构化，与 CHANGELOG.md / GitHub Releases 同源）
