@@ -130,7 +130,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 
 ### 团结（8788，tuanjie）——主力
 - 可用模型 ID（2026-09-06 实测 /v1/models，大小写敏感）：`KIMI-K3`（全大写）、
-  `GLM-5.3-FLASH`、`codely-core/basic/flash/air/vl`；**GLM-5.3 直连名已 401**
+  `GLM-5.3-FLASH`、`codely-core/basic/flash/air/vl`；**2026-09-15 上游新增原生
+  `DeepSeek-V4.1-Flash`（`?full=true` 共 8 个，裸 `GLM-5.3` 不在内）**；
+  上游现给 codely 别名配 `display_name` 后端名（core→GLM-5.3、basic/flash/air→
+  DeepSeek-V4-Flash），**矩阵与按账号列表只认 id，不认 display_name**
+  （v3.17.0，已实测 78363 免费号 5 个、另两号 8 个）；**GLM-5.3 直连名已 401**
   （team_model_access_denied，上游白名单只剩 alias-only-proxy-models / KIMI-K3 / GLM-5.3-FLASH），
   **codely-core 即 GLM-5.3 的承载入口**——上游把 GLM-5.3 收进 core 别名，
   选 core 实际用的就是 GLM-5.3（用户 2026-09-06 确认，直连 401 同日复核）
@@ -399,13 +403,28 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-09-15，v3.16.0 已发布）
+## 当前状态（2026-09-15，v3.17.0 已发布，未提交）
 
 > **发版节奏自 2026-09-13 起改为攒版**（用户裁决，见上文「攒版发布」节）：
 > 各会话只提交不发版，待用户说「发版」时由那个会话统一升版本号并发。
 > 本节下方各版本条目保留作历史记录；**「下版（vX.Y.Z）」类预测已失效**——
 > 实际版本号在发版时按「本版内容最高档」现算。
 
+- **v3.17.0 已发布（2026-09-15，工作区未提交）**：团结矩阵去轮询 +
+  按账号看模型 + 矩阵只显示官方可调名 + 识图加 DeepSeek-V4.1-Flash +
+  B.AI 补消耗统计 + token 显示中文。段位=次版本（新功能+界面变化）。
+  ① 矩阵去 3 秒轮询（点火拉一次 + 点「↻ 刷新」才现拉，`/account-models`
+  只在开弹窗/点展开时触发，后端 5 分钟缓存可 `refresh=1` 旁路）② 账号矩阵
+  每卡「可用模型 N 个 + 展开」（实测 78363 免费号 5 个、另两号 8 个）
+  ③ 矩阵与按账号列表只认官方 id（忽略上游 display_name，如 codely-core→GLM-5.3）
+  ④ 团结识图下拉加 `DeepSeek-V4.1-Flash`（media.go 视觉白名单 + ui 下拉同批）
+  ⑤ B.AI 甲板补消耗统计（`internal/bai/server.go` 按模型累计 + `/stats` +
+  `bai-stats.json` 落盘，结构同 tuanjie/codebuddy）⑥ 全甲板 token 显示改中文
+  直读（`fmtTok`：1e4→万、1e8→亿，替换 K/M 缩写）。
+  版本串 8 处 + CHANGELOG 双处同源已齐；exe 已重编（含 v3.17.0×8）。
+  ⚠ 上游同期变化（2026-09-15 实测）：`?full=true` 新增原生 `DeepSeek-V4.1-Flash`、
+  裸 `GLM-5.3` 不在可调 id 内（`?full=true` 8 个以 id 为准）；`/model/info`
+  上游回非 JSON（模型指南链路断，待上游恢复）。
 - **v3.16.0 已发布（2026-09-15）**：额度耗尽自动换号 + 工具调用修复
   （`30ef636` + 并行会话 `8901c9d` 11129 诊断 + `9c267c7` 脱敏修误删工具参数）。
   14018（Credits exhausted）原两边不沾（非 401/非 429）如实透传炸客户端 →
@@ -455,12 +474,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck（remote 名 `myrepo`，
   不是 origin；`push_api.py` 里的 `REPO` 写的是改名前旧名 `command-code-proxy-tools`，
   GitHub 会重定向，能用但名字陈旧）
-- 服务现状（2026-09-14 01:5x 复核）：用户按「彻底关机」拨杆全停——因当时那版的
-  关机漏停 bug（已修，见 v3.15.4）残留的 3 个后端进程（8785/8786/8891）已按端口
-  清杀，现 **7 端口全 DOWN、0 进程**，55990 按需未起；待用户双击根目录
-  **v3.15.4 新包**重启并逐个拉杆（无存活实例，拉杆即从新包全新拉起，后端侧优化
-  随之生效）。⚠ **拉杆不会换包**：`pluginStart` 探活到端口健康就「接管复用，不杀不
-  重启」（见下条），想让后端换包必须**熄火再点火**。
+- 服务现状（2026-09-15 01:3x 复核）：7 进程全在（1 GUI + 6 插件后端，
+  8785/8786/8787/8788/8789/8891 全部 health ok）；团结 seed 双轨道 ok
+  （npm rc.60 + 桌面端，registry latest=rc.60）；待用户双击根目录
+  **v3.17.0 新包**重启 GUI（后端是独立常驻子进程，关 GUI 不死；
+  后端要换包须逐个熄火再点火，拉杆只会接管复用）。
   ⚠ 账号池 **Dead/冷却/调用计数是进程内存态**（重启清零），只有 Enabled/Removed 落盘；
   上游 reset 时点不落盘，重启丢一次无害。`codebuddy-pool(-intl).json` 现已 gitignore。
   **GUI 不持久化插件启动状态**（`plugins.go` 无写盘），

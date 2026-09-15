@@ -2375,6 +2375,12 @@ body.pt-try { background: var(--pt-paper); }
 .mx-bar i.warn { background: #e8b34b; }
 .mx-bar i.crit { background: var(--pt-accent); }
 .mx-act { display: flex; gap: 6px; margin-top: 8px; }
+/* 账号矩阵「按账号可用模型」展开列表：数据由用户手势（开弹窗/点展开/点刷新）拉一次，
+   绝不进 3 秒轮询——逐账号换 key 直打官网 = N 账号 × 1 次官方请求。 */
+.mx-mmodels { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px;
+  max-height: 96px; overflow-y: auto; }
+.mx-mmodels .mm { font-family: var(--pt-font-disp); font-size: 9.5px; color: var(--pt-ink2);
+  border: 1px solid var(--pt-hairline); border-radius: 3px; padding: 1px 4px; }
 
 /* 自定义服务商卡片（学群友 renderProviderCard 口径） */
 .pv-host { font-size: 10px; color: var(--pt-ink2); margin-left: auto; max-width: 110px;
@@ -2709,7 +2715,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.16.0</span>
+                    <span class="v ver" id="etchVer">v3.17.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -2807,10 +2813,10 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <button type="button" class="ibtn2" id="refreshStats" data-i18n="app.btn.refresh">↻ 刷新</button></div>
                 <div class="pt-grid">
                   <div class="pt-readout"><span class="rk" data-i18n="app.rk.total">总消耗 TOKEN</span>
-                    <span class="rv" id="statTotal">0<span class="u">tok</span></span>
+                    <span class="rv" id="statTotal">0<span class="u">token</span></span>
                     <span class="rs" id="statTotalSub">↑0 / ↓0</span></div>
                   <div class="pt-readout"><span class="rk" data-i18n="app.rk.today">今日消耗</span>
-                    <span class="rv" id="statToday">0<span class="u">tok</span></span>
+                    <span class="rv" id="statToday">0<span class="u">token</span></span>
                     <span class="rs" id="statTodaySub">↑0 / ↓0</span></div>
                   <div class="pt-readout"><span class="rk" id="statCostK" data-i18n="app.rk.cost">估算金额</span>
                     <span class="rv" id="statCost">$0.00</span>
@@ -3325,6 +3331,9 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <span class="pt-val" id="baModelCount">OFFLINE</span></div>
                 <div id="baModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
 
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.usage">消耗 TOP</span></div>
+                <div class="pt-bars" id="baBars"><div class="bars-empty">// 插件启动后自动统计</div></div>
+
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
                   <button type="button" class="ibtn2" data-i18n="app.btn.modelRef">模型参考</button>
                   <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
@@ -3417,13 +3426,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.16.0">v3.16.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.17.0">v3.17.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.16.0</div>
+                    <div class="s" id="buildNo">v3.17.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.16.0</span>
+                  <span class="pt-val" id="verChip">v3.17.0</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -3531,7 +3540,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t">识图请求</div>
-                    <div class="s">团结 codely-vl / GLM-5.3-FLASH / KIMI-K3 或自定义服务商的 chat 类模型</div>
+                    <div class="s">团结 codely-vl / GLM-5.3-FLASH / KIMI-K3 / DeepSeek-V4.1-Flash 或自定义服务商的 chat 类模型</div>
                   </div>
                   <select class="ibtn2" id="tjVisSel" title="识图请求改路由到的识图模型"></select>
                 </div></div>
@@ -5047,8 +5056,19 @@ var PT_I18N = {
     if (typeof n !== 'number' || isNaN(n)) return '—';
     return n % 1 === 0 ? Math.round(n).toLocaleString() : n.toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
-  function tkFmt(n) { return n >= 1e8 ? (n / 1e8).toFixed(1) + '亿' : n >= 1e4 ? (n / 1e4).toFixed(1) + '万' : String(n || 0); }
-  function fmtTok(n) { return n >= 1048576 ? Math.round(n / 1048576) + 'M' : n >= 1024 ? Math.round(n / 1024) + 'K' : (n || '—'); }
+  /* token 消耗一律中文直读（万/亿 + token 后缀，整数不带 .0）：
+     500M → 500万 token、1e8 → 1亿 token、1.5e8 → 1.5亿 token */
+  function fmtTok(n) {
+    n = Number(n) || 0;
+    var unit = function (v, suf) {
+      var s = v.toFixed(1);
+      if (s.slice(-2) === '.0') s = s.slice(0, -2);
+      return s + suf;
+    };
+    if (n >= 1e8) return unit(n / 1e8, '亿') + ' token';
+    if (n >= 1e4) return unit(n / 1e4, '万') + ' token';
+    return fmt(n) + ' token';
+  }
   function fmtUptime(s) {
     var h = String(Math.floor(s / 3600)).padStart(2, '0'),
         m = String(Math.floor(s % 3600 / 60)).padStart(2, '0'),
@@ -5328,8 +5348,8 @@ var PT_I18N = {
      不进 3 秒轮询：只在页面加载和点击切换后刷新。 */
   var TJ_VIS_TJ = 'codely-vl';
   /* 团结池内原生识图模型（对齐后端 builtinVisionCapable）：可作识图改路由目标的池内模型 */
-  var TJ_VIS_POOL = ['GLM-5.3-FLASH', 'KIMI-K3'];
-  var TJ_VIS_LABELS = { 'codely-vl': '团结 codely-vl', 'GLM-5.3-FLASH': '团结 GLM-5.3-FLASH', 'KIMI-K3': '团结 KIMI-K3' };
+  var TJ_VIS_POOL = ['GLM-5.3-FLASH', 'KIMI-K3', 'DeepSeek-V4.1-Flash'];
+  var TJ_VIS_LABELS = { 'codely-vl': '团结 codely-vl', 'GLM-5.3-FLASH': '团结 GLM-5.3-FLASH', 'KIMI-K3': '团结 KIMI-K3', 'DeepSeek-V4.1-Flash': '团结 DeepSeek-V4.1-Flash' };
   var tjVisBusy = false;
   var tjVisModel = ''; /* 当前生效识图模型（loadTuanjieVision 刷新，renderProviders 同步下拉选项时复用） */
   var tjMediaBusy = false; /* 生图/生视频下拉的 POST 防抖（与识图各自独立） */
@@ -5368,7 +5388,7 @@ var PT_I18N = {
     var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
     return (d.getMonth() + 1) + '-' + d.getDate() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
   }
-  /* 渲染识图下拉选项：团结池识图模型（codely-vl / GLM-5.3-FLASH / KIMI-K3，对齐后端
+  /* 渲染识图下拉选项：团结池识图模型（codely-vl / GLM-5.3-FLASH / KIMI-K3 / DeepSeek-V4.1-Flash，对齐后端
      builtinVisionCapable）+ 各 provider 的 chat 类 config_models（去重）。
      当前生效模型不在选项里时（如旧配置的模型已删）也保留为选项，可见即可切走。 */
   function renderTuanjieVision(model, providerModels) {
@@ -5511,6 +5531,28 @@ var PT_I18N = {
     var box = document.querySelector('.modal-box');
     if (box) box.classList.add('wide');
   }
+  /* 按账号可用模型（/account-models）：只由用户手势触发——开弹窗/点展开/点刷新，
+     绝不进 3 秒轮询（逐账号换 key 直打官网 = N 账号 × 1 次官方请求）。
+     后端另有 5 分钟缓存，弹窗重开命中缓存不重复打官网。 */
+  var tjAccModels = null;   // user_id → {count, models, err}
+  var mxModelOpen = {};     // user_id → 展开态
+  var tjAccModelsP = null;  // 在途请求（并发调用复用，避免重复打官网）
+  var tjAccModelsErr = false; // 最近一次拉取失败（插件未启动等）：如实上屏，不装作加载中
+  function loadTjAccModels(force) {
+    if (tjAccModelsP) return tjAccModelsP;
+    tjAccModelsP = (async function () {
+      try {
+        var d = await (await fetch('http://127.0.0.1:' + PV.tj.port + '/account-models' + (force ? '?refresh=1' : ''),
+          { signal: AbortSignal.timeout(60000) })).json();
+        var m = {};
+        (d.accounts || []).forEach(function (a) { m[a.user_id] = a; });
+        tjAccModels = m;
+        tjAccModelsErr = false;
+      } catch (e) { tjAccModelsErr = true; /* 插件未启动：保持上次显示并标失败 */ }
+      finally { tjAccModelsP = null; }
+    })();
+    return tjAccModelsP;
+  }
   function mxCardHtml(a) {
     var hrs = Number(a.token_remaining_hours || 0);
     var expCls = hrs > 72 ? 'ok' : hrs > 24 ? 'warn' : 'crit';
@@ -5523,6 +5565,24 @@ var PT_I18N = {
       + (a.has_glm53 ? ' <span class="acc-tag glm">GLM</span>' : '')
       + (load > 0 ? ' <span class="acc-tag" style="background:var(--pt-ink)">进行中 ' + load + '</span>' : '');
     var meta2 = (a.token_expires && a.token_expires !== '未知' ? '到期 ' + escHtml(String(a.token_expires)) : '到期 未知');
+    /* 按账号可用模型（/account-models，只在开弹窗/点展开时拉一次，不进轮询）：
+       数量常显，展开看各自 id 列表——免费/付费号差异一眼可见。未拉到时显示占位。 */
+    var am = tjAccModels ? tjAccModels[a.user_id] : null;
+    var amOpen = !!mxModelOpen[a.user_id];
+    var amLine = '<div class="mx-meta" style="margin-top:5px"><span>可用模型 <b>' +
+      (am ? (am.err ? '—' : (am.count || 0)) : '—') + '</b> 个' +
+      (am && am.err ? ' · ' + escHtml(am.err) : '') + '</span>' +
+      '<button type="button" class="ibtn2" data-mx-mmodels="' + escHtml(a.user_id) +
+      '" style="padding:2px 8px;font-size:9.5px">' + (amOpen ? '收起' : '展开') + '</button></div>';
+    if (amOpen) {
+      amLine += '<div class="mx-mmodels">' +
+        (!am ? (tjAccModelsErr ? '<span class="mm">拉取失败（插件未启动？）</span>' : '<span class="mm">加载中…</span>')
+          : am.err ? '<span class="mm">' + escHtml(am.err) + '</span>'
+          : (am.models && am.models.length
+              ? am.models.map(function (m) { return '<span class="mm">' + escHtml(m) + '</span>'; }).join('')
+              : '<span class="mm">上游未返回模型</span>')) +
+        '</div>';
+    }
     var models = a.models || [];
     var modelLine;
     if (models.length) {
@@ -5541,6 +5601,7 @@ var PT_I18N = {
       '<span class="mx-uid">#' + escHtml(a.user_id) + '</span></div>' +
       '<div class="mx-badges">' + tags + '</div>' +
       '<div class="mx-badges" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px">' + modelLine + '</div>' +
+      amLine +
       '<div class="mx-meta"><span>调用 <b>' + (a.use_count || 0) + '</b> 次</span><span>KEY 剩余 <b>' + escHtml(String(a.token_remaining_hours != null ? a.token_remaining_hours : '—')) + 'h</b></span></div>' +
       '<div class="mx-bar"><i class="' + expCls + '" style="width:' + expPct + '%"></i></div>' +
       '<div class="mx-meta"><span>' + meta2 + '</span>' +
@@ -5657,6 +5718,18 @@ var PT_I18N = {
             openModelPicker(uid, cur);
           };
         });
+        /* 按账号模型展开/收起：首次展开才拉（用户手势），之后复用已拉结果 */
+        grid.querySelectorAll('[data-mx-mmodels]').forEach(function (b) {
+          b.onclick = async function () {
+            var uid = b.dataset.mxMmodels;
+            mxModelOpen[uid] = !mxModelOpen[uid];
+            if (mxModelOpen[uid] && !(tjAccModels && tjAccModels[uid])) {
+              renderTuanjieMatrix(); /* 先上屏「加载中…」 */
+              await loadTjAccModels(false);
+            }
+            renderTuanjieMatrix();
+          };
+        });
       }
     } catch (e) { grid.className = 'm-body'; grid.__sig = null; grid.innerHTML = '<div class="if-empty">// 读取失败（代理未启动？）</div>'; }
   }
@@ -5668,6 +5741,13 @@ var PT_I18N = {
       '<div class="m-body" id="mxGrid">读取中…</div>');
     bindAccAuto(); bindAccAdd();
     renderTuanjieMatrix();
+    /* 开弹窗触发一次按账号模型查询（用户手势，不进轮询）；后端 5 分钟缓存兜住重复打开。
+       先上屏「加载中…」（首次）再拉，回来后重渲染把数量/列表画出来。 */
+    (async function () {
+      if (!tjAccModels) renderTuanjieMatrix();
+      await loadTjAccModels(false);
+      renderTuanjieMatrix();
+    })();
   }
 
   /* 自定义服务商子页面（学群友 providers：管理 + 计费信息展示；models 命中的模型参与转发）。
@@ -5992,7 +6072,7 @@ var PT_I18N = {
         return;
       }
       var h = evs.slice(0, 12).map(function (e) {
-        var tok = e.tokens ? ' · ' + (e.tokens > 10000 ? (e.tokens / 1000).toFixed(1) + 'K' : e.tokens) + ' tok' : '';
+        var tok = e.tokens ? ' · ' + fmtTok(e.tokens) : '';
         var lat = e.latency_ms ? ' · ' + (e.latency_ms > 1000 ? (e.latency_ms / 1000).toFixed(1) + 's' : e.latency_ms + 'ms') : '';
         return '<div class="act-row ' + (e.kind || 'info') + '">' +
           '<span class="lt">' + escHtml(e.time) + '</span>' +
@@ -6597,8 +6677,8 @@ var PT_I18N = {
       if (cost && cost.requests > 0) {
         costHtml = '<div class="if-empty">// 本次成本：' + Number(cost.requests).toLocaleString() +
           ' 次请求 · 入 ' + Number(cost.prompt_tokens || 0).toLocaleString() +
-          ' tok · 出 ' + Number(cost.completion_tokens || 0).toLocaleString() +
-          ' tok · 用时 ' + Number(cost.elapsed || 0).toFixed(1) + ' 秒</div>';
+          ' token · 出 ' + Number(cost.completion_tokens || 0).toLocaleString() +
+          ' token · 用时 ' + Number(cost.elapsed || 0).toFixed(1) + ' 秒</div>';
       }
       /* 第 32 轮弱渠道副注 / 第 34 轮改口径：非官方渠道不自建基准，报告比对的是
          该模型的官方渠道基准——有官方基准才可比对，无则如实「无法判定」 */
@@ -7706,9 +7786,9 @@ var PT_I18N = {
       var cr = u.creditsAvailable || 0, pct2 = u.percentUsed || 0;
       $('statCostSub').textContent = cr > 0 ? '可用 $' + cr.toFixed(2) + ' · 已用 ' + pct2.toFixed(1) + '%' : '官网金额';
       countUp($('statTotal'), u.totalTokens || 0);
-      $('statTotalSub').textContent = '↑' + fmt(u.tokensIn || 0) + ' / ↓' + fmt(u.tokensOut || 0) + ' · 官网';
+      $('statTotalSub').textContent = '↑' + fmtTok(u.tokensIn || 0) + ' / ↓' + fmtTok(u.tokensOut || 0) + ' · 官网';
       countUp($('statToday'), u.todayTokens || ltoday.total || 0);
-      $('statTodaySub').textContent = u.todayTokens ? '今日（官网明细）' : (ltoday.total ? '↑' + fmt(ltoday.input) + ' / ↓' + fmt(ltoday.output) + ' · 本地' : '今日');
+      $('statTodaySub').textContent = u.todayTokens ? '今日（官网明细）' : (ltoday.total ? '↑' + fmtTok(ltoday.input) + ' / ↓' + fmtTok(ltoday.output) + ' · 本地' : '今日');
       countUp($('statRuns'), u.totalRuns || 0);
       $('statModels').textContent = (u.planLabel || '未命名计划') + (u.daysLeft ? ' · 剩 ' + u.daysLeft + ' 天' : '');
       renderWindow('stat5h', 'stat5hCap', 'stat5hSub', u.fiveHour, '5小时');
@@ -7727,7 +7807,7 @@ var PT_I18N = {
         });
       }
       renderBars($('barsWrap'), mergeZeros(blist), 'tokens');
-      logInto($('logStream'), 'ok', '统计已刷新（官网口径）：' + fmt(u.totalTokens || 0) + ' tok · $' + (u.costUSD || 0).toFixed(2));
+      logInto($('logStream'), 'ok', '统计已刷新（官网口径）：' + fmt(u.totalTokens || 0) + ' token · $' + (u.costUSD || 0).toFixed(2));
       return;
     }
     var d2 = await call('Stats');
@@ -7750,9 +7830,9 @@ var PT_I18N = {
     }
     var crT = total.cacheRead || 0, crD = today.cacheRead || 0;
     countUp($('statTotal'), total.total || 0);
-    $('statTotalSub').textContent = '↑' + fmt(total.input) + ' / ↓' + fmt(total.output) + (crT ? ' / ⚡' + fmt(crT) : '');
+    $('statTotalSub').textContent = '↑' + fmtTok(total.input) + ' / ↓' + fmtTok(total.output) + (crT ? ' / ⚡' + fmt(crT) : '');
     countUp($('statToday'), today.total || 0);
-    $('statTodaySub').textContent = '↑' + fmt(today.input) + ' / ↓' + fmt(today.output) + (crD ? ' / ⚡' + fmt(crD) : '');
+    $('statTodaySub').textContent = '↑' + fmtTok(today.input) + ' / ↓' + fmtTok(today.output) + (crD ? ' / ⚡' + fmt(crD) : '');
     var names = Object.keys(models);
     var runs = names.reduce(function (s, k) { return s + (models[k].runs || 0); }, 0);
     countUp($('statRuns'), runs);
@@ -7812,7 +7892,19 @@ var PT_I18N = {
          在这里一次性消费（原先由 tj/cb 分支各自清，bai 无积分分支会漏清→轮询反复强制刷新） */
       var justIgnited = !!V.fetchOnRun;
       V.fetchOnRun = false;
-      loadPluginModels(V, justIgnited);
+      /* 团结模型矩阵去 3 秒轮询：上游模型接口只在拉杆点火那一次拉取（走后端 5 分钟
+         缓存），之后只有用户点「↻ 刷新」才现拉（refresh=1 旁路缓存）——3 秒一轮
+         逐账号换 key 直打官网有封号隐患。面板重开时插件已在跑（本轮会话没有点火
+         事件）不补拉，如实提示点刷新。其余插件保持原轮询行为。 */
+      if (V.mode !== 'tj') loadPluginModels(V, justIgnited);
+      else if (justIgnited) loadPluginModels(V, false);
+      else if (!V.lastModels && !V.tjIdleHinted) {
+        V.tjIdleHinted = true;
+        var mcEl2 = $(V.pfx + 'ModelCount');
+        if (mcEl2) mcEl2.textContent = '—'; /* 插件在跑但矩阵未拉取：不写 OFFLINE 骗人 */
+        var mlEl = $(V.pfx + 'ModelList');
+        if (mlEl) mlEl.innerHTML = '<div class="pt-models-empty">// 模型矩阵未拉取 · 点右上「↻ 刷新」现拉<br>// 平时不轮询上游（封号防护）</div>';
+      }
       loadPluginMeta(V);
       loadPluginStats(V, mode);
       loadPluginLog(V);
@@ -7945,6 +8037,7 @@ var PT_I18N = {
       V.uptime = 0; V.logLoaded = false;
       V.lastModels = null; V.lastMeta = null; V.metaMap = null; V.modelIds = null;
       V.quotaLoaded = false; V.fetchOnRun = false; /* 停止后重置——下次拉杆启动时重新拉一次积分 */
+      V.tjIdleHinted = false; /* 停止后重置——下次运行时若仍无矩阵，重新提示一次 */
       V.healthMs = null; /* cb/ba 甲板「本地回环」读数同步回「不通」 */
       if (V.mode === 'cb') PTApp.dot('cbProbe', false, false, ''); /* 模型探测灯随停堆熄灭 */
       if (V.mode === 'qoder') { PTApp.dot('qoderCredits', false, false, ''); PTApp.dot('qoderQuota', false, false, ''); }
@@ -8049,11 +8142,15 @@ var PT_I18N = {
     /* B.AI 走 /model/matrix：服务端拿渠道配置的 key 拉上游并缓存。
        /v1/models 是纯透传，GUI 没有 key → 只会拿到上游 401，矩阵永远空。 */
     var isMatrix = V.mode === 'bai';
+    if (V.mode === 'tj') V.tjIdleHinted = true; /* 已尝试过拉取：轮询不再用「未拉取」提示覆盖失败信息 */
     try {
       var url = 'http://127.0.0.1:' + V.port + (isMatrix ? '/model/matrix' : '/v1/models');
-      if (V.mode === 'tj') url += '?full=true';
+      /* tj 的 refresh=1 让后端旁路 5 分钟缓存，强制逐账号现拉官网（只在点火/手动刷新） */
+      if (V.mode === 'tj') url += '?full=true' + (refresh ? '&refresh=1' : '');
       else if (isMatrix && refresh) url += '?refresh=1';
-      var r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      /* tj 每次拉取都要逐账号换 key 打官网（N 账号串行），3 秒不够；且已无 3 秒轮询兜底，
+         超时会把矩阵留在 ERR——给足 60 秒（缓存命中时秒回，不占时间） */
+      var r = await fetch(url, { signal: AbortSignal.timeout(V.mode === 'tj' ? 60000 : 3000) });
       var d = await r.json();
       var ids = (d.data || []).map(function (m) { return m.id; });
       var mcEl = $(V.pfx + 'ModelCount'), mlBox = $(V.pfx + 'ModelList');
@@ -8080,6 +8177,7 @@ var PT_I18N = {
       if (V.lastModels && V.lastModels === key) {
         /* 集合未变也要刷时间戳，否则刚重新拉过却还挂着旧的「缓存于 …」=撒谎 */
         if (isMatrix) pSet(V, 'StModelsSub', '缓存于 ' + fmtTime((d.fetched_at || 0) * 1000));
+        else if (V.mode === 'tj' && refresh) plog(V, 'net', '模型矩阵已现拉 · 无变化 · ' + ids.length + ' 个模型');
         return;
       }
       V.lastModels = key;
@@ -8091,13 +8189,16 @@ var PT_I18N = {
       if (V.mode === 'cb') PTApp.dot('cbProbe', true, false, ids.length + ' 个');
       var groups = {};
       /* nameMap: 有 display_name 且与 id 不同的条目（Qoder qmodel_38max→Qwen3.8-Max）：
-         chip 显示界面名、复制仍复制可用名（id）；tj/cb/bai 无 display_name 或两者相同，行为不变。
-         厂家分组同样优先按 display_name 认（Qoder 的内部代号 qmodel_38max/gfmodel 无厂家前缀，
-         按 id 分组会一人一组；按显示名分 Qwen/GLM/DeepSeek 才成组） */
+         chip 显示界面名、复制仍复制可用名（id）；tj 甲板不用 display_name——团结上游
+         下发的 display_name 是后端部署名（如 codely-core→GLM-5.3），显示它会误导
+         用户复制了调不通的名字，矩阵只显示官方可调 id（tj/cb/bai 行为一致）。
+         厂家分组同样只按 id 认。 */
       V.modelNameMap = {};
-      (d.data || []).forEach(function (m) {
-        if (m.display_name && m.display_name !== m.id) V.modelNameMap[m.id] = m.display_name;
-      });
+      if (V.mode !== 'tj') {
+        (d.data || []).forEach(function (m) {
+          if (m.display_name && m.display_name !== m.id) V.modelNameMap[m.id] = m.display_name;
+        });
+      }
       ids.forEach(function (id) {
         var v = pluginVendorOf(V.modelNameMap[id] || id);
         (groups[v] = groups[v] || []).push(id);
@@ -8107,7 +8208,8 @@ var PT_I18N = {
     } catch (e) {
       var mc2 = $(V.pfx + 'ModelCount'), ml2 = $(V.pfx + 'ModelList');
       if (mc2) mc2.textContent = 'ERR';
-      if (ml2) ml2.innerHTML = '<div class="pt-models-empty">// 拉取失败: ' + esc(e && e.message || e) + '</div>';
+      if (ml2) ml2.innerHTML = '<div class="pt-models-empty">// 拉取失败: ' + esc(e && e.message || e) +
+        (V.mode === 'tj' ? '<br>// 点右上「↻ 刷新」重试（已无轮询自动重试）' : '') + '</div>';
       if (V.mode === 'cb') PTApp.dot('cbProbe', false, false, '');
     }
   }
@@ -8276,8 +8378,8 @@ var PT_I18N = {
        轮询不再重复打官网；其余插件用本地 token 统计 */
     try {
       var entries = null, bmode = 'tokens';
-      /* bai 也排除：本地无 /v1/stats，会被透传打到 api.b.ai（境外空请求），且 ba 甲板无消耗条 */
-      if (V.id !== 'tuanjie' && V.id !== 'bai') {
+      /* bai 走本地 /v1/stats（插件侧自建统计，不再透传打到 api.b.ai 的境外空请求） */
+      if (V.id !== 'tuanjie') {
         var ds = await (await fetch('http://127.0.0.1:' + V.port + '/v1/stats', { signal: AbortSignal.timeout(3000) })).json();
         var models = ds.models || {};
         entries = Object.keys(models).map(function (name) {
@@ -8436,7 +8538,7 @@ var PT_I18N = {
       }
       // 卡5 月度统计（当月实际消耗）
       pSet(V, 'StTopModel', intFmt(q.month.points));
-      pSet(V, 'StTopModelSub', tkFmt(q.month.totalTokens) + ' token · ' + q.month.requests + ' 次 · ' + q.month.startDate + '~' + q.month.endDate);
+      pSet(V, 'StTopModelSub', fmtTok(q.month.totalTokens) + ' · ' + q.month.requests + ' 次 · ' + q.month.startDate + '~' + q.month.endDate);
       // 卡6 赠送池+日赠（替代健康检查位）：免费积分两个池合一（与官网 Total 口径一致），主值=合计，副行给拆解
       pSet(V, 'StHealth', intFmt(giftRemain + dailyRem));
       pSet(V, 'StHealthSub', dailyQuota ? '赠送池 ' + intFmt(giftRemain) + ' + 日赠剩 ' + intFmt(dailyRem) : '赠送池余额');
@@ -8810,6 +8912,15 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.17.0', date: '2026-09-15', groups: [
+      { label: '🚀 新功能', items: [
+        '账号矩阵按账号看可用模型，免费/付费差异一目了然',
+        '团结矩阵只显示官方可调名，不再被后端部署名误导',
+        'B.AI 甲板补消耗统计：token 消耗 TOP 按模型累计',
+        '团结识图下拉新增 DeepSeek-V4.1-Flash' ] },
+      { label: '✨ 体验优化', items: [
+        '团结矩阵去 3 秒轮询：点火拉一次 + 点「↻ 刷新」才现拉',
+        '全甲板 token 显示中文：500万/2000万/1亿 token 直读' ] } ] },
     { v: 'v3.16.0', date: '2026-09-15', groups: [
       { label: '🚀 新功能', items: [
         '没额度的账号自动切走，智能体不再被 14018 炸停',
@@ -9717,8 +9828,14 @@ var PT_I18N = {
         var old = rf.textContent;
         rf.textContent = '刷新中…';
         plog(V, 'sys', '手动刷新积分');
-        if (mode === 'tj') await loadTuanjieQuota(V, true);
-        else await loadCodebuddyQuota(V, true);
+        if (mode === 'tj') {
+          /* 团结：手动刷新同时强制现拉模型矩阵（refresh=1 旁路后端 5 分钟缓存）+
+             实时拉积分。矩阵平时不轮询，这颗按钮是点火后唯一的现拉入口。 */
+          await loadPluginModels(V, true);
+          await loadTuanjieQuota(V, true);
+        } else {
+          await loadCodebuddyQuota(V, true);
+        }
         refreshPluginView(mode);
         rf.disabled = false;
         rf.textContent = old;
@@ -9780,7 +9897,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.16.0';
+  var UI_CUR = 'v3.17.0';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   var cbQuotaUserId = ''; // WorkBuddy 积分面板选中的账号（空串=默认最新号；区域感知：切区后失效重选）
   function verCmp(a, b) {

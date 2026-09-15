@@ -121,13 +121,14 @@ func (s *Server) Start(host, port string) error {
 	mux.HandleFunc("/v1/stats", s.handleStats)
 	mux.HandleFunc("/quota", s.handleQuota)
 	mux.HandleFunc("/kimi-pacing", s.handleKimiPacing)
-	mux.HandleFunc("/accounts", s.handleAccounts)          // 单账号状态 + 注水事件
-	mux.HandleFunc("/inflight", s.handleInflight)          // 进行中请求面板
-	mux.HandleFunc("/activity", s.handleActivity)          // 实时动态（最近事件）
-	mux.HandleFunc("/water-probe", s.handleWaterProbe)     // 注水金丝雀探针
-	mux.HandleFunc("/providers", s.handleProviders)        // 外部账号（管理 + 信息展示）
-	mux.HandleFunc("/vision-config", s.handleVisionConfig) // 视觉模型配置（兼容层：内部转到 media-config 机制）
-	mux.HandleFunc("/media-config", s.handleMediaConfig)   // 媒体模型三选择器（识图/生图/生视频）
+	mux.HandleFunc("/accounts", s.handleAccounts)            // 单账号状态 + 注水事件
+	mux.HandleFunc("/account-models", s.handleAccountModels) // 按账号可用模型（用户手势触发）
+	mux.HandleFunc("/inflight", s.handleInflight)            // 进行中请求面板
+	mux.HandleFunc("/activity", s.handleActivity)            // 实时动态（最近事件）
+	mux.HandleFunc("/water-probe", s.handleWaterProbe)       // 注水金丝雀探针
+	mux.HandleFunc("/providers", s.handleProviders)          // 外部账号（管理 + 信息展示）
+	mux.HandleFunc("/vision-config", s.handleVisionConfig)   // 视觉模型配置（兼容层：内部转到 media-config 机制）
+	mux.HandleFunc("/media-config", s.handleMediaConfig)     // 媒体模型三选择器（识图/生图/生视频）
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
 	mux.HandleFunc("/v1/images/generations", s.handleImagesGenerations) // 生图（外部 provider 转发 + 统一改写）
 	mux.HandleFunc("/v1/videos", s.handleVideoCreate)                   // 生视频（外部 provider 转发，异步任务制）
@@ -326,8 +327,16 @@ var (
 	modelsCache   []byte
 	modelsCacheAt time.Time
 
-	// fullModelsCache：?full=true 全量模型缓存（5 分钟）。该路径每 3s 被
-	// GUI 轮询，逐账号换 key 直打官网——不缓存会 429 限流（2026-08-27 事故）。
+	// accountModelsCache：/account-models 按账号模型缓存（5 分钟）。该端点逐账号
+	// 换 key 直打官网（N 账号 × 1 次官方请求），只在用户手势（开弹窗/点展开/点刷新）
+	// 时触发，绝不进 GUI 轮询；?refresh=1 旁路缓存。
+	accountModelsCacheMu sync.Mutex
+	accountModelsCache   []byte
+	accountModelsCacheAt time.Time
+
+	// fullModelsCache：?full=true 全量模型缓存（5 分钟）。该路径逐账号换 key
+	// 直打官网——不缓存会 429 限流（2026-08-27 事故）。GUI 已去 3 秒轮询：
+	// 只在点火那一次与用户点「↻ 刷新」时拉本端点；手动刷新带 ?refresh=1 旁路缓存。
 	fullModelsCacheMu sync.Mutex
 	fullModelsCache   []byte
 	fullModelsCacheAt time.Time
@@ -449,11 +458,12 @@ func (s *Server) serveModels(w http.ResponseWriter, r *http.Request, mergeProvid
 
 // handleModelsFull 遍历账号池所有 enabled 账号，用各自 token 拉 /v1/models，
 // 返回模型数最多的结果。付费号通常能看到全量模型，免费号只能看受限列表。
-// 结果缓存 5 分钟——GUI 每 3s 轮询本端点，逐账号换 key 直打官网，
-// 不缓存会把官网打到 429 限流。
+// 结果缓存 5 分钟——逐账号换 key 直打官网，不缓存会把官网打到 429 限流。
+// ?refresh=1 旁路缓存强制现拉（GUI「↻ 刷新」用）。
 func (s *Server) handleModelsFull(w http.ResponseWriter, r *http.Request) {
+	refresh := r.URL.Query().Get("refresh") == "1"
 	fullModelsCacheMu.Lock()
-	if len(fullModelsCache) > 0 && time.Since(fullModelsCacheAt) < 5*time.Minute {
+	if !refresh && len(fullModelsCache) > 0 && time.Since(fullModelsCacheAt) < 5*time.Minute {
 		body := fullModelsCache
 		fullModelsCacheMu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
@@ -509,6 +519,111 @@ func (s *Server) handleModelsFull(w http.ResponseWriter, r *http.Request) {
 	}
 	// 所有账号都失败 → 回退普通拉取（同样不合并 provider 条目）
 	s.serveModels(w, r, false)
+}
+
+// accountModelsEntry 是 /account-models 里单个账号的可用模型条目。
+type accountModelsEntry struct {
+	UserID         string   `json:"user_id"`
+	Username       string   `json:"username,omitempty"`
+	Source         string   `json:"source,omitempty"`
+	Enabled        bool     `json:"enabled"`
+	BudgetExceeded bool     `json:"budget_exceeded"`
+	Count          int      `json:"count"`
+	Models         []string `json:"models"`        // 官方可调 id（忽略上游 display_name）
+	Err            string   `json:"err,omitempty"` // 该账号拉取失败的原因（免费号受限等如实给）
+}
+
+// handleAccountModels 按账号返回各自可用模型（数量 + id 列表），供账号矩阵弹窗
+// 展开查看（免费/付费差异可见）。逐账号换 key 直打官网 = N 账号 × 1 次官方请求，
+// 只在用户手势（开弹窗/点展开/点刷新）时触发，绝不进 GUI 3 秒轮询；结果缓存
+// 5 分钟，?refresh=1 旁路缓存强制现拉。
+func (s *Server) handleAccountModels(w http.ResponseWriter, r *http.Request) {
+	refresh := r.URL.Query().Get("refresh") == "1"
+	accountModelsCacheMu.Lock()
+	if !refresh && len(accountModelsCache) > 0 && time.Since(accountModelsCacheAt) < 5*time.Minute {
+		body := accountModelsCache
+		accountModelsCacheMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		_, _ = w.Write(body)
+		return
+	}
+	accountModelsCacheMu.Unlock()
+
+	ids := s.pool.SortedUserIDs()
+	entries := make([]accountModelsEntry, 0, len(ids))
+	for _, uid := range ids {
+		acc := s.pool.Get(uid)
+		if acc == nil {
+			continue
+		}
+		e := accountModelsEntry{
+			UserID:         acc.UserID,
+			Username:       acc.Username,
+			Source:         acc.Source,
+			Enabled:        acc.Enabled,
+			BudgetExceeded: acc.BudgetExceeded,
+			Models:         []string{},
+		}
+		if !acc.Enabled || acc.BudgetExceeded {
+			e.Err = "未参与调度（停用或配额用尽）"
+			entries = append(entries, e)
+			continue
+		}
+		tok, err := acc.effectiveAccessToken()
+		if err != nil || tok == "" {
+			e.Err = "取 token 失败"
+			entries = append(entries, e)
+			continue
+		}
+		resp, err := s.ForwardDirect(r.Context(), http.MethodGet, "/v1/models", nil, tok, nil)
+		if err != nil {
+			e.Err = err.Error()
+			entries = append(entries, e)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			e.Err = fmt.Sprintf("上游返回 %d", resp.StatusCode)
+			entries = append(entries, e)
+			continue
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+		resp.Body.Close()
+		var m struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+		}
+		if json.Unmarshal(body, &m) != nil {
+			e.Err = "上游响应解析失败"
+			entries = append(entries, e)
+			continue
+		}
+		for _, d := range m.Data {
+			if d.ID != "" {
+				e.Models = append(e.Models, d.ID)
+			}
+		}
+		e.Count = len(e.Models)
+		entries = append(entries, e)
+	}
+	out, err := json.Marshal(map[string]any{
+		"ok":         true,
+		"fetched_at": time.Now().Unix(),
+		"accounts":   entries,
+	})
+	if err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	accountModelsCacheMu.Lock()
+	accountModelsCache = out
+	accountModelsCacheAt = time.Now()
+	accountModelsCacheMu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	_, _ = w.Write(out)
 }
 
 // ModelInfo 是单个模型的元数据（供 GUI 模型指南展示）。

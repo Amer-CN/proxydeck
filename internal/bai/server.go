@@ -1,6 +1,7 @@
 package bai
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -11,8 +12,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,11 +30,28 @@ type Server struct {
 	srv       *http.Server
 	startedAt time.Time
 	matrix    matrixState // 模型矩阵缓存（GUI 专用，见 models.go）
+
+	statsMu   sync.Mutex
+	stats     map[string]*modelStat // 按模型累计（GUI 消耗 TOP）
+	statsPath string
 }
 
-// NewServer 创建服务。
+// modelStat 单模型用量累计（字段名与 tuanjie/codebuddy 同形，GUI 共用一套渲染）。
+type modelStat struct {
+	Calls     int64 `json:"calls"`
+	InputTok  int64 `json:"inputTokens"`
+	OutputTok int64 `json:"outputTokens"`
+	TotalTok  int64 `json:"totalTokens"`
+}
+
+// NewServer 创建服务。统计文件 bai-stats.json 与 exe 同目录（同 codebuddy 的落盘口径）。
 func NewServer() *Server {
-	return &Server{startedAt: time.Now()}
+	s := &Server{startedAt: time.Now(), stats: map[string]*modelStat{}}
+	if exe, err := os.Executable(); err == nil {
+		s.statsPath = filepath.Join(filepath.Dir(exe), "bai-stats.json")
+		s.loadStats()
+	}
+	return s
 }
 
 // corsWith 给所有响应加 CORS 头：GUI 页面跑在 localhost:随机端口，
@@ -57,6 +77,78 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"service":   "bai-go",
 		"uptimeSec": int64(time.Since(s.startedAt).Seconds()),
 	})
+}
+
+// handleStats 返回消耗统计 + 运行时长（GUI 消耗 TOP 用，结构同 tuanjie/codebuddy）。
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	s.statsMu.Lock()
+	out := make(map[string]*modelStat, len(s.stats))
+	for k, v := range s.stats {
+		cp := *v
+		out[k] = &cp
+	}
+	s.statsMu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"models":    out,
+		"uptimeSec": int64(time.Since(s.startedAt).Seconds()),
+	})
+}
+
+// addStat 累计一次调用的用量并落盘。
+func (s *Server) addStat(model string, in, out, total int64) {
+	if total == 0 && in == 0 && out == 0 {
+		return
+	}
+	s.statsMu.Lock()
+	st := s.stats[model]
+	if st == nil {
+		st = &modelStat{}
+		s.stats[model] = st
+	}
+	st.Calls++
+	st.InputTok += in
+	st.OutputTok += out
+	if total > 0 {
+		st.TotalTok += total
+	} else {
+		st.TotalTok += in + out
+	}
+	s.statsMu.Unlock()
+	s.saveStats()
+	log.Printf("bai-plugin: stat model=%s in=%d out=%d", model, in, out)
+}
+
+// loadStats 启动时读回历史统计。
+func (s *Server) loadStats() {
+	if s.statsPath == "" {
+		return
+	}
+	b, err := os.ReadFile(s.statsPath)
+	if err != nil {
+		return
+	}
+	var m map[string]*modelStat
+	if json.Unmarshal(b, &m) == nil {
+		s.stats = m
+	}
+}
+
+// saveStats 原子落盘。
+func (s *Server) saveStats() {
+	if s.statsPath == "" {
+		return
+	}
+	s.statsMu.Lock()
+	b, err := json.Marshal(s.stats)
+	s.statsMu.Unlock()
+	if err != nil {
+		return
+	}
+	tmp := s.statsPath + ".tmp"
+	if os.WriteFile(tmp, b, 0o644) == nil {
+		_ = os.Rename(tmp, s.statsPath)
+	}
 }
 
 // Start 在 host:port 上监听（阻塞）。
@@ -87,8 +179,9 @@ func (s *Server) Start(host, port string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/model/matrix", s.handleModelMatrix) // GUI 甲板专用；/v1/models 仍是纯透传
+	mux.HandleFunc("/v1/stats", s.handleStats)           // 本地统计（GUI 消耗 TOP）；不透传上游
 	mux.Handle("/v1/models", proxy)
-	mux.Handle("/v1/chat/completions", adaptQuirks(proxy))
+	mux.Handle("/v1/chat/completions", s.statsWith(adaptQuirks(proxy)))
 	mux.Handle("/v1/", proxy)
 	mux.Handle("/", proxy)
 
@@ -281,6 +374,123 @@ func adaptQuirks(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// statsWith 只读统计中间件（/v1/chat/completions 专用）：
+// 请求体里取 model（只读，不改写请求体），响应体旁路拷贝一份——流式是 SSE 的
+// data: 行、非流式是整段 JSON——从 usage 字段入账，供 /v1/stats 与 GUI 消耗 TOP 用。
+// 对请求/响应字节一律原样透传（只统计，不改语义）；写盘失败/解析失败只丢统计不报错。
+func (s *Server) statsWith(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		model := peekModel(r)
+		cw := &captureWriter{ResponseWriter: w}
+		next.ServeHTTP(cw, r)
+		if model == "" {
+			return
+		}
+		if u, ok := extractUsage(cw.cap()); ok {
+			s.addStat(model, u.PromptTokens, u.CompletionTokens, u.TotalTokens)
+		}
+	})
+}
+
+// captureWriter 包一层 ResponseWriter：原样写下游，同时旁路留一份响应体副本（上限 8MB）。
+// Flush/Unwrap 透传，保证 ReverseProxy 的流式刷新与 http.ResponseController 行为不变。
+type captureWriter struct {
+	http.ResponseWriter
+	buf    bytes.Buffer
+	tooBig bool
+}
+
+func (c *captureWriter) Write(p []byte) (int, error) {
+	if !c.tooBig {
+		if c.buf.Len()+len(p) > 8<<20 {
+			c.tooBig = true
+			c.buf.Reset()
+		} else {
+			c.buf.Write(p)
+		}
+	}
+	return c.ResponseWriter.Write(p)
+}
+
+func (c *captureWriter) Flush() {
+	if f, ok := c.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (c *captureWriter) Unwrap() http.ResponseWriter { return c.ResponseWriter }
+
+// cap 取副本；超限视为无统计（不半截解析出错误数字）。
+func (c *captureWriter) cap() []byte {
+	if c.tooBig {
+		return nil
+	}
+	return c.buf.Bytes()
+}
+
+// peekModel 从请求体只读取 model 字段（不消费请求体，正文原样留给下游）。
+func peekModel(r *http.Request) string {
+	if r.Body == nil {
+		return ""
+	}
+	buf, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
+	_ = r.Body.Close()
+	r.Body = io.NopCloser(bytes.NewReader(buf))
+	if err != nil {
+		return ""
+	}
+	var m struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal(buf, &m) != nil {
+		return ""
+	}
+	return m.Model
+}
+
+// tokenUsage 上游 usage 字段（OpenAI 口径）。
+type tokenUsage struct {
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+	TotalTokens      int64 `json:"total_tokens"`
+}
+
+// extractUsage 从响应体副本里抠 usage：
+// 非流式是整段 chat.completion JSON；流式是 SSE（每行 data: {...}），
+// stream_options.include_usage 时末帧带 usage（[DONE] 行跳过）。
+// 流式只取最后一个含 usage 的帧——累计口径的 usage 只出现一次。
+func extractUsage(body []byte) (tokenUsage, bool) {
+	var full struct {
+		Usage *tokenUsage `json:"usage"`
+	}
+	if json.Unmarshal(bytes.TrimSpace(body), &full) == nil && full.Usage != nil {
+		return *full.Usage, true
+	}
+	buf := bytes.NewReader(body)
+	sc := bufio.NewScanner(buf)
+	sc.Buffer(make([]byte, 64*1024), 4<<20)
+	var got tokenUsage
+	found := false
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(line[len("data:"):])
+		if payload == "" || payload == "[DONE]" {
+			continue
+		}
+		var chunk struct {
+			Usage *tokenUsage `json:"usage"`
+		}
+		if json.Unmarshal([]byte(payload), &chunk) == nil && chunk.Usage != nil {
+			got = *chunk.Usage
+			found = true
+		}
+	}
+	return got, found
 }
 
 // bufferBody 把带请求体的请求读入内存并设 GetBody（可重放），重试的前提。
