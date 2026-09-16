@@ -8,6 +8,7 @@ stats.json
 *-stats.json
 notice_dismissed.flag
 close_hint_dismissed.flag
+close_mode.txt
 app.exe
 *.exe
 !ProxyDeck.exe
