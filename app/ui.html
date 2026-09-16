@@ -312,6 +312,17 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 
 .pt-lights i:nth-child(3) { background: #28C840; }
 
+/* 标题栏右侧设置按钮：点击＝进设置甲板（原第 4 键职责）。
+   台肩 pointerdown 的拖拽豁免由 initLedge 的 closest 判定给（含本类） */
+.pt-settings-btn {
+  position: absolute; right: 14px; top: 4px; width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; appearance: none; border: 0; border-radius: 5px;
+  background: transparent; color: var(--pt-ink2); cursor: pointer;
+}
+.pt-settings-btn:hover { color: var(--pt-ink); background: var(--pt-hairline); }
+.pt-settings-btn svg { display: block; }
+
 .pt-body {
   flex: 1 1 auto; min-height: 0;
   padding: 9px var(--pt-inset);
@@ -2563,6 +2574,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
         <!-- 顶部台肩：自绘标题栏（无边框窗口）。红绿灯 = 关/最小化/最大化，空白区拖拽移动 -->
         <div class="pt-ledge" id="ptLedge">
           <span class="pt-lights"><i id="lightClose" title="关闭"></i><i id="lightMin" title="最小化"></i><i id="lightMax" title="最大化"></i></span>
+          <button type="button" class="pt-settings-btn" id="settingsBtn"
+                  aria-label="设置" data-i18n-attr="aria-label:app.key.settingsAria" title="设置">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+              <circle cx="8" cy="8" r="2.4"></circle>
+              <path d="M8 1.5v1.9M8 12.6v1.9M1.5 8h1.9M12.6 8h1.9M3.4 3.4l1.35 1.35M11.25 11.25l1.35 1.35M12.6 3.4l-1.35 1.35M4.75 11.25L3.4 12.6"></path>
+            </svg>
+          </button>
         </div>
 
         <div class="pt-body">
@@ -2743,6 +2761,23 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
               </div>
 
+              <!-- 扩展 屏体（扩展甲板：插件视图；点火目标 VibeX 8790） -->
+              <div class="pt-sc-body ext" data-body="ext">
+                <div class="sc-unified">
+                  <div class="run-line">
+                    <span class="pt-dot grn" data-dot="vibexRun"><span class="run-name">VIBEX · 8790</span><b></b></span>
+                  </div>
+                  <div class="pt-system-readout">
+                    <span class="pt-silk">Uptime</span>
+                    <div class="pt-odo pt-sc" data-odo="vibexUptime">0:00:00</div>
+                  </div>
+                  <div class="pt-sc-sep"></div>
+                  <div class="pt-dots">
+                    <span class="pt-dot on" data-dot="extView"><span>插件视图</span><b></b></span>
+                  </div>
+                </div>
+              </div>
+
               <!-- 媒体转路由 屏体 = 信息区：三路媒体请求当前生效去向 + 自定义服务商健康 -->
               <div class="pt-sc-body media" data-body="media">
                 <div class="sc-unified">
@@ -2770,7 +2805,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
             <button type="button" class="pt-key" role="radio" data-mode="cmd" aria-checked="true"><span class="dual-key"><b>COMMAND</b><i>⇄ B.AI</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="tj" aria-checked="false" tabindex="-1"><span class="dual-key"><b>TUANJIE</b><i>⇄ COMATE</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="cb" aria-checked="false" tabindex="-1"><span class="dual-key"><b>WORKBUDDY</b><i>⇄ QODER</i></span></button>
-            <button type="button" class="pt-key" role="radio" data-mode="set" aria-checked="false" tabindex="-1"><span data-i18n="app.settings">设置</span></button>
+            <button type="button" class="pt-key" role="radio" data-mode="ext" aria-checked="false" tabindex="-1"><span data-i18n="app.key.ext">扩展</span></button>
           </div>
 
           <!-- ========== 甲板传送带 ========== -->
@@ -3493,6 +3528,54 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="s" data-i18n="app.s.quit">拨下拨杆退出界面——代理以后台进程继续运行。</span>
                   </span>
                 </button>
+               </div></div>
+              </div>
+
+              <!-- —————— 扩展 甲板（插件视图：点火拉杆/端点/模型/日志照 cb·bai 甲板口径） —————— -->
+              <div class="pt-deck" data-deck="ext">
+               <div class="pt-deck-scroll"><div class="inner">
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.ext.title">扩展 · Extensions</span></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.ignite">点火拉杆</div>
+                    <div class="s">拉到底点火（8790）· 拉回熄火 · VibeX 插件</div>
+                  </div>
+                </div></div>
+                <button type="button" class="pt-activation" data-ignite="vibexRun" data-lever-mode="activate"
+                        aria-label="点火拉杆">
+                  <span class="rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                  <span class="legend">IGNITE</span>
+                  <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
+                </button>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.baseUrl">BASE URL</div>
+                    <div class="s" data-i18n="app.s.copy">点击复制</div>
+                  </div>
+                  <span class="pt-val click" id="vibexEndpoint">http://127.0.0.1:8790/v1</span>
+                </div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span></div>
+                <div class="pt-grid">
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
+                    <span class="rv" id="vibexStModels">—</span><span class="rs" id="vibexStModelsSub">拉杆刷新</span></div>
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.health">健康检查</span>
+                    <span class="rv" id="vibexStHealth">—<span class="u">ms</span></span><span class="rs" id="vibexStHealthSub">本地回环</span></div>
+                </div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.models">模型矩阵 · Models</span>
+                  <span class="pt-val" id="vibexModelCount">OFFLINE</span></div>
+                <div id="vibexModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.usage">消耗 TOP</span></div>
+                <div class="pt-bars" id="vibexBars"><div class="bars-empty">// 插件启动后自动统计</div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.modelRef">模型参考</button>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
+                  <button type="button" class="ibtn2" id="vibexClearLog" data-i18n="app.btn.clear">清空</button></div>
+                <div class="pt-log" id="vibexLog"></div>
                </div></div>
               </div>
 
@@ -4285,7 +4368,7 @@ var PT_I18N = {
 
   /* ══════════════════ 3. 状态与模式 ══════════════════ */
   var st = { mode: 'cmd', soundSet: 1 };
-  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'media', 'water'];
+  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'ext', 'media', 'water'];
   /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；tj 的副页是 COMATE；cb 的副页是 Qoder） */
   var ALT_MODE = { cmd: 'bai', bai: 'cmd', tj: 'comate', comate: 'tj', cb: 'qoder', qoder: 'cb' };
   /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
@@ -4294,7 +4377,7 @@ var PT_I18N = {
      cell 的 --y 与 children 序号一致）。cmd 居中用 idx5；COMATE 占首格 idx0——与 TUANJIE idx1 相邻，
      同一颗键的两张脸切换只滚 1 格（同 COMMAND→B.AI 滚 1 格的既有韵律）；Qoder 占 idx3 与 cb 副页相邻；
      子页顺序 设置→媒体→注水 */
-  var DRUM_IDX = { comate: 0, tj: 1, cb: 2, qoder: 3, set: 4, cmd: 5, bai: 6, media: 7, water: 8 };
+  var DRUM_IDX = { comate: 0, tj: 1, cb: 2, qoder: 3, set: 4, ext: 4, cmd: 5, bai: 6, media: 7, water: 8 };
   /* 实体键面子记忆：COMMAND/TUANJIE/WORKBUDDY 各有两张脸（COMMAND/B.AI、TUANJIE/COMATE、WORKBUDDY/QODER）。
      在哪张脸上离开，键帽就保持那张脸的名字，从别的页再按它也回到那张脸（点 TUANJIE 再回来
      不能落回 COMMAND ——「从什么界面离开，就保持什么界面」） */
@@ -4306,7 +4389,7 @@ var PT_I18N = {
       if (m === h || m === ALT_MODE[h]) keyFace[h] = m;
     });
   }
-  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, comate: 6, media: 7, water: 8 };
+  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, comate: 7, media: 8, water: 9 };
   /* 上屏 Wheel 音量条只亮着六个主页可见；set/water/media 里它挡住屏体右侧读数 */
   var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate', 'qoder'];
   /* lx（灵犀+设置）与 no 共用第 4 颗键：已停在 no 时再点该键进 lx（双职责），
@@ -4822,10 +4905,15 @@ var PT_I18N = {
     if (!ledge) return;
     ledge.addEventListener('pointerdown', function (ev) {
       if (ev.button !== 0) return;
-      if (ev.target.closest('.pt-lights')) return;   /* 灯有自己的点击语义 */
+      /* 灯与设置按钮有自己的点击语义：不拖窗（closest 判定＝豁免，勿删） */
+      if (ev.target.closest('.pt-lights')) return;
+      if (ev.target.closest('.pt-settings-btn')) return;
       windowCmd('move');
     });
-    ledge.addEventListener('dblclick', function () { windowCmd('max'); });
+    ledge.addEventListener('dblclick', function (ev) {
+      if (ev.target.closest('.pt-settings-btn')) return;   /* 台肩双击＝最大化，设置按钮上不生效 */
+      windowCmd('max');
+    });
     var lightClose = $('#lightClose'), lightMin = $('#lightMin'), lightMax = $('#lightMax');
     if (lightClose) lightClose.addEventListener('click', function () {
       play('keyPress');
@@ -4841,6 +4929,12 @@ var PT_I18N = {
     if (lightMax) lightMax.addEventListener('click', function () {
       play('keyPress');
       windowCmd('max');
+    });
+    /* 标题栏设置按钮：进设置甲板——与原来第 4 颗模式键的点击目标同一个（selectMode('set')） */
+    var settingsBtn = $('#settingsBtn');
+    if (settingsBtn) settingsBtn.addEventListener('click', function () {
+      play('keyPress');
+      selectMode('set');
     });
   })();
 
@@ -7597,7 +7691,9 @@ var PT_I18N = {
     cb: { id: 'codebuddy', port: 8787, pfx: 'cb', mode: 'cb', uptime: null, phase: 'idle' },
     bai: { id: 'bai', port: 8891, pfx: 'ba', mode: 'bai', uptime: null, phase: 'idle' },
     comate: { id: 'comate', port: 8786, pfx: 'comate', mode: 'comate', uptime: null, phase: 'idle' },
-    qoder: { id: 'qoder', port: 8785, pfx: 'qoder', mode: 'qoder', uptime: null, phase: 'idle' }
+    qoder: { id: 'qoder', port: 8785, pfx: 'qoder', mode: 'qoder', uptime: null, phase: 'idle' },
+    /* 扩展甲板第一家供应商：VibeX（8790）——端点/状态灯/模型列表/拉杆全走通用插件视图 */
+    ext: { id: 'vibex', port: 8790, pfx: 'vibex', mode: 'vibex', uptime: null, phase: 'idle' }
   };
 
   /* ---------------- WorkBuddy 甲板：国内版 ⇄ 国际版（同甲板区域切换，不增甲板/模式键） ----------------
@@ -8757,6 +8853,9 @@ var PT_I18N = {
     'app.update':     { zh: '更新', 'zh-hant': '更新', en: 'Update', de: 'Update', ja: 'アップデート', fr: 'Mise à jour', es: 'Actualización' },
     'app.about':     { zh: '关于', 'zh-hant': '關於', en: 'About', de: 'Über', ja: '情報', fr: 'À propos', es: 'Acerca de' },
     'app.settings':     { zh: '设置', 'zh-hant': '設置', en: 'Settings', de: 'Einstellungen', ja: '設定', fr: 'Réglages', es: 'Ajustes' },
+    'app.key.ext':        { zh: '扩展', 'zh-hant': '擴展', en: 'Extensions', de: 'Erweiterungen', ja: '拡張', fr: 'Extensions', es: 'Extensiones' },
+    'app.key.settingsAria': { zh: '设置', 'zh-hant': '設置', en: 'Settings', de: 'Einstellungen', ja: '設定', fr: 'Réglages', es: 'Ajustes' },
+    'app.ext.title':      { zh: '扩展 · Extensions', 'zh-hant': '擴展 · Extensions', en: 'Extensions', de: 'Erweiterungen', ja: '拡張', fr: 'Extensions', es: 'Extensiones' },
     'app.quit':     { zh: '彻底关机', 'zh-hant': '徹底關機', en: 'Power Off', de: 'Ausschalten', ja: '完全終了', fr: 'Éteindre', es: 'Apagar' },
     'app.version':     { zh: '版本', 'zh-hant': '版本', en: 'Version', de: 'Version', ja: 'バージョン', fr: 'Version', es: 'Versión' },
     'app.github':     { zh: '开源地址', 'zh-hant': '開源地址', en: 'Open Source', de: 'Open Source', ja: 'オープンソース', fr: 'Open Source', es: 'Código abierto' },
@@ -9626,6 +9725,11 @@ var PT_I18N = {
       '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8786/v1</code>（甲板上点击即复制）。<br>' +
       '<b>【协议适配】</b>zulu 会话引擎 · OpenAI 兼容 · 免费可用。<br>' +
       '<b>【运行提示】</b>免费档上游限速是常态，运行时「限速中」灯常亮。<br>' +
+      '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>',
+    ext:
+      '<h3>使用帮助 · GUIDE · 扩展</h3><div class="m-body">' +
+      '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8790）；拉回最左熄火。<br>' +
+      '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8790/v1</code>（甲板上点击即复制）。<br>' +
       '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>'
   };
 
@@ -9702,6 +9806,21 @@ var PT_I18N = {
 
   /* Qoder / Comate：/v1/models 返回 id + display_name（内部代号 → 界面名）。
      无内置名单——离线时不编造，点火后拉到的就是后端真实清单。 */
+  /* 扩展甲板供应商（VibeX 8790）：模型清单直读通用插件视图的 /v1/models */
+  async function refForExt() {
+    var r = await refFetchList(8790, '/v1/models');
+    if (!r) { openModal(refNote('插件未运行 · 点火后与后端实时清单一致')); return; }
+    if (r.err) { openModal(refNote('拉取失败 · 稍后再试')); return; }
+    var html = '<h3>模型参考 · MODEL REF · 扩展 · VibeX</h3><div class="m-body">' +
+      '<b>【口径】</b>清单与 8790 后端实时一致；点击模型名一键复制。' +
+      '<table class="pm-tbl"><thead><tr><th>模型</th></tr></thead>';
+    r.list.forEach(function (m) {
+      var id = m.id || m;
+      html += '<tr>' + refNameCell(id, id) + '</tr>';
+    });
+    openModal(html + '</table></div>');
+  }
+
   function refForNamed(port, title) {
     return async function () {
       var r = await refFetchList(port, '/v1/models');
@@ -9743,7 +9862,8 @@ var PT_I18N = {
     cb: refForCb,
     qoder: refForQoder,
     bai: refForBai,
-    comate: refForComate
+    comate: refForComate,
+    ext: refForExt
   };
 
   function setModelFilter(mode) {
@@ -9890,8 +10010,8 @@ var PT_I18N = {
     try { var saved = localStorage.getItem('latProxy'); if (saved) $('latProxy').value = saved; } catch (e) {}
 
     /* —— 插件启停 —— */
-    ['tj', 'cb', 'bai', 'comate', 'qoder'].forEach(bindPluginToggle);
-    ['tjEndpoint', 'cbEndpoint', 'baEndpoint', 'comateEndpoint', 'qoderEndpoint'].forEach(function (id) {
+    ['tj', 'cb', 'bai', 'comate', 'qoder', 'ext'].forEach(bindPluginToggle);
+    ['tjEndpoint', 'cbEndpoint', 'baEndpoint', 'comateEndpoint', 'qoderEndpoint', 'vibexEndpoint'].forEach(function (id) {
       var el = $(id);
       if (el) el.onclick = function () { copyText(el.textContent, 'Base URL'); };
     });
@@ -9911,7 +10031,7 @@ var PT_I18N = {
         else plog(V, 'err', '积分清零失败: ' + ((d && d.error) || '未知'));
       } catch (e) { plog(V, 'err', '积分清零失败: ' + (e && e.message || e)); }
     };
-    ['tj', 'cb', 'bai', 'comate', 'qoder'].forEach(function (mode) {
+    ['tj', 'cb', 'bai', 'comate', 'qoder', 'ext'].forEach(function (mode) {
       var V = PV[mode];
       var clr = $(V.pfx + 'ClearLog');
       if (clr) clr.onclick = function () { $(V.pfx + 'Log').innerHTML = ''; plog(V, 'sys', '日志已清空'); };
@@ -9990,7 +10110,7 @@ var PT_I18N = {
               ids = plist.map(function (p) { return p.id; });
             }
           } catch (e) {}
-          if (!ids) ids = ['tuanjie', 'codebuddy', 'codebuddy-intl', 'bai', 'comate', 'qoder'];
+          if (!ids) ids = ['tuanjie', 'codebuddy', 'codebuddy-intl', 'bai', 'comate', 'qoder', 'vibex'];
           for (var i = 0; i < ids.length; i++) {
             try { await call('PluginStop', ids[i]); } catch (e) {}
           }
