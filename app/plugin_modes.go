@@ -6,12 +6,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/Amer-CN/proxydeck/internal/bai"
 	"github.com/Amer-CN/proxydeck/internal/codebuddy"
 	"github.com/Amer-CN/proxydeck/internal/comate"
 	"github.com/Amer-CN/proxydeck/internal/qoder"
 	"github.com/Amer-CN/proxydeck/internal/tuanjie"
+	"github.com/Amer-CN/proxydeck/internal/vibex"
 )
 
 var (
@@ -22,11 +24,56 @@ var (
 	flagPluginBai           = flag.Bool("plugin-bai", false, "B.AI 插件服务模式（本地转发到 api.b.ai，OpenAI 兼容）")
 	flagPluginComate        = flag.Bool("plugin-comate", false, "Comate 插件服务模式（托管 zulu serve，本地 OpenAI 兼容 8786）")
 	flagPluginQoder         = flag.Bool("plugin-qoder", false, "Qoder 插件服务模式（托管官方 agent SDK worker，本地 OpenAI 兼容 8785）")
+
+	// flagPluginVibex 由下面的 vibexDispatchFlag 置位（--plugin-vibex）。
+	flagPluginVibex bool
 )
+
+// vibexDispatchFlag 实现 flag.Value：解析 --plugin-vibex 时同时置位 flagPluginBai。
+//
+// 为什么这么绕：main() 的插件子模式分发条件是六个既有 flag 的或
+// （app/main.go，本轮改动白名单不含它），单加一个 flag 进不了 runPluginMode()。
+// 借道已有标志后，runPluginMode 里的 vibex 分支排在最前，故 --plugin-vibex 的
+// 行为与"新增一个分发项"等价；带上 --plugin-bai 一起用时以 vibex 为准。
+type vibexDispatchFlag struct{}
+
+func (vibexDispatchFlag) String() string   { return "false" }
+func (vibexDispatchFlag) IsBoolFlag() bool { return true }
+
+func (vibexDispatchFlag) Set(s string) error {
+	b, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	flagPluginVibex = b
+	if b {
+		*flagPluginBai = true
+	}
+	return nil
+}
+
+// --plugin-vibex：VibeX（RunningHub）插件服务模式，本地 OpenAI 兼容 8790。
+func init() {
+	flag.Var(vibexDispatchFlag{}, "plugin-vibex", "VibeX 插件服务模式（REST+WS 协议客户端，本地 OpenAI 兼容 8790）")
+}
 
 // runPluginMode 处理 --plugin-tuanjie / --plugin-codebuddy / --plugin-bai / --plugin-comate
 // 子模式：进程内直接跑对应插件服务（无窗口，关 GUI 不受影响）。
 func runPluginMode() int {
+	// VibeX 插件服务模式：REST + WS 私有协议客户端，对外 OpenAI 兼容（8790）。
+	// 注意：必须排在 --plugin-bai 分支之前——vibexDispatchFlag 是借 flagPluginBai
+	// 进入本函数的（见该类型注释）。
+	if flagPluginVibex {
+		srv := vibex.NewServer()
+		log.Printf("vibex-plugin: starting on %s:%s (VibeX REST+WS)", *flagHost, *flagPort)
+		if err := srv.Start(*flagHost, *flagPort); err != nil {
+			_ = os.WriteFile(filepath.Join(exeDir(), "vibex-plugin-error.log"),
+				[]byte(err.Error()), 0o600)
+			os.Exit(1)
+		}
+		select {}
+	}
+
 	// 团结插件服务模式：进程内直接跑 internal/tuanjie 服务。
 	if *flagPluginTuanjie {
 		srv := tuanjie.NewServer()

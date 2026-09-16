@@ -60,6 +60,13 @@ var pluginDefs = []pluginDef{
 		Native: "qoder",
 		Port:   8785, Health: "/health",
 	},
+	{
+		// VibeX（RunningHub）：REST + WS 私有协议的协议客户端，对外 OpenAI 兼容。
+		// 本轮只注册不点火（简报要求：正式端口 8790 只写进 pluginDefs）。
+		ID: "vibex", Name: "VibeX",
+		Native: "vibex",
+		Port:   8790, Health: "/health",
+	},
 }
 
 type pluginState struct {
