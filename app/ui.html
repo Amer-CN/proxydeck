@@ -2776,7 +2776,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   </div>
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
-                    <span class="pt-dot on" data-dot="extView"><span>插件视图</span><b></b></span>
+                    <span class="pt-dot" data-dot="vibexToken"><span>token 就绪</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -3537,11 +3537,10 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
               <!-- —————— VIBEX 甲板（插件视图：点火拉杆/端点/模型/日志照 cb·bai 甲板口径） —————— -->
               <div class="pt-deck" data-deck="ext">
                <div class="pt-deck-scroll"><div class="inner">
-                <div class="pt-subhead"><span class="pt-silk sm">VibeX · VIBEX</span></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.ignite">点火拉杆</div>
-                    <div class="s">拉到底点火（8790）· 拉回熄火 · VibeX 插件</div>
+                    <div class="s" data-i18n="app.s.vibexLever">拉到底点火（8790）· 拉回熄火 · VibeX 插件</div>
                   </div>
                 </div></div>
                 <button type="button" class="pt-activation" data-ignite="vibexRun" data-lever-mode="activate"
@@ -8466,6 +8465,9 @@ var PT_I18N = {
         V.uptime = h.uptimeSec;
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
       }
+      /* vibex 屏灯：token 就绪（token 7～30 天过期是本通道头号运维项，health 自带该字段；
+         缺 token 时琥珀警告，行为对标各甲板相位灯写法） */
+      if (V.mode === 'ext') PTApp.dot('vibexToken', h.token_configured === true, h.token_configured === false, '');
       if (V.id === 'tuanjie') { updateJudgeBanner(h); updateSeedBanner(h); }
       if (V.mode === 'cb') {
         /* WorkBuddy 两区共用本甲板（cbRegion 决定 V.id），hy4 兜底状态条按区域画 */
@@ -8867,6 +8869,7 @@ var PT_I18N = {
     'app.s.cbLever':     { zh: '拉到底点火（8787）· 拉回熄火 · 模型探测首次约 20 秒', 'zh-hant': '拉到底點火（8787）· 拉回熄火 · 模型探測首次約 20 秒', en: 'Pull fully to ignite (8787) · Pull back to stop · Probe ~20s first run', de: 'Ganz ziehen (8787) · Zurück zum Stop · Erste Suche ~20 s', ja: '右端まで引いて点火（8787）・初回検出約20秒', fr: 'Tirer à fond (8787) · Détection ~20 s au début', es: 'Tira al fondo (8787) · Detección ~20 s la primera vez' },
     'app.s.cbLeverIntl':     { zh: '拉到底点火（8789）· 拉回熄火 · 模型探测首次约 20 秒', 'zh-hant': '拉到底點火（8789）· 拉回熄火 · 模型探測首次約 20 秒', en: 'Pull fully to ignite (8789) · Pull back to stop · Probe ~20s first run', de: 'Ganz ziehen (8789) · Zurück zum Stop · Erste Suche ~20 s', ja: '右端まで引いて点火（8789）・初回検出約20秒', fr: 'Tirer à fond (8789) · Détection ~20 s au début', es: 'Tira al fondo (8789) · Detección ~20 s la primera vez' },
     'app.s.baiLever':     { zh: '拉到底点火（8891）· 拉回熄火 · Go 栈直连 api.b.ai', 'zh-hant': '拉到底點火（8891）· 拉回熄火 · Go 棧直連 api.b.ai', en: 'Pull to ignite (8891) · Back to stop · Go stack to api.b.ai', de: 'Ziehen zum Starten (8891) · Zurück zum Stoppen · Go-Stack zu api.b.ai', ja: '引いて起動（8891）· 戻して停止 · Goスタックで api.b.ai へ', fr: 'Tirer pour démarrer (8891) · Retour pour arrêter · Pile Go vers api.b.ai', es: 'Tira para encender (8891) · Vuelve para apagar · Pila Go a api.b.ai' },
+    'app.s.vibexLever':   { zh: '拉到底点火（8790）· 拉回熄火 · VibeX 插件', 'zh-hant': '拉到底點火（8790）· 拉回熄火 · VibeX 插件', en: 'Pull to ignite (8790) · Back to stop · VibeX plugin', de: 'Ziehen zum Starten (8790) · Zurück zum Stoppen · VibeX-Plugin', ja: '引いて起動（8790）· 戻して停止 · VibeXプラグイン', fr: 'Tirer pour démarrer (8790) · Retour pour arrêter · Plugin VibeX', es: 'Tira para encender (8790) · Vuelve para apagar · Plugin VibeX' },
     'app.s.comateLever':     { zh: '拉杆点火，托管 Comate 智能体引擎（8786）· 拉回熄火', 'zh-hant': '拉桿點火，託管 Comate 智能體引擎（8786）· 拉回熄火', en: 'Pull to ignite, hosting the Comate agent engine (8786) · Pull back to stop', de: 'Ziehen zum Start, hostet die Comate-Engine (8786) · Zurück zum Stoppen', ja: '引いて点火、Comate エージェントエンジンをホスト（8786）· 戻して停止', fr: 'Tirer pour démarrer, héberge le moteur Comate (8786) · Retour pour arrêter', es: 'Tira para encender, aloja el motor de Comate (8786) · Vuelve para apagar' },
     'app.s.qoderLever':      { zh: '拉杆点火，托管 Qoder 智能体引擎（8785）· 拉回熄火', 'zh-hant': '拉桿點火，託管 Qoder 智能體引擎（8785）· 拉回熄火', en: 'Pull to ignite, hosting the Qoder agent engine (8785) · Pull back to stop', de: 'Ziehen zum Start, hostet die Qoder-Engine (8785) · Zurück zum Stoppen', ja: '引いて点火、Qoder エージェントエンジンをホスト（8785）· 戻して停止', fr: 'Tirer pour démarrer, héberge le moteur Qoder (8785) · Retour pour arrêter', es: 'Tira para encender, aloja el motor de Qoder (8785) · Vuelve para apagar' },
     'app.s.copy':     { zh: '点击复制', 'zh-hant': '點擊複製', en: 'Click to copy', de: 'Klicken zum Kopieren', ja: 'クリックでコピー', fr: 'Cliquer pour copier', es: 'Clic para copiar' },
