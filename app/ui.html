@@ -2739,7 +2739,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v3.18.0</span>
+                    <span class="v ver" id="etchVer">v3.19.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3476,13 +3476,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v3.18.0">v3.18.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v3.19.0">v3.19.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v3.18.0</div>
+                    <div class="s" id="buildNo">v3.19.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">v3.18.0</span>
+                  <span class="pt-val" id="verChip">v3.19.0</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -9276,6 +9276,14 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v3.19.0', date: '2026-09-17', groups: [
+      { label: '🚀 新功能', items: [
+        'VIBEX 反代插件：RunningHub 模型转本地接口（8790）',
+        'VIBEX 甲板＋账号自动探测：弹浏览器登一次自动入池' ] },
+      { label: '✨ 体验优化', items: [
+        '标题栏设置齿轮：设置页改右上角进，第 4 键让贤',
+        '鼓轮终态 10 格：COMMAND 开头，第 8 格预留',
+        '矩阵只收免费档＋消耗统计：厂家分组，黑屏对齐成品' ] } ] },
     { v: 'v3.18.0', date: '2026-09-16', groups: [
       { label: '🚀 新功能', items: [
         '关窗新增退到托盘：红灯二选一，勾记住下次不问',
@@ -10246,7 +10254,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v3.18.0';
+  var UI_CUR = 'v3.19.0';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   var cbQuotaUserId = ''; // WorkBuddy 积分面板选中的账号（空串=默认最新号；区域感知：切区后失效重选）
   function verCmp(a, b) {
