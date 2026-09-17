@@ -251,11 +251,20 @@ func (c *Client) providers(ctx context.Context) ([]any, error) {
 			if list, ok := m[k].([]any); ok {
 				return list, nil
 			}
+			// 二层兜底：形如 {"code":0,"data":{"providers":[...]}}（appsFrom 同款容错）
+			if inner := toMap(m[k]); inner != nil {
+				for _, k2 := range []string{"providers", "items", "data", "list"} {
+					if list, ok := inner[k2].([]any); ok {
+						return list, nil
+					}
+				}
+			}
 		}
 	}
 	// 未解出列表：记顶层结构自证（只记键名/类型与数量，绝不记 body 与 token），
 	// “0 MODELS”时看这条即知是上游真空还是嵌套格式漏网。
-	logf("providers 上游 200 但未解出列表（结构=%s）", shapeOf(v))
+	m := toMap(v)
+	logf("providers 上游 200 但未解出列表（结构=%s code=%v msg=%.120s）", shapeOf(v), m["code"], str(m["msg"]))
 	return nil, nil
 }
 

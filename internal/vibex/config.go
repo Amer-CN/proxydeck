@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"flag"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,7 +18,7 @@ import (
 //
 // DEFAULT_INSTRUCTION 用简体中文（对方实现是繁体，不照抄——见任务简报硬约束 5）。
 const (
-	defaultBaseURL      = "https://vibex.runninghub.cn"
+	defaultBaseURL      = "https://vibex.runninghub.cn/vc"
 	defaultAppName      = "vibex2api"
 	defaultAppType      = "web"
 	defaultTurnTimeout  = 900
@@ -123,6 +124,12 @@ func LoadConfig() *Config {
 func (c *Config) normalize() {
 	if strings.TrimSpace(c.BaseURL) == "" {
 		c.BaseURL = defaultBaseURL
+	}
+	// REST 网关要 /vc 前缀（README 配置示例口径；WS 由 _ws_url 取 netloc 直连，不受影响）：
+	// 裸域（无 path）自动补 /vc，自带 path 的自定义地址保持原样。
+	if u, err := url.Parse(strings.TrimRight(c.BaseURL, "/")); err == nil && (u.Path == "" || u.Path == "/") {
+		u.Path = "/vc"
+		c.BaseURL = u.String()
 	}
 	if strings.TrimSpace(c.AppName) == "" {
 		c.AppName = defaultAppName
