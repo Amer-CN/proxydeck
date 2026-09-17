@@ -2358,6 +2358,7 @@ body.pt-try { background: var(--pt-paper); }
 .pt-drum i:nth-child(7) { --y: 6; } /* B.AI/媒体路由/注水检测接在绕接格与 COMMAND 真格之后（B.AI 紧挨真格） */
 .pt-drum i:nth-child(8) { --y: 7; } /* 无物理键的副页也要在 Mode 鼓轮上有一格 */
 .pt-drum i:nth-child(9) { --y: 8; } /* 末格：VIBEX（注水检测是独立窗口，不上鼓轮） */
+.pt-drum i:nth-child(10) { --y: 9; } /* 鼓轮终态 10 格：8=设置，9=媒体路由（第 8 格为第 8 供应商预留） */
 
 /* 自定义服务商刷新指示：/providers 冷启动要现查订阅与用量，给一条呼吸提示而不是空白等待 */
 .pv-busy { margin-left: 10px; font-family: var(--pt-font-ui); font-size: 11px; font-weight: 500;
@@ -2600,15 +2601,17 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
               <span class="pt-sc-mode">
                 <span class="pt-silk sm">Mode</span>
                 <span class="pt-drum" style="--i:0">
-                  <i data-mode="comate"><span>COMATE</span></i>
-                  <i data-mode="tj"><span>TUANJIE</span></i>
-                  <i data-mode="cb"><span>WORKBUDDY</span></i>
-                  <i data-mode="qoder"><span>QODER</span></i>
-                  <i data-mode="set"><span data-i18n="app.settings">设置</span></i>
                   <i data-mode="cmd"><span>COMMAND</span></i>
                   <i data-mode="bai"><span>B.AI</span></i>
+                  <i data-mode="tj"><span>TUANJIE</span></i>
+                  <i data-mode="comate"><span>COMATE</span></i>
+                  <i data-mode="cb"><span>WORKBUDDY</span></i>
+                  <i data-mode="qoder"><span>QODER</span></i>
+                  <i data-mode="ext"><span>VIBEX</span></i>
+                  <!-- 第 8 供应商预留格（未映射任何 mode，路过时鼓轮保持上一位置） -->
+                  <i><span>···</span></i>
+                  <i data-mode="set"><span data-i18n="app.settings">设置</span></i>
                   <i data-mode="media"><span data-i18n="app.key.mediaDrum">媒体路由</span></i>
-                                    <i data-mode="ext"><span>VIBEX</span></i>
                 </span>
               </span>
             </div>
@@ -4375,11 +4378,10 @@ var PT_I18N = {
   var ALT_MODE = { cmd: 'bai', bai: 'cmd', tj: 'comate', comate: 'tj', cb: 'qoder', qoder: 'cb' };
   /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
   var ALT_LABEL = { cmd: 'B.AI', tj: 'COMATE', cb: 'QODER' };
-  /* 鼓轮 9 格 DOM [comate,tj,cb,qoder,set,cmd,bai,media,ext]；居中格 = children[--i]（CSS 按 --y−--i 定位，
-     cell 的 --y 与 children 序号一致）。cmd 居中用 idx5；COMATE 占首格 idx0——与 TUANJIE idx1 相邻，
-     同一颗键的两张脸切换只滚 1 格（同 COMMAND→B.AI 滚 1 格的既有韵律）；Qoder 占 idx3 与 cb 副页相邻；
-     子页顺序 设置→媒体→注水；VIBEX 末格 idx8；注水检测是独立窗口不上鼓轮（无专属格的 mode 保持鼓轮上一位置） */
-  var DRUM_IDX = { comate: 0, tj: 1, cb: 2, qoder: 3, set: 4, ext: 8, cmd: 5, bai: 6, media: 7 };
+  /* 鼓轮 10 格 DOM [cmd,bai,tj,comate,cb,qoder,ext,预留,set,media]；居中格 = children[--i]（CSS 按 --y−--i 定位，
+     cell 的 --y 与 children 序号一致）。顺序即终态：主页 COMMAND 开头，第 8 格（idx7）为第 8 供应商预留
+     （无 mode 映射，路过保持上一位置），设置 idx8，媒体路由 idx9；后来者只填预留格，不调顺序。 */
+  var DRUM_IDX = { cmd: 0, bai: 1, tj: 2, comate: 3, cb: 4, qoder: 5, ext: 6, set: 8, media: 9 };
   /* 实体键面子记忆：COMMAND/TUANJIE/WORKBUDDY 各有两张脸（COMMAND/B.AI、TUANJIE/COMATE、WORKBUDDY/QODER）。
      在哪张脸上离开，键帽就保持那张脸的名字，从别的页再按它也回到那张脸（点 TUANJIE 再回来
      不能落回 COMMAND ——「从什么界面离开，就保持什么界面」） */
@@ -4456,7 +4458,7 @@ var PT_I18N = {
     if (vuWrap) vuWrap.style.display = VU_HOME.indexOf(m) >= 0 ? '' : 'none';
     var drum = $('.pt-drum');
     if (drum) {
-      /* 居中格 = children[--i]：comate→0、tj→1、cb→2、set→3、cmd→4（尾格）、bai→5；
+      /* 居中格 = children[--i]（顺序见 DRUM_IDX 注释：cmd→0 … ext→6，预留格 idx7 无映射，set→8，media→9）；
          没有专属格的 mode 保持鼓轮上一位置，不能把 --i 设成 undefined（calc 失效，格子会叠成一坨） */
       var di = DRUM_IDX[m];
       if (di != null) {
