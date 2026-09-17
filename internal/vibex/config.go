@@ -195,6 +195,31 @@ func (c *Config) persistToken(token string) error {
 	if !slices.Contains(cp.Tokens, token) {
 		cp.Tokens = append(cp.Tokens, token)
 	}
+	// 同号去重落盘：同 sub 只留最后一条（最新登录串），无 sub 的按串保留。
+	// 否则每次登录永久多一条过期串，文件越烂越大（内存池有 addWithState 兜底，
+	// 但文件是持久池，必须在这里收敛）。
+	seen := make(map[string]bool, len(cp.Tokens))
+	out := make([]string, 0, len(cp.Tokens))
+	for i := len(cp.Tokens) - 1; i >= 0; i-- {
+		t := cp.Tokens[i]
+		sub := ""
+		if info := decodeJWT(t); info != nil {
+			sub = info.Sub
+		}
+		if sub == "" {
+			out = append(out, t)
+			continue
+		}
+		if seen[sub] {
+			continue
+		}
+		seen[sub] = true
+		out = append(out, t)
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	cp.Tokens = out
 	if err := cp.persist(); err != nil {
 		return err
 	}

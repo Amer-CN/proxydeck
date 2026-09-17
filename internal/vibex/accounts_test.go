@@ -569,3 +569,30 @@ func TestNewPoolDedupsFileDupes(t *testing.T) {
 		t.Fatalf("加载应自愈为 1 条，实际 %d", p.Len())
 	}
 }
+
+// TestPersistTokenDedupsFileBySub：同号多次落盘，文件里永远只剩最新一条。
+func TestPersistTokenDedupsFileBySub(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &Config{path: dir + "/vibex-config.json"}
+	a := fakeJWTSub(t, time.Now().Add(24*time.Hour), "号", "u-5")
+	b := fakeJWTSub(t, time.Now().Add(48*time.Hour), "号", "u-5")
+	if err := cfg.persistToken(a); err != nil {
+		t.Fatalf("第一次落盘失败: %v", err)
+	}
+	if err := cfg.persistToken(b); err != nil {
+		t.Fatalf("第二次落盘失败: %v", err)
+	}
+	var back struct {
+		Tokens []string `json:"tokens"`
+	}
+	raw, err := os.ReadFile(cfg.path)
+	if err != nil {
+		t.Fatalf("读回失败: %v", err)
+	}
+	if err := json.Unmarshal(raw, &back); err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+	if len(back.Tokens) != 1 || back.Tokens[0] != b {
+		t.Fatalf("文件应只剩最新一条，实际 %d 条", len(back.Tokens))
+	}
+}
