@@ -3402,18 +3402,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
                 <div class="pt-div"></div>
 
-                <!-- 链路诊断：外网延迟测试（手动点击）——本机端口健康读数已去掉（无诊断价值） -->
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.diag.head">链路诊断 · Diagnostics</span></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t" data-i18n="app.diag.latTitle">外网延迟测试</div>
-                    <div class="s" data-i18n="app.diag.latDesc">HTTP/HTTPS 延迟 · 走代理链路 · 手动点击探测</div>
-                  </div>
-                  <input class="pt-field" id="latProxy" data-i18n-attr="placeholder:app.diag.proxy" placeholder="代理地址 · 留空自动探测本地代理" spellcheck="false" autocomplete="off">
-                  <button type="button" class="ibtn2" id="latTestBtn" data-i18n="app.btn.latency">测延迟</button>
-                </div></div>
-                <div class="pt-lat" id="latResult"><span class="lat-idle" data-i18n="app.diag.latIdle">HTTP/HTTPS 延迟 · 走代理链路</span></div>
-                <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.water.title">注水检测</div>
@@ -5103,10 +5091,6 @@ var PT_I18N = {
     open: function () { return { ok: true }; },
     copy: function (t) { try { navigator.clipboard.writeText(t); } catch (e) {} return { ok: true }; },
     dismiss: function () { return { ok: true }; },
-    latencyTest: function () { return { ok: true, targets: [
-      { name: 'CommandCode API', ms: 86, ok: true },
-      { name: 'GitHub', ms: 64, ok: true },
-      { name: '国内 · 百度', ms: 23, ok: true }] }; }
   };
   function call(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -9052,7 +9036,6 @@ var PT_I18N = {
     'app.btn.save':     { zh: '保存', 'zh-hant': '保存', en: 'Save', de: 'Speichern', ja: '保存', fr: 'Enregistrer', es: 'Guardar' },
     'app.btn.refresh':     { zh: '↻ 刷新', 'zh-hant': '↻ 刷新', en: '↻ Refresh', de: '↻ Aktualisieren', ja: '↻ 更新', fr: '↻ Rafraîchir', es: '↻ Actualizar' },
     'app.btn.all':     { zh: '全部', 'zh-hant': '全部', en: 'All', de: 'Alle', ja: 'すべて', fr: 'Tous', es: 'Todos' },
-    'app.btn.latency':     { zh: '测延迟', 'zh-hant': '測延遲', en: 'Latency', de: 'Latenz', ja: 'レイテンシ', fr: 'Latence', es: 'Latencia' },
     'app.btn.modelRef':     { zh: '模型参考', 'zh-hant': '模型參考', en: 'Model Ref', de: 'Modell-Ref', ja: 'モデル参考', fr: 'Réf. modèles', es: 'Ref. modelos' },
     'app.btn.help':     { zh: '使用帮助', 'zh-hant': '使用幫助', en: 'Help', de: 'Hilfe', ja: 'ヘルプ', fr: 'Aide', es: 'Ayuda' },
     'app.btn.clear':     { zh: '清空', 'zh-hant': '清空', en: 'Clear', de: 'Leeren', ja: 'クリア', fr: 'Vider', es: 'Limpiar' },
@@ -9090,11 +9073,6 @@ var PT_I18N = {
     'app.media.headVal': { zh: '识图请求自动改路由到识图模型 · 当前生效于团结链路', 'zh-hant': '識圖請求自動改路由到識圖模型 · 當前生效於團結鏈路', en: 'Vision requests auto-reroute to the vision model · Active on the Tuanjie link', de: 'Bildanfragen werden automatisch zum Bildmodell umgeleitet · Aktiv auf der Tuanjie-Verbindung', ja: '画像リクエストを画像モデルへ自動振り分け・現在は団結リンクが対象', fr: 'Les requêtes vision sont reroutées vers le modèle vision · Actif sur le lien Tuanjie', es: 'Las peticiones de visión se redirigen al modelo de visión · Activo en el enlace Tuanjie' },
     'app.media.desc':    { zh: '识图模型选择 · 自定义服务商与模型管理 · 识图请求自动改路由到识图模型（团结 codely-vl 或自定义服务商里配置的模型）· 生效于团结链路', 'zh-hant': '識圖模型選擇 · 自定義服務商與模型管理 · 識圖請求自動改路由到識圖模型（團結 codely-vl 或自定義服務商裡配置的模型）· 生效於團結鏈路', en: 'Vision model picker · Custom providers and model management · Vision requests auto-reroute to the vision model (Tuanjie codely-vl or a custom provider model) · Active on the Tuanjie link', de: 'Bildmodell-Wahl · Eigene Anbieter und Modellverwaltung · Bildanfragen werden automatisch zum Bildmodell umgeleitet (Tuanjie codely-vl oder Modell eines eigenen Anbieters) · Aktiv auf der Tuanjie-Verbindung', ja: '画像モデル選択・カスタムプロバイダとモデル管理・画像リクエストを画像モデルへ自動振り分け（団結 codely-vl またはカスタムプロバイダのモデル）・団結リンクが対象', fr: 'Choix du modèle vision · Fournisseurs et gestion de modèles personnalisés · Les requêtes vision sont reroutées vers le modèle vision (codely-vl Tuanjie ou modèle dun fournisseur personnalisé) · Actif sur le lien Tuanjie', es: 'Elección del modelo de visión · Proveedores personalizados y gestión de modelos · Las peticiones de visión se redirigen al modelo de visión (codely-vl de Tuanjie o modelo de un proveedor personalizado) · Activo en el enlace Tuanjie' },
     'app.media.manage':  { zh: ' ⇗ 管理…', 'zh-hant': ' ⇗ 管理…', en: ' ⇗ Manage…', de: ' ⇗ Verwalten…', ja: ' ⇗ 管理…', fr: ' ⇗ Gérer…', es: ' ⇗ Gestionar…' },
-    'app.diag.head':     { zh: '链路诊断', 'zh-hant': '鏈路診斷', en: 'Diagnostics', de: 'Diagnose', ja: '診断', fr: 'Diagnostic', es: 'Diagnóstico' },
-    'app.diag.latTitle': { zh: '外网延迟测试', 'zh-hant': '外網延遲測試', en: 'Latency Test', de: 'Latenztest', ja: 'レイテンシ測定', fr: 'Test de latence', es: 'Prueba de latencia' },
-    'app.diag.latDesc':  { zh: 'HTTP/HTTPS 延迟 · 走代理链路 · 手动点击探测', 'zh-hant': 'HTTP/HTTPS 延遲 · 走代理鏈路 · 手動點擊探測', en: 'HTTP/HTTPS latency · via proxy path · manual probe', de: 'HTTP/HTTPS-Latenz · über den Proxy-Pfad · manueller Test', ja: 'HTTP/HTTPS レイテンシ・プロキシ経由・手動クリックで測定', fr: 'Latence HTTP/HTTPS · via le proxy · sondage manuel', es: 'Latencia HTTP/HTTPS · vía proxy · sondeo manual' },
-    'app.diag.latIdle':  { zh: 'HTTP/HTTPS 延迟 · 走代理链路', 'zh-hant': 'HTTP/HTTPS 延遲 · 走代理鏈路', en: 'HTTP/HTTPS latency · via proxy path', de: 'HTTP/HTTPS-Latenz · über den Proxy-Pfad', ja: 'HTTP/HTTPS レイテンシ・プロキシ経由', fr: 'Latence HTTP/HTTPS · via le proxy', es: 'Latencia HTTP/HTTPS · vía proxy' },
-    'app.diag.proxy':    { zh: '代理地址 · 留空自动探测本地代理', 'zh-hant': '代理地址 · 留空自動探測本地代理', en: 'Proxy address · leave empty to auto-detect local proxy', de: 'Proxy-Adresse · leer lassen für automatische Erkennung', ja: 'プロキシアドレス・空欄でローカルプロキシを自動検出', fr: 'Adresse du proxy · vide = détection auto du proxy local', es: 'Dirección del proxy · vacío = detectar proxy local automáticamente' },
     'app.water.title':   { zh: '注水检测', 'zh-hant': '注水檢測', en: 'Canary Probe', de: 'Kanarien-Test', ja: 'カナリア検査', fr: 'Sonde canari', es: 'Prueba canaria' },
     'app.water.desc':    { zh: '金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型 · 检测团结账号池 · 生效于团结链路', 'zh-hant': '金絲雀探針：指紋漂移+答題，識別上游是否換便宜模型 · 檢測團結賬號池 · 生效於團結鏈路', en: 'Canary probe: fingerprint drift + quiz to detect upstream model swaps · checks the Tuanjie account pool · active on the Tuanjie link', de: 'Kanarien-Test: Fingerabdruck-Drift und Quiz erkennen Upstream-Modelltausch · prüft den Tuanjie-Accountpool · aktiv auf der Tuanjie-Verbindung', ja: 'カナリア探針：指紋ドリフト+クイズで上流の安いモデルへの差し替えを検出・団結アカウントプールを検査・団結リンクが対象', fr: 'Sonde canari : derive d empreinte et quiz pour detecter un remplacement du modele amont · verifie le pool de comptes Tuanjie · actif sur le lien Tuanjie', es: 'Sonda canaria: deriva de huella y cuestionario detectan cambios de modelo aguas arriba · comprueba el pool de cuentas Tuanjie · activo en el enlace Tuanjie' },
     'app.water.btn':     { zh: '☌ 注水检测', 'zh-hant': '☌ 注水檢測', en: '☌ Canary Probe', de: '☌ Kanarien-Test', ja: '☌ カナリア検査', fr: '☌ Sonde canari', es: '☌ Prueba canaria' },
@@ -10138,53 +10116,6 @@ var PT_I18N = {
         if (curMode !== 'cmd') PTApp.selectMode('cmd');
       }
     });
-
-    /* —— 延迟测试 —— */
-    $('latTestBtn').onclick = async function () {
-      var btn = $('latTestBtn'), res = $('latResult');
-      var proxy = $('latProxy').value.trim();
-      try { localStorage.setItem('latProxy', proxy); } catch (e) {}
-      btn.disabled = true; btn.textContent = '测中…';
-      res.innerHTML = '<span class="lat-idle">正在探测 3 个目标' + (proxy ? '（经 ' + esc(proxy) + '）' : '') + '…</span>';
-      /* 探测已下沉 Go 后台（原同步最坏分钟级，探测期间整窗冻结）：
-         testing = 后台跑着，800ms 轮询取结果（探测期间界面可正常操作） */
-      var r = null;
-      for (var i = 0; i < 90; i++) {
-        r = await call('LatencyTest', proxy);
-        if (r && r.msg === 'testing') {
-          await new Promise(function (ok) { setTimeout(ok, 800); });
-          continue;
-        }
-        break;
-      }
-      if (!r || !r.ok || !r.targets || !r.targets.length) {
-        res.innerHTML = '<span class="lat-t err"><b>探测失败</b></span>';
-      } else {
-        var html = '';
-        if (r.inference) {
-          var inf = r.inference;
-          var cls = inf.ok ? (inf.ms < 1500 ? 'ok' : inf.ms < 4000 ? 'bad' : 'err') : 'err';
-          html += '<div class="lat-t ' + cls + '"><b>' + (inf.ok ? inf.ms + 'ms' : '✗') + '</b><em>模型推理</em></div>';
-        }
-        r.targets.forEach(function (t) {
-          var cls2 = t.ok ? (t.ms < 200 ? 'ok' : t.ms < 600 ? 'bad' : 'err') : 'err';
-          html += '<div class="lat-t ' + cls2 + '"><b>' + (t.ok ? t.ms + 'ms' : '超时') + '</b><em>' + esc(t.name) + '</em></div>';
-        });
-        res.innerHTML = html;
-        var okN = r.targets.filter(function (t) { return t.ok; }).length;
-        S.lastLatOk = okN > 0;
-        S.lastLatMs = r.targets[0] && r.targets[0].ok ? r.targets[0].ms : 0;
-        if (r.detected && !proxy) {
-          $('latProxy').value = r.detected;
-          try { localStorage.setItem('latProxy', r.detected); } catch (e) {}
-          logInto($('logStream'), 'net', '已自动探测到本地代理 ' + r.detected);
-        }
-        logInto($('logStream'), 'net', '延迟测试：' + okN + '/' + r.targets.length + ' 可达' +
-          (r.targets.map(function (t) { return t.name + '=' + (t.ok ? t.ms + 'ms' : '✗'); }).join(' ')));
-      }
-      btn.disabled = false; btn.textContent = '测延迟';
-    };
-    try { var saved = localStorage.getItem('latProxy'); if (saved) $('latProxy').value = saved; } catch (e) {}
 
     /* —— 插件启停 —— */
     ['tj', 'cb', 'bai', 'comate', 'qoder', 'ext'].forEach(bindPluginToggle);
