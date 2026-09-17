@@ -2780,6 +2780,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="vibexToken"><span>token 就绪</span><b></b></span>
+                      <span class="pt-dot" data-dot="vibexFree"><span>限时免费</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -8196,6 +8197,8 @@ var PT_I18N = {
     }
     /* bai 屏灯：限时免费运行时常亮（平台免费档属性）；需代理为静态琥珀徽章不在此画 */
     if (V.mode === 'bai') PTApp.dot('baiFree', p === 'running', false, '');
+    /* vibex 屏灯：限时免费运行时常亮（免费 lite 档属性，与 baiFree 同口径） */
+    if (V.mode === 'vibex') PTApp.dot('vibexFree', p === 'running', false, '');
     /* 插件启停改变"运行态"——键角蓝灯（refreshKeyLights）随相位重刷 */
     refreshKeyLights();
   }
