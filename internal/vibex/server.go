@@ -47,23 +47,32 @@ type Server struct {
 	models   []modelItem
 	modelsAt time.Time
 
+	statsMu   sync.Mutex
+	stats     map[string]*modelStat // 按请求 model 名累计（GUI 消耗 TOP，见 stats.go）
+	statsPath string
+
 	ln  net.Listener
 	srv *http.Server
 }
 
 // NewServer 读配置建服务（token 三选一：flag / env RH_ACCESSTOKEN / 配置文件）。
+// 统计文件 vibex-stats.json 与 exe 同目录，启动即读回历史（见 stats.go）。
 func NewServer() *Server {
 	cfg := LoadConfig()
 	pool := NewPool(cfg.tokenSources(), tokenCooldown)
 	client := NewClient(cfg, pool)
-	return &Server{
+	s := &Server{
 		cfg:       cfg,
 		pool:      pool,
 		client:    client,
 		engine:    NewEngine(cfg, client, pool),
 		queue:     make(chan struct{}, cfg.QueueLimit),
 		startedAt: time.Now(),
+		stats:     map[string]*modelStat{},
+		statsPath: statsFilePath(),
 	}
+	s.loadStats()
+	return s
 }
 
 // corsWith 给所有响应加 CORS 头（GUI 从 localhost:随机端口 fetch 本端口属跨域）。
@@ -86,6 +95,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/accounts", s.handleAccounts)
 	mux.HandleFunc("/v1/models", s.handleModels)
+	mux.HandleFunc("/v1/stats", s.handleStats) // 本地统计（GUI 消耗 TOP），不透传上游
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
 	return corsWith(mux)
 }
@@ -477,6 +487,8 @@ func (s *Server) syncOut(w http.ResponseWriter, out chan outEvent, state *turnSt
 		writeOAIError(w, http.StatusBadGateway, "本轮未产生任何内容", "EMPTY_TURN")
 		return
 	}
+	// 统计入账：只认 result 事件带来的真 usage（无 usage 则 addStat 自己跳过，不估算）。
+	s.recordUsage(modelName, usage)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": "chatcmpl-" + randHex(12), "object": "chat.completion",
 		"created": time.Now().Unix(), "model": modelName,
@@ -621,6 +633,8 @@ loop:
 			return
 		}
 	}
+	// 统计入账：走完循环即本轮完成，usage 取 result 事件真值（无 usage 则不入账）。
+	s.recordUsage(modelName, usage)
 	final := chunk(map[string]any{}, "stop")
 	final["usage"] = oaiUsage(usage)
 	if err := send(final); err != nil {
