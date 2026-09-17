@@ -56,8 +56,9 @@ func NewPool(values []string, cooldown time.Duration) *Pool {
 }
 
 func (p *Pool) has(v string) bool {
+	key := addrOf(v)
 	for _, t := range p.list {
-		if t.Value == v {
+		if addrOf(t.Value) == key {
 			return true
 		}
 	}
@@ -69,6 +70,48 @@ func (p *Pool) Len() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return len(p.list)
+}
+
+// addrOf 返回 token 的稳定身份地址：Rh-Accesstoken 在响应 Set-Cookie 里可能带
+// 属性尾巴（值与 cookie 值同源，故按首个分号前那一段比对，避免重复入池）。
+func addrOf(v string) string {
+	v = strings.TrimSpace(v)
+	if i := strings.IndexByte(v, ';'); i >= 0 {
+		v = strings.TrimSpace(v[:i])
+	}
+	return v
+}
+
+// add 把一个 token 串追加进池（按 addrOf 去重，JWT exp 现解）；已存在返回 existing=true。
+// 供 POST /accounts action=add 热加载用：不重启插件即可用新号（P0-账号体验）。
+func (p *Pool) add(v string) (*tokenState, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil, false
+	}
+	st := &tokenState{Value: v}
+	if info := decodeJWT(v); info != nil {
+		st.Exp, st.HasExp = info.Exp, info.hasExp()
+	}
+	return p.addWithState(st)
+}
+
+// addWithState 直接把建好的 tokenState 追加进池（按 addrOf 去重），已存在返回池里那一个。
+// 自动探测路径用：凭据已经在手，不必再解一次 JWT。
+func (p *Pool) addWithState(st *tokenState) (*tokenState, bool) {
+	if st == nil || strings.TrimSpace(st.Value) == "" {
+		return nil, false
+	}
+	key := addrOf(st.Value)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, t := range p.list {
+		if addrOf(t.Value) == key {
+			return t, true
+		}
+	}
+	p.list = append(p.list, st)
+	return st, false
 }
 
 // acquire 取第一个可用 token（存活、非冷却、未过期）；没有可用则返回 false。
@@ -133,8 +176,39 @@ func (p *Pool) snapshot() []map[string]any {
 		if t.HasExp {
 			item["exp"] = t.Exp.Format(time.RFC3339)
 			item["expired"] = now.After(t.Exp)
+			item["days_left"] = daysLeft(t.Exp, now) // 甲板账号行要用（到期前 7~30 天）
 		}
 		out = append(out, item)
 	}
 	return out
+}
+
+// daysLeft 返回距 exp 的剩余天数（向上取整：不足一天也算 1 天；已过期给负数）。
+func daysLeft(exp, now time.Time) int {
+	d := exp.Sub(now)
+	if d > 0 && d < 24*time.Hour {
+		return 1 // 剩 0.5 天显示「剩 1 天」，不显示「剩 0 天」
+	}
+	if d <= 0 {
+		return -1 // 已过期：甲板只看「已过期」三态，负数取 -1 即可
+	}
+	return int((d + 24*time.Hour - 1) / (24 * time.Hour))
+}
+
+// maxDaysLeft 返回池中所有带 exp 的 token 里最大的剩余天数（无 exp 或无 token 返回 false）。
+func (p *Pool) maxDaysLeft() (int, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := time.Now()
+	best, ok := 0, false
+	for _, t := range p.list {
+		if !t.HasExp {
+			continue
+		}
+		d := daysLeft(t.Exp, now)
+		if !ok || d > best {
+			best, ok = d, true
+		}
+	}
+	return best, ok
 }

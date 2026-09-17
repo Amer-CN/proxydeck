@@ -41,6 +41,8 @@ type Server struct {
 
 	startedAt time.Time
 
+	tokenMu sync.Mutex // token 入池落盘串行化（配置文件整份读写）
+
 	modelsMu sync.Mutex
 	models   []modelItem
 	modelsAt time.Time
@@ -82,6 +84,7 @@ func corsWith(h http.Handler) http.Handler {
 func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/accounts", s.handleAccounts)
 	mux.HandleFunc("/v1/models", s.handleModels)
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
 	return corsWith(mux)
@@ -109,17 +112,211 @@ func (s *Server) Close() {
 
 // handleHealth 常驻 200（无 token 也是 200，token_configured:false），字段脱敏。
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	tokens := s.pool.snapshot()
+	out := map[string]any{
 		"status":           "ok",
 		"service":          "vibex-go",
 		"version":          pluginVersion,
 		"token_configured": s.pool.Len() > 0,
-		"tokens":           s.pool.snapshot(),
+		"tokens":           tokens,
 		"base_url":         s.cfg.baseURL(),
 		"model_default":    nonEmptyOrNil(s.cfg.Model),
 		"app_name":         s.cfg.AppName,
 		"uptimeSec":        int64(time.Since(s.startedAt).Seconds()),
-	})
+	}
+	// days_left_max 是甲板账号行的三态依据（未配置/剩 X 天/已过期），
+	// 取池中未过期 token 的最大剩余天数；无带 exp 的 token 时省略该键。
+	if d, ok := s.pool.maxDaysLeft(); ok {
+		out["days_left_max"] = d
+		out["days_left"] = d // 别名：单 token 场景下两者同值
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// invalidTokenMsg 是入池前预验证失败（探活不通/401）的固定报错文案。
+const invalidTokenMsg = "该 token 无效或已过期（GET /api/llm-providers 探活失败）" +
+	"——请在浏览器登录 vibex.runninghub.cn 后重新提取 Rh-Accesstoken"
+
+// autoWaitTimeout 是自动探测第③段「等用户登录」的长轮询预算（照抄团结的 150 秒）。
+// 包级变量：单测改成毫秒级，不必真等两分半。
+var autoWaitTimeout = 150 * time.Second
+
+// handleAccounts 账号管理（与团结 handleAccounts 同构）：
+//
+//	GET  → 池快照（脱敏，绝不含 token 本体）+ days_left
+//	POST → {"action":"auto"} 自动探测入池；{"action":"add","token":"..."} 手动粘贴兜底
+func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		out := map[string]any{
+			"ok": true, "action": "list", "tokens": s.pool.snapshot(),
+			"pool_size": s.pool.Len(), "token_configured": s.pool.Len() > 0,
+		}
+		if d, ok := s.pool.maxDaysLeft(); ok {
+			out["days_left"] = d
+		}
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"ok": false, "msg": "只接受 GET/POST"})
+		return
+	}
+	var req struct {
+		Action string `json:"action"` // auto | add（缺省 add）
+		Token  string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// 请求体不是 JSON 对象 = 请求错误，与旧 POST /token 同口径回 400
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "msg": "请求体解析失败"})
+		return
+	}
+	switch req.Action {
+	case "auto":
+		s.handleAccountAuto(w, r)
+	case "add", "":
+		s.addAccount(w, r, strings.TrimSpace(req.Token))
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "msg": "未知 action"})
+	}
+}
+
+// addAccount 手动粘贴兜底：JWT 解码 → providers 探活 → 入池 → 落盘（0600）→ 热加载。
+// 非法 token 一律 400（与 POST /token 的旧行为一致）；日志不打印 token 本体（坑 21）。
+func (s *Server) addAccount(w http.ResponseWriter, r *http.Request, token string) {
+	info := decodeJWT(token)
+	if token == "" || info == nil {
+		writeOAIError(w, http.StatusBadRequest,
+			"不是合法的 JWT（须是 Rh-Accesstoken 整串，形如 aaa.bbb.ccc）", "INVALID_TOKEN")
+		return
+	}
+	if err := s.client.validateToken(r.Context(), token); err != nil {
+		writeOAIError(w, http.StatusBadRequest, invalidTokenMsg+"（"+err.Error()+"）", "INVALID_TOKEN")
+		return
+	}
+	st := &tokenState{Value: token, Exp: info.Exp, HasExp: info.hasExp()}
+	_, existing := s.pool.addWithState(st)
+	if existing {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok": false, "existing": true, "msg": "该 token 已在池里",
+			"user": info.Username, "pool_size": s.pool.Len(),
+		})
+		return
+	}
+	resp := map[string]any{
+		"ok": true, "existing": false, "msg": "账号已添加",
+		"user": info.Username, "pool_size": s.pool.Len(),
+	}
+	// tokenMu：落盘串行化（配置文件是整份读写，并发写会互相盖掉）
+	s.tokenMu.Lock()
+	err := s.cfg.persistToken(token)
+	s.tokenMu.Unlock()
+	if err != nil {
+		// 落盘失败不回滚内存态（本次能用），但如实告知——重启后会丢
+		resp["persisted"] = false
+		resp["warning"] = "token 已热加载，但写入配置文件失败: " + err.Error()
+		logf("token 落盘失败（重启后会丢，token 本体不打印）: %v", err)
+	} else {
+		resp["persisted"] = true
+		logf("账号已入池（手动粘贴，池 %d 个，token 本体不打印）", s.pool.Len())
+	}
+	now := time.Now()
+	if info.hasExp() {
+		resp["exp"] = info.Exp.Format(time.RFC3339)
+		resp["days_left"] = daysLeft(info.Exp, now)
+		resp["expired"] = now.After(info.Exp)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleAccountAuto 三段式自动探测（照抄团结 handleAccountAuto）：
+// ①直接探测（浏览器已带调试口在跑）；②探不到则一次性 profile＋独立端口拉浏览器开登录页；
+// ③150 秒长轮询等登录（2 秒一次，只盯本会话端口，客户端断开即停）。
+// vibex 换掉的两处：cookie 名 Rh-Accesstoken + 域 vibex.runninghub.cn；
+// 校验用 GET /api/llm-providers 探活（不用团结的 cli-api-key 换取那套）。
+func (s *Server) handleAccountAuto(w http.ResponseWriter, r *http.Request) {
+	// 1. 直接探测（浏览器可能已带调试口在跑）。
+	//    读到已在池的账号时不拦截——fall through 到弹窗流程，让用户可以登新号。
+	//    token 无效（过期/被吊销）也不拦截——同样 fall through 让用户重新登录。
+	if creds := probeCDPBrowser(); creds != nil {
+		if err := s.client.validateToken(r.Context(), creds.Token); err != nil {
+			logf("自动探测到 VibeX 登录态但探活失败，继续弹窗流程以便用户重新登录: %v", err)
+		} else if _, existing := s.pool.addWithState(tokenStateOf(creds.Token)); !existing {
+			s.persistNewToken(creds.Token)
+			logf("自动探测成功（浏览器已开调试口，来源=%s 池 %d 个）", creds.Source, s.pool.Len())
+			writeJSON(w, http.StatusOK, map[string]any{
+				"ok": true, "msg": "已从浏览器读取并添加账号",
+				"user_id": creds.UserID, "browser": creds.Browser, "pool_size": s.pool.Len(),
+			})
+			return
+		} else {
+			logf("自动探测到 %s 已在池里，继续弹窗流程以便用户登新号", creds.UserID)
+		}
+	}
+	// 2. 探测不到 → 拉起【一次性独立 profile】浏览器带调试口（136+ 版本安全限制：
+	//    默认 profile 忽略调试参数，必须独立 user-data-dir），打开 VibeX 登录页。
+	//    每次探测用全新目录 + 独立端口，登录态不跨会话复用。
+	cleanupStaleProbeProfiles()
+	port := freeCDPPort()
+	path, err := cdpLaunchBrowser(port, newProbeSessionDir())
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok": false, "msg": "未探测到调试口，且启动浏览器失败: " + err.Error()})
+		return
+	}
+	// 3. 长轮询等登录：一次性 profile 是全新环境，需要在弹出的窗口里登录一次；
+	//    登录后 cookie/localStorage 写入该 profile，读取入池。只盯本会话端口，
+	//    避免读到其它窗口旧登录态。最长 autoWaitTimeout（缺省 150 秒），每 2 秒查一次。
+	deadline := time.Now().Add(autoWaitTimeout)
+	for time.Now().Before(deadline) {
+		if err := sleepCtx(r.Context(), 2*time.Second); err != nil {
+			return // 客户端断开，不再等
+		}
+		creds := probeCDPBrowserQuiet(port)
+		if creds == nil {
+			continue
+		}
+		if err := s.client.validateToken(r.Context(), creds.Token); err != nil {
+			logf("探测窗口读到的登录态探活失败（等下一次轮询）: %v", err)
+			continue
+		}
+		if _, existing := s.pool.addWithState(tokenStateOf(creds.Token)); existing {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"ok": false, "msg": "该账号已在池里（user_id " + creds.UserID + "）",
+				"user_id": creds.UserID, "pool_size": s.pool.Len(),
+			})
+			return
+		}
+		s.persistNewToken(creds.Token)
+		logf("自动探测成功：探测窗口可以关了（port=%s user_id=%s）", port, creds.UserID)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok": true, "msg": "已读取登录态并入池（弹出的浏览器窗口可以关了）",
+			"user_id": creds.UserID, "browser": path, "pool_size": s.pool.Len(),
+		})
+		return
+	}
+	logf("自动探测超时：探测窗口可以关了（port=%s，150 秒未读到期）", port)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": false,
+		"msg": "等待登录超时（150 秒）——请在弹出的浏览器窗口里登录 VibeX 账号后再点一次探测"})
+}
+
+// tokenStateOf 用一个 token 串建 tokenState（JWT exp 现解）。
+func tokenStateOf(token string) *tokenState {
+	st := &tokenState{Value: token}
+	if info := decodeJWT(token); info != nil {
+		st.Exp, st.HasExp = info.Exp, info.hasExp()
+	}
+	return st
+}
+
+// persistNewToken 把刚入池的 token 落盘（失败只记日志，不回滚内存态）。
+func (s *Server) persistNewToken(token string) {
+	s.tokenMu.Lock()
+	err := s.cfg.persistToken(token)
+	s.tokenMu.Unlock()
+	if err != nil {
+		logf("token 落盘失败（重启后会丢，token 本体不打印）: %v", err)
+	}
 }
 
 // handleModels 返回 provider 列表（OpenAI models 形状），带 5 分钟缓存。

@@ -60,6 +60,11 @@ func (c *Client) headers(tok *tokenState) map[string]string {
 	if tok != nil {
 		token = tok.Value
 	}
+	return c.headersFor(token)
+}
+
+// headersFor 用指定 token 串构造鉴权头（入池前预验证用，那时还没有 tokenState）。
+func (c *Client) headersFor(token string) map[string]string {
 	h := map[string]string{
 		"Content-Type":   "application/json",
 		"Authorization":  "Bearer " + token,
@@ -75,6 +80,38 @@ func (c *Client) headers(tok *tokenState) map[string]string {
 		h["username"] = info.Username
 	}
 	return h
+}
+
+// validateToken 入池前预验证：用给定 token 打一次 GET /api/llm-providers，
+// 200 即有效（简报口径：JWT 解码 + providers 探活）。无效返回 *VibexError（401 级）。
+// 不登记调用计数——该 token 此时还没入池。
+func (c *Client) validateToken(ctx context.Context, token string) error {
+	reqCtx, cancel := context.WithTimeout(ctx, restTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet,
+		c.cfg.baseURL()+"/api/llm-providers", nil)
+	if err != nil {
+		return &VibexError{Message: err.Error(), Status: 500}
+	}
+	for k, v := range c.headersFor(token) {
+		req.Header.Set(k, v)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return &VibexError{Message: "探活请求失败: " + err.Error(), Status: 502}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+	if err := unauthErr(resp.StatusCode, raw); err != nil {
+		return err
+	}
+	if resp.StatusCode >= 400 {
+		return &VibexError{
+			Message: fmt.Sprintf("探活失败 HTTP %d: %s", resp.StatusCode, clip(string(raw), 200)),
+			Status:  502,
+		}
+	}
+	return nil
 }
 
 // api 在 token 池上跑一次 REST 调用，必要时换号：
@@ -154,28 +191,10 @@ func (c *Client) do(ctx context.Context, tok *tokenState, method, path string, b
 	parsed := jsonUnmarshal(raw)
 
 	// 未授权在 body 里：{"code":403,"msg":"TOKEN_MISSION"} 之类（HTTP 可能仍是 200）
-	if m := toMap(parsed); m != nil {
-		code := str(m["code"])
-		msg := str(m["msg"])
-		if msg == "" {
-			msg = str(m["message"])
-		}
-		switch code {
-		case "401", "403", "412":
-			return nil, &VibexError{Message: authFailHint + "（" + firstNonEmpty(msg, code) + "）", Status: 401, Code: "TOKEN_INVALID"}
-		case "402":
-			return nil, &VibexError{Message: "上游返回额度不足: " + clip(msg, 200), Status: 402, Code: "BALANCE_INSUFFICIENT"}
-		case "429":
-			return nil, &VibexError{Message: "上游限流: " + clip(msg, 200), Status: 429, Code: "RATE_LIMITED"}
-		}
-		if strings.Contains(strings.ToUpper(msg), "TOKEN") {
-			return nil, &VibexError{Message: authFailHint + "（" + clip(msg, 200) + "）", Status: 401, Code: "TOKEN_INVALID"}
-		}
+	if err := unauthErr(resp.StatusCode, raw); err != nil {
+		return nil, err
 	}
-
 	switch {
-	case resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 412:
-		return nil, &VibexError{Message: authFailHint, Status: 401, Code: "TOKEN_INVALID"}
 	case resp.StatusCode == 402 || resp.StatusCode == 429:
 		return nil, &VibexError{
 			Message: fmt.Sprintf("上游返回 HTTP %d: %s", resp.StatusCode, clip(string(raw), 200)),
@@ -188,6 +207,34 @@ func (c *Client) do(ctx context.Context, tok *tokenState, method, path string, b
 		}
 	}
 	return parsed, nil
+}
+
+// unauthErr 识别未授权（SPEC-T1 §3.4）：body 里的 code 401/403/412 或含 TOKEN 的 msg
+// （HTTP 可能仍是 200），以及 HTTP 401/403/412 本身。命中返回 401 级 *VibexError。
+// do（单 token 请求）与 validateToken（入池前预验证）共用，保证两条路径口径一致。
+func unauthErr(status int, raw []byte) error {
+	if m := toMap(jsonUnmarshal(raw)); m != nil {
+		code := str(m["code"])
+		msg := str(m["msg"])
+		if msg == "" {
+			msg = str(m["message"])
+		}
+		switch code {
+		case "401", "403", "412":
+			return &VibexError{Message: authFailHint + "（" + firstNonEmpty(msg, code) + "）", Status: 401, Code: "TOKEN_INVALID"}
+		case "402":
+			return &VibexError{Message: "上游返回额度不足: " + clip(msg, 200), Status: 402, Code: "BALANCE_INSUFFICIENT"}
+		case "429":
+			return &VibexError{Message: "上游限流: " + clip(msg, 200), Status: 429, Code: "RATE_LIMITED"}
+		}
+		if strings.Contains(strings.ToUpper(msg), "TOKEN") {
+			return &VibexError{Message: authFailHint + "（" + clip(msg, 200) + "）", Status: 401, Code: "TOKEN_INVALID"}
+		}
+	}
+	if status == 401 || status == 403 || status == 412 {
+		return &VibexError{Message: authFailHint, Status: 401, Code: "TOKEN_INVALID"}
+	}
+	return nil
 }
 
 // providers 取 llm-providers 列表（容错解包 .providers/.items/.data）。

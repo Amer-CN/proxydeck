@@ -3567,6 +3567,19 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <span class="pt-val">REST＋WS 私有协议 · OpenAI 兼容 · 免费档自动选</span>
                 </div></div>
 
+                <!-- 账号（登录态）：三态状态字 + 自动探测/手动粘贴兜底（照团结甲板账号池口径） -->
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.vibex.acc">账号 · Account</span>
+                  <button type="button" class="ibtn2 accent" id="vibexAccAuto">⚡ 自动探测</button>
+                  <button type="button" class="ibtn2" id="vibexAccAdd">＋ 手动粘贴</button></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.vibex.tokenState">Rh-Accesstoken</div>
+                    <div class="s" data-i18n="app.vibex.tokenSub">浏览器登录后自动探测，或手动粘贴兜底</div>
+                  </div>
+                  <span class="pt-val" id="vibexAccState" data-i18n="app.vibex.notSet">未配置</span>
+                  <span class="rs" id="vibexAccDetail"></span>
+                </div></div>
+
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
                   <button type="button" class="ibtn2" id="vibexRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
                 <div class="pt-grid">
@@ -7761,6 +7774,109 @@ var PT_I18N = {
   });
   function pSet(V, id, val) { var el = $(V.pfx + id); if (el) el.textContent = val; }
 
+  /* ================= VIBEX 甲板（8790）：账号行 =================
+     三态：未配置 / 剩 X 天 / 已过期。数据源 = /health 的 token_configured +
+     tokens[].expired|days_left（后端 pool.snapshot 已带这两个字段），
+     不额外加轮询——由 loadPluginStats 每次拿到 health 后顺带渲染。
+     按钮：⚡自动探测（POST /accounts action=auto，后端拉起一次性浏览器窗口等登录，
+     最长 150 秒）＋ 手动粘贴（action=add，兜底，token 无效后端回 400）。 */
+  function vibexRenderAccounts(h) {
+    var st = $('vibexAccState'), de = $('vibexAccDetail');
+    if (!st) return;
+    if (!h || h.token_configured !== true) {
+      st.textContent = t('app.vibex.notSet');
+      if (de) de.textContent = '点「⚡ 自动探测」从浏览器读取，或「＋ 手动粘贴」';
+      return;
+    }
+    var toks = h.tokens || [], alive = 0, soonest = null;
+    toks.forEach(function (x) {
+      if (x.expired === true || x.dead === true) return;
+      alive++;
+      if (typeof x.days_left === 'number' && (soonest === null || x.days_left < soonest)) soonest = x.days_left;
+    });
+    if (!alive) {
+      st.textContent = t('app.vibex.expired');
+      if (de) de.textContent = '池里 ' + toks.length + ' 个 token 全部失效——重新探测或粘贴新 token';
+      return;
+    }
+    if (soonest === null) {
+      st.textContent = t('app.vibex.ready');
+      if (de) de.textContent = '池里 ' + toks.length + ' 个 token（JWT 无 exp，到期以上游 401 为准）';
+      return;
+    }
+    st.textContent = t('app.vibex.daysLeft').replace('{n}', soonest);
+    if (de) de.textContent = '池里 ' + toks.length + ' 个 token · 最近一个 ' + soonest + ' 天后过期';
+  }
+
+  /* 手动粘贴兜底窗（照团结 bindAccAdd 的机械风模态；vibex 只需 token 一项，
+     user_id 由后端从 JWT sub 解出） */
+  var VIBEX_ACC_FORM = '<h3>粘贴 token · ADD TOKEN</h3><div class="m-body acc-form">' +
+    '<div class="acc-f-row"><label>Rh-Accesstoken</label>' +
+    '<input class="pt-field" id="vbToken" type="password" placeholder="eyJ 开头的整串（JWT）" spellcheck="false" autocomplete="off">' +
+    '<button type="button" class="pt-key-eye" id="vbEye" title="显示/隐藏">👁</button></div>' +
+    '<p class="acc-f-help">取法：浏览器登录 vibex.runninghub.cn → F12 → Application → Local Storage（或 Cookies）→ 复制 Rh-Accesstoken 的值。后端会先探活，无效直接回错。</p>' +
+    '<div class="acc-f-actions"><button type="button" class="ibtn2 accent" id="vbSubmit">添加</button></div></div>';
+
+  function vibexBindAcc() {
+    var auto = $('vibexAccAuto'), add = $('vibexAccAdd');
+    if (auto) auto.onclick = function () {
+      confirmModal('自动探测 · AUTO DETECT',
+        '将弹出一个专用的浏览器窗口并打开 VibeX 登录页。<br>请在那扇窗口里登录你要添加的账号（一次性，之后全自动）；日常浏览器不受影响。',
+        function () {
+          auto.disabled = true; auto.textContent = '等待登录…（在弹出的窗口里登录 VibeX）';
+          fetch('http://127.0.0.1:8790/accounts', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'auto' })
+          }).then(function (r) { return r.json(); }).then(function (r) {
+            toast(r.ok ? 'ok' : 'err', r.ok ? '自动探测成功' : '探测未成功', r.msg || '');
+            if (r.ok) plog(PV.ext, 'ok', '账号：已自动添加 ' + (r.user_id || ''));
+          }).catch(function (e) { toast('err', '探测失败', String(e)); })
+            .then(function () {
+              auto.disabled = false; auto.textContent = '⚡ 自动探测';
+              vibexRefreshAccounts();
+            });
+        });
+    };
+    if (add) add.onclick = function () {
+      openModal(VIBEX_ACC_FORM);
+      var eye = $('vbEye');
+      if (eye) eye.onclick = function () {
+        var t2 = $('vbToken');
+        t2.type = t2.type === 'password' ? 'text' : 'password';
+      };
+      var submit = $('vbSubmit');
+      if (!submit) return;
+      submit.onclick = function () {
+        var tok = ($('vbToken').value || '').trim();
+        if (!tok) { toast('err', '缺少字段', 'token 不能为空'); return; }
+        submit.disabled = true; submit.textContent = '添加中…';
+        fetch('http://127.0.0.1:8790/accounts', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'add', token: tok })
+        }).then(function (r) {
+          return r.json().then(function (d) { return { status: r.status, d: d }; });
+        }).then(function (res) {
+          var d = res.d || {};
+          var err = (d.error && d.error.message) || d.msg || '';
+          toast(d.ok ? 'ok' : 'err', d.ok ? '账号已添加' : '添加失败', err);
+          if (d.ok) { var mc = document.querySelector('.modal-close'); if (mc) mc.click(); }
+        }).catch(function (e) { toast('err', '添加失败', String(e)); })
+          .then(function () {
+            submit.disabled = false; submit.textContent = '添加';
+            vibexRefreshAccounts();
+          });
+      };
+    };
+  }
+
+  /* 重拉一次 /health 刷新账号行（探测/粘贴/手动刷新后调用，不进轮询） */
+  function vibexRefreshAccounts() {
+    return fetch('http://127.0.0.1:8790/health', { signal: AbortSignal.timeout(3000) })
+      .then(function (r) { return r.json(); })
+      .then(function (h) { vibexRenderAccounts(h); })
+      .catch(function () { vibexRenderAccounts(null); });
+  }
+
   /* ================= COMMAND 甲板 ================= */
   var S = { phase: 'idle', uptime: 0, autostart: false, modelsLoaded: false, healFail: 0, userStopped: false, modelFilter: 'go', seenOnce: false };
 
@@ -8478,7 +8594,11 @@ var PT_I18N = {
       }
       /* vibex 屏灯：token 就绪（token 7～30 天过期是本通道头号运维项，health 自带该字段；
          缺 token 时琥珀警告，行为对标各甲板相位灯写法） */
-      if (V.mode === 'vibex') PTApp.dot('vibexToken', h.token_configured === true, h.token_configured === false, '');
+      if (V.mode === 'vibex') {
+        PTApp.dot('vibexToken', h.token_configured === true, h.token_configured === false, '');
+        V.vibexHealth = h; /* 留给切语言时重渲染账号行三态文案 */
+        vibexRenderAccounts(h); /* 账号行三态（未配置/剩 X 天/已过期），复用本次 /health */
+      }
       if (V.id === 'tuanjie') { updateJudgeBanner(h); updateSeedBanner(h); }
       if (V.mode === 'cb') {
         /* WorkBuddy 两区共用本甲板（cbRegion 决定 V.id），hy4 兜底状态条按区域画 */
@@ -8881,6 +9001,14 @@ var PT_I18N = {
     'app.s.cbLeverIntl':     { zh: '拉到底点火（8789）· 拉回熄火 · 模型探测首次约 20 秒', 'zh-hant': '拉到底點火（8789）· 拉回熄火 · 模型探測首次約 20 秒', en: 'Pull fully to ignite (8789) · Pull back to stop · Probe ~20s first run', de: 'Ganz ziehen (8789) · Zurück zum Stop · Erste Suche ~20 s', ja: '右端まで引いて点火（8789）・初回検出約20秒', fr: 'Tirer à fond (8789) · Détection ~20 s au début', es: 'Tira al fondo (8789) · Detección ~20 s la primera vez' },
     'app.s.baiLever':     { zh: '拉到底点火（8891）· 拉回熄火 · Go 栈直连 api.b.ai', 'zh-hant': '拉到底點火（8891）· 拉回熄火 · Go 棧直連 api.b.ai', en: 'Pull to ignite (8891) · Back to stop · Go stack to api.b.ai', de: 'Ziehen zum Starten (8891) · Zurück zum Stoppen · Go-Stack zu api.b.ai', ja: '引いて起動（8891）· 戻して停止 · Goスタックで api.b.ai へ', fr: 'Tirer pour démarrer (8891) · Retour pour arrêter · Pile Go vers api.b.ai', es: 'Tira para encender (8891) · Vuelve para apagar · Pila Go a api.b.ai' },
     'app.s.vibexLever':   { zh: '拉到底点火（8790）· 拉回熄火 · VibeX 插件', 'zh-hant': '拉到底點火（8790）· 拉回熄火 · VibeX 插件', en: 'Pull to ignite (8790) · Back to stop · VibeX plugin', de: 'Ziehen zum Starten (8790) · Zurück zum Stoppen · VibeX-Plugin', ja: '引いて起動（8790）· 戻して停止 · VibeXプラグイン', fr: 'Tirer pour démarrer (8790) · Retour pour arrêter · Plugin VibeX', es: 'Tira para encender (8790) · Vuelve para apagar · Plugin VibeX' },
+    /* VIBEX 账号行（8790）：三态状态字 ＋ 账号区标题/副行。{n} 是剩余天数占位符 */
+    'app.vibex.acc':       { zh: '账号', 'zh-hant': '賬號', en: 'Account', de: 'Konto', ja: 'アカウント', fr: 'Compte', es: 'Cuenta' },
+    'app.vibex.tokenState': { zh: 'Rh-Accesstoken', 'zh-hant': 'Rh-Accesstoken', en: 'Rh-Accesstoken', de: 'Rh-Accesstoken', ja: 'Rh-Accesstoken', fr: 'Rh-Accesstoken', es: 'Rh-Accesstoken' },
+    'app.vibex.tokenSub': { zh: '浏览器登录后自动探测，或手动粘贴兜底', 'zh-hant': '瀏覽器登錄後自動探測，或手動粘貼兜底', en: 'Auto-detect from your browser, or paste it manually', de: 'Automatisch aus dem Browser lesen oder manuell einfügen', ja: 'ブラウザから自動検出、または手動で貼り付け', fr: 'Détection auto depuis le navigateur, ou collage manuel', es: 'Detección automática desde el navegador o pegado manual' },
+    'app.vibex.notSet':   { zh: '未配置', 'zh-hant': '未配置', en: 'Not set', de: 'Nicht gesetzt', ja: '未設定', fr: 'Non défini', es: 'Sin configurar' },
+    'app.vibex.ready':    { zh: '已就绪', 'zh-hant': '已就緒', en: 'Ready', de: 'Bereit', ja: '準備完了', fr: 'Prêt', es: 'Listo' },
+    'app.vibex.daysLeft': { zh: '剩 {n} 天', 'zh-hant': '剩 {n} 天', en: '{n} days left', de: 'Noch {n} Tage', ja: '残り {n} 日', fr: '{n} jours restants', es: '{n} días restantes' },
+    'app.vibex.expired':  { zh: '已过期', 'zh-hant': '已過期', en: 'Expired', de: 'Abgelaufen', ja: '期限切れ', fr: 'Expiré', es: 'Caducado' },
     'app.s.comateLever':     { zh: '拉杆点火，托管 Comate 智能体引擎（8786）· 拉回熄火', 'zh-hant': '拉桿點火，託管 Comate 智能體引擎（8786）· 拉回熄火', en: 'Pull to ignite, hosting the Comate agent engine (8786) · Pull back to stop', de: 'Ziehen zum Start, hostet die Comate-Engine (8786) · Zurück zum Stoppen', ja: '引いて点火、Comate エージェントエンジンをホスト（8786）· 戻して停止', fr: 'Tirer pour démarrer, héberge le moteur Comate (8786) · Retour pour arrêter', es: 'Tira para encender, aloja el motor de Comate (8786) · Vuelve para apagar' },
     'app.s.qoderLever':      { zh: '拉杆点火，托管 Qoder 智能体引擎（8785）· 拉回熄火', 'zh-hant': '拉桿點火，託管 Qoder 智能體引擎（8785）· 拉回熄火', en: 'Pull to ignite, hosting the Qoder agent engine (8785) · Pull back to stop', de: 'Ziehen zum Start, hostet die Qoder-Engine (8785) · Zurück zum Stoppen', ja: '引いて点火、Qoder エージェントエンジンをホスト（8785）· 戻して停止', fr: 'Tirer pour démarrer, héberge le moteur Qoder (8785) · Retour pour arrêter', es: 'Tira para encender, aloja el motor de Qoder (8785) · Vuelve para apagar' },
     'app.s.copy':     { zh: '点击复制', 'zh-hant': '點擊複製', en: 'Click to copy', de: 'Klicken zum Kopieren', ja: 'クリックでコピー', fr: 'Cliquer pour copier', es: 'Clic para copiar' },
@@ -9007,6 +9135,13 @@ var PT_I18N = {
         if (mm) el.setAttribute(mm[1], t(mm[2]));
       });
     });
+    /* 账号行三态与副行是动态文案（未配置/剩 X 天/已过期），不在 [data-i18n] 里，
+       切语言后重渲染一次；还没取到 /health 时按「未配置」渲染，等轮询回来会覆盖 */
+    if ($('vibexAccState')) {
+      var vh = PV.ext && PV.ext.vibexHealth;
+      if (vh) vibexRenderAccounts(vh);
+      else $('vibexAccState').textContent = t('app.vibex.notSet');
+    }
     var val = document.querySelector('[data-val="lang"]');
     if (val) val.textContent = langState === 'system' ? t('try.gen.langSystemTitle') : LANG_TITLE[langState];
     var etch = document.querySelector('[data-etch="lang"]');
@@ -10026,6 +10161,7 @@ var PT_I18N = {
 
     /* —— 插件启停 —— */
     ['tj', 'cb', 'bai', 'comate', 'qoder', 'ext'].forEach(bindPluginToggle);
+    vibexBindAcc(); /* VIBEX 甲板账号行：⚡自动探测 + 手动粘贴兜底（DOM 常驻，一次性绑） */
     ['tjEndpoint', 'cbEndpoint', 'baEndpoint', 'comateEndpoint', 'qoderEndpoint', 'vibexEndpoint'].forEach(function (id) {
       var el = $(id);
       if (el) el.onclick = function () { copyText(el.textContent, 'Base URL'); };
@@ -10058,8 +10194,12 @@ var PT_I18N = {
           /* B.AI 的「↻ 刷新」与拉杆点火同权：复用同一个闩锁去强制刷一次模型矩阵，
              否则改走缓存端点之后这颗按钮按下去不会有任何变化 */
           if (mode === 'bai') V.fetchOnRun = true;
-          /* vibex：模型 5 分钟缓存，手动刷新先旁路缓存现拉一次（后端 ?refresh=1），再刷视图 */
-          if (mode === 'ext') { try { await fetch('http://127.0.0.1:' + V.port + '/v1/models?refresh=1'); } catch (e) {} }
+          /* vibex：模型 5 分钟缓存，手动刷新先旁路缓存现拉一次（后端 ?refresh=1），再刷视图；
+             顺手重拉一次账号行（token 剩余天数是本通道头号运维项，改完 token 想看即时状态） */
+          if (mode === 'ext') {
+            try { await fetch('http://127.0.0.1:' + V.port + '/v1/models?refresh=1'); } catch (e) {}
+            await vibexRefreshAccounts();
+          }
           refreshPluginView(mode); plog(V, 'sys', '手动刷新'); return;
         }
         if (mode === 'qoder') {

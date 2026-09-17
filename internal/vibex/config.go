@@ -148,6 +148,10 @@ func (c *Config) normalize() {
 }
 
 // persist 原子落盘（tmp + rename），权限 0600（token 在里面，禁止宽权限）。
+// Windows 说明：Go 在 Windows 上没有 POSIX 权限位，0600 只决定「不设只读属性」，
+// 实际访问控制由父目录 ACL 决定（实测：本机 %APPDATA% / exe 目录下只有本用户与
+// Administrators 有写权，回读结果为 0666）。保留 0600 的写法以便跨平台一致，
+// 不额外加 ACL 调用——那超出本插件的职责，且会让同目录其它配置文件的处置不一致。
 func (c *Config) persist() error {
 	if c.path == "" {
 		return os.ErrInvalid
@@ -161,6 +165,34 @@ func (c *Config) persist() error {
 		return err
 	}
 	return os.Rename(tmp, c.path)
+}
+
+// persistToken 把新 token 追加进配置文件（0600，tmp + rename），并同步内存里的
+// cfg.Tokens（下一个 token 落盘时才能带上本次这个）。环境变量/flag 来源的 token 不在
+// cfg.Tokens 里，故不会被动写进文件——那两种来源跟启动参数走，写进文件会在用户撤销后残留。
+func (c *Config) persistToken(token string) error {
+	if c.path == "" {
+		return os.ErrInvalid
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return os.ErrInvalid
+	}
+	cp := *c
+	cp.Tokens = make([]string, 0, len(c.Tokens)+1)
+	for _, t := range c.Tokens {
+		if strings.TrimSpace(t) != "" {
+			cp.Tokens = append(cp.Tokens, t)
+		}
+	}
+	if !slices.Contains(cp.Tokens, token) {
+		cp.Tokens = append(cp.Tokens, token)
+	}
+	if err := cp.persist(); err != nil {
+		return err
+	}
+	c.Tokens = cp.Tokens
+	return nil
 }
 
 // tokenSources 汇总 token 来源：环境变量 RH_ACCESSTOKEN 优先（SPEC-T1 §3.1），
