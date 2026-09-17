@@ -22,6 +22,7 @@ tuanjie-media.json
 tuanjie-vision.json
 tuanjie-water.json
 tuanjie-baselines.json
+vibex-config.json
 
 # 官方 Codely CLI 残留（不属于本项目）
 .codely-cli/
