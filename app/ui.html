@@ -313,14 +313,17 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 .pt-lights i:nth-child(3) { background: #28C840; }
 
 /* 标题栏右侧设置按钮：点击＝进设置甲板（原第 4 键职责）。
-   台肩 pointerdown 的拖拽豁免由 initLedge 的 closest 判定给（含本类） */
+   台肩 pointerdown 的拖拽豁免由 initLedge 的 closest 判定给（含本类）。
+   位置与左侧三灯同中轴：灯 top 12.5px＋半径 6px＝中线 18.5px，本按钮 20px 高故 top 取 8.5px。
+   苹果风：单色细线齿轮，hover 只提亮不变底块。 */
 .pt-settings-btn {
-  position: absolute; right: 14px; top: 4px; width: 20px; height: 20px;
+  position: absolute; right: 14px; top: 8.5px; width: 20px; height: 20px;
   display: flex; align-items: center; justify-content: center;
   padding: 0; appearance: none; border: 0; border-radius: 5px;
   background: transparent; color: var(--pt-ink2); cursor: pointer;
 }
-.pt-settings-btn:hover { color: var(--pt-ink); background: var(--pt-hairline); }
+.pt-settings-btn:hover { color: var(--pt-ink); }
+.pt-settings-btn:active { color: var(--pt-ink); opacity: .65; }
 .pt-settings-btn svg { display: block; }
 
 .pt-body {
@@ -2601,7 +2604,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <i data-mode="tj"><span>TUANJIE</span></i>
                   <i data-mode="cb"><span>WORKBUDDY</span></i>
                   <i data-mode="qoder"><span>QODER</span></i>
-                  <i data-mode="set"><span data-i18n="app.settings">设置</span></i>
+                  <i data-mode="ext"><span>VIBEX</span></i>
                   <i data-mode="cmd"><span>COMMAND</span></i>
                   <i data-mode="bai"><span>B.AI</span></i>
                   <i data-mode="media"><span data-i18n="app.key.mediaDrum">媒体路由</span></i>
@@ -2761,7 +2764,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
               </div>
 
-              <!-- 扩展 屏体（扩展甲板：插件视图；点火目标 VibeX 8790） -->
+              <!-- VIBEX 屏体（VIBEX 甲板：插件视图；点火目标 VibeX 8790） -->
               <div class="pt-sc-body ext" data-body="ext">
                 <div class="sc-unified">
                   <div class="run-line">
@@ -2805,7 +2808,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
             <button type="button" class="pt-key" role="radio" data-mode="cmd" aria-checked="true"><span class="dual-key"><b>COMMAND</b><i>⇄ B.AI</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="tj" aria-checked="false" tabindex="-1"><span class="dual-key"><b>TUANJIE</b><i>⇄ COMATE</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="cb" aria-checked="false" tabindex="-1"><span class="dual-key"><b>WORKBUDDY</b><i>⇄ QODER</i></span></button>
-            <button type="button" class="pt-key" role="radio" data-mode="ext" aria-checked="false" tabindex="-1"><span data-i18n="app.key.ext">扩展</span></button>
+            <button type="button" class="pt-key" role="radio" data-mode="ext" aria-checked="false" tabindex="-1"><span><b>VIBEX</b></span></button>
           </div>
 
           <!-- ========== 甲板传送带 ========== -->
@@ -3531,10 +3534,10 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                </div></div>
               </div>
 
-              <!-- —————— 扩展 甲板（插件视图：点火拉杆/端点/模型/日志照 cb·bai 甲板口径） —————— -->
+              <!-- —————— VIBEX 甲板（插件视图：点火拉杆/端点/模型/日志照 cb·bai 甲板口径） —————— -->
               <div class="pt-deck" data-deck="ext">
                <div class="pt-deck-scroll"><div class="inner">
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.ext.title">扩展 · Extensions</span></div>
+                <div class="pt-subhead"><span class="pt-silk sm">VibeX · VIBEX</span></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.ignite">点火拉杆</div>
@@ -7692,7 +7695,7 @@ var PT_I18N = {
     bai: { id: 'bai', port: 8891, pfx: 'ba', mode: 'bai', uptime: null, phase: 'idle' },
     comate: { id: 'comate', port: 8786, pfx: 'comate', mode: 'comate', uptime: null, phase: 'idle' },
     qoder: { id: 'qoder', port: 8785, pfx: 'qoder', mode: 'qoder', uptime: null, phase: 'idle' },
-    /* 扩展甲板第一家供应商：VibeX（8790）——端点/状态灯/模型列表/拉杆全走通用插件视图 */
+    /* VIBEX 甲板（8790）——端点/状态灯/模型列表/拉杆全走通用插件视图 */
     ext: { id: 'vibex', port: 8790, pfx: 'vibex', mode: 'vibex', uptime: null, phase: 'idle' }
   };
 
@@ -8853,9 +8856,7 @@ var PT_I18N = {
     'app.update':     { zh: '更新', 'zh-hant': '更新', en: 'Update', de: 'Update', ja: 'アップデート', fr: 'Mise à jour', es: 'Actualización' },
     'app.about':     { zh: '关于', 'zh-hant': '關於', en: 'About', de: 'Über', ja: '情報', fr: 'À propos', es: 'Acerca de' },
     'app.settings':     { zh: '设置', 'zh-hant': '設置', en: 'Settings', de: 'Einstellungen', ja: '設定', fr: 'Réglages', es: 'Ajustes' },
-    'app.key.ext':        { zh: '扩展', 'zh-hant': '擴展', en: 'Extensions', de: 'Erweiterungen', ja: '拡張', fr: 'Extensions', es: 'Extensiones' },
     'app.key.settingsAria': { zh: '设置', 'zh-hant': '設置', en: 'Settings', de: 'Einstellungen', ja: '設定', fr: 'Réglages', es: 'Ajustes' },
-    'app.ext.title':      { zh: '扩展 · Extensions', 'zh-hant': '擴展 · Extensions', en: 'Extensions', de: 'Erweiterungen', ja: '拡張', fr: 'Extensions', es: 'Extensiones' },
     'app.quit':     { zh: '彻底关机', 'zh-hant': '徹底關機', en: 'Power Off', de: 'Ausschalten', ja: '完全終了', fr: 'Éteindre', es: 'Apagar' },
     'app.version':     { zh: '版本', 'zh-hant': '版本', en: 'Version', de: 'Version', ja: 'バージョン', fr: 'Version', es: 'Versión' },
     'app.github':     { zh: '开源地址', 'zh-hant': '開源地址', en: 'Open Source', de: 'Open Source', ja: 'オープンソース', fr: 'Open Source', es: 'Código abierto' },
@@ -9727,7 +9728,7 @@ var PT_I18N = {
       '<b>【运行提示】</b>免费档上游限速是常态，运行时「限速中」灯常亮。<br>' +
       '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>',
     ext:
-      '<h3>使用帮助 · GUIDE · 扩展</h3><div class="m-body">' +
+      '<h3>使用帮助 · GUIDE · VIBEX</h3><div class="m-body">' +
       '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8790）；拉回最左熄火。<br>' +
       '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8790/v1</code>（甲板上点击即复制）。<br>' +
       '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>'
@@ -9806,12 +9807,12 @@ var PT_I18N = {
 
   /* Qoder / Comate：/v1/models 返回 id + display_name（内部代号 → 界面名）。
      无内置名单——离线时不编造，点火后拉到的就是后端真实清单。 */
-  /* 扩展甲板供应商（VibeX 8790）：模型清单直读通用插件视图的 /v1/models */
+  /* VIBEX 甲板（8790）：模型清单直读通用插件视图的 /v1/models */
   async function refForExt() {
     var r = await refFetchList(8790, '/v1/models');
     if (!r) { openModal(refNote('插件未运行 · 点火后与后端实时清单一致')); return; }
     if (r.err) { openModal(refNote('拉取失败 · 稍后再试')); return; }
-    var html = '<h3>模型参考 · MODEL REF · 扩展 · VibeX</h3><div class="m-body">' +
+    var html = '<h3>模型参考 · MODEL REF · VibeX</h3><div class="m-body">' +
       '<b>【口径】</b>清单与 8790 后端实时一致；点击模型名一键复制。' +
       '<table class="pm-tbl"><thead><tr><th>模型</th></tr></thead>';
     r.list.forEach(function (m) {
