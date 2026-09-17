@@ -3560,8 +3560,14 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   </div>
                   <span class="pt-val click" id="vibexEndpoint">http://127.0.0.1:8790/v1</span>
                 </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label"><div class="t">协议适配</div></div>
+                  <span class="pt-val">REST＋WS 私有协议 · OpenAI 兼容 · 免费档自动选</span>
+                </div></div>
 
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span></div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
+                  <button type="button" class="ibtn2" id="vibexRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
                 <div class="pt-grid">
                   <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
                     <span class="rv" id="vibexStModels">—</span><span class="rs" id="vibexStModelsSub">拉杆刷新</span></div>
@@ -10045,10 +10051,12 @@ var PT_I18N = {
          团结/WorkBuddy 强制实时拉一次积分，B.AI/Comate/Qoder 无积分卡只刷视图 */
       var rf = $(V.pfx + 'Refresh');
       if (rf) rf.onclick = async function () {
-        if (mode === 'bai' || mode === 'comate') {
+        if (mode === 'bai' || mode === 'comate' || mode === 'ext') {
           /* B.AI 的「↻ 刷新」与拉杆点火同权：复用同一个闩锁去强制刷一次模型矩阵，
              否则改走缓存端点之后这颗按钮按下去不会有任何变化 */
           if (mode === 'bai') V.fetchOnRun = true;
+          /* vibex：模型 5 分钟缓存，手动刷新先旁路缓存现拉一次（后端 ?refresh=1），再刷视图 */
+          if (mode === 'ext') { try { await fetch('http://127.0.0.1:' + V.port + '/v1/models?refresh=1'); } catch (e) {} }
           refreshPluginView(mode); plog(V, 'sys', '手动刷新'); return;
         }
         if (mode === 'qoder') {
