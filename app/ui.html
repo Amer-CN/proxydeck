@@ -2775,7 +2775,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   </div>
                   <div class="pt-system-readout">
                     <span class="pt-silk">Uptime</span>
-                    <div class="pt-odo pt-sc" data-odo="vibexUptime">0:00:00</div>
+                    <div class="pt-odo pt-sc" data-odo="extUptime">0:00:00</div>
                   </div>
                   <div class="pt-sc-sep"></div>
                   <div class="pt-dots">
@@ -8475,7 +8475,7 @@ var PT_I18N = {
       }
       /* vibex 屏灯：token 就绪（token 7～30 天过期是本通道头号运维项，health 自带该字段；
          缺 token 时琥珀警告，行为对标各甲板相位灯写法） */
-      if (V.mode === 'ext') PTApp.dot('vibexToken', h.token_configured === true, h.token_configured === false, '');
+      if (V.mode === 'vibex') PTApp.dot('vibexToken', h.token_configured === true, h.token_configured === false, '');
       if (V.id === 'tuanjie') { updateJudgeBanner(h); updateSeedBanner(h); }
       if (V.mode === 'cb') {
         /* WorkBuddy 两区共用本甲板（cbRegion 决定 V.id），hy4 兜底状态条按区域画 */
