@@ -516,3 +516,56 @@ func TestAddrOfDedup(t *testing.T) {
 		t.Fatalf("池里应只有 1 个 token，实际 %d", p.Len())
 	}
 }
+
+// fakeJWTSub 同 fakeJWT，但 sub 可指定（模拟同一账号两次登录签发不同串）。
+func fakeJWTSub(t *testing.T, exp time.Time, nick, sub string) string {
+	t.Helper()
+	payload, _ := json.Marshal(map[string]any{
+		"sub": sub, "nickName": nick, "exp": exp.Unix(),
+	})
+	enc := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
+	return enc(`{"alg":"HS256","typ":"JWT"}`) + "." + enc(string(payload)) + ".sig"
+}
+
+// TestPoolSameSubReplaces：同号两次登录（不同串）→ 旧串让位，池里永远只有 1 条。
+func TestPoolSameSubReplaces(t *testing.T) {
+	p := NewPool(nil, tokenCooldown)
+	a := fakeJWTSub(t, time.Now().Add(24*time.Hour), "号", "u-9")
+	b := fakeJWTSub(t, time.Now().Add(48*time.Hour), "号", "u-9")
+	if a == b {
+		t.Fatalf("两个串应不同（模拟两次登录）")
+	}
+	if _, existing := p.add(a); existing {
+		t.Fatalf("首次添加不应算已存在")
+	}
+	got, existing := p.add(b)
+	if existing {
+		t.Fatalf("同号新串应替换而非报已存在")
+	}
+	if p.Len() != 1 {
+		t.Fatalf("同号应只剩 1 条，实际 %d", p.Len())
+	}
+	if got.Value != b {
+		t.Fatalf("池里应留新串")
+	}
+}
+
+// TestPoolDifferentSubKeepsBoth：不同号互不干扰。
+func TestPoolDifferentSubKeepsBoth(t *testing.T) {
+	p := NewPool(nil, tokenCooldown)
+	p.add(fakeJWTSub(t, time.Now().Add(24*time.Hour), "甲", "u-1"))
+	p.add(fakeJWTSub(t, time.Now().Add(24*time.Hour), "乙", "u-2"))
+	if p.Len() != 2 {
+		t.Fatalf("不同号应各 1 条，实际 %d", p.Len())
+	}
+}
+
+// TestNewPoolDedupsFileDupes：配置文件里的重复串（同号多条）加载即自愈为 1 条。
+func TestNewPoolDedupsFileDupes(t *testing.T) {
+	a := fakeJWTSub(t, time.Now().Add(24*time.Hour), "号", "u-7")
+	b := fakeJWTSub(t, time.Now().Add(48*time.Hour), "号", "u-7")
+	p := NewPool([]string{a, b}, tokenCooldown)
+	if p.Len() != 1 {
+		t.Fatalf("加载应自愈为 1 条，实际 %d", p.Len())
+	}
+}

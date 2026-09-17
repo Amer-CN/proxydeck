@@ -15,6 +15,7 @@ type tokenState struct {
 	Calls         int64
 	Exp           time.Time // 由 JWT exp 解出；零值表示未知
 	HasExp        bool
+	Sub           string // JWT sub（同号去重键；空表示未知，走串去重兜底）
 }
 
 // usable 报告该 token 现在能不能用。
@@ -43,26 +44,17 @@ func NewPool(values []string, cooldown time.Duration) *Pool {
 	p := &Pool{cooldown: cooldown}
 	for _, v := range values {
 		v = strings.TrimSpace(v)
-		if v == "" || p.has(v) {
+		if v == "" {
 			continue
 		}
 		st := &tokenState{Value: v}
 		if info := decodeJWT(v); info != nil {
 			st.Exp, st.HasExp = info.Exp, info.hasExp()
+			st.Sub = info.Sub
 		}
-		p.list = append(p.list, st)
+		p.addWithState(st) // 走统一去重（含同 sub 替换）：重启加载即自愈文件里的重复串
 	}
 	return p
-}
-
-func (p *Pool) has(v string) bool {
-	key := addrOf(v)
-	for _, t := range p.list {
-		if addrOf(t.Value) == key {
-			return true
-		}
-	}
-	return false
 }
 
 // Len 返回池中 token 数量（不区分死活）。
@@ -92,12 +84,16 @@ func (p *Pool) add(v string) (*tokenState, bool) {
 	st := &tokenState{Value: v}
 	if info := decodeJWT(v); info != nil {
 		st.Exp, st.HasExp = info.Exp, info.hasExp()
+		st.Sub = info.Sub
 	}
 	return p.addWithState(st)
 }
 
-// addWithState 直接把建好的 tokenState 追加进池（按 addrOf 去重），已存在返回池里那一个。
+// addWithState 直接把建好的 tokenState 追加进池，已存在返回池里那一个。
 // 自动探测路径用：凭据已经在手，不必再解一次 JWT。
+// 去重两档：①同串（addrOf）→ 已存在，直接返回；②同 sub 不同串
+// （每次登录签发新 JWT）→ 旧串让位给新串，保证同号在池里永远只有一条。
+// sub 为空的老条目按需现解 JWT 回填，保证替换不漏网。
 func (p *Pool) addWithState(st *tokenState) (*tokenState, bool) {
 	if st == nil || strings.TrimSpace(st.Value) == "" {
 		return nil, false
@@ -109,6 +105,20 @@ func (p *Pool) addWithState(st *tokenState) (*tokenState, bool) {
 		if addrOf(t.Value) == key {
 			return t, true
 		}
+	}
+	if st.Sub != "" {
+		kept := make([]*tokenState, 0, len(p.list)+1)
+		for _, t := range p.list {
+			if t.Sub == "" {
+				if info := decodeJWT(t.Value); info != nil {
+					t.Sub, t.Exp, t.HasExp = info.Sub, info.Exp, info.hasExp()
+				}
+			}
+			if t.Sub == "" || t.Sub != st.Sub {
+				kept = append(kept, t)
+			}
+		}
+		p.list = kept
 	}
 	p.list = append(p.list, st)
 	return st, false

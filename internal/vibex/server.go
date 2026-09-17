@@ -305,6 +305,7 @@ func tokenStateOf(token string) *tokenState {
 	st := &tokenState{Value: token}
 	if info := decodeJWT(token); info != nil {
 		st.Exp, st.HasExp = info.Exp, info.hasExp()
+		st.Sub = info.Sub
 	}
 	return st
 }
