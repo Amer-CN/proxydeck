@@ -10377,7 +10377,7 @@ var PT_I18N = {
   }
 
   function buildAllOdo() {
-    ['uptime', 'tjUptime', 'cbUptime', 'baiUptime', 'qoderUptime'].forEach(function (k) {
+    ['uptime', 'tjUptime', 'cbUptime', 'baiUptime', 'qoderUptime', 'extUptime'].forEach(function (k) {
       var el = document.querySelector('[data-odo="' + k + '"]');
       if (el) { PTApp.buildOdo(el, fmtUptime(0)); el.dataset.text = fmtUptime(0); }
     });
