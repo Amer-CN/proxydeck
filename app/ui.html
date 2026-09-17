@@ -7614,6 +7614,21 @@ var PT_I18N = {
     return s.split(/[-._]/)[0].replace(/\d+$/, '') || s;
   }
 
+  /* vibex 厂家分组：按真实系列认（deepseek/qwen/glm/doubao/kimi/claude，dsv 系 DeepSeek 缩写），
+     free-/paid- 前缀不认（否则全堆进 FREE 组）；调用方传 id 与 display 名双文本，
+     id 是占位符（如 "0"）时靠 display 名（如 Free-Doubao2.1 Pro），display 是缩写
+     （如 Free-DSV4.1 Flash）时靠 id；都认不出回退 pluginVendorOf，不改变旧行为。 */
+  function vibexVendorOf(name) {
+    var s = String(name || '').toLowerCase();
+    if (s.indexOf('deepseek') >= 0 || s.indexOf('dsv') >= 0) return 'deepseek';
+    if (s.indexOf('qwen') >= 0) return 'qwen';
+    if (s.indexOf('glm') >= 0) return 'glm';
+    if (s.indexOf('doubao') >= 0) return 'doubao';
+    if (s.indexOf('kimi') >= 0) return 'kimi';
+    if (s.indexOf('claude') >= 0 || s.indexOf('anthropic') >= 0) return 'claude';
+    return pluginVendorOf(name);
+  }
+
   /* ---------------- 消耗 TOP 条形图（COMMAND 官网/本地 + 插件积分/token） ---------------- */
   function renderBars(box, list, mode) {
     if (!box) return;
@@ -8404,7 +8419,12 @@ var PT_I18N = {
          超时会把矩阵留在 ERR——给足 60 秒（缓存命中时秒回，不占时间） */
       var r = await fetch(url, { signal: AbortSignal.timeout(V.mode === 'tj' ? 60000 : 3000) });
       var d = await r.json();
-      var ids = (d.data || []).map(function (m) { return m.id; });
+      var items = d.data || [];
+      if (V.mode === 'vibex') {
+        /* VIBEX 矩阵只收免费档（billing_tier==='lite'）；付费/试用不上甲板，后端照常保留 */
+        items = items.filter(function (m) { return m && m.vibex && m.vibex.billing_tier === 'lite'; });
+      }
+      var ids = items.map(function (m) { return m.id; });
       var mcEl = $(V.pfx + 'ModelCount'), mlBox = $(V.pfx + 'ModelList');
       if (!mcEl || !mlBox) return;
       if (isMatrix && d.ok === false) {
@@ -8452,7 +8472,10 @@ var PT_I18N = {
         });
       }
       ids.forEach(function (id) {
-        var v = pluginVendorOf(V.modelNameMap[id] || id);
+        var label = V.modelNameMap[id] || id;
+        var v = V.mode === 'vibex'
+          ? vibexVendorOf(id + ' ' + label)
+          : pluginVendorOf(label);
         (groups[v] = groups[v] || []).push(id);
       });
       renderModelChips(mlBox, groups, PLUGIN_VENDOR_COLORS, true, V);
