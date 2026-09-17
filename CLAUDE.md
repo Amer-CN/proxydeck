@@ -18,18 +18,19 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 │   ├─ bridge.go                WebView2 JS 桥（ccGetState/ccStart/...绑定）
 │   ├─ plugins.go               插件托管：pluginDefs 注册 + 启动/停止/健康检查
 │   ├─ plugin_modes.go          --plugin-* 子模式（进程内直跑插件服务）
-│   └─ ui.html                  全部 UI（内嵌；四模式键甲板 + Qoder/B.AI/Comate/媒体/注水副页）
+│   └─ ui.html                  全部 UI（内嵌；COMMAND/TUANJIE/WORKBUDDY/VIBEX 四模式键＋标题栏齿轮进设置＋媒体/注水副页）
 ├─ internal/
 │   ├─ proxy + server + api     主代理核心
 │   ├─ tuanjie/                 团结插件后端（8788）
 │   ├─ codebuddy/               WorkBuddy 插件后端（8787）
 │   ├─ comate/                  Comate 插件后端（8786）
 │   ├─ qoder/                   Qoder 插件后端（8785）
-│   └─ bai/                     B.AI 插件后端（8891）
+│   ├─ bai/                     B.AI 插件后端（8891）
+│   └─ vibex/                   VibeX 插件后端（8790，REST＋WS 私有协议直译）
 └─ build.py                     构建脚本（单模式，python build.py）
 ```
 
-- 端口约定：主代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891
+- 端口约定：主代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891 / VibeX 8790
 - 插件 = spawn 本 exe 的 `--plugin-<id> --port <n>` 子进程，独立常驻，关 GUI 不中断
 - **升版本必须同步的位置**（漏一处就有地方显示旧版；2026-09-02 按实操勘误计数，
   2026-09-10 补第 8 项）：
@@ -368,6 +369,14 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     `-replace '-api-key \S+','-api-key <redacted>'`；密钥类文件（`api-key.txt`）
     保持 gitignore
 
+22. **双 exe 并行必致版本误诊，认进程一律用全路径**：测试版与正式版同名不同文件
+    并跑时，看到的每个界面都可能是过期货（2026-09-17 实证：鼓轮"设置/VIBEX"错位
+    投诉查了两轮，根因是旧测试版窗口没关）。已裁决单轨（测试版使命结束即删）。
+    附带两条：① `Get-Process` 的 ProcessName 截断（`ProxyDeck.test-ext` 显示成
+    `ProxyDeck`），认进程一律用 `Win32_Process.ExecutablePath` 全路径；
+    ② 删不掉的 exe 先查谁跑在它身上（如 9/16 五个老后端跑在 `ProxyDeck.old.exe`
+    上）——是后端宿主就等自然消亡，不要硬删；也不要拿改名/删除试探结论当证据。
+
 ## 自定义服务商（tuanjie-providers.json；v3.9.0 引入时叫「外部账号」，v3.10.0 改名重构）
 
 - **三协议**：账号自带 `protocol` 字段——chat（/chat/completions 缺省）/
@@ -403,13 +412,25 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-09-16，v3.18.0 已发布）
+## 当前状态（2026-09-17，v3.19.0 已发布）
 
 > **发版节奏自 2026-09-13 起改为攒版**（用户裁决，见上文「攒版发布」节）：
 > 各会话只提交不发版，待用户说「发版」时由那个会话统一升版本号并发。
 > 本节下方各版本条目保留作历史记录；**「下版（vX.Y.Z）」类预测已失效**——
 > 实际版本号在发版时按「本版内容最高档」现算。
 
+- **v3.19.0 已发布（2026-09-17）**：VIBEX 反代插件＋账号自动探测＋扩展甲板系 UI。
+  段位=次版本（新功能＋界面变化）。发版链 `17d4cdf`（版本串 8 处＋CHANGELOG 双处）
+  → `3efa413`（exe，worktree 干净树 @ 17d4cdf，sha256 18beb1d7…）；tag 打在 17d4cdf
+  ＋ Release 带 exe 已核验（API digest 与本地构建逐字节一致）。换装：腾位法＋只重启
+  GUI，7 后端零重启全绿；旧包锁残留彻底退出后已清，单轨。完整 B 类流程，
+  reviewer 驳回 1 处（流式中断哨兵泄漏，engine.go）已修。
+  后端 `internal/vibex`（8790）：REST＋WS 私有协议直译（base_url 缺省补 `/vc`），
+  OpenAI 兼容；多 token 池同号以新换旧（内存＋落盘双收敛）；`/v1/models` 5 分钟缓存；
+  `/v1/stats` 真 usage 入账；token 经自动探测（CDP 读 cookie，照抄团结）或手动粘贴入池，
+  `vibex-config.json` 0600 且 gitignore。UI：第 4 键 VIBEX＋标题栏齿轮进设置＋鼓轮终态
+  10 格（第 8 格预留，注水下鼓轮）＋矩阵只收 lite 档按厂家分＋token/免费双灯。
+  链路诊断整套删除（270 行删减，UI＋Go 后端，顺手）。
 - **v3.18.0 已发布（2026-09-16）**：关窗退托盘 + 图标常驻。段位=次版本。
   发版链 `59ea872`（版本串 8 处+CHANGELOG 双处+`.gitignore` 补 `close_mode.txt`）
   → `dabbe1e`（exe，干净树 @ 59ea872，sha256 442b3099…）；tag 打在 59ea872
@@ -480,9 +501,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck（remote 名 `myrepo`，
   不是 origin；`push_api.py` 里的 `REPO` 写的是改名前旧名 `command-code-proxy-tools`，
   GitHub 会重定向，能用但名字陈旧）
-- 服务现状（2026-09-16 v3.18.0 换装后复核）：7 进程全在（1 GUI + 6 插件后端，
-  8785/8786/8787/8788/8789/8891 全部 health ok）；团结 seed 双轨道沿用 09-15
-  结论（本轮未重验）；v3.18.0 新包已换装
+- 服务现状（2026-09-17 v3.19.0 换装后复核；随后用户彻底退出，当前 0 进程）：
+  换装时 1 新 GUI＋7 后端（8785/8786/8787/8788/8789/8891/8790）全绿；vibex 18 模型
+  （lite 6 个）＋统计 TOP 有数；token 池生效（JWT exp 解码＋days_left）。
+  磁盘唯一 `ProxyDeck.exe` 即 v3.19.0；团结 seed 双轨道沿用 09-15
+  结论（本轮未重验）；v3.19.0 新包已换装
   （旧 GUI 已杀、新 GUI 已拉起，6 后端逐个熄火再点火换包全绿；核心 55990
   按需点火，当前 idle）。后端是独立常驻子进程，关 GUI 不死；
   后端要换包须逐个熄火再点火，拉杆只会接管复用。
