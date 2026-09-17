@@ -316,6 +316,8 @@ func (s *Server) persistNewToken(token string) {
 	s.tokenMu.Unlock()
 	if err != nil {
 		logf("token 落盘失败（重启后会丢，token 本体不打印）: %v", err)
+	} else {
+		logf("token 已落盘（池 %d 个，token 本体不打印）", s.pool.Len())
 	}
 }
 

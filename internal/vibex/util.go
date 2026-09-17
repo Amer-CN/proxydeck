@@ -4,6 +4,9 @@ package vibex
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strconv"
+	"strings"
 )
 
 // str 把任意 JSON 值收敛成字符串（数字/布尔用 fmt.Sprint，nil 给空串）。
@@ -53,6 +56,31 @@ func truthy(v any) bool {
 func toMap(v any) map[string]any {
 	m, _ := v.(map[string]any)
 	return m
+}
+
+// shapeOf 描述 JSON 值的顶层结构（键名/类型/数组长度），专供“0 MODELS”这类
+// 空结果自证：只记结构，绝不记 body 与 token 本体。
+func shapeOf(v any) string {
+	if list, ok := v.([]any); ok {
+		return "array[" + strconv.Itoa(len(list)) + "]"
+	}
+	m := toMap(v)
+	if m == nil {
+		return "non-container"
+	}
+	keys := make([]string, 0, len(m))
+	for k, item := range m {
+		switch inner := item.(type) {
+		case []any:
+			keys = append(keys, k+"[]=+"+strconv.Itoa(len(inner)))
+		case map[string]any:
+			keys = append(keys, k+"{}")
+		default:
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+	return "map{" + strings.Join(keys, ",") + "}"
 }
 
 // toList 把 JSON 值收敛成切片。

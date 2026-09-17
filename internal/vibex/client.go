@@ -253,6 +253,9 @@ func (c *Client) providers(ctx context.Context) ([]any, error) {
 			}
 		}
 	}
+	// 未解出列表：记顶层结构自证（只记键名/类型与数量，绝不记 body 与 token），
+	// “0 MODELS”时看这条即知是上游真空还是嵌套格式漏网。
+	logf("providers 上游 200 但未解出列表（结构=%s）", shapeOf(v))
 	return nil, nil
 }
 
