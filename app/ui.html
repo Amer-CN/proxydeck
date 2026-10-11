@@ -3410,6 +3410,46 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <button type="button" class="ibtn2" id="tjWaterBtn" data-i18n="app.water.btn" title="金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型">☌ 注水检测</button>
                 </div></div>
                 <div class="pt-div"></div>
+
+                <!-- B类：模式键供应商显隐（纯 UI，localStorage 持久化；B.AI 默认隐藏，代码零删除） -->
+                <div class="pt-subhead"><span class="pt-silk sm">模式键供应商 · PROVIDERS</span>
+                  <span class="pt-val">退役/不用的一路可隐藏 · 关 GUI 重开仍在</span></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t">B.AI（COMMAND 副页 · 8891）</div>
+                    <div class="s">免费模型已退役，默认隐藏；打开后入口与矩阵恢复如前</div>
+                  </div>
+                  <button type="button" class="pt-sw" role="switch" aria-checked="false" data-sw="prov-bai"
+                          aria-label="B.AI 显隐"><span class="i"></span><span class="o"></span><span class="k"></span></button>
+                </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t">COMATE（TUANJIE 副页 · 8786）</div>
+                    <div class="s">关闭后 TUANJIE 键回单脸，甲板/上屏/矩阵不再展示与请求</div>
+                  </div>
+                  <button type="button" class="pt-sw" role="switch" aria-checked="true" data-sw="prov-comate"
+                          aria-label="COMATE 显隐"><span class="i"></span><span class="o"></span><span class="k"></span></button>
+                </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t">QODER（WORKBUDDY 副页 · 8785）</div>
+                    <div class="s">关闭后 WORKBUDDY 键回单脸，甲板/上屏/矩阵不再展示与请求</div>
+                  </div>
+                  <button type="button" class="pt-sw" role="switch" aria-checked="true" data-sw="prov-qoder"
+                          aria-label="QODER 显隐"><span class="i"></span><span class="o"></span><span class="k"></span></button>
+                </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t">VIBEX（独立键 · 8790）</div>
+                    <div class="s">关闭后整键隐藏，甲板/上屏/矩阵不再展示与请求</div>
+                  </div>
+                  <button type="button" class="pt-sw" role="switch" aria-checked="true" data-sw="prov-ext"
+                          aria-label="VIBEX 显隐"><span class="i"></span><span class="o"></span><span class="k"></span></button>
+                </div></div>
+                <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="try.gen.loginT">开机自启</div>
@@ -4405,6 +4445,40 @@ var PT_I18N = {
       if (m === h || m === ALT_MODE[h]) keyFace[h] = m;
     });
   }
+  /* ═══ B类：模式键供应商显隐（纯 UI，localStorage 持久化，默认 B.AI 隐藏）═══
+     键：provVis.v1 = {bai,comate,qoder,ext}；缺键/坏值按默认值补齐。
+     引擎层只读此键做绘制与切换门控，写操作由业务层开关回调经 window.__provSet 进入。 */
+  var PROV_DEF = { bai: false, comate: true, qoder: true, ext: true };
+  var provCache = null;
+  function provGet() {
+    if (provCache) return provCache;
+    var c = null;
+    try { c = JSON.parse(localStorage.getItem('provVis.v1') || 'null'); } catch (e) { c = null; }
+    provCache = { bai: PROV_DEF.bai, comate: PROV_DEF.comate, qoder: PROV_DEF.qoder, ext: PROV_DEF.ext };
+    if (c && typeof c === 'object') {
+      ['bai', 'comate', 'qoder', 'ext'].forEach(function (k) {
+        if (typeof c[k] === 'boolean') provCache[k] = c[k];
+      });
+    }
+    return provCache;
+  }
+  function provEnabled(m) {
+    var c = provGet();
+    if (m === 'bai') return c.bai;
+    if (m === 'comate') return c.comate;
+    if (m === 'qoder') return c.qoder;
+    if (m === 'ext') return c.ext;
+    return true;
+  }
+  window.__provGet = provGet;
+  window.__provSet = function (cfg) {
+    provCache = { bai: PROV_DEF.bai, comate: PROV_DEF.comate, qoder: PROV_DEF.qoder, ext: PROV_DEF.ext };
+    ['bai', 'comate', 'qoder', 'ext'].forEach(function (k) {
+      if (cfg && typeof cfg[k] === 'boolean') provCache[k] = cfg[k];
+    });
+    try { localStorage.setItem('provVis.v1', JSON.stringify(provCache)); } catch (e) {}
+    paint();
+  };
   var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, comate: 7, media: 8, water: 9 };
   /* 上屏 Wheel 音量条只亮着六个主页可见；set/water/media 里它挡住屏体右侧读数 */
   var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate', 'qoder'];
@@ -4487,13 +4561,33 @@ var PT_I18N = {
       var on = d.dataset.deck === m;
       d.toggleAttribute('inert', !on);
       d.setAttribute('aria-hidden', on ? 'false' : 'true');
+      /* B类供应商显隐：禁用的副页/独立页甲板直接 display:none（不占传送带位） */
+      if (d.dataset.deck === 'bai' || d.dataset.deck === 'comate' ||
+          d.dataset.deck === 'qoder' || d.dataset.deck === 'ext') {
+        d.style.display = provEnabled(d.dataset.deck) ? '' : 'none';
+      }
     });
     $$('.pt-sc-body').forEach(function (b) {
       b.classList.toggle('cur', b.dataset.body === m);
+      /* B类供应商显隐：上屏屏体同步隐藏 */
+      if (b.dataset.body === 'bai' || b.dataset.body === 'comate' ||
+          b.dataset.body === 'qoder' || b.dataset.body === 'ext') {
+        b.style.display = provEnabled(b.dataset.body) ? '' : 'none';
+      }
+    });
+    /* B类供应商显隐：鼓轮禁用格隐藏（无 mode 映射的预留格不动） */
+    $$('.pt-drum i[data-mode]').forEach(function (cell) {
+      var cm = cell.getAttribute('data-mode');
+      if (cm === 'bai' || cm === 'comate' || cm === 'qoder' || cm === 'ext') {
+        cell.style.display = provEnabled(cm) ? '' : 'none';
+      }
     });
     $$('.pt-key').forEach(function (k) {
       var keyMode = k.dataset.mode;
       var alt = ALT_MODE[keyMode];
+      /* B类供应商显隐：VIBEX 整键隐藏；副页禁用时主键回单脸（副行不显示） */
+      if (keyMode === 'ext' && !provEnabled('ext')) { k.style.display = 'none'; }
+      else { k.style.display = ''; }
       /* on：当前真停在原主名所在面；onAlt：当前停在这颗键的副页（bai 无物理键，宿主键代持按压态） */
       var on = keyMode === m;
       var onAlt = !on && alt === m;
@@ -4502,6 +4596,7 @@ var PT_I18N = {
       /* 键帽脸名：显示这张键离开时所在的那个面——在 B.AI 离开去 TUANJIE，
          键帽仍写 B.AI；回到 cmd 主页后才换回 COMMAND */
       var face = faceOf(keyMode);
+      if (alt && !provEnabled(alt)) face = keyMode; /* 禁用副页时强制回主键脸 */
       var faceAlt = face !== keyMode;
       k.classList.toggle('on-alt', faceAlt);
       var label = k.querySelector('span');
@@ -4513,7 +4608,10 @@ var PT_I18N = {
         main.textContent = faceAlt ? ALT_LABEL[keyMode] : orig;
         if (dual) {
           var sub = label.querySelector('i');
-          if (sub) sub.textContent = faceAlt ? '⇄ ' + orig : '⇄ ' + (ALT_LABEL[keyMode] || '');
+          if (sub) {
+            if (alt && !provEnabled(alt)) { sub.style.display = 'none'; }
+            else { sub.style.display = ''; sub.textContent = faceAlt ? '⇄ ' + orig : '⇄ ' + (ALT_LABEL[keyMode] || ''); }
+          }
         }
       }
     });
@@ -4531,6 +4629,13 @@ var PT_I18N = {
 
   /* ══════════════════ 6. 模式切换 ══════════════════ */
   function selectMode(m) {
+    /* B类供应商显隐：禁用的副页/独立页不可进入，各自回主键（ext 回 cmd） */
+    if (m === 'bai' || m === 'comate' || m === 'qoder' || m === 'ext') {
+      if (!provEnabled(m)) {
+        m = (m === 'bai') ? 'cmd' : (m === 'comate') ? 'tj' : (m === 'qoder') ? 'cb' : 'cmd';
+        if (m === st.mode) { paint(); return; }
+      }
+    }
     if (m === st.mode) return;
     st.mode = m;
     noteFace(m);
@@ -4547,8 +4652,10 @@ var PT_I18N = {
   $$('.pt-key[data-mode]').forEach(function (k) {
     k.addEventListener('click', function () {
       /* 单击有副页的键：当前已在该键或它的副页上 → 翻副页/翻回；
-         否则回到这颗键离开时的那张脸。COMMAND ⇄ B.AI 即此机制 */
+         否则回到这颗键离开时的那张脸。COMMAND ⇄ B.AI 即此机制
+         B类供应商显隐：副页禁用时不翻页，只回主键脸 */
       var alt = ALT_MODE[k.dataset.mode];
+      if (alt && !provEnabled(alt)) { selectMode(k.dataset.mode); return; }
       if (alt && (k.dataset.mode === st.mode || alt === st.mode)) {
         /* 当前在副页（alt===st.mode）→ 回主键；当前在主页（k.dataset.mode===st.mode）→ 去副页 */
         selectMode(alt === st.mode ? k.dataset.mode : alt);
@@ -4562,6 +4669,7 @@ var PT_I18N = {
         ev.preventDefault();
         ev.stopPropagation();
         var altK = ALT_MODE[k.dataset.mode];
+        if (altK && !provEnabled(altK)) { selectMode(k.dataset.mode); return; }
         if (altK && (k.dataset.mode === st.mode || altK === st.mode)) {
           selectMode(altK === st.mode ? k.dataset.mode : altK);
           return;
@@ -4572,8 +4680,13 @@ var PT_I18N = {
       var d = { ArrowLeft: -1, ArrowRight: 1 }[ev.key];
       if (!d) return;
       ev.preventDefault();
-      var i = MODES.indexOf(st.mode) + d;
-      if (i < 0 || i >= MODES.length) return;
+      /* B类供应商显隐：方向键跳过禁用页（最多绕一圈） */
+      var i = MODES.indexOf(st.mode);
+      for (var n = 0; n < MODES.length; n++) {
+        i += d;
+        if (i < 0 || i >= MODES.length) return;
+        if (provEnabled(MODES[i])) break;
+      }
       selectMode(MODES[i]);
       $$('.pt-key').forEach(function (b) { if (b.dataset.mode === MODES[i]) b.focus(); });
     });
@@ -8129,6 +8242,11 @@ var PT_I18N = {
   async function refreshPluginView(mode) {
     var V = PV[mode];
     if (!V) return;
+    /* B类供应商显隐：隐藏页不展示不请求（矩阵/统计/日志一律不拉，后端不动） */
+    if ((mode === 'bai' || mode === 'comate' || mode === 'qoder' || mode === 'ext') &&
+        typeof window.__provGet === 'function') {
+      try { if (!window.__provGet()[mode]) return; } catch (e) {}
+    }
     var list = await call('PluginList');
     var p = Array.isArray(list) ? list.find(function (x) { return x.id === V.id; }) : null;
     var running = !!(p && p.healthy);
@@ -10065,6 +10183,34 @@ var PT_I18N = {
         return false;
       });
     });
+
+    /* —— B类：模式键供应商显隐开关（纯 UI，localStorage 持久化，默认 B.AI 关） —— */
+    (function bindProvSwitches() {
+      if (typeof window.__provGet !== 'function' || typeof window.__provSet !== 'function') return;
+      var cur = window.__provGet();
+      var nameOf = { bai: 'B.AI', comate: 'COMATE', qoder: 'QODER', ext: 'VIBEX' };
+      var homeOf = { bai: 'cmd', comate: 'tj', qoder: 'cb', ext: 'cmd' };
+      ['bai', 'comate', 'qoder', 'ext'].forEach(function (k) {
+        PTApp.sw('prov-' + k, !!cur[k]);
+        PTApp.onSwitch('prov-' + k, function (on) {
+          var next = window.__provGet();
+          next[k] = !!on;
+          window.__provSet(next);
+          PTApp.sw('prov-' + k, !!on);
+          /* 当前正停在被关掉的页 → 回各自主键 */
+          try {
+            if (!on && PTApp.mode() === k) PTApp.selectMode(homeOf[k]);
+            else PTApp.paint();
+          } catch (e) {}
+          try {
+            logInto($('logStream'), 'sys', '供应商显隐：' + nameOf[k] + (on ? '已显示' : '已隐藏') + '（配置已持久化）');
+          } catch (e) {}
+          return true;
+        });
+      });
+      /* 启动即按持久化配置绘制一次（默认 B.AI 隐藏），保证首屏即终态 */
+      try { PTApp.paint(); } catch (e) {}
+    })();
 
     $('baseUrl').onclick = function () { copyText($('baseUrl').textContent, 'Base URL'); };
     $('toggleKey').onclick = function () {
