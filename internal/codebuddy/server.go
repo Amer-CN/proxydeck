@@ -98,8 +98,13 @@ func NewServer(desensitize bool) (*Server, error) {
 // --desensitize）。
 func NewServerForRegion(region Region, desensitize bool) (*Server, error) {
 	// 账号池：扫描 auth 目录里该区域的全部登录态（只读）。目录里一个可用号
-	// 都没有 → 与旧逻辑同一句报错，不新花样。
-	missing := fmt.Errorf("未找到 %s 区域的 CodeBuddy/WorkBuddy 登录文件，请先在桌面端完成登录", region)
+	// 都没有 → 与旧逻辑同一句报错，不新花样（另附已搜索目录，用户照着能自查；
+	// 有文件但全是新版加密时说清"不是没文件，是解密不了"）。
+	missing := fmt.Errorf("未找到 %s 区域的 CodeBuddy/WorkBuddy 登录文件，请先在桌面端完成登录（已搜索：%s）", region, strings.Join(findAuthDirs(), "; "))
+	if n := countEncryptedFiles(region); n > 0 {
+		missing = fmt.Errorf("找到 %s 区域 %d 个登录文件但 token 均为新版加密形态（桌面端升级后加密存储，代理无法解密），已搜索：%s",
+			region, n, strings.Join(findAuthDirs(), "; "))
+	}
 	pool := NewAccountPool(region)
 	if pool == nil {
 		return nil, missing
@@ -199,6 +204,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"backend": c.BaseURL,
 		"region":  string(s.region),
 		"mode":    "direct-proxy (native function calling)",
+		// 登录态搜索过哪些目录：目录不存在/零命中时用户照着能自查。
+		"auth_search_dirs": findAuthDirs(),
 	}
 	if !s.startedAt.IsZero() {
 		resp["uptimeSec"] = int64(time.Since(s.startedAt).Seconds())

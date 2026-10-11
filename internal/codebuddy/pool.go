@@ -155,6 +155,7 @@ func scanAuthFiles(region Region) []*Account {
 		mtime time.Time
 	}
 	var found []cand
+	encrypted := 0
 	for _, dir := range findAuthDirs() {
 		ents, err := os.ReadDir(dir)
 		if err != nil {
@@ -172,6 +173,12 @@ func scanAuthFiles(region Region) []*Account {
 			domain, uid, nick, ok := parseAuthInfo(path)
 			if !ok || !containsDomain(domain, suffix) {
 				log.Printf("[codebuddy] 账号池扫描：跳过无法解析或区域不符的文件 %s", e.Name())
+				continue
+			}
+			// 新版加密文件代理无法解密：不入池（入池会被 Pick 选中再吃 401 误标死号）。
+			if !authTokenUsable(path) {
+				encrypted++
+				log.Printf("[codebuddy] 账号池扫描：跳过新版加密登录文件 %s（token 无法解密）", e.Name())
 				continue
 			}
 			found = append(found, cand{Account{UID: uid, Nickname: nick, AuthPath: path, Enabled: true}, info.ModTime()})
@@ -193,6 +200,15 @@ func scanAuthFiles(region Region) []*Account {
 		a := f.acct
 		accounts = append(accounts, &a)
 	}
+	// 零可用不再静默：区分"一个文件都没有"与"有文件但全是新版加密"，报去哪找过。
+	if len(accounts) == 0 {
+		if encrypted > 0 {
+			log.Printf("[codebuddy] 账号池扫描 region=%s：%d 个登录文件但 token 均为新版加密形态（代理无法解密），已搜索目录：%s",
+				region, encrypted, strings.Join(findAuthDirs(), "; "))
+		} else {
+			log.Printf("[codebuddy] 账号池扫描 region=%s 零命中，已搜索目录：%s", region, strings.Join(findAuthDirs(), "; "))
+		}
+	}
 	return accounts
 }
 
@@ -208,7 +224,7 @@ func parseAuthInfo(path string) (domain, uid, nickname string, ok bool) {
 	if json.Unmarshal(b, &s) != nil || s.Account.UID == "" {
 		return "", "", "", false
 	}
-	return s.Auth.Domain, s.Account.UID, s.Account.Nickname, true
+	return s.Auth.Domain, s.Account.UID, string(s.Account.Nickname), true
 }
 
 // Size 返回池内账号数。

@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,45 +38,131 @@ type Credential struct {
 	client *http.Client
 }
 
+// flexString 兼容新版桌面端把 account.nickname 写成加密对象（{"$wbEncrypted":1,
+// "envelope":"..."}）的写法：字符串原样收；对象/数组/数字/null 一律收成空串——
+// 昵称只是显示名，绝不能因它解析失败丢掉整个登录态。
+// 实测（2026-10-12）：双区今日新文件 nickname 均为加密对象，旧解析（string）
+// 让 health 双区同报"auth 文件结构异常"、池重扫跳过新文件。
+type flexString string
+
+// UnmarshalJSON 字符串原样收，非字符串一律置空且不报错。
+func (f *flexString) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		*f = flexString(s)
+		return nil
+	}
+	*f = ""
+	return nil
+}
+
 // authAccount 对应 auth 文件里的顶层结构（宽松解析）。
 type sessionInfo struct {
 	Auth struct {
-		AccessToken     string `json:"accessToken"`
-		RefreshToken    string `json:"refreshToken"`
+		// AccessToken/RefreshToken：旧版明文字符串；新版桌面端（2026-10-12
+		// 实测 WorkBuddy 5.7.7 / AI 5.7.6）写加密对象 {"$wbEncrypted":1,...}，
+		// 代理无法解密——flex 收成空串保住整件解析，是否可用另由
+		// authTokenUsable 判定（选文件只选含明文 token 的）。
+		AccessToken     flexString `json:"accessToken"`
+		RefreshToken    flexString `json:"refreshToken"`
 		Domain          string `json:"domain"`
 		ExpiresAt       int64  `json:"expiresAt"`
 		RefreshExpiresAt int64 `json:"refreshExpiresAt"`
 	} `json:"auth"`
 	Account struct {
 		UID           string `json:"uid"`
-		Nickname      string `json:"nickname"`
+		Nickname      flexString `json:"nickname"`
 		EnterpriseID  string `json:"enterpriseId"`
 		EnterpriseName string `json:"enterpriseName"`
 	} `json:"account"`
 }
 
+// authTokenUsable 该文件是否含可直接用的明文 token（非空字符串）。
+// 新版加密对象一律不可用——只读字段值做匹配，不打印、不落日志。
+func authTokenUsable(path string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var probe struct {
+		Auth struct {
+			AccessToken any `json:"accessToken"`
+		} `json:"auth"`
+	}
+	if json.Unmarshal(b, &probe) != nil {
+		return false
+	}
+	s, ok := probe.Auth.AccessToken.(string)
+	return ok && s != ""
+}
+
+// countEncryptedFiles 该区域下"可解析、区域对、但 token 为加密形态"的文件数
+//（诊断用：区分"一个文件都没有"和"有文件但全是新版加密"）。
+func countEncryptedFiles(region Region) int {
+	suffix := regionConfigs[region].DomainSuffix
+	n := 0
+	for _, d := range findAuthDirs() {
+		ents, err := os.ReadDir(d)
+		if err != nil {
+			continue
+		}
+		for _, e := range ents {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".info") {
+				continue
+			}
+			p := filepath.Join(d, e.Name())
+			if authFileDomainMatches(p, suffix) && !authTokenUsable(p) {
+				n++
+			}
+		}
+	}
+	return n
+}
+
 // findAuthDirs 返回候选 auth 目录（Windows/macOS/Linux，与 Python 版一致）。
+// 优先级：CODEBUDDY_AUTH_DIR 环境变量（逃生口，命中即唯一）> 本机多候选目录。
+// 多候选：第 1 位沿用既有默认（%LOCALAPPDATA%\CodeBuddyExtension\...）；其后沿用
+// macOS/Linux 位。2026-10-12 本机实测：注册表卸载表两条目（WorkBuddy 5.7.7 /
+// WorkBuddy AI 5.7.6）InstallLocation 均空，auth 实际仍在默认目录（双区当日均有
+// 新文件），注册表推导指不到 auth，故不采用；漫游位（%APPDATA%\...）本机根本
+// 不存在（.work/roaming_verdict.txt），无命中实证，不保留，只做多候选目录。
 func findAuthDirs() []string {
 	if d := os.Getenv("CODEBUDDY_AUTH_DIR"); d != "" {
 		return []string{d}
 	}
 	home, _ := os.UserHomeDir()
+	return candidateAuthDirs(os.Getenv("LOCALAPPDATA"), home, os.Getenv("XDG_DATA_HOME"))
+}
+
+// candidateAuthDirs 纯函数：按传入的根拼多候选目录（去重、去空；单测喂假根，
+// 不碰真实环境）。
+func candidateAuthDirs(localAppData, home, xdg string) []string {
 	var dirs []string
-	// Windows: %LOCALAPPDATA%\CodeBuddyExtension\Data\Public\auth
-	if la := os.Getenv("LOCALAPPDATA"); la != "" {
-		dirs = append(dirs, filepath.Join(la, "CodeBuddyExtension", "Data", "Public", "auth"))
-	} else if home != "" {
-		dirs = append(dirs, filepath.Join(home, "AppData", "Local", "CodeBuddyExtension", "Data", "Public", "auth"))
+	add := func(d string) {
+		if d == "" {
+			return
+		}
+		for _, e := range dirs {
+			if e == d {
+				return
+			}
+		}
+		dirs = append(dirs, d)
 	}
-	// macOS
-	dirs = append(dirs, filepath.Join(home, "Library", "Application Support", "CodeBuddyExtension", "Data", "Public", "auth"))
-	// Linux (XDG)
-	xdg := os.Getenv("XDG_DATA_HOME")
+	if localAppData == "" && home != "" {
+		localAppData = filepath.Join(home, "AppData", "Local")
+	}
+	if localAppData != "" {
+		add(filepath.Join(localAppData, "CodeBuddyExtension", "Data", "Public", "auth"))
+	}
+	if home != "" {
+		add(filepath.Join(home, "Library", "Application Support", "CodeBuddyExtension", "Data", "Public", "auth"))
+	}
 	if xdg == "" && home != "" {
 		xdg = filepath.Join(home, ".local", "share")
 	}
 	if xdg != "" {
-		dirs = append(dirs, filepath.Join(xdg, "CodeBuddyExtension", "Data", "Public", "auth"))
+		add(filepath.Join(xdg, "CodeBuddyExtension", "Data", "Public", "auth"))
 	}
 	return dirs
 }
@@ -93,9 +180,14 @@ func FindAuthFile() string {
 
 // FindAuthFileForRegion 同 FindAuthFile，但按区域过滤 auth.domain
 //（CN → 含 codebuddy.cn；INTL → 含 workbuddy.ai）。
+// 可用性优先：只选含明文 token 的文件（新版加密文件代理无法解密，选了等于
+// 断流）；同目录内按 mtime 取最新（目录优先级保持旧语义：默认目录优先）。
+// 零可用时如实区分"一个文件都没有"与"有文件但全是新版加密"，日志写清去哪找过。
 func FindAuthFileForRegion(region Region) string {
 	suffix := regionConfigs[region].DomainSuffix
-	for _, d := range findAuthDirs() {
+	dirs := findAuthDirs()
+	encrypted := 0
+	for _, d := range dirs {
 		ents, err := os.ReadDir(d)
 		if err != nil {
 			continue
@@ -117,12 +209,23 @@ func FindAuthFileForRegion(region Region) string {
 			if !authFileDomainMatches(p, suffix) {
 				continue
 			}
+			if !authTokenUsable(p) {
+				encrypted++
+				log.Printf("[codebuddy] 跳过新版加密登录文件 %s（token 无法解密，用最后可用文件）", e.Name())
+				continue
+			}
 			files = append(files, fi{p, info.ModTime()})
 		}
 		if len(files) > 0 {
 			sort.Slice(files, func(i, j int) bool { return files[i].mtime.After(files[j].mtime) })
 			return files[0].path
 		}
+	}
+	if encrypted > 0 {
+		log.Printf("[codebuddy] %s 有 %d 个登录文件但 token 均为新版加密形态（代理无法解密），已搜索目录：%s",
+			region, encrypted, strings.Join(dirs, "; "))
+	} else {
+		log.Printf("[codebuddy] 未找到 %s 登录文件，已搜索目录：%s", region, strings.Join(dirs, "; "))
 	}
 	return ""
 }
@@ -196,7 +299,7 @@ func (c *Credential) expired(s *sessionInfo) bool {
 // refresh 调后端刷新 token，写回 auth 文件与缓存。
 func (c *Credential) refresh(ctx context.Context, s *sessionInfo) error {
 	h := c.buildHeaders(s)
-	h.Set("X-Refresh-Token", s.Auth.RefreshToken)
+	h.Set("X-Refresh-Token", string(s.Auth.RefreshToken))
 	h.Set("X-Auth-Refresh-Source", "plugin")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
@@ -277,7 +380,7 @@ func (c *Credential) buildHeaders(s *sessionInfo) http.Header {
 	h := http.Header{}
 	h.Set("Content-Type", "application/json")
 	h.Set("Accept", "application/json")
-	h.Set("Authorization", "Bearer "+s.Auth.AccessToken)
+	h.Set("Authorization", "Bearer "+string(s.Auth.AccessToken))
 	h.Set("X-User-Id", s.Account.UID)
 	h.Set("X-Enterprise-Id", s.Account.EnterpriseID)
 	h.Set("X-Tenant-Id", s.Account.EnterpriseID)
@@ -319,6 +422,10 @@ func (c *Credential) headersFor(ctx context.Context, path string) (http.Header, 
 	if err != nil {
 		return nil, err
 	}
+	// 兜底：加密形态文件绝不允许走到出站（选文件层已过滤；显式路径传入时在这里拦）。
+	if s.Auth.AccessToken == "" {
+		return nil, fmt.Errorf("登录文件 %s 的 token 为新版加密形态，代理无法解密", filepath.Base(c.path))
+	}
 	if c.expired(s) {
 		if regionConfigs[c.region].NoRefresh {
 			return nil, fmt.Errorf("国际版 token 已过期（桌面端会自动续期，请打开 WorkBuddy 桌面端刷新登录态）")
@@ -338,6 +445,16 @@ func (c *Credential) headersFor(ctx context.Context, path string) (http.Header, 
 func (c *Credential) Summary() map[string]any {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// 无登录文件：如实报去哪找过（health 直接透出，用户照着能自查）；
+	// 有文件但全是新版加密时说清"不是没文件，是解密不了"。
+	if c.path == "" {
+		if n := countEncryptedFiles(c.region); n > 0 {
+			return map[string]any{"error": fmt.Sprintf(
+				"找到 %s 区域 %d 个登录文件但 token 均为新版加密形态（桌面端升级后加密存储，代理无法解密），已搜索目录：%s",
+				c.region, n, strings.Join(findAuthDirs(), "; "))}
+		}
+		return map[string]any{"error": fmt.Sprintf("未找到登录文件，已搜索目录：%s", strings.Join(findAuthDirs(), "; "))}
+	}
 	if err := c.loadIfStale(); err != nil {
 		return map[string]any{"error": err.Error()}
 	}
@@ -347,7 +464,7 @@ func (c *Credential) Summary() map[string]any {
 	}
 	return map[string]any{
 		"uid":             s.Account.UID,
-		"nickname":        s.Account.Nickname,
+		"nickname":        string(s.Account.Nickname),
 		"enterpriseName":  s.Account.EnterpriseName,
 		"token_expires_at": s.Auth.ExpiresAt,
 		"token_expired":   c.expired(s),
