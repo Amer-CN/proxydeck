@@ -113,6 +113,12 @@ func (a *app) pluginLog(d pluginDef) string {
 	return filepath.Join(a.pluginsDir(), d.ID+".log")
 }
 
+// pluginErrLog 返回原生插件启动失败时由 --plugin-* 子模式写入的诊断文件路径
+// （命名与 plugin_modes.go 各分支一致：<id>-plugin-error.log，落在 exe 同目录）。
+func (a *app) pluginErrLog(d pluginDef) string {
+	return filepath.Join(exeDir(), d.ID+"-plugin-error.log")
+}
+
 // pyCmd 探测可用的 Python 命令（python / py -3），返回命令与参数前缀。
 func pyCmd() (string, []string, error) {
 	for _, c := range [][]string{{"python"}, {"py", "-3"}} {
@@ -250,6 +256,8 @@ func (a *app) pluginStart(id string) error {
 		cmd.Stdout = lf
 		cmd.Stderr = lf
 	}
+	// 清掉上一次的失败诊断：否则本轮启动成功、旧错误仍会被当成本次原因读出。
+	_ = os.Remove(a.pluginErrLog(*d))
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("启动 %s 失败: %v", d.Name, err)
 	}
@@ -259,11 +267,48 @@ func (a *app) pluginStart(id string) error {
 	st.started = time.Now()
 	st.lastErr = ""
 	st.mu.Unlock()
+	a.watchPluginExit(st, cmd, *d)
 
 	// 不再同步等就绪：本方法在 WebView2 UI 线程的串行 bind 队列里执行，
 	// 原先最长 15s 的就绪轮询会把整窗冻死（原生后端秒起，等它纯属白冻）。
 	// 就绪状态交给 pluginList 的 3s 探活：启动中显示 starting，健康后亮 running。
 	return nil
+}
+
+// watchPluginExit 监视子进程退出，进程一死就把状态复位并带上失败原因。
+//
+// 没有它时 running 恒为 true：后端秒退（缺登录态、端口冲突等）后端口永远不会
+// 上线，界面就永远停在「启动中」——群友反馈的「拉杆拉了没反应」即此因。
+// 判定用 st.cmd != cmd：主动停堆（pluginStop 把 cmd 置 nil）与换新实例都不会被误判成失败。
+func (a *app) watchPluginExit(st *pluginState, cmd *exec.Cmd, d pluginDef) {
+	go func() {
+		waitErr := cmd.Wait()
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		if st.cmd != cmd {
+			return
+		}
+		st.running = false
+		st.cmd = nil
+		st.lastErr = pluginExitReason(a.pluginErrLog(d), waitErr, d)
+	}()
+}
+
+// pluginExitReason 组装退出原因：优先用子进程自己写的诊断文件，其次用退出错误。
+// 只回可读短句，避免把整份日志灌进界面。
+func pluginExitReason(errLog string, waitErr error, d pluginDef) string {
+	if b, err := readLogTail(errLog, 4<<10); err == nil {
+		if msg := strings.TrimSpace(string(b)); msg != "" {
+			if len(msg) > 300 {
+				msg = msg[:300] + "…"
+			}
+			return "启动失败：" + msg
+		}
+	}
+	if waitErr != nil {
+		return fmt.Sprintf("%s 启动后退出：%v", d.Name, waitErr)
+	}
+	return d.Name + " 启动后退出（无诊断信息）"
 }
 
 // pluginStop 停止一个插件（按端口结束进程）。
