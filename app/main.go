@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	appVersion  = "v3.20.1"
+	appVersion  = "v3.20.2"
 	coreVersion = "v1.2.0"
 	appTitle    = "ProxyDeck · 多平台代理控制台"
 )
