@@ -2805,12 +2805,25 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
               </div>
 
+              <!-- 键位组合 屏体 = 信息区：键数与首键脸谱，甲板做增删 -->
+              <div class="pt-sc-body keymap" data-body="keymap">
+                <div class="sc-unified">
+                  <div class="run-line">
+                    <span class="pt-dot grn" data-dot="kmRun"><span class="run-name">键位组合 · KEYMAP</span><b></b></span>
+                  </div>
+                  <div class="sh-rows">
+                    <span class="sh-k">键数</span><span class="sh-v" id="kmScKeys">—</span>
+                    <span class="sh-k">首键</span><span class="sh-v" id="kmScFirst">—</span>
+                  </div>
+                </div>
+              </div>
+
             </div>
             <!-- 悬停详情层：鼠标悬停模型键帽时接管上屏（LCD 同风格） -->
             <div class="pt-sc-hover" id="scHover" aria-hidden="true"></div>
           </div>
 
-          <!-- ========== 四颗模式键（COMMAND/TUANJIE 为双职责键，再按一次翻副页） ========== -->
+          <!-- ========== 模式键（1-4 自动：按 keyMap.v1 映射由 rebuildKeys 增删节点渲染） ========== -->
           <div class="pt-keys" role="radiogroup" aria-label="甲板">
             <button type="button" class="pt-key" role="radio" data-mode="cmd" aria-checked="true"><span class="dual-key"><b>COMMAND</b><i>⇄ B.AI</i></span></button>
             <button type="button" class="pt-key" role="radio" data-mode="tj" aria-checked="false" tabindex="-1"><span class="dual-key"><b>TUANJIE</b><i>⇄ COMATE</i></span></button>
@@ -3414,43 +3427,15 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
                 <div class="pt-div"></div>
 
-                <!-- B类：模式键供应商显隐（纯 UI，localStorage 持久化；B.AI 默认隐藏，代码零删除） -->
+                <!-- B类键位自由组合：配置进独立子页，设置页只留入口行 -->
                 <div class="pt-subhead"><span class="pt-silk sm">模式键供应商 · PROVIDERS</span>
-                  <span class="pt-val">退役/不用的一路可隐藏 · 关 GUI 重开仍在</span></div>
+                  <span class="pt-val">每键挂哪几张脸、键数1-4自动 · 关 GUI 重开仍在</span></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
-                    <div class="t">B.AI（COMMAND 副页 · 8891）</div>
-                    <div class="s">免费模型已退役，默认隐藏；打开后入口与矩阵恢复如前</div>
+                    <div class="t">键位供应商组合</div>
+                    <div class="s">每键可挂1..N张脸，键数按映射自动1-4个；B.AI默认不在任何键下，可加回</div>
                   </div>
-                  <button type="button" class="pt-sw" role="switch" aria-checked="false" data-sw="prov-bai"
-                          aria-label="B.AI 显隐"><span class="i"></span><span class="o"></span><span class="k"></span></button>
-                </div></div>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t">COMATE（TUANJIE 副页 · 8786）</div>
-                    <div class="s">关闭后 TUANJIE 键回单脸，甲板/上屏/矩阵不再展示与请求</div>
-                  </div>
-                  <button type="button" class="pt-sw" role="switch" aria-checked="true" data-sw="prov-comate"
-                          aria-label="COMATE 显隐"><span class="i"></span><span class="o"></span><span class="k"></span></button>
-                </div></div>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t">QODER（WORKBUDDY 副页 · 8785）</div>
-                    <div class="s">关闭后 WORKBUDDY 键回单脸，甲板/上屏/矩阵不再展示与请求</div>
-                  </div>
-                  <button type="button" class="pt-sw" role="switch" aria-checked="true" data-sw="prov-qoder"
-                          aria-label="QODER 显隐"><span class="i"></span><span class="o"></span><span class="k"></span></button>
-                </div></div>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t">VIBEX（独立键 · 8790）</div>
-                    <div class="s">关闭后整键隐藏，甲板/上屏/矩阵不再展示与请求</div>
-                  </div>
-                  <button type="button" class="pt-sw" role="switch" aria-checked="true" data-sw="prov-ext"
-                          aria-label="VIBEX 显隐"><span class="i"></span><span class="o"></span><span class="k"></span></button>
+                  <button type="button" class="ibtn2" id="keymapCfgBtn" title="键位供应商自由组合：每键增删脸、可增删键（1-4自动）"> ⇗ 配置…</button>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -3779,6 +3764,29 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm">被动观测 · PASSIVE</span></div>
                 <div class="if-list" id="wtPassive"><div class="if-empty">// 读取中…</div></div>
+               </div></div>
+              </div>
+
+              <!-- —————— 键位供应商组合子页 = 操作区（设置页入口进，返回回设置）—————— -->
+              <div class="pt-deck sub" data-deck="keymap">
+               <div class="pt-deck-scroll"><div class="inner fill">
+                <div class="pt-row"><div class="pt-rowline">
+                  <button type="button" class="ibtn2" id="kmBack" title="返回设置页（直接按「设置」键或 Esc 同样可退）">← 返回</button>
+                  <div class="pt-label">
+                    <div class="t">键位供应商组合 · KEYMAP</div>
+                    <div class="s">每键挂1..N张脸，键数按映射自动1-4个；B.AI默认不在任何键下，可加回；改完立即生效并落盘</div>
+                  </div>
+                </div></div>
+                <div class="pt-div"></div>
+                <div id="kmKeys"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t">键数 1-4 自动</div>
+                    <div class="s">增删键只增删键行节点，不藏整键；鼓轮/传送带槽位不动</div>
+                  </div>
+                  <button type="button" class="ibtn2" id="kmAddKey" title="新增一键（最多4键）">＋ 添加键</button>
+                  <button type="button" class="ibtn2" id="kmReset" title="回到默认映射（B.AI不在任何键下）">恢复默认</button>
+                </div></div>
                </div></div>
               </div>
 
@@ -4428,7 +4436,7 @@ var PT_I18N = {
 
   /* ══════════════════ 3. 状态与模式 ══════════════════ */
   var st = { mode: 'cmd', soundSet: 1 };
-  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'ext', 'media', 'water'];
+  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'ext', 'media', 'water', 'keymap'];
   /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；tj 的副页是 COMATE；cb 的副页是 Qoder） */
   var ALT_MODE = { cmd: 'bai', bai: 'cmd', tj: 'comate', comate: 'tj', cb: 'qoder', qoder: 'cb' };
   /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
@@ -4437,52 +4445,120 @@ var PT_I18N = {
      cell 的 --y 与 children 序号一致）。顺序即终态：主页 COMMAND 开头，第 8 格（idx7）为第 8 供应商预留
      （无 mode 映射，路过保持上一位置），设置 idx8，媒体路由 idx9；后来者只填预留格，不调顺序。 */
   var DRUM_IDX = { cmd: 0, bai: 1, tj: 2, comate: 3, cb: 4, qoder: 5, ext: 6, set: 8, media: 9 };
-  /* 实体键面子记忆：COMMAND/TUANJIE/WORKBUDDY 各有两张脸（COMMAND/B.AI、TUANJIE/COMATE、WORKBUDDY/QODER）。
-     在哪张脸上离开，键帽就保持那张脸的名字，从别的页再按它也回到那张脸（点 TUANJIE 再回来
-     不能落回 COMMAND ——「从什么界面离开，就保持什么界面」） */
+  /* 实体键面子记忆：每物理键记住离开时的那张脸（1-4 键动态，索引记忆；
+     单脸键恒显示该脸，多脸键在离开时的那张脸上保持键名）。 */
   var keyFace = { cmd: 'cmd', tj: 'tj', cb: 'cb' };
-  function faceOf(keyMode) { return keyFace[keyMode] || keyMode; }
+  var keyFaceByIdx = {};
+  function faceOf(keyMode) {
+    var idx = -1;
+    try { idx = keyIdxOf(keyMode); } catch (e) { idx = -1; }
+    if (idx >= 0) { var ff = null; try { ff = faceOfKey(idx); } catch (e2) {} return ff || keyMode; }
+    return keyFace[keyMode] || keyMode;
+  }
   function noteFace(m) {
+    try {
+      var idx = keyIdxOf(m);
+      if (idx >= 0) keyFaceByIdx[idx] = m;
+    } catch (e) {}
     Object.keys(ALT_MODE).forEach(function (h) {
       if (!document.querySelector('.pt-key[data-mode="' + h + '"]')) return;
       if (m === h || m === ALT_MODE[h]) keyFace[h] = m;
     });
   }
-  /* ═══ B类：模式键供应商显隐（纯 UI，localStorage 持久化，默认 B.AI 隐藏）═══
-     键：provVis.v1 = {bai,comate,qoder,ext}；缺键/坏值按默认值补齐。
-     引擎层只读此键做绘制与切换门控，写操作由业务层开关回调经 window.__provSet 进入。 */
-  var PROV_DEF = { bai: false, comate: true, qoder: true, ext: true };
-  var provCache = null;
-  function provGet() {
-    if (provCache) return provCache;
-    var c = null;
-    try { c = JSON.parse(localStorage.getItem('provVis.v1') || 'null'); } catch (e) { c = null; }
-    provCache = { bai: PROV_DEF.bai, comate: PROV_DEF.comate, qoder: PROV_DEF.qoder, ext: PROV_DEF.ext };
-    if (c && typeof c === 'object') {
-      ['bai', 'comate', 'qoder', 'ext'].forEach(function (k) {
-        if (typeof c[k] === 'boolean') provCache[k] = c[k];
-      });
+  /* ═══ B类键位自由组合（纯 UI，localStorage 持久化，默认 B.AI 不在任何键下）═══
+     键：keyMap.v1 = [[faces...],...]，1-4 键，每键 1..N 张脸；脸名仅限 7 供应商。
+     旧 provVis.v1 无论缺失/存在一律按默认映射解释，不读不迁，无弹窗。
+     引擎层只读此键做绘制与切换门控，写操作由配置子页经 window.__keymapSet 进入；
+     window.__provGet/__provSet 保留为兼容垫（派生布尔值，旧调用点照常工作）。 */
+  var SUP_FACES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext'];
+  var SUP_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX' };
+  var KEYMAP_DEF = [['cmd'], ['tj', 'comate'], ['cb', 'qoder'], ['ext']];
+  var KEYMAP_KEY = 'keyMap.v1';
+  function keyMapClone(m) { return m.map(function (k) { return k.slice(); }); }
+  function keyMapValid(m) {
+    if (!Array.isArray(m) || m.length < 1 || m.length > 4) return false;
+    var seen = {};
+    for (var ki = 0; ki < m.length; ki++) {
+      var kk = m[ki];
+      if (!Array.isArray(kk) || !kk.length) return false;
+      for (var kj = 0; kj < kk.length; kj++) {
+        if (SUP_FACES.indexOf(kk[kj]) < 0) return false;
+        if (seen[kk[kj]]) return false;
+        seen[kk[kj]] = true;
+      }
     }
-    return provCache;
+    return true;
+  }
+  var keyMapCache = null;
+  function keyMapGet() {
+    if (keyMapCache) return keyMapCache;
+    var c = null;
+    try { c = JSON.parse(localStorage.getItem(KEYMAP_KEY) || 'null'); } catch (e) { c = null; }
+    if (!keyMapValid(c)) c = keyMapClone(KEYMAP_DEF);
+    keyMapCache = c;
+    return keyMapCache;
+  }
+  function keyMapSet(m) {
+    if (!keyMapValid(m)) return false;
+    keyMapCache = keyMapClone(m);
+    try { localStorage.setItem(KEYMAP_KEY, JSON.stringify(keyMapCache)); } catch (e) {}
+    rebuildKeys();
+    paint();
+    return true;
+  }
+  function keyIdxOf(m) {
+    var km = keyMapGet();
+    for (var qi = 0; qi < km.length; qi++) if (km[qi].indexOf(m) >= 0) return qi;
+    return -1;
+  }
+  function faceOfKey(qi) {
+    var km = keyMapGet();
+    var faces = km[qi];
+    if (!faces || !faces.length) return null;
+    var f = keyFaceByIdx[qi];
+    if (f && faces.indexOf(f) >= 0) return f;
+    return faces[0];
+  }
+  function provGet() {
+    return { bai: isMapped('bai'), comate: isMapped('comate'), qoder: isMapped('qoder'), ext: isMapped('ext') };
   }
   function provEnabled(m) {
-    var c = provGet();
-    if (m === 'bai') return c.bai;
-    if (m === 'comate') return c.comate;
-    if (m === 'qoder') return c.qoder;
-    if (m === 'ext') return c.ext;
+    if (SUP_FACES.indexOf(m) >= 0) return isMapped(m);
     return true;
+  }
+  function isMapped(m) {
+    if (SUP_FACES.indexOf(m) < 0) return true;
+    return keyIdxOf(m) >= 0;
   }
   window.__provGet = provGet;
   window.__provSet = function (cfg) {
-    provCache = { bai: PROV_DEF.bai, comate: PROV_DEF.comate, qoder: PROV_DEF.qoder, ext: PROV_DEF.ext };
+    if (!cfg || typeof cfg !== 'object') { paint(); return true; }
+    var km = keyMapClone(keyMapGet());
+    var homeOf = { bai: 'cmd', comate: 'tj', qoder: 'cb', ext: 'ext' };
     ['bai', 'comate', 'qoder', 'ext'].forEach(function (k) {
-      if (cfg && typeof cfg[k] === 'boolean') provCache[k] = cfg[k];
+      if (typeof cfg[k] !== 'boolean') return;
+      var idx = -1;
+      for (var ai = 0; ai < km.length; ai++) if (km[ai].indexOf(k) >= 0) idx = ai;
+      if (cfg[k] && idx < 0) {
+        var home = homeOf[k], hi = -1;
+        for (var hi2 = 0; hi2 < km.length; hi2++) if (km[hi2].indexOf(home) >= 0) hi = hi2;
+        if (k === 'ext' && hi < 0 && km.length < 4) km.push([k]);
+        else if (hi >= 0) km[hi].push(k);
+        else if (km.length) km[0].push(k);
+      } else if (!cfg[k] && idx >= 0) {
+        km[idx] = km[idx].filter(function (f) { return f !== k; });
+        if (!km[idx].length) {
+          if (km.length > 1) km.splice(idx, 1);
+          else km[idx] = [homeOf[k] === k ? 'cmd' : homeOf[k]];
+        }
+      }
     });
-    try { localStorage.setItem('provVis.v1', JSON.stringify(provCache)); } catch (e) {}
-    paint();
+    if (!keyMapValid(km)) return false;
+    return keyMapSet(km);
   };
-  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, comate: 7, media: 8, water: 9 };
+  window.__keymapGet = function () { return keyMapClone(keyMapGet()); };
+  window.__keymapSet = keyMapSet;
+  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, comate: 7, media: 8, water: 9, keymap: 10 };
   /* 上屏 Wheel 音量条只亮着六个主页可见；set/water/media 里它挡住屏体右侧读数 */
   var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate', 'qoder'];
   /* lx（灵犀+设置）与 no 共用第 4 颗键：已停在 no 时再点该键进 lx（双职责），
@@ -4540,6 +4616,105 @@ var PT_I18N = {
     b.textContent = value == null ? '' : value;
   }
 
+  /* ═══ B类键位自由组合：键行按映射自动 1-4 个，增删只增删 DOM 节点（禁 display:none 藏整键）═══ */
+  function keyBtnFaces(btn) {
+    var idx = +(btn.dataset.keyidx || 0);
+    var km = keyMapGet();
+    if (km[idx]) return km[idx];
+    var raw = (btn.dataset.faces || btn.dataset.mode || '').split(',');
+    return raw.filter(function (x) { return !!x; });
+  }
+  function bindKeyBtn(btn) {
+    btn.addEventListener('click', function () {
+      var idx = +(btn.dataset.keyidx || 0);
+      var faces = keyMapGet()[idx] || keyBtnFaces(btn);
+      if (!faces || !faces.length) return;
+      /* 在本键某张脸上 → 轮切下一张； elsewhere → 回本键记住的那张脸 */
+      if (faces.indexOf(st.mode) >= 0) {
+        var ni = (faces.indexOf(st.mode) + 1) % faces.length;
+        selectMode(faces[ni]);
+        return;
+      }
+      selectMode(faceOfKey(idx) || faces[0]);
+    });
+    btn.addEventListener('keydown', function (ev) {
+      var idx2 = +(btn.dataset.keyidx || 0);
+      var faces2 = keyMapGet()[idx2] || keyBtnFaces(btn);
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        /* 阻断冒泡：全局「空格=点火/停堆」快捷键不能跟着触发（双动作 bug） */
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (!faces2 || !faces2.length) return;
+        if (faces2.indexOf(st.mode) >= 0) {
+          var nj = (faces2.indexOf(st.mode) + 1) % faces2.length;
+          selectMode(faces2[nj]);
+          return;
+        }
+        selectMode(faceOfKey(idx2) || faces2[0]);
+        return;
+      }
+      var d = { ArrowLeft: -1, ArrowRight: 1 }[ev.key];
+      if (!d) return;
+      ev.preventDefault();
+      /* 方向键跳过未映射页（最多绕一圈）；keymap 在 MODES 尾，Esc/返回回设置 */
+      var i = MODES.indexOf(st.mode);
+      for (var n = 0; n < MODES.length; n++) {
+        i += d;
+        if (i < 0 || i >= MODES.length) return;
+        if (provEnabled(MODES[i])) break;
+      }
+      selectMode(MODES[i]);
+      var target = MODES[i];
+      var found = null;
+      $$('.pt-key').forEach(function (b) {
+        var bi = +(b.dataset.keyidx || 0);
+        var bf = keyMapGet()[bi] || [];
+        if (bf.indexOf(target) >= 0) found = b;
+        else if (!found && b.dataset.mode === target) found = b;
+      });
+      if (found) found.focus();
+    });
+  }
+  function rebuildKeys() {
+    var wrap = document.querySelector('.pt-keys');
+    if (!wrap) return;
+    var km = keyMapGet();
+    var facesSig = km.map(function (k) { return k.join('+'); }).join('|');
+    var have = wrap.querySelectorAll('.pt-key').length;
+    if (have === km.length && wrap.__kmSig === facesSig) return;
+    wrap.__kmSig = facesSig;
+    while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
+    Object.keys(keyFaceByIdx).forEach(function (k) {
+      if (+k >= km.length) delete keyFaceByIdx[k];
+    });
+    km.forEach(function (faces, idx) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pt-key';
+      b.setAttribute('role', 'radio');
+      b.dataset.mode = faces[0];
+      b.dataset.keyidx = String(idx);
+      b.dataset.faces = faces.join(',');
+      b.setAttribute('aria-checked', 'false');
+      b.tabIndex = -1;
+      var sp = document.createElement('span');
+      if (faces.length > 1) sp.className = 'dual-key';
+      var main = document.createElement('b');
+      main.textContent = SUP_LABEL[faceOfKey(idx) || faces[0]] || faces[0];
+      sp.appendChild(main);
+      if (faces.length > 1) {
+        var sub0 = document.createElement('i');
+        var cur0 = faceOfKey(idx) || faces[0];
+        var nxt0 = faces[(faces.indexOf(cur0) + 1) % faces.length];
+        sub0.textContent = '⇄ ' + (SUP_LABEL[nxt0] || nxt0);
+        sp.appendChild(sub0);
+      }
+      b.appendChild(sp);
+      bindKeyBtn(b);
+      wrap.appendChild(b);
+    });
+  }
+
   function paint() {
     var m = st.mode;
     /* Wheel 音量条只属于五个主页（cmd/tj/cb/bai/comate）：设置与子页面里它会盖住屏体右侧读数 */
@@ -4584,37 +4759,40 @@ var PT_I18N = {
       if (off) cell.setAttribute('aria-disabled', 'true');
       else cell.removeAttribute('aria-disabled');
     });
+    rebuildKeys();
     $$('.pt-key').forEach(function (k) {
-      var keyMode = k.dataset.mode;
-      var alt = ALT_MODE[keyMode];
-      /* B类供应商显隐：VIBEX 整键隐藏；副页禁用时主键回单脸（副行不显示） */
-      if (keyMode === 'ext' && !provEnabled('ext')) { k.style.display = 'none'; }
-      else { k.style.display = ''; }
-      /* on：当前真停在原主名所在面；onAlt：当前停在这颗键的副页（bai 无物理键，宿主键代持按压态） */
-      var on = keyMode === m;
-      var onAlt = !on && alt === m;
-      k.setAttribute('aria-checked', (on || onAlt) ? 'true' : 'false');
-      k.tabIndex = on || onAlt ? 0 : -1;
-      /* 键帽脸名：显示这张键离开时所在的那个面——在 B.AI 离开去 TUANJIE，
-         键帽仍写 B.AI；回到 cmd 主页后才换回 COMMAND */
-      var face = faceOf(keyMode);
-      if (alt && !provEnabled(alt)) face = keyMode; /* 禁用副页时强制回主键脸 */
-      var faceAlt = face !== keyMode;
-      k.classList.toggle('on-alt', faceAlt);
+      var idx = +(k.dataset.keyidx || 0);
+      var km = keyMapGet();
+      var faces = km[idx] || keyBtnFaces(k);
+      if (!faces || !faces.length) return;
+      k.dataset.mode = faces[0];
+      k.dataset.faces = faces.join(',');
+      /* 硬约束：键行禁 display:none 藏整键——增删只增删节点，这里一律占位显示 */
+      k.style.display = '';
+      var on = faces.indexOf(m) >= 0;
+      k.setAttribute('aria-checked', on ? 'true' : 'false');
+      k.tabIndex = on ? 0 : -1;
+      /* 键帽脸名：多脸键显示离开时的那张脸，副行显示下一张（再点一次去向） */
+      var cur = faces.indexOf(m) >= 0 ? m : (faceOfKey(idx) || faces[0]);
+      var nxt = faces[(faces.indexOf(cur) + 1) % faces.length];
+      var isAlt = cur !== faces[0];
+      k.classList.toggle('on-alt', faces.length > 1 && isAlt);
+      k.dataset.curFace = cur;
       var label = k.querySelector('span');
-      if (label) {
-        /* 双职责键（dual-key）：主名在 <b>，副行 <i> 显示"再点一次去另一张脸" */
-        var dual = label.classList.contains('dual-key');
-        var main = dual ? label.querySelector('b') : label;
-        var orig = k.dataset.origLabel || (k.dataset.origLabel = main.textContent);
-        main.textContent = faceAlt ? ALT_LABEL[keyMode] : orig;
-        if (dual) {
-          var sub = label.querySelector('i');
-          if (sub) {
-            if (alt && !provEnabled(alt)) { sub.style.display = 'none'; }
-            else { sub.style.display = ''; sub.textContent = faceAlt ? '⇄ ' + orig : '⇄ ' + (ALT_LABEL[keyMode] || ''); }
-          }
-        }
+      if (!label) {
+        label = document.createElement('span');
+        k.appendChild(label);
+      }
+      if (faces.length > 1) label.className = 'dual-key';
+      else label.className = '';
+      label.innerHTML = '';
+      var bEl = document.createElement('b');
+      bEl.textContent = SUP_LABEL[cur] || cur;
+      label.appendChild(bEl);
+      if (faces.length > 1) {
+        var iEl = document.createElement('i');
+        iEl.textContent = '⇄ ' + (SUP_LABEL[nxt] || nxt);
+        label.appendChild(iEl);
       }
     });
     /* 音效旋钮 */
@@ -4631,12 +4809,11 @@ var PT_I18N = {
 
   /* ══════════════════ 6. 模式切换 ══════════════════ */
   function selectMode(m) {
-    /* B类供应商显隐：禁用的副页/独立页不可进入，各自回主键（ext 回 cmd） */
-    if (m === 'bai' || m === 'comate' || m === 'qoder' || m === 'ext') {
-      if (!provEnabled(m)) {
-        m = (m === 'bai') ? 'cmd' : (m === 'comate') ? 'tj' : (m === 'qoder') ? 'cb' : 'cmd';
-        if (m === st.mode) { paint(); return; }
-      }
+    /* B类键位自由组合：未映射到任何键的供应商脸不可进入，回第一键首脸 */
+    if (SUP_FACES.indexOf(m) >= 0 && !isMapped(m)) {
+      var fb = (keyMapGet()[0] || ['cmd'])[0] || 'cmd';
+      m = fb;
+      if (m === st.mode) { paint(); return; }
     }
     if (m === st.mode) return;
     st.mode = m;
@@ -4651,48 +4828,8 @@ var PT_I18N = {
     /* 第 30 轮：键面翻面后蓝灯跟随当前面（noteFace 改了 on-alt → 灯须重算） */
     if (typeof window.refreshKeyLights === 'function') window.refreshKeyLights();
   }
-  $$('.pt-key[data-mode]').forEach(function (k) {
-    k.addEventListener('click', function () {
-      /* 单击有副页的键：当前已在该键或它的副页上 → 翻副页/翻回；
-         否则回到这颗键离开时的那张脸。COMMAND ⇄ B.AI 即此机制
-         B类供应商显隐：副页禁用时不翻页，只回主键脸 */
-      var alt = ALT_MODE[k.dataset.mode];
-      if (alt && !provEnabled(alt)) { selectMode(k.dataset.mode); return; }
-      if (alt && (k.dataset.mode === st.mode || alt === st.mode)) {
-        /* 当前在副页（alt===st.mode）→ 回主键；当前在主页（k.dataset.mode===st.mode）→ 去副页 */
-        selectMode(alt === st.mode ? k.dataset.mode : alt);
-        return;
-      }
-      selectMode(faceOf(k.dataset.mode));
-    });
-    k.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Enter' || ev.key === ' ') {
-        /* 阻断冒泡：全局「空格=点火/停堆」快捷键不能跟着触发（双动作 bug） */
-        ev.preventDefault();
-        ev.stopPropagation();
-        var altK = ALT_MODE[k.dataset.mode];
-        if (altK && !provEnabled(altK)) { selectMode(k.dataset.mode); return; }
-        if (altK && (k.dataset.mode === st.mode || altK === st.mode)) {
-          selectMode(altK === st.mode ? k.dataset.mode : altK);
-          return;
-        }
-        selectMode(faceOf(k.dataset.mode));
-        return;
-      }
-      var d = { ArrowLeft: -1, ArrowRight: 1 }[ev.key];
-      if (!d) return;
-      ev.preventDefault();
-      /* B类供应商显隐：方向键跳过禁用页（最多绕一圈） */
-      var i = MODES.indexOf(st.mode);
-      for (var n = 0; n < MODES.length; n++) {
-        i += d;
-        if (i < 0 || i >= MODES.length) return;
-        if (provEnabled(MODES[i])) break;
-      }
-      selectMode(MODES[i]);
-      $$('.pt-key').forEach(function (b) { if (b.dataset.mode === MODES[i]) b.focus(); });
-    });
-  });
+  /* B类键位自由组合：键绑定由 rebuildKeys/bindKeyBtn 在重建时挂载（轮切多脸），此处仅做首屏重建 */
+  rebuildKeys();
 
   /* ══════════════════ 7. I/O 开关（业务回调版）══════════════════ */
   var swHandlers = {};
@@ -8454,10 +8591,13 @@ var PT_I18N = {
     $$('.pt-key[data-mode]').forEach(function (k) {
       var keyMode = k.dataset.mode;
       var selected = k.getAttribute('aria-checked') === 'true';
-      /* 第 30 轮（用户裁决）：蓝灯跟随键面当前页——键面显 COMATE 就看 comate，
-         显 PROBE/注水检测就看 tuanjie。面由 on-alt 类标（faceAlt 切换处已刷灯）。 */
-      var isAlt = k.classList.contains('on-alt');
-      var face = isAlt && ALT_MODE[keyMode] ? ALT_MODE[keyMode] : keyMode;
+      /* B类键位自由组合：蓝灯跟随键面当前脸（paint 已写 dataset.curFace）；旧单脸键回退 ALT_MODE */
+      var face = k.dataset.curFace || null;
+      if (!face) {
+        var isAlt = k.classList.contains('on-alt');
+        var altMap = (typeof window !== 'undefined' && window.ALT_MODE) || (typeof ALT_MODE !== 'undefined' ? ALT_MODE : null);
+        face = (isAlt && altMap && altMap[keyMode]) ? altMap[keyMode] : keyMode;
+      }
       var V = PV[face];
       var on = face === 'cmd'
         ? (live ? live.core === true : (S.phase === 'running' || S.phase === 'external'))
@@ -9246,8 +9386,7 @@ var PT_I18N = {
     $$('[data-i18n]').forEach(function (el) {
       el.textContent = t(el.getAttribute('data-i18n'));
     });
-    /* 键面缓存重置：paint() 首次渲染把 .pt-key 键名存进 dataset.origLabel 并回写，
-       不清缓存则切换语言后被旧键名打回（设置→Settings→设置） */
+    /* 键面无缓存：paint() 按 keyMap.v1 用 SUP_LABEL 现算键名（旧 origLabel 缓存已删，留此行清残留） */
     $$('.pt-key[data-mode]').forEach(function (k) { delete k.dataset.origLabel; });
     /* 铭牌 aria-label = 译名 + 蚀刻版本（版本号不进字典，随蚀刻值走） */
     $$('.pt-nameplate').forEach(function (np) {
@@ -10186,32 +10325,154 @@ var PT_I18N = {
       });
     });
 
-    /* —— B类：模式键供应商显隐开关（纯 UI，localStorage 持久化，默认 B.AI 关） —— */
-    (function bindProvSwitches() {
-      if (typeof window.__provGet !== 'function' || typeof window.__provSet !== 'function') return;
-      var cur = window.__provGet();
-      var nameOf = { bai: 'B.AI', comate: 'COMATE', qoder: 'QODER', ext: 'VIBEX' };
-      var homeOf = { bai: 'cmd', comate: 'tj', qoder: 'cb', ext: 'cmd' };
-      ['bai', 'comate', 'qoder', 'ext'].forEach(function (k) {
-        PTApp.sw('prov-' + k, !!cur[k]);
-        PTApp.onSwitch('prov-' + k, function (on) {
-          var next = window.__provGet();
-          next[k] = !!on;
-          window.__provSet(next);
-          PTApp.sw('prov-' + k, !!on);
-          /* 当前正停在被关掉的页 → 回各自主键 */
-          try {
-            if (!on && PTApp.mode() === k) PTApp.selectMode(homeOf[k]);
-            else PTApp.paint();
-          } catch (e) {}
-          try {
-            logInto($('logStream'), 'sys', '供应商显隐：' + nameOf[k] + (on ? '已显示' : '已隐藏') + '（配置已持久化）');
-          } catch (e) {}
-          return true;
+    /* —— B类键位自由组合：独立配置子页（设置页只留入口行） —— */
+    (function bindKeymapPage() {
+      var KM_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX' };
+      var KM_PORT = { cmd: '55990', tj: '8788', comate: '8786', cb: '8787', qoder: '8785', bai: '8891', ext: '8790' };
+      var KM_ALL = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext'];
+      function kmGet() {
+        try {
+          if (typeof window.__keymapGet === 'function') return window.__keymapGet();
+        } catch (e) {}
+        return [['cmd'], ['tj', 'comate'], ['cb', 'qoder'], ['ext']];
+      }
+      function kmUnmapped(km) {
+        var used = {};
+        km.forEach(function (k) { (k || []).forEach(function (f) { used[f] = true; }); });
+        return KM_ALL.filter(function (f) { return !used[f]; });
+      }
+      function kmFallback(km) { return ((km[0] || ['cmd'])[0] || 'cmd'); }
+      function kmEnsureVisible() {
+        /* 当前停留页被删/被移出映射 → 回第一键首脸（selectMode 门控只拦进入，不拦滞留） */
+        try {
+          var km = kmGet();
+          var cur = PTApp.mode();
+          var ok = false;
+          km.forEach(function (k) { if ((k || []).indexOf(cur) >= 0) ok = true; });
+          if (!ok && KM_ALL.indexOf(cur) >= 0) PTApp.selectMode(kmFallback(km));
+          else PTApp.paint();
+        } catch (e) {}
+      }
+      window.renderKeymapPage = function () {
+        var box = $('kmKeys');
+        if (!box) return;
+        var km = kmGet();
+        var unmapped = kmUnmapped(km);
+        try {
+          var kEl = $('kmScKeys');
+          if (kEl) kEl.textContent = km.length + ' 键';
+          var fEl = $('kmScFirst');
+          if (fEl) fEl.textContent = (km[0] || []).map(function (f) { return KM_LABEL[f] || f; }).join(' + ') || '—';
+          if (typeof PTApp !== 'undefined' && PTApp.dot) PTApp.dot('kmRun', true, false, km.length + '键');
+        } catch (e) {}
+        box.innerHTML = km.map(function (faces, idx) {
+          var chips = (faces || []).map(function (f) {
+            var dis = (faces.length <= 1) ? ' disabled title="每键至少留 1 张脸（要整键删除请点删键）"' : '';
+            return '<span class="acc-tag">' + escHtml(KM_LABEL[f] || f) +
+              ' <button type="button" class="pv-x" data-km-delface="' + idx + ':' + f + '"' + dis + ' title="移除该脸">✕</button></span>';
+          }).join(' ');
+          var addRow = unmapped.length
+            ? '<select class="pt-field" data-km-addsel="' + idx + '" title="加入本键的供应商脸（仅显示未上键的）">' +
+              unmapped.map(function (f) {
+                return '<option value="' + f + '">' + escHtml((KM_LABEL[f] || f) + ' · ' + KM_PORT[f]) + '</option>';
+              }).join('') + '</select>' +
+              ' <button type="button" class="ibtn2 accent" data-km-addface="' + idx + '" title="把选中脸加入本键">＋ 添加</button>'
+            : '<span class="if-empty">全部供应商已上键</span>';
+          var delDis = km.length <= 1 ? ' disabled title="至少保留 1 键"' : '';
+          return '<div class="mx-card"><div class="pv-line"><span class="mx-name">第' + (idx + 1) + '键 · ' + faces.length + '张脸</span>' +
+            '<span class="pv-host">' + escHtml((faces || []).map(function (f) { return KM_LABEL[f] || f; }).join(' + ')) + '</span>' +
+            '<button type="button" class="ibtn2" data-km-delkey="' + idx + '"' + delDis + ' title="删除整键（键内脸须先 leaves？不：删键即删去其脸映射，未映射脸回待加池）">删键</button></div>' +
+            '<div class="pv-models">' + chips + '</div>' +
+            '<div class="acc-f-actions" style="margin-top:6px">' + addRow + '</div></div>';
+        }).join('') +
+          (kmUnmapped(km).indexOf('bai') >= 0
+            ? '<p class="acc-f-help" style="margin:6px 0 0">B.AI 默认不在任何键下（退役态保留，后端不动）；要加回就在某键下拉里选 B.AI · 8891。</p>'
+            : '');
+        box.querySelectorAll('[data-km-delface]').forEach(function (b) {
+          b.onclick = function () {
+            if (b.disabled) return;
+            var parts = (b.dataset.kmDelface || '').split(':');
+            var ki = +parts[0], face = parts[1];
+            var cur = kmGet();
+            if (!cur[ki] || cur[ki].length <= 1) { toast('err', '键位组合', '每键至少留 1 张脸'); return; }
+            cur[ki] = cur[ki].filter(function (f) { return f !== face; });
+            if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
+              try { logInto($('logStream'), 'sys', '键位组合：第' + (ki + 1) + '键移除 ' + (KM_LABEL[face] || face) + '（配置已持久化）'); } catch (e) {}
+              kmEnsureVisible();
+              window.renderKeymapPage();
+            } else toast('err', '键位组合', '移除失败（映射非法？）');
+          };
         });
-      });
-      /* 启动即按持久化配置绘制一次（默认 B.AI 隐藏），保证首屏即终态 */
-      try { PTApp.paint(); } catch (e) {}
+        box.querySelectorAll('[data-km-addface]').forEach(function (b) {
+          b.onclick = function () {
+            var ki = +(b.dataset.kmAddface || 0);
+            var sel = box.querySelector('[data-km-addsel="' + ki + '"]');
+            var face = sel ? sel.value : '';
+            if (!face) return;
+            var cur = kmGet();
+            var used = {};
+            cur.forEach(function (k) { (k || []).forEach(function (f) { used[f] = true; }); });
+            if (used[face]) { toast('err', '键位组合', (KM_LABEL[face] || face) + ' 已在别的键下（一脸一键）'); return; }
+            cur[ki].push(face);
+            if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
+              try { logInto($('logStream'), 'sys', '键位组合：第' + (ki + 1) + '键加入 ' + (KM_LABEL[face] || face) + '（配置已持久化）'); } catch (e) {}
+              kmEnsureVisible();
+              window.renderKeymapPage();
+            } else toast('err', '键位组合', '加入失败（映射非法？）');
+          };
+        });
+        box.querySelectorAll('[data-km-delkey]').forEach(function (b) {
+          b.onclick = function () {
+            if (b.disabled) return;
+            var ki = +(b.dataset.kmDelkey || 0);
+            var cur = kmGet();
+            if (cur.length <= 1) { toast('err', '键位组合', '至少保留 1 键'); return; }
+            var gone = cur[ki] || [];
+            cur.splice(ki, 1);
+            if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
+              try { logInto($('logStream'), 'sys', '键位组合：删除第' + (ki + 1) + '键（' + gone.map(function (f) { return KM_LABEL[f] || f; }).join('+') + '回待加池，配置已持久化）'); } catch (e) {}
+              kmEnsureVisible();
+              window.renderKeymapPage();
+            } else toast('err', '键位组合', '删键失败');
+          };
+        });
+        var addK = $('kmAddKey');
+        if (addK) {
+          addK.disabled = km.length >= 4 || !unmapped.length;
+          addK.title = km.length >= 4 ? '最多 4 键' : (!unmapped.length ? '全部供应商已上键，无脸可建新键' : '新增一键（把待加池第一张脸建成新键）');
+        }
+      };
+      var cfg = $('keymapCfgBtn');
+      if (cfg) cfg.onclick = function () { PTApp.selectMode('keymap'); };
+      var back = $('kmBack');
+      if (back) back.onclick = function () { PTApp.selectMode('set'); };
+      var addKey = $('kmAddKey');
+      if (addKey) addKey.onclick = function () {
+        var cur = kmGet();
+        if (cur.length >= 4) { toast('err', '键位组合', '最多 4 键'); return; }
+        var un = kmUnmapped(cur);
+        if (!un.length) { toast('err', '键位组合', '全部供应商已上键，无脸可建新键'); return; }
+        cur.push([un[0]]);
+        if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
+          try { logInto($('logStream'), 'sys', '键位组合：新增第' + cur.length + '键 [' + (KM_LABEL[un[0]] || un[0]) + ']（配置已持久化）'); } catch (e) {}
+          kmEnsureVisible();
+          window.renderKeymapPage();
+        }
+      };
+      var reset = $('kmReset');
+      if (reset) reset.onclick = function () {
+        var def = [['cmd'], ['tj', 'comate'], ['cb', 'qoder'], ['ext']];
+        if (typeof window.__keymapSet === 'function' && window.__keymapSet(def)) {
+          try { logInto($('logStream'), 'sys', '键位组合：已恢复默认（B.AI 不在任何键下，配置已持久化）'); } catch (e) {}
+          kmEnsureVisible();
+          window.renderKeymapPage();
+        }
+      };
+      /* 进子页即渲染一次；启动即按持久化映射绘制一次，保证首屏即终态 */
+      try {
+        window.renderKeymapPage();
+        PTApp.paint();
+      } catch (e) {}
     })();
 
     $('baseUrl').onclick = function () { copyText($('baseUrl').textContent, 'Base URL'); };
@@ -10268,7 +10529,7 @@ var PT_I18N = {
           if (location.hash === '#fax' && typeof window.ccFaxClose === 'function') { ccFaxClose(); return; }   /* 独立浮窗：Esc=关窗 */
           closeFaxOverlay(); return; }   /* 传真机子页：Esc 关层回原甲板（设置 / 注水） */
         if (document.querySelector('.modal-mask')) { closeModal(); return; }
-        if (curMode === 'water' || curMode === 'media') { PTApp.selectMode('set'); return; }
+        if (curMode === 'water' || curMode === 'media' || curMode === 'keymap') { PTApp.selectMode('set'); return; }
         if (curMode !== 'cmd') PTApp.selectMode('cmd');
       }
     });
@@ -10539,9 +10800,10 @@ var PT_I18N = {
   PTApp.onModeChange(function (m) {
     hideModelTip();
     curMode = m;
-    /* 子页面模式（注水检测 / 媒体转路由）不是插件甲板，进页面时刷自己的数据 */
+    /* 子页面模式（注水检测 / 媒体转路由 / 键位组合）不是插件甲板，进页面时刷自己的数据 */
     if (m === 'water') { loadWaterPage(); loadTuanjieAccounts(); return; } /* 被动观测数据同源 /accounts，即时刷一轮 */
     if (m === 'media') { loadMediaPage(); return; }
+    if (m === 'keymap') { try { window.renderKeymapPage(); } catch (e) {} return; }
     if (m === 'tj') { loadTuanjieAccounts(); loadTuanjieInflight(); loadTuanjieActivity(); } /* 进甲板即时刷，不等 3s tick */
     if (m !== 'cmd') refreshPluginView(m);
     else pollState();
