@@ -48,6 +48,7 @@ func (a *app) statsFile() string     { return filepath.Join(exeDir(), "stats.jso
 func (a *app) noticeFile() string    { return filepath.Join(exeDir(), "notice_dismissed.flag") }
 func (a *app) closeHintFile() string { return filepath.Join(exeDir(), "close_hint_dismissed.flag") }
 func (a *app) closeModeFile() string { return filepath.Join(exeDir(), "close_mode.txt") }
+func (a *app) keyMapFile() string    { return filepath.Join(exeDir(), "keymap.json") }
 func (a *app) baseURL() string       { return "http://" + net.JoinHostPort(a.host, a.port) }
 func (a *app) healthURL() string     { return a.baseURL() + "/health" }
 
@@ -78,6 +79,67 @@ func (a *app) setCloseMode(mode string) error {
 		return nil
 	}
 	return os.WriteFile(a.closeModeFile(), []byte(mode), 0o600)
+}
+
+// keyMapDef 默认键位映射（与 app/ui.html 的 KEYMAP_DEF 同源：B.AI 默认不在任何键下）。
+// 改默认映射时两处必须同步，否则首跑（无 keymap.json 时）前后端首屏不一致。
+var keyMapDef = [][]string{{"cmd"}, {"tj", "comate"}, {"cb", "qoder"}, {"ext"}}
+
+// keyMapFaceOK 脸名白名单（与 ui.html 的 SUP_FACES 同源）。
+var keyMapFaceOK = map[string]bool{
+	"cmd": true, "tj": true, "comate": true, "cb": true, "qoder": true, "bai": true, "ext": true,
+}
+
+// keyMapValid 键位映射形态校验（与 ui.html 的 keyMapValid 同口径）：
+// 1-4 键、每键 ≥1 脸、脸名白名单、一页一键（无重复）。
+// 前端子页写盘前已用同一口径验过，这里是后端权威复验（防手改文件与绕过）。
+func keyMapValid(m [][]string) bool {
+	if len(m) < 1 || len(m) > 4 {
+		return false
+	}
+	seen := make(map[string]bool)
+	for _, k := range m {
+		if len(k) < 1 {
+			return false
+		}
+		for _, f := range k {
+			if !keyMapFaceOK[f] {
+				return false
+			}
+			if seen[f] {
+				return false
+			}
+			seen[f] = true
+		}
+	}
+	return true
+}
+
+// keyMapGet 读盘：文件缺席/非法 → 返回默认映射 + saved=false
+// （前端此时保持 localStorage 快路值，绝不把快路值回写成文件——
+// 首跑无文件是正常态，不是错误）。
+func (a *app) keyMapGet() ([][]string, bool) {
+	b, err := os.ReadFile(a.keyMapFile())
+	if err != nil {
+		return keyMapDef, false
+	}
+	var m [][]string
+	if err := json.Unmarshal(b, &m); err != nil || !keyMapValid(m) {
+		return keyMapDef, false
+	}
+	return m, true
+}
+
+// keyMapSet 校验后落盘 0600（close_mode.txt 同口径）：raw 须是映射数组的 JSON。
+func (a *app) keyMapSet(raw string) error {
+	var m [][]string
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return err
+	}
+	if !keyMapValid(m) {
+		return errors.New("非法键位映射（1-4 键、每键 ≥1 页、页名须在白名单且一页一键）")
+	}
+	return os.WriteFile(a.keyMapFile(), []byte(raw), 0o600)
 }
 
 // applyCloseMode 执行关窗动作：tray=藏进托盘（托盘图标挂不上就不藏——藏了没图标
@@ -934,6 +996,23 @@ func (a *app) bindAll(w webview.WebView) {
 			return jsonErr(errors.New("未知关窗模式: " + mode))
 		}
 		if err := a.setCloseMode(mode); err != nil {
+			return jsonErr(err)
+		}
+		return jsonOK("已保存")
+	})
+	// 键位映射文件持久化（WebView2 无持久 profile，localStorage 随退出丢失，
+	// 故映射以 keymap.json 为准：无文件/非法 → ok:false，前端保持快路值且不回写；
+	// 每次改映射由前端透传，Go 侧权威复验后 0600 落盘）。
+	_ = w.Bind("ccKeyMapGet", func() string {
+		m, saved := a.keyMapGet()
+		if !saved {
+			return `{"ok":false,"msg":"no saved keymap"}`
+		}
+		b, _ := json.Marshal(map[string]any{"ok": true, "map": m})
+		return string(b)
+	})
+	_ = w.Bind("ccKeyMapSet", func(raw string) string {
+		if err := a.keyMapSet(strings.TrimSpace(raw)); err != nil {
 			return jsonErr(err)
 		}
 		return jsonOK("已保存")

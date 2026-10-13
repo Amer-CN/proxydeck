@@ -4465,10 +4465,12 @@ var PT_I18N = {
       if (m === h || m === ALT_MODE[h]) keyFace[h] = m;
     });
   }
-  /* ═══ B类键位自由组合（纯 UI，localStorage 持久化，默认 B.AI 不在任何键下）═══
+  /* ═══ B类键位自由组合（localStorage 快路＋keymap.json 文件为准，默认 B.AI 不在任何键下）═══
      键：keyMap.v1 = [[faces...],...]，1-4 键，每键 1..N 张脸；脸名仅限 7 供应商。
      旧 provVis.v1 无论缺失/存在一律按默认映射解释，不读不迁，无弹窗。
-     引擎层只读此键做绘制与切换门控，写操作由配置子页经 window.__keymapSet 进入；
+     引擎层只读此键做绘制与切换门控，写操作由配置子页经 window.__keymapSet 进入
+     （同步写快路＋透传桥落盘）；启动时业务层拉一次桥文件值经 window.__keymapApplyFile
+     覆盖快路（无文件时不调不回写，快路绝不覆盖文件值）；
      window.__provGet/__provSet 保留为兼容垫（派生布尔值，旧调用点照常工作）。 */
   var SUP_FACES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext'];
   var SUP_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX' };
@@ -4502,6 +4504,15 @@ var PT_I18N = {
     if (!keyMapValid(m)) return false;
     keyMapCache = keyMapClone(m);
     try { localStorage.setItem(KEYMAP_KEY, JSON.stringify(keyMapCache)); } catch (e) {}
+    /* 文件为准：每次改映射都透传桥落盘（0600 keymap.json，Go 侧权威复验）。
+       引擎 IIFE 看不见业务层的 call/HAS_BRIDGE，直调 window.cc 桥（WebView2 下为 Promise）；
+       无桥环境（file:// 无头）window.ccKeyMapSet 缺席即跳过，行为与原来一致。 */
+    try {
+      if (typeof window !== 'undefined' && window && typeof window.ccKeyMapSet === 'function') {
+        var _kmSave = window.ccKeyMapSet(JSON.stringify(keyMapCache));
+        if (_kmSave && typeof _kmSave.then === 'function') _kmSave.then(function () {}, function () {});
+      }
+    } catch (e) {}
     rebuildKeys();
     paint();
     return true;
@@ -4558,6 +4569,16 @@ var PT_I18N = {
   };
   window.__keymapGet = function () { return keyMapClone(keyMapGet()); };
   window.__keymapSet = keyMapSet;
+  /* 文件值应用口（启动加载专用）：与 keyMapSet 唯一差别是不写桥文件——
+     启动时文件值覆盖快路值，绝不能反过来把快路值回写成文件（无文件时调用方直接不调这里）。 */
+  window.__keymapApplyFile = function (m) {
+    if (!keyMapValid(m)) return false;
+    keyMapCache = keyMapClone(m);
+    try { localStorage.setItem(KEYMAP_KEY, JSON.stringify(keyMapCache)); } catch (e) {}
+    rebuildKeys();
+    paint();
+    return true;
+  };
   var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, comate: 7, media: 8, water: 9, keymap: 10 };
   /* 上屏 Wheel 音量条只亮着六个主页可见；set/water/media 里它挡住屏体右侧读数 */
   var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate', 'qoder'];
@@ -9528,6 +9549,17 @@ var PT_I18N = {
       var i = CLOSE_MODES.indexOf(r && r.mode);
       if (i >= 0) PTApp.gear('closeMode', i);
     });
+  })();
+  /* 键位映射启动加载：异步拉一次桥文件值（keymap.json），有文件才覆盖快路并重绘；
+     无文件（首跑）/非法 → 保持快路值，绝不回写（回写即快路覆盖文件值，禁）。 */
+  (function initKeyMapFile() {
+    if (!HAS_BRIDGE) return;
+    call('KeyMapGet').then(function (r) {
+      if (!r || !r.ok || typeof window.__keymapApplyFile !== 'function') return;
+      var applied = false;
+      try { applied = window.__keymapApplyFile(r.map); } catch (e) { applied = false; }
+      if (applied) { try { window.renderKeymapPage(); } catch (e) {} }
+    }, function () {});
   })();
 
   /* ================= 更新日志（与仓库 CHANGELOG.md 同源） ================= */
