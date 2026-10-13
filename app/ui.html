@@ -404,6 +404,9 @@ html { scroll-behavior: smooth; background: var(--pt-bg); }
 
 .pt-drum i.cur { color: var(--pt-sc-accent); }
 
+/* B类供应商显隐：禁用格占位不变暗（禁止 display:none——鼓轮按 nth-child/children 下标定位，抽格全筒错位） */
+.pt-drum i.off { opacity: .25; }
+
 .pt-drum i.cur span { display: inline-block; transform: translateX(.75px) scale(1.05); }
 
 .pt-drum i span { transform: translateX(.75px); display: inline-block; }
@@ -4575,12 +4578,13 @@ var PT_I18N = {
         b.style.display = provEnabled(b.dataset.body) ? '' : 'none';
       }
     });
-    /* B类供应商显隐：鼓轮禁用格隐藏（无 mode 映射的预留格不动） */
+    /* B类供应商显隐：鼓轮禁用格只变暗占位（nth-child/children 下标定位，禁止 display:none 抽格） */
     $$('.pt-drum i[data-mode]').forEach(function (cell) {
       var cm = cell.getAttribute('data-mode');
-      if (cm === 'bai' || cm === 'comate' || cm === 'qoder' || cm === 'ext') {
-        cell.style.display = provEnabled(cm) ? '' : 'none';
-      }
+      var off = (cm === 'bai' || cm === 'comate' || cm === 'qoder' || cm === 'ext') && !provEnabled(cm);
+      cell.classList.toggle('off', off);
+      if (off) cell.setAttribute('aria-disabled', 'true');
+      else cell.removeAttribute('aria-disabled');
     });
     $$('.pt-key').forEach(function (k) {
       var keyMode = k.dataset.mode;
