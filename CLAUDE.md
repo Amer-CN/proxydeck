@@ -47,6 +47,8 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
      列过它（2026-09-10 发现并修）
   外加 `CHANGELOG.md` 顶条 + GitHub Release（正文＝CHANGELOG 顶条逐字，标题＝`vX.Y.Z · 主题 · 主题`，
   **必须附 `ProxyDeck.exe` 附件**——那是一键更新的下载源，漏传 = 用户点更新 404；
+  附件名必须逐字叫 `ProxyDeck.exe`（后端只认此名找直链，`ProxyDeck-vX.Y.Z.exe` 会被无视、
+  前端退回打开网页下载——v3.20.0 亲手犯过、事后补传）；
   2026-09-04 发 v3.8.5 时曾漏、事后补传）。
   改完用旧版本串 grep `app/ README.md` 复核一遍（应只剩 CHANGELOG_DATA 历史条目）。
   `CHANGELOG_DATA` 的 `date` 用**本机发布日**——跨零点发版最容易差一天（v3.10.5 于
