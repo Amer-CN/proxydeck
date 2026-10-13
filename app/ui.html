@@ -4564,11 +4564,9 @@ var PT_I18N = {
       var on = d.dataset.deck === m;
       d.toggleAttribute('inert', !on);
       d.setAttribute('aria-hidden', on ? 'false' : 'true');
-      /* B类供应商显隐：禁用的副页/独立页甲板直接 display:none（不占传送带位） */
-      if (d.dataset.deck === 'bai' || d.dataset.deck === 'comate' ||
-          d.dataset.deck === 'qoder' || d.dataset.deck === 'ext') {
-        d.style.display = provEnabled(d.dataset.deck) ? '' : 'none';
-      }
+      /* B类供应商显隐：甲板禁止 display:none——传送带按 TRACK_IDX 固定槽位平移，
+         抽掉一格后面全串位（comate 格跑出 media 内容即此因）；禁用页由 selectMode
+         门控根本进不去，槽位留着也永远不会居中显示 */
     });
     $$('.pt-sc-body').forEach(function (b) {
       b.classList.toggle('cur', b.dataset.body === m);
