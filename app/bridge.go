@@ -171,21 +171,48 @@ func (a *app) applyCloseMode(mode string, hwnd uintptr) string {
 	return jsonOK("")
 }
 
-// cleanupOldExe 删掉更新替换（腾位法）留在 exe 同目录的 ProxyDeck.exe.old，启动时调用一次。
+// cleanupOldExe 删掉更新替换（腾位法）留在 exe 同目录的旧程序残骸，启动时调用一次。
+//
 // 位置不写死：取 exeDir()（更新流程也按自身 exe 定位，两处同源）。Windows 上删除失败一律
 // 不重试——旧进程仍持有 .old（旧窗口尚未关完）或被占用时删不掉，文件留着无害，下次
-// 启动再清；失败不阻塞启动、不弹窗，只写日志（更新失败分支的 .old 手动放回提示不受影响：
-// 那条路径压根没跑成替换，进程也不是被更新拉起来的新进程）。
+// 启动再清；失败不阻塞启动、不弹窗，只写日志。
+//
+// 2026-10-14：腾位名改为唯一（ProxyDeck.exe.old-<纳秒>）后，残骸不再只有一个固定名字，
+// 故这里按通配清理（老版本的裸 .old 也在匹配范围内）。
 func cleanupOldExe() {
-	p := filepath.Join(exeDir(), "ProxyDeck.exe.old")
-	if _, err := os.Stat(p); err != nil {
-		return // 无残骸（含正常启动路径）：不写日志不动作
+	matches, _ := filepath.Glob(filepath.Join(exeDir(), "ProxyDeck.exe.old*"))
+	for _, p := range matches {
+		if err := os.Remove(p); err != nil {
+			log.Printf("[update] 旧程序残骸删除失败（不影响使用，下次启动再清）：%s: %v", filepath.Base(p), err)
+			continue
+		}
+		log.Printf("[update] 已清理旧程序残骸 %s", filepath.Base(p))
 	}
-	if err := os.Remove(p); err != nil {
-		log.Printf("[update] 旧程序残骸删除失败（不影响使用，下次启动再清）：%v", err)
-		return
+}
+
+// replaceRunningExe 用腾位法把运行中的 exe 换成 newFile（已下载并校验通过的新包），
+// 返回腾位后的旧文件路径（供调用方写报错文案；失败时为空串）。
+//
+// 为什么旧名不能再写死（2026-10-14 群友实测「替换失败(旧程序改名 .old 不成): Access is
+// denied」的根因）：写死 ProxyDeck.exe.old 时，只要上一次更新留下的 .old 仍在被运行
+// ——旧窗口没关完、或后端子进程还跑在它身上——os.Remove 删不掉，改名到同名目标继续
+// 撞 Access denied，于是「二次更新必挂」。改为每次取唯一名（带纳秒时间戳），残留名字
+// 永不重复；外面再套 3 次退避重试，吃掉杀软/同步盘对文件的短暂占用。
+func replaceRunningExe(exe, newFile string) (string, error) {
+	dir := filepath.Dir(exe)
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(300*attempt) * time.Millisecond)
+		}
+		old := filepath.Join(dir, fmt.Sprintf("ProxyDeck.exe.old-%d", time.Now().UnixNano()))
+		if err := os.Rename(exe, old); err == nil {
+			return old, nil
+		} else {
+			lastErr = err
+		}
 	}
-	log.Printf("[update] 已清理旧程序残骸 %s", p)
+	return "", lastErr
 }
 
 // migrateLegacyStats 把旧版（bin\stats.json）的统计数据迁移到新位置，仅首次生效。
@@ -1108,7 +1135,6 @@ func (a *app) runOneKeyUpdateFlow(w webview.WebView, latest, dlURL string, dlSiz
 	}
 	dir := filepath.Dir(exe)
 	newFile := filepath.Join(dir, "ProxyDeck.exe.new")
-	oldFile := filepath.Join(dir, "ProxyDeck.exe.old")
 
 	// 下载候选链：镜像常量按序在前、直连兜底最后一位（全部候选失败才 fail）。
 	// 镜像/直连只进 log——phase 文案不含「镜像」字样，用户零感知。
@@ -1221,18 +1247,11 @@ func (a *app) runOneKeyUpdateFlow(w webview.WebView, latest, dlURL string, dlSiz
 	setPhase("downloaded", 100, "下载完成 · 校验通过")
 
 	// 腾位法替换（Windows 允许 rename 运行中的 exe，本会话构建腾位实证多次）：
-	// 1) 运行中的旧 exe 改名 .old 腾出原路径 → 2) .new 改名顶替原路径。
-	if err := os.Rename(exe, oldFile); err != nil {
-		// .old 残留挡路的两种报错都要接住（审查 P2 勘误）：Permission=残留被占用；
-		// Windows 上 rename 到已存在目标最常报 ErrExist（ERROR_ALREADY_EXISTS）而非
-		// Permission——只接后者会让「首轮失败→二次更新」必挂
-		if (os.IsPermission(err) || os.IsExist(err)) && os.Remove(oldFile) == nil {
-			err = os.Rename(exe, oldFile)
-		}
-		if err != nil {
-			fail(fmt.Sprintf("替换失败（旧程序改名 .old 不成）: %v", err))
-			return
-		}
+	// 1) 运行中的旧 exe 改成唯一名腾出原路径 → 2) .new 改名顶替原路径。
+	oldFile, rerr := replaceRunningExe(exe, newFile)
+	if rerr != nil {
+		fail(fmt.Sprintf("替换失败（旧程序改名腾位不成）: %v。常见原因：上一次更新留下的旧实例或后端进程仍在运行（含托盘里的图标），请把它们全部退出后重试", rerr))
+		return
 	}
 	if err := os.Rename(newFile, exe); err != nil {
 		fail(fmt.Sprintf("替换失败（新包就位不成）: %v（旧程序在 %s，新包在 %s，可手动放回）", err, oldFile, newFile))
