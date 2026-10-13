@@ -7,13 +7,15 @@ package tuanjie
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // providerTTL 计费查询缓存时长（学群友 120s）。
@@ -73,9 +75,10 @@ func providersFilePath() string {
 }
 
 // NewProviderStore 从 tuanjie-providers.json 加载（文件缺失 = 空）。
+// appdir.ReadFile：旧明文原样读（读兼容），DPAPI 密文自动解密。
 func NewProviderStore() *ProviderStore {
 	ps := &ProviderStore{path: providersFilePath(), cache: map[string]cachedInfo{}, refreshing: map[string]bool{}}
-	raw, err := os.ReadFile(ps.path)
+	raw, err := appdir.ReadFile(ps.path)
 	if err == nil {
 		_ = json.Unmarshal(raw, &ps.list)
 	}
@@ -84,7 +87,10 @@ func NewProviderStore() *ProviderStore {
 
 func (ps *ProviderStore) saveLocked() {
 	if raw, err := json.MarshalIndent(ps.list, "", "  "); err == nil {
-		_ = os.WriteFile(ps.path, raw, 0o600)
+		// 含 api_key → 加密落盘；失败只在日志留痕，内存里的配置不丢。
+		if err := appdir.WriteFile(ps.path, raw); err != nil {
+			log.Printf("[tuanjie] 外部账号配置落盘失败（内存态不受影响）：%v", err)
+		}
 	}
 }
 

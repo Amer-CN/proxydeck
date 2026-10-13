@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // overrideExeDir 把 exe 目录指到临时目录（providers.json 落盘隔离），返回该目录。
@@ -64,7 +66,8 @@ func TestProviderUpdateBranches(t *testing.T) {
 	}
 
 	// 落盘：改动写进临时目录的 tuanjie-providers.json
-	raw, err := os.ReadFile(filepath.Join(dir, "tuanjie-providers.json"))
+	// （凭据文件已由 appdir 加密落盘，须经 appdir.ReadFile 还原成明文再断言）
+	raw, err := appdir.ReadFile(filepath.Join(dir, "tuanjie-providers.json"))
 	if err != nil {
 		t.Fatalf("read persisted: %v", err)
 	}
@@ -118,7 +121,7 @@ func TestProviderInfosProtocolRaw(t *testing.T) {
 	if !ps.Update("old", ExternalProvider{BaseURL: srv.URL + "/v2"}) {
 		t.Fatal("Update 旧式账号应成功")
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "tuanjie-providers.json"))
+	raw, err := appdir.ReadFile(filepath.Join(dir, "tuanjie-providers.json"))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -167,7 +170,7 @@ func TestHandleProvidersEditAction(t *testing.T) {
 	if e := ps.List()[0]; e.BaseURL != "https://edited.example/v9" || e.APIKey != "sk-old" || e.Protocol != "chat" {
 		t.Fatalf("编辑结果不对: %+v", e)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "tuanjie-providers.json"))
+	raw, err := appdir.ReadFile(filepath.Join(dir, "tuanjie-providers.json"))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}

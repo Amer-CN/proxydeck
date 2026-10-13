@@ -246,7 +246,7 @@ func buildMetadataPayload(sess *LitellmSession) json.RawMessage {
 	fields := []orderedField{
 		{key: "prompt_id", value: fmt.Sprintf("%s########%d", sess.ID, sess.promptSeq)},
 		{key: "session_id", value: sess.ID},
-		{key: "cwd", value: exeDirForAccounts()},
+		{key: "cwd", value: exeDirForProgram()},
 		{key: "litellm_conversation_id", value: sess.ConversationID},
 	}
 	return json.RawMessage(orderedJSON(fields))

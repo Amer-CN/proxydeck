@@ -8,10 +8,11 @@ import (
 	"flag"
 	"net/url"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // 缺省值（对齐 SPEC-T1 §3.1 的 DEFAULTS；监听地址/端口由 app 的 --host/--port 提供）。
@@ -72,26 +73,12 @@ func (c *Config) readyTimeout() time.Duration { return time.Duration(c.ReadyTime
 func (c *Config) heartbeat() time.Duration    { return time.Duration(c.HeartbeatSec) * time.Second }
 func (c *Config) baseURL() string             { return strings.TrimRight(c.BaseURL, "/") }
 
-// configPath 返回配置文件路径：--vibex-config 优先，其次 exe 同目录的 vibex-config.json。
+// configPath 返回配置文件路径：--vibex-config 优先，其次数据目录的 vibex-config.json。
 func configPath() string {
 	if p := strings.TrimSpace(*flagVibexConfig); p != "" {
 		return p
 	}
-	return filepath.Join(exeDir(), "vibex-config.json")
-}
-
-// exeDir 返回 exe 所在目录（go run 时退回工作目录），与 app/exeDir 同口径。
-func exeDir() string {
-	if p, err := os.Executable(); err == nil {
-		if rp, err := filepath.EvalSymlinks(p); err == nil {
-			p = rp
-		}
-		return filepath.Dir(p)
-	}
-	if wd, err := os.Getwd(); err == nil {
-		return wd
-	}
-	return "."
+	return appdir.Path("vibex-config.json")
 }
 
 // LoadConfig 读取配置：缺省值 ← 配置文件（只认已知键，多余键忽略）← 环境变量覆盖 token。
@@ -109,7 +96,8 @@ func LoadConfig() *Config {
 		ConnectMode:     "auto",
 	}
 	cfg.path = configPath()
-	if b, err := os.ReadFile(cfg.path); err == nil {
+	// appdir.ReadFile：旧明文配置原样读（读兼容），DPAPI 密文自动解密。
+	if b, err := appdir.ReadFile(cfg.path); err == nil {
 		_ = json.Unmarshal(b, cfg) // 解析失败就用缺省值，不阻断启动
 	}
 	cfg.normalize()
@@ -154,11 +142,8 @@ func (c *Config) normalize() {
 	}
 }
 
-// persist 原子落盘（tmp + rename），权限 0600（token 在里面，禁止宽权限）。
-// Windows 说明：Go 在 Windows 上没有 POSIX 权限位，0600 只决定「不设只读属性」，
-// 实际访问控制由父目录 ACL 决定（实测：本机 %APPDATA% / exe 目录下只有本用户与
-// Administrators 有写权，回读结果为 0666）。保留 0600 的写法以便跨平台一致，
-// 不额外加 ACL 调用——那超出本插件的职责，且会让同目录其它配置文件的处置不一致。
+// persist 落盘（token 在文件里 → appdir 一律 DPAPI 加密，并收紧 ACL 到当前用户）。
+// 加密失败即返回错误且不改动原文件（账号数据不丢）。
 func (c *Config) persist() error {
 	if c.path == "" {
 		return os.ErrInvalid
@@ -167,11 +152,7 @@ func (c *Config) persist() error {
 	if err != nil {
 		return err
 	}
-	tmp := c.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, c.path)
+	return appdir.WriteFile(c.path, b)
 }
 
 // persistToken 把新 token 追加进配置文件（0600，tmp + rename），并同步内存里的

@@ -176,13 +176,13 @@ func shouldFallback(status int) bool {
 	return status == -1 || status >= 500 || status == 429
 }
 
-// visionConfigPath 旧视觉模型配置文件（exe 同目录 tuanjie-vision.json，
+// visionConfigPath 旧视觉模型配置文件（数据目录 tuanjie-vision.json，
 // 只读迁移，保留不删）。
 func visionConfigPath() string {
 	return filepath.Join(exeDirForAccounts(), "tuanjie-vision.json")
 }
 
-// mediaConfigPath 媒体模型统一配置文件（exe 同目录 tuanjie-media.json）。
+// mediaConfigPath 媒体模型统一配置文件（数据目录 tuanjie-media.json）。
 func mediaConfigPath() string {
 	return filepath.Join(exeDirForAccounts(), "tuanjie-media.json")
 }

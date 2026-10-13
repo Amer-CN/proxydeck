@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // ============ 插件托管（Python 服务收编 / Go 原生内置） ============
@@ -77,6 +79,7 @@ type pluginState struct {
 	lastErr string
 }
 
+// pluginsDir 返回插件脚本目录（随程序分发的 Python 插件，属**程序**侧，留在 exe 同目录）。
 func (a *app) pluginsDir() string { return filepath.Join(exeDir(), "plugins") }
 
 func (a *app) pluginStates() map[string]*pluginState {
@@ -108,15 +111,15 @@ func (a *app) pluginHealthURL(d pluginDef) string {
 	return fmt.Sprintf("http://127.0.0.1:%d%s", d.Port, d.Health)
 }
 
-// pluginLog 返回插件日志路径。
+// pluginLog 返回插件运行日志路径（滚动 stdout/stderr，属状态文件 → 数据目录）。
 func (a *app) pluginLog(d pluginDef) string {
-	return filepath.Join(a.pluginsDir(), d.ID+".log")
+	return appdir.Path(filepath.Join("plugins", d.ID+".log"))
 }
 
 // pluginErrLog 返回原生插件启动失败时由 --plugin-* 子模式写入的诊断文件路径
-// （命名与 plugin_modes.go 各分支一致：<id>-plugin-error.log，落在 exe 同目录）。
+// （命名与 plugin_modes.go 各分支一致：<id>-plugin-error.log，落在数据目录）。
 func (a *app) pluginErrLog(d pluginDef) string {
-	return filepath.Join(exeDir(), d.ID+"-plugin-error.log")
+	return appdir.Path(d.ID + "-plugin-error.log")
 }
 
 // pyCmd 探测可用的 Python 命令（python / py -3），返回命令与参数前缀。
@@ -169,6 +172,16 @@ func (a *app) pluginList() []map[string]any {
 			// healthy 无条件查端口：外部启动的实例（终端/上次 GUI）同样识别为运行中，
 			// 否则视图会误判"未启动"，模型矩阵/日志全部不加载。
 			alive := present && httpOK(a.pluginHealthURL(d))
+			// 陈旧报错自愈：端口已健康（用户补了登录文件后重扫成功、或换了实例）
+			// 就把上一次的失败原因清掉——启动失败的历史不该长期驻留在界面上。
+			// 判据是可观测的当前状态（端口探活），不是"进程必须是我起的"：
+			// 外部拉起的健康实例同样算好状态，跟着它报旧错才是假情报。
+			if alive && lastErr != "" {
+				st.mu.Lock()
+				st.lastErr = ""
+				st.mu.Unlock()
+				lastErr = ""
+			}
 			out[i] = map[string]any{
 				"id": d.ID, "name": d.Name, "port": d.Port,
 				"native":  d.Native != "",
@@ -225,13 +238,14 @@ func (a *app) pluginStart(id string) error {
 	}
 
 	var cmd *exec.Cmd
+	// 原生插件：spawn 本 exe（内置于二进制，无目录/Python 依赖）；
+	// 便携模式带上 --portable，让子进程与 GUI 解析到同一个数据目录。
 	if d.Native != "" {
-		// 原生插件：spawn 本 exe（内置于二进制，无目录/Python 依赖）
 		exe, err := os.Executable()
 		if err != nil {
 			return fmt.Errorf("定位本程序失败: %v", err)
 		}
-		args := []string{fmt.Sprintf("--plugin-%s", d.Native), "--port", fmt.Sprintf("%d", d.Port)}
+		args := append([]string{fmt.Sprintf("--plugin-%s", d.Native), "--port", fmt.Sprintf("%d", d.Port)}, appdir.PortableArgs()...)
 		args = append(args, d.Args...)
 		cmd = exec.Command(exe, args...)
 	} else {
@@ -252,9 +266,11 @@ func (a *app) pluginStart(id string) error {
 		cmd = exec.Command(exe, args...)
 		cmd.Dir = filepath.Dir(script)
 	}
-	if lf, err := os.OpenFile(a.pluginLog(*d), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-		cmd.Stdout = lf
-		cmd.Stderr = lf
+	// 子进程 stdout/stderr 落数据目录日志：带时间戳行头、追加写、超 1 MB 轮转。
+	if lf := appdir.OpenLog(a.pluginLog(*d)); lf != nil {
+		w := appdir.NewStampedWriter(lf)
+		cmd.Stdout = w
+		cmd.Stderr = w
 	}
 	// 清掉上一次的失败诊断：否则本轮启动成功、旧错误仍会被当成本次原因读出。
 	_ = os.Remove(a.pluginErrLog(*d))

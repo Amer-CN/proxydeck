@@ -11,12 +11,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // parseSSEData 从 SSE 文本里抽出全部 data: 行的 payload（跳过 [DONE]）。
@@ -557,7 +558,8 @@ func TestProviderAddPersistsProtocol(t *testing.T) {
 	if !ps.Add(ExternalProvider{Name: "r2", BaseURL: "https://h/v1", APIKey: "k", Protocol: "grpc"}) {
 		t.Fatal("Add r2 失败")
 	}
-	raw, err := os.ReadFile(ps.path)
+	// 凭据文件已由 appdir 加密落盘，须经 appdir.ReadFile 还原成明文再断言。
+	raw, err := appdir.ReadFile(ps.path)
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}

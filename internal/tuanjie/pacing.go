@@ -3,11 +3,12 @@ package tuanjie
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // KIMI-K3 429 兜底（pacing）：2026-08 下旬上游改限流口径，429 错误体不再携带
@@ -29,13 +30,11 @@ type Pacer struct {
 	pending atomic.Int64
 }
 
-// NewPacer 创建兜底开关并从 exe 同目录读回开关状态。
+// NewPacer 创建兜底开关并从数据目录读回开关状态。
 func NewPacer() *Pacer {
 	p := &Pacer{}
-	if exe, err := os.Executable(); err == nil {
-		p.path = filepath.Join(filepath.Dir(exe), "tuanjie-pacing.json")
-		p.load()
-	}
+	p.path = appdir.Path("tuanjie-pacing.json")
+	p.load()
 	return p
 }
 

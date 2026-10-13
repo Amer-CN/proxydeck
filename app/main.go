@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 	"github.com/Amer-CN/proxydeck/internal/proxy"
 	"github.com/Amer-CN/proxydeck/internal/server"
 	webview "github.com/webview/webview_go"
@@ -46,6 +47,12 @@ var (
 	flagVersion  = flag.Bool("version", false, "打印版本并退出")
 	flagFax      = flag.Bool("fax", false, "注水专线浮窗（独立窗口）")
 
+	// flagPortable 便携模式：状态文件写 exe 同目录（等价于 exe 同目录存在 portable 标记文件）。
+	// 默认写 %APPDATA%\ProxyDeck\，exe 目录（桌面 / Program Files）视作只读。
+	// GUI 拉起子进程（-headless / --plugin-* / --fax）时按当前模式原样带上本参数，
+	// 保证前后端读写同一个目录。
+	flagPortable = flag.Bool("portable", false, "便携模式：状态文件写 exe 同目录（缺省写 %APPDATA%\\ProxyDeck）")
+
 	// 插件子模式（--plugin-tuanjie / --plugin-codebuddy / --plugin-bai / --desensitize）
 	// 定义在 plugin_modes.go。
 )
@@ -66,7 +73,8 @@ func bindFaxLauncher(w webview.WebView) {
 		if err != nil {
 			return jsonErr(err)
 		}
-		if err := exec.Command(exe, "--fax").Start(); err != nil {
+		cmd := exec.Command(exe, append([]string{"--fax"}, appdir.PortableArgs()...)...)
+		if err := cmd.Start(); err != nil {
 			return jsonErr(err)
 		}
 		return jsonOK("注水专线浮窗已打开")
@@ -148,7 +156,7 @@ func runFaxWindow() int {
 func runCoreHeadless(host, port, apiKey string) error {
 	// 未显式传 key 时，从 api-key.txt 读取（GUI 保存的 key 自动生效）。
 	if apiKey == "" {
-		if b, err := os.ReadFile(filepath.Join(exeDir(), "api-key.txt")); err == nil {
+		if b, err := appdir.ReadFile(appdir.Path("api-key.txt")); err == nil {
 			apiKey = strings.TrimSpace(string(b))
 		}
 	}
@@ -159,7 +167,7 @@ func runCoreHeadless(host, port, apiKey string) error {
 	}
 	p := proxy.NewProxy(apiKey)
 	p.Debug = *flagDebug
-	p.SetStatsFile(filepath.Join(exeDir(), "stats.json"))
+	p.SetStatsFile(appdir.Path("stats.json"))
 	srv := server.NewServer(p)
 	srv.SetHost(host)
 	srv.SetPort(port)
@@ -172,23 +180,39 @@ func runCoreHeadless(host, port, apiKey string) error {
 	return nil
 }
 
-// exeDir 返回 exe 所在目录（go run 时退回工作目录），数据文件都放在这里。
-func exeDir() string {
-	if p, err := os.Executable(); err == nil {
-		if rp, err := filepath.EvalSymlinks(p); err == nil {
-			p = rp
-		}
-		return filepath.Dir(p)
+// exeDir 返回 exe 所在目录（go run 时退回工作目录）——只用于**程序**侧的东西
+// （ProxyDeck.exe.old 残骸等）；状态文件一律走 appdir.DataDir()。
+func exeDir() string { return appdir.ExeDir() }
+
+// runDataDirInit 启动早期的一次性收口（在任何状态文件读写之前调用）：
+//  1. appdir.Init 解析数据目录（默认 %APPDATA%\ProxyDeck\，便携模式 / portable 标记则 exe 同目录）
+//  2. 把 exe 同目录的历史状态文件搬进数据目录（搬不走的改名 *.migrated，不留两份分叉状态）
+//  3. 数据目录里仍是明文的凭据文件升级为 DPAPI 密文（读兼容：旧明文照读，写侧收口）；
+//     ACL 收紧由 appdir.WriteFile 逐文件做（只给当前用户补显式授权，绝不动其它条目）
+func runDataDirInit() {
+	appdir.Init(*flagPortable)
+	if appdir.Portable() {
+		return // 便携模式：数据就在 exe 同目录，无迁移
 	}
-	if wd, err := os.Getwd(); err == nil {
-		return wd
+	var notes []string
+	notes = append(notes, appdir.Migrate(appdir.DataDir(), appdir.ExeDir())...)
+	notes = append(notes, appdir.UpgradePlaintext()...)
+	if len(notes) == 0 {
+		return // 常态：没有历史文件，什么都不做、不写日志
 	}
-	return "."
+	if f := appdir.OpenLog(filepath.Join(appdir.DataDir(), "headless-error.log")); f != nil {
+		w := appdir.NewStampedWriter(f)
+		_, _ = w.Write([]byte("[state] " + strings.Join(notes, "；") + "\n"))
+		_ = f.Close()
+	}
 }
 
 func main() {
 	setDPIAware()
 	flag.Parse()
+	// 数据目录必须在任何状态文件读写之前定下来：插件子模式（runPluginMode）与
+	// headless 都会自己读写状态文件，早于此处的读写会落错地方。
+	runDataDirInit()
 	if *flagVersion {
 		fmt.Printf("ProxyDeck %s (proxy core %s)\n", appVersion, coreVersion)
 		return
@@ -210,8 +234,7 @@ func main() {
 	// 注意：headless 是"代理本体"，不再 spawn 子进程；GUI 的 start 才是 spawn 方。
 	if *flagHeadless {
 		if err := runCoreHeadless(*flagHost, *flagPort, *flagAPIKey); err != nil {
-			_ = os.WriteFile(filepath.Join(exeDir(), "headless-error.log"),
-				[]byte(err.Error()), 0o600)
+			_ = appdir.AppendLog(appdir.Path("headless-error.log"), "headless 启动失败："+err.Error())
 			os.Exit(1)
 		}
 		select {}

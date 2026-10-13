@@ -13,10 +13,10 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // 测试缝：上游地址、渠道配置路径、传输层（生产用带重试的代理自探测 Transport）。
@@ -154,8 +154,9 @@ type channelKeyCfg struct {
 }
 
 // baiChannelKey 从注水检测共用的渠道配置里取 B.AI 的 Bearer；缺失/坏文件回空串。
+// appdir.ReadFile：旧明文原样读（读兼容），DPAPI 密文自动解密。
 func baiChannelKey() string {
-	b, err := os.ReadFile(channelsConfigPath())
+	b, err := appdir.ReadFile(channelsConfigPath())
 	if err != nil {
 		return ""
 	}
@@ -171,10 +172,7 @@ func baiChannelKey() string {
 	return ""
 }
 
-// defaultChannelsConfigPath 渠道配置在 exe 同目录（回退工作目录），与注水检测同一路径。
+// defaultChannelsConfigPath 渠道配置在数据目录，与注水检测同一路径。
 func defaultChannelsConfigPath() string {
-	if exe, err := os.Executable(); err == nil {
-		return filepath.Join(filepath.Dir(exe), "tuanjie-water-channels.json")
-	}
-	return filepath.Join(".", "tuanjie-water-channels.json")
+	return appdir.Path("tuanjie-water-channels.json")
 }

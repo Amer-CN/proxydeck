@@ -17,6 +17,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // ---------- 假 JWT / 测试服务 ----------
@@ -226,7 +228,8 @@ func TestAutoDetectReadsCookieFromCDP(t *testing.T) {
 		t.Fatalf("应通过 CDP Network.getCookies 读 cookie，实际调用 %v", calls)
 	}
 	// 落盘：cookie 路径读到的 token 也要写进配置文件（重启后才不用重登）
-	if raw, err := os.ReadFile(cfgPath); err != nil || !strings.Contains(string(raw), tok) {
+	// （配置文件已由 appdir 加密落盘，须经 appdir.ReadFile 还原成明文再断言）
+	if raw, err := appdir.ReadFile(cfgPath); err != nil || !strings.Contains(string(raw), tok) {
 		t.Fatalf("读到的 token 未落盘: err=%v", err)
 	}
 
@@ -368,7 +371,7 @@ func TestAddAccountValidJWT(t *testing.T) {
 	if s.pool.Len() != 1 {
 		t.Fatalf("池里应有一个 token，实际 %d", s.pool.Len())
 	}
-	raw, err := os.ReadFile(cfgPath)
+	raw, err := appdir.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("配置文件未落盘: %v", err)
 	}
@@ -585,7 +588,7 @@ func TestPersistTokenDedupsFileBySub(t *testing.T) {
 	var back struct {
 		Tokens []string `json:"tokens"`
 	}
-	raw, err := os.ReadFile(cfg.path)
+	raw, err := appdir.ReadFile(cfg.path)
 	if err != nil {
 		t.Fatalf("读回失败: %v", err)
 	}

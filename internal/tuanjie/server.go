@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,6 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // Server 是团结转发的本地 OpenAI 兼容服务。
@@ -74,28 +75,28 @@ func NewServer() *Server {
 	s := &Server{client: NewClient(), pool: NewAccountPool(), stats: map[string]*modelStat{}, startedAt: time.Now(), pacer: NewPacer(),
 		registry: NewRegistry(), water: LoadWater(), activity: NewActivityLog(),
 		providers: NewProviderStore(), baselines: LoadBaselines(),
-		seedAlert: seedAlert{online: "unchecked"}} // 首轮在线核验完成前 /health 报 unchecked
+	seedAlert: seedAlert{online: "unchecked"}} // 首轮在线核验完成前 /health 报 unchecked
 	LoadMediaConfig()
-	if exe, err := os.Executable(); err == nil {
-		s.statsPath = filepath.Join(filepath.Dir(exe), "tuanjie-stats.json")
-		s.loadStats()
-	}
+	s.statsPath = appdir.Path("tuanjie-stats.json")
+	s.loadStats()
 	return s
 }
 
-// exeDirForAccounts 取 exe 所在目录（回退到工作目录）。
+// exeDirForAccounts 返回状态文件所在目录（数据目录：默认 %APPDATA%\ProxyDeck\，
+// 便携模式为 exe 同目录）。**不再返回 exe 目录**——那是程序目录，桌面安装时只读。
+// exeDirOverride 仍是单测注入点（测试用 t.TempDir 隔离，绝不碰真实状态文件）。
 func exeDirForAccounts() string {
 	if exeDirOverride != nil {
 		return exeDirOverride()
 	}
-	if p, err := os.Executable(); err == nil {
-		return filepath.Dir(p)
-	}
-	if wd, err := os.Getwd(); err == nil {
-		return wd
-	}
-	return "."
+	return appdir.DataDir()
 }
+
+// exeDirForProgram 返回 **程序**目录本身，与状态文件目录无关。
+// 唯一用途是出站 metadata.cwd（reqshape.go）：那个字段此前取 exe 同目录，
+// 本改动不碰它——上游看到的 cwd 与状态文件搬到哪儿无关，改它是另一件事
+// （红线 8 项里的字段序/取值，需单独实证后再动）。
+func exeDirForProgram() string { return appdir.ExeDir() }
 
 // corsWith 给所有响应加 CORS 头：GUI 页面跑在 localhost:随机端口，
 // fetch 127.0.0.1:8788 属跨域，没有这个头前端全部拉不到数据。

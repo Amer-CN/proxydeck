@@ -8,11 +8,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"log"
-	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // Account 是账号池里的一个团结账号。
@@ -57,6 +58,7 @@ type AccountPool struct {
 	loads map[string]int
 }
 
+// accountsFilePath 账号池文件（含 access_token → DPAPI 加密落盘，见 appdir）。
 func accountsFilePath() string { return filepath.Join(exeDirForAccounts(), "tuanjie-accounts.json") }
 
 // NewAccountPool 从 tuanjie-accounts.json 加载账号池（文件缺失 = 空池 = 单账号模式）。
@@ -71,7 +73,8 @@ func (p *AccountPool) reload() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.accounts = nil
-	b, err := os.ReadFile(accountsFilePath())
+	// appdir.ReadFile：旧明文文件原样读（读兼容），DPAPI 密文自动解密。
+	b, err := appdir.ReadFile(accountsFilePath())
 	if err != nil {
 		return
 	}
@@ -102,7 +105,11 @@ func (p *AccountPool) saveLocked() {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(accountsFilePath(), b, 0o600)
+	// 落盘即 DPAPI 加密（access_token 明文永不落盘）+ ACL 收紧到当前用户。
+	// 加密失败只在日志留痕：内存里的池仍然可用，账号数据不丢。
+	if err := appdir.WriteFile(accountsFilePath(), b); err != nil {
+		log.Printf("[tuanjie] 账号池落盘失败（内存态不受影响）：%v", err)
+	}
 }
 
 // Size 返回账号总数（0 = 单账号模式）。

@@ -9,12 +9,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // waterChannelDef 渠道静态定义：端点 + Bearer 来源。
@@ -79,10 +80,10 @@ func channelsConfigPath() string {
 	return filepath.Join(exeDirForAccounts(), "tuanjie-water-channels.json")
 }
 
-// LoadChannelKeys 读渠道密钥配置（缺失 = 空 map）。含密钥，勿进版本库。
+// LoadChannelKeys 读渠道密钥配置（缺失 = 空 map）。含密钥 → 加密落盘，旧明文原样读。
 func LoadChannelKeys() map[string]string {
 	keys := map[string]string{}
-	if b, err := os.ReadFile(channelsConfigPath()); err == nil {
+	if b, err := appdir.ReadFile(channelsConfigPath()); err == nil {
 		var cfgs []channelKeyCfg
 		if json.Unmarshal(b, &cfgs) == nil {
 			for _, c := range cfgs {
@@ -116,12 +117,12 @@ func SaveChannelKey(id, key string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(channelsConfigPath(), b, 0o600)
+	return appdir.WriteFile(channelsConfigPath(), b)
 }
 
-// readAPIKeyFile 读 exe 同目录 api-key.txt（command 渠道 Bearer；存在才带）。
+// readAPIKeyFile 读数据目录的 api-key.txt（command 渠道 Bearer；存在才带）。
 func readAPIKeyFile() string {
-	b, err := os.ReadFile(filepath.Join(exeDirForAccounts(), "api-key.txt"))
+	b, err := appdir.ReadFile(filepath.Join(exeDirForAccounts(), "api-key.txt"))
 	if err != nil {
 		return ""
 	}

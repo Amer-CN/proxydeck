@@ -28,6 +28,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // Server 是 CodeBuddy 转发的本地服务。
@@ -127,19 +129,17 @@ func NewServerForRegion(region Region, desensitize bool) (*Server, error) {
 		stats:       map[string]*modelStat{},
 		startedAt:   time.Now(),
 	}
-	if exe, err := os.Executable(); err == nil {
-		dir := filepath.Dir(exe)
-		// CN 沿用原文件名（老用户零变化）；INTL 独立文件——两区实例可能同时跑，
-		// 共用同一 stats/failover 文件会互相覆盖写
-		suffix := ""
-		if region == RegionINTL {
-			suffix = "-intl"
-		}
-		s.statsPath = filepath.Join(dir, "codebuddy-stats"+suffix+".json")
-		s.loadStats()
-		s.failPath = filepath.Join(dir, "codebuddy-failover"+suffix+".json")
-		s.loadFailover()
+	dir := appdir.DataDir()
+	// CN 沿用原文件名（老用户零变化）；INTL 独立文件——两区实例可能同时跑，
+	// 共用同一 stats/failover 文件会互相覆盖写
+	suffix := ""
+	if region == RegionINTL {
+		suffix = "-intl"
 	}
+	s.statsPath = filepath.Join(dir, "codebuddy-stats"+suffix+".json")
+	s.loadStats()
+	s.failPath = filepath.Join(dir, "codebuddy-failover"+suffix+".json")
+	s.loadFailover()
 	return s, nil
 }
 

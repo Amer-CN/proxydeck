@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 	"github.com/Amer-CN/proxydeck/internal/proxy"
 	"github.com/atotto/clipboard"
 	webview "github.com/webview/webview_go"
@@ -36,19 +37,21 @@ func newApp(host, port, key string) *app {
 
 	a := &app{host: host, port: port, apiKey: key}
 	if a.apiKey == "" {
-		if b, err := os.ReadFile(a.keyFile()); err == nil {
+		if b, err := appdir.ReadFile(a.keyFile()); err == nil {
 			a.apiKey = strings.TrimSpace(string(b))
 		}
 	}
 	return a
 }
 
-func (a *app) keyFile() string       { return filepath.Join(exeDir(), "api-key.txt") }
-func (a *app) statsFile() string     { return filepath.Join(exeDir(), "stats.json") }
-func (a *app) noticeFile() string    { return filepath.Join(exeDir(), "notice_dismissed.flag") }
-func (a *app) closeHintFile() string { return filepath.Join(exeDir(), "close_hint_dismissed.flag") }
-func (a *app) closeModeFile() string { return filepath.Join(exeDir(), "close_mode.txt") }
-func (a *app) keyMapFile() string    { return filepath.Join(exeDir(), "keymap.json") }
+// 状态文件一律落 appdir.DataDir()（默认 %APPDATA%\ProxyDeck\，便携模式则 exe 同目录）：
+// exe 目录视作只读，桌面/Program Files 里不再长文件。
+func (a *app) keyFile() string       { return appdir.Path("api-key.txt") }
+func (a *app) statsFile() string     { return appdir.Path("stats.json") }
+func (a *app) noticeFile() string    { return appdir.Path("notice_dismissed.flag") }
+func (a *app) closeHintFile() string { return appdir.Path("close_hint_dismissed.flag") }
+func (a *app) closeModeFile() string { return appdir.Path("close_mode.txt") }
+func (a *app) keyMapFile() string    { return appdir.Path("keymap.json") }
 func (a *app) baseURL() string       { return "http://" + net.JoinHostPort(a.host, a.port) }
 func (a *app) healthURL() string     { return a.baseURL() + "/health" }
 
@@ -77,6 +80,9 @@ func (a *app) setCloseMode(mode string) error {
 			return err
 		}
 		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(a.closeModeFile()), 0o700); err != nil {
+		return err
 	}
 	return os.WriteFile(a.closeModeFile(), []byte(mode), 0o600)
 }
@@ -138,6 +144,9 @@ func (a *app) keyMapSet(raw string) error {
 	}
 	if !keyMapValid(m) {
 		return errors.New("非法键位映射（1-4 键、每键 ≥1 页、页名须在白名单且一页一键）")
+	}
+	if err := os.MkdirAll(filepath.Dir(a.keyMapFile()), 0o700); err != nil {
+		return err
 	}
 	return os.WriteFile(a.keyMapFile(), []byte(raw), 0o600)
 }
@@ -211,7 +220,7 @@ func (a *app) start(key string) (string, error) {
 	keySaved := true
 	if key != "" {
 		a.apiKey = key
-		keySaved = os.WriteFile(a.keyFile(), []byte(key), 0o600) == nil
+		keySaved = appdir.WriteFile(a.keyFile(), []byte(key)) == nil
 	}
 
 	// 端口已有健康代理（可能是上次遗留的 headless 子进程）→ 直接接管观察。
@@ -237,19 +246,19 @@ func (a *app) start(key string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("无法定位自身可执行文件: %v", err)
 	}
-	cmd := hiddenCmd(exe, "-headless")
+	cmd := hiddenCmd(exe, append([]string{"-headless"}, appdir.PortableArgs()...)...)
 	/* key 已在上面落盘（api-key.txt），子进程未显式传 key 时会自行读取（见 main.go 的
 	   runCoreHeadless）——正常路径不把密钥放上 argv：进程命令行对本机任意进程可读，
 	   2026-09-11 排查时整行打印进程列表就把 key 打进过会话记录。仅落盘失败才退回 argv。 */
 	if key != "" && !keySaved {
 		cmd.Args = append(cmd.Args, "-api-key", key)
 	}
-	// headless 的 stdout/stderr 落盘（headless-error.log，与 exe 同目录），
-	// 后台异常时可查原因；日志文件已加入 .gitignore。
-	if lf, err := os.OpenFile(filepath.Join(exeDir(), "headless-error.log"),
-		os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-		cmd.Stdout = lf
-		cmd.Stderr = lf
+	// headless 的 stdout/stderr 落盘（数据目录的 headless-error.log），后台异常时可查原因；
+	// 日志带时间戳行头并按 1 MB × 3 轮转（否则长跑几小时就涨成几 MB 的单文件）。
+	if lf := appdir.OpenLog(appdir.Path("headless-error.log")); lf != nil {
+		w := appdir.NewStampedWriter(lf)
+		cmd.Stdout = w
+		cmd.Stderr = w
 	}
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("启动后台代理失败: %v", err)
@@ -350,7 +359,7 @@ func (a *app) state() stateMsg {
 	}
 	// 曾成功运行过？读 stats.json 的 started 字段（>0 即曾运行）。
 	startedOnce := false
-	if b, err := os.ReadFile(a.statsFile()); err == nil {
+	if b, err := appdir.ReadFile(a.statsFile()); err == nil {
 		var st struct {
 			Started int64 `json:"started"`
 		}
@@ -623,7 +632,7 @@ func (a *app) bindAll(w webview.WebView) {
 			return s
 		}
 		// 代理未运行时兜底读本地 stats.json——历史消耗离线可见
-		if b, err := os.ReadFile(a.statsFile()); err == nil && len(b) > 0 {
+		if b, err := appdir.ReadFile(a.statsFile()); err == nil && len(b) > 0 {
 			return string(b)
 		}
 		return `{"ok":false,"msg":"代理未运行或无法连接"}`
@@ -668,13 +677,13 @@ func (a *app) bindAll(w webview.WebView) {
 		keyProbeCached = ""
 		keyProbeMu.Unlock()
 		if key == "" {
-			if err := os.Remove(a.keyFile()); err != nil && !os.IsNotExist(err) {
+			if err := appdir.Remove(a.keyFile()); err != nil {
 				return jsonErr(err)
 			}
 			a.apiKey = ""
 			return jsonOK("已清除保存的 Key")
 		}
-		if err := os.WriteFile(a.keyFile(), []byte(key), 0o600); err != nil {
+		if err := appdir.WriteFile(a.keyFile(), []byte(key)); err != nil {
 			return jsonErr(err)
 		}
 		a.apiKey = key
@@ -702,7 +711,7 @@ func (a *app) bindAll(w webview.WebView) {
 			go func() {
 				key := strings.TrimSpace(a.apiKey)
 				if key == "" {
-					if b, err := os.ReadFile(a.keyFile()); err == nil {
+					if b, err := appdir.ReadFile(a.keyFile()); err == nil {
 						key = strings.TrimSpace(string(b))
 					}
 				}
@@ -926,13 +935,13 @@ func (a *app) bindAll(w webview.WebView) {
 		return jsonOK("已复制")
 	})
 	_ = w.Bind("ccDismiss", func() string {
-		if err := os.WriteFile(a.noticeFile(), []byte("1"), 0o600); err != nil {
+		if err := appdir.WriteFile(a.noticeFile(), []byte("1")); err != nil {
 			return jsonErr(err)
 		}
 		return jsonOK("已记录")
 	})
 	_ = w.Bind("ccDismissCloseHint", func() string {
-		if err := os.WriteFile(a.closeHintFile(), []byte("1"), 0o600); err != nil {
+		if err := appdir.WriteFile(a.closeHintFile(), []byte("1")); err != nil {
 			return jsonErr(err)
 		}
 		return jsonOK("已记录")

@@ -43,3 +43,8 @@ codebuddy-failover-intl.json
 # 账号池停用/移出状态文件（CN/INTL 两实例各一份，运行态不进 git）
 codebuddy-pool.json
 codebuddy-pool-intl.json
+
+# 状态目录分离（2026-10-14）：默认状态文件已移到 %APPDATA%\ProxyDeck\，
+# 下面是「便携模式 / go run 从仓库根跑」时可能落在仓库里的残留形态，一律不入库
+*.migrated
+portable

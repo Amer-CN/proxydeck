@@ -9,7 +9,7 @@
 //     不需要 tuanjie 的 ResumeBudgetLoop 后台循环。
 //   - 状态三件套（对齐团结账号矩阵）：Enabled 手动停用 / Removed 移出（uid
 //     键持久排除，绝不碰 auth 文件）/ UseCount·LastUsed·Inflight 调用统计。
-//     持久化只落 Enabled/Removed（exe 同目录 codebuddy-pool(-intl).json）；
+//     持久化只落 Enabled/Removed（数据目录 codebuddy-pool(-intl).json）；
 //     统计与 Dead 一律内存态（Dead 的 rescan 复位语义不变）。
 package codebuddy
 
@@ -22,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // Account 账号池里的一个登录态（对应 auth 目录里一个 *.info 文件）。
@@ -62,18 +64,14 @@ type poolState struct {
 	Accounts map[string]poolStateEntry `json:"accounts"`
 }
 
-// poolStatePath 状态文件落 exe 同目录（与 stats/failover 同规矩）：CN 用
+// poolStatePath 状态文件落数据目录（与 stats/failover 同规矩）：CN 用
 // codebuddy-pool.json，INTL 沿 -intl 后缀惯例用 codebuddy-pool-intl.json（两区
 // 实例可能同时跑，共用一个文件会互相覆盖写）。CODEBUDDY_POOL_DIR 环境变量可
 // 重定向目录（单测隔离与临时实例用；真实运行由 GUI spawn，不带该变量）。
 func poolStatePath(region Region) string {
-	dir := ""
-	if d := os.Getenv("CODEBUDDY_POOL_DIR"); d != "" {
-		dir = d
-	} else if exe, err := os.Executable(); err == nil {
-		dir = filepath.Dir(exe)
-	} else {
-		return ""
+	dir := os.Getenv("CODEBUDDY_POOL_DIR")
+	if dir == "" {
+		dir = appdir.DataDir()
 	}
 	suffix := ""
 	if region == RegionINTL {

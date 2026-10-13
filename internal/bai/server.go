@@ -12,11 +12,12 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // 上游 base URL：api.b.ai 是标准 OpenAI 兼容端点。
@@ -44,13 +45,11 @@ type modelStat struct {
 	TotalTok  int64 `json:"totalTokens"`
 }
 
-// NewServer 创建服务。统计文件 bai-stats.json 与 exe 同目录（同 codebuddy 的落盘口径）。
+// NewServer 创建服务。统计文件 bai-stats.json 落在数据目录（同 codebuddy 的落盘口径）。
 func NewServer() *Server {
 	s := &Server{startedAt: time.Now(), stats: map[string]*modelStat{}}
-	if exe, err := os.Executable(); err == nil {
-		s.statsPath = filepath.Join(filepath.Dir(exe), "bai-stats.json")
-		s.loadStats()
-	}
+	s.statsPath = appdir.Path("bai-stats.json")
+	s.loadStats()
 	return s
 }
 

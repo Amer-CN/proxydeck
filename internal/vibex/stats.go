@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
+
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
 
 // modelStat 单模型用量累计（字段名与 bai/tuanjie/codebuddy 同形，GUI 共用一套渲染）。
@@ -18,8 +19,8 @@ type modelStat struct {
 	TotalTok  int64 `json:"totalTokens"`
 }
 
-// statsFilePath 统计文件路径：exe 同目录（同 bai-stats.json 的落盘口径）。
-func statsFilePath() string { return filepath.Join(exeDir(), "vibex-stats.json") }
+// statsFilePath 统计文件路径：数据目录（同 bai-stats.json 的落盘口径）。
+func statsFilePath() string { return appdir.Path("vibex-stats.json") }
 
 // handleStats 返回消耗统计 + 运行时长（GUI 消耗 TOP 用，结构与 B.AI 一字对齐）。
 // 统计文件缺失/损坏时 stats 是空表，仍 200（不 500）。
