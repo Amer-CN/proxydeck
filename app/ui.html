@@ -3429,13 +3429,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
 
                 <!-- B类键位自由组合：配置进独立子页，设置页只留入口行 -->
                 <div class="pt-subhead"><span class="pt-silk sm">模式键供应商 · PROVIDERS</span>
-                  <span class="pt-val">每键挂哪几张脸、键数1-4自动 · 关 GUI 重开仍在</span></div>
+                  <span class="pt-val">每键挂哪几页、键数1-4自动 · 关 GUI 重开仍在</span></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t">键位供应商组合</div>
-                    <div class="s">每键可挂1..N张脸，键数按映射自动1-4个；B.AI默认不在任何键下，可加回</div>
+                    <div class="s">每键可挂1..N页，键数按映射自动1-4个；B.AI默认不在任何键下，可加回</div>
                   </div>
-                  <button type="button" class="ibtn2" id="keymapCfgBtn" title="键位供应商自由组合：每键增删脸、可增删键（1-4自动）"> ⇗ 配置…</button>
+                  <button type="button" class="ibtn2" id="keymapCfgBtn" title="键位供应商自由组合：每键增删页、可增删键（1-4自动）"> ⇗ 配置…</button>
                 </div></div>
                 <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
@@ -3774,7 +3774,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <button type="button" class="ibtn2" id="kmBack" title="返回设置页（直接按「设置」键或 Esc 同样可退）">← 返回</button>
                   <div class="pt-label">
                     <div class="t">键位供应商组合 · KEYMAP</div>
-                    <div class="s">每键挂1..N张脸，键数按映射自动1-4个；B.AI默认不在任何键下，可加回；改完立即生效并落盘</div>
+                    <div class="s">每键挂1..N页，键数按映射自动1-4个；B.AI默认不在任何键下，可加回；改完立即生效并落盘</div>
                   </div>
                 </div></div>
                 <div class="pt-div"></div>
@@ -10367,21 +10367,21 @@ var PT_I18N = {
         } catch (e) {}
         box.innerHTML = km.map(function (faces, idx) {
           var chips = (faces || []).map(function (f) {
-            var dis = (faces.length <= 1) ? ' disabled title="每键至少留 1 张脸（要整键删除请点删键）"' : '';
+            var dis = (faces.length <= 1) ? ' disabled title="每键至少留 1 页（要整键删除请点删键）"' : '';
             return '<span class="acc-tag">' + escHtml(KM_LABEL[f] || f) +
-              ' <button type="button" class="pv-x" data-km-delface="' + idx + ':' + f + '"' + dis + ' title="移除该脸">✕</button></span>';
+              ' <button type="button" class="pv-x" data-km-delface="' + idx + ':' + f + '"' + dis + ' title="移除该页">✕</button></span>';
           }).join(' ');
           var addRow = unmapped.length
-            ? '<select class="pt-field" data-km-addsel="' + idx + '" title="加入本键的供应商脸（仅显示未上键的）">' +
+            ? '<select class="pt-field" data-km-addsel="' + idx + '" title="加入本键的供应商页（仅显示未上键的）">' +
               unmapped.map(function (f) {
                 return '<option value="' + f + '">' + escHtml((KM_LABEL[f] || f) + ' · ' + KM_PORT[f]) + '</option>';
               }).join('') + '</select>' +
-              ' <button type="button" class="ibtn2 accent" data-km-addface="' + idx + '" title="把选中脸加入本键">＋ 添加</button>'
+              ' <button type="button" class="ibtn2 accent" data-km-addface="' + idx + '" title="把选中页加入本键">＋ 添加</button>'
             : '<span class="if-empty">全部供应商已上键</span>';
           var delDis = km.length <= 1 ? ' disabled title="至少保留 1 键"' : '';
-          return '<div class="mx-card"><div class="pv-line"><span class="mx-name">第' + (idx + 1) + '键 · ' + faces.length + '张脸</span>' +
+          return '<div class="mx-card"><div class="pv-line"><span class="mx-name">第' + (idx + 1) + '键 · ' + faces.length + '页</span>' +
             '<span class="pv-host">' + escHtml((faces || []).map(function (f) { return KM_LABEL[f] || f; }).join(' + ')) + '</span>' +
-            '<button type="button" class="ibtn2" data-km-delkey="' + idx + '"' + delDis + ' title="删除整键（键内脸须先 leaves？不：删键即删去其脸映射，未映射脸回待加池）">删键</button></div>' +
+            '<button type="button" class="ibtn2" data-km-delkey="' + idx + '"' + delDis + ' title="删除整键（删键即删去其页映射，未映射页回待加池）">删键</button></div>' +
             '<div class="pv-models">' + chips + '</div>' +
             '<div class="acc-f-actions" style="margin-top:6px">' + addRow + '</div></div>';
         }).join('') +
@@ -10394,7 +10394,7 @@ var PT_I18N = {
             var parts = (b.dataset.kmDelface || '').split(':');
             var ki = +parts[0], face = parts[1];
             var cur = kmGet();
-            if (!cur[ki] || cur[ki].length <= 1) { toast('err', '键位组合', '每键至少留 1 张脸'); return; }
+            if (!cur[ki] || cur[ki].length <= 1) { toast('err', '键位组合', '每键至少留 1 页'); return; }
             cur[ki] = cur[ki].filter(function (f) { return f !== face; });
             if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
               try { logInto($('logStream'), 'sys', '键位组合：第' + (ki + 1) + '键移除 ' + (KM_LABEL[face] || face) + '（配置已持久化）'); } catch (e) {}
@@ -10412,7 +10412,7 @@ var PT_I18N = {
             var cur = kmGet();
             var used = {};
             cur.forEach(function (k) { (k || []).forEach(function (f) { used[f] = true; }); });
-            if (used[face]) { toast('err', '键位组合', (KM_LABEL[face] || face) + ' 已在别的键下（一脸一键）'); return; }
+            if (used[face]) { toast('err', '键位组合', (KM_LABEL[face] || face) + ' 已在别的键下（一页一键）'); return; }
             cur[ki].push(face);
             if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
               try { logInto($('logStream'), 'sys', '键位组合：第' + (ki + 1) + '键加入 ' + (KM_LABEL[face] || face) + '（配置已持久化）'); } catch (e) {}
@@ -10439,7 +10439,7 @@ var PT_I18N = {
         var addK = $('kmAddKey');
         if (addK) {
           addK.disabled = km.length >= 4 || !unmapped.length;
-          addK.title = km.length >= 4 ? '最多 4 键' : (!unmapped.length ? '全部供应商已上键，无脸可建新键' : '新增一键（把待加池第一张脸建成新键）');
+          addK.title = km.length >= 4 ? '最多 4 键' : (!unmapped.length ? '全部供应商已上键，无页可建新键' : '新增一键（把待加池第一页建成新键）');
         }
       };
       var cfg = $('keymapCfgBtn');
@@ -10451,7 +10451,7 @@ var PT_I18N = {
         var cur = kmGet();
         if (cur.length >= 4) { toast('err', '键位组合', '最多 4 键'); return; }
         var un = kmUnmapped(cur);
-        if (!un.length) { toast('err', '键位组合', '全部供应商已上键，无脸可建新键'); return; }
+        if (!un.length) { toast('err', '键位组合', '全部供应商已上键，无页可建新键'); return; }
         cur.push([un[0]]);
         if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
           try { logInto($('logStream'), 'sys', '键位组合：新增第' + cur.length + '键 [' + (KM_LABEL[un[0]] || un[0]) + ']（配置已持久化）'); } catch (e) {}
