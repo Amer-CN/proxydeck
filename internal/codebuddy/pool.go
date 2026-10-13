@@ -175,10 +175,11 @@ func scanAuthFiles(region Region) []*Account {
 				log.Printf("[codebuddy] 账号池扫描：跳过无法解析或区域不符的文件 %s", e.Name())
 				continue
 			}
-			// 新版加密文件代理无法解密：不入池（入池会被 Pick 选中再吃 401 误标死号）。
+			// 不可用文件不入池（入池会被 Pick 选中再吃 401 误标死号；原因不带原文）。
 			if !authTokenUsable(path) {
 				encrypted++
-				log.Printf("[codebuddy] 账号池扫描：跳过新版加密登录文件 %s（token 无法解密）", e.Name())
+				log.Printf("[codebuddy] 账号池扫描：跳过不可用登录文件 %s（%s）",
+					e.Name(), authTokenUnusableReason(path))
 				continue
 			}
 			found = append(found, cand{Account{UID: uid, Nickname: nick, AuthPath: path, Enabled: true}, info.ModTime()})
@@ -200,10 +201,10 @@ func scanAuthFiles(region Region) []*Account {
 		a := f.acct
 		accounts = append(accounts, &a)
 	}
-	// 零可用不再静默：区分"一个文件都没有"与"有文件但全是新版加密"，报去哪找过。
+	// 零可用不再静默：区分"一个文件都没有"与"有文件但全解不出来"，报去哪找过。
 	if len(accounts) == 0 {
 		if encrypted > 0 {
-			log.Printf("[codebuddy] 账号池扫描 region=%s：%d 个登录文件但 token 均为新版加密形态（代理无法解密），已搜索目录：%s",
+			log.Printf("[codebuddy] 账号池扫描 region=%s：%d 个登录文件但 token 均不可用（加密解不出来或已损坏），已搜索目录：%s",
 				region, encrypted, strings.Join(findAuthDirs(), "; "))
 		} else {
 			log.Printf("[codebuddy] 账号池扫描 region=%s 零命中，已搜索目录：%s", region, strings.Join(findAuthDirs(), "; "))

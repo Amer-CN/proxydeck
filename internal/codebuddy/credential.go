@@ -35,6 +35,10 @@ type Credential struct {
 	path   string
 	cached map[string]any
 	mtime  time.Time
+	// decAccess/decRefresh 为已解密的明文（loadIfStale 随文件重载时解析一次；
+	// 明文原文件直接取，$wbEncrypted 信封走 atrest.go 解；凭据原文不出日志）。
+	decAccess  string
+	decRefresh string
 	client *http.Client
 }
 
@@ -56,15 +60,51 @@ func (f *flexString) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// authAccount 对应 auth 文件里的顶层结构（宽松解析）。
+// wbToken 登录态 token 字段：旧版明文字符串原样收；新版 $wbEncrypted 信封
+// 存 raw、解密延后到 Resolve（解析期绝不调 exe，假信封单测不受本机环境影响）。
+// 昵称仍用 flexString（显示名置空即可，绝不解密）。
+type wbToken struct {
+	raw       json.RawMessage
+	plain     string
+	encrypted bool
+}
+
+// UnmarshalJSON 字符串原样收；信封记形态；其余（数字/null/数组）置空不报错。
+func (t *wbToken) UnmarshalJSON(b []byte) error {
+	t.raw = append(t.raw[:0], b...)
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		t.plain, t.encrypted = s, false
+		return nil
+	}
+	var v any
+	if err := json.Unmarshal(b, &v); err == nil && isEncryptedField(v) {
+		t.plain, t.encrypted = "", true
+		return nil
+	}
+	t.plain, t.encrypted = "", false
+	return nil
+}
+
+// IsEncrypted 是否为 $wbEncrypted 信封形态。
+func (t *wbToken) IsEncrypted() bool { return t.encrypted }
+
+// Resolve 取明文（明文直接回；信封走 at-rest 解密，失败如实错、不带原文）。
+func (t *wbToken) Resolve(region Region) (string, error) {
+	if !t.encrypted {
+		return t.plain, nil
+	}
+	return decryptEnvelopeRaw(t.raw, region)
+}
+// sessionInfo 对应 auth 文件里的顶层结构（宽松解析）。
 type sessionInfo struct {
 	Auth struct {
 		// AccessToken/RefreshToken：旧版明文字符串；新版桌面端（2026-10-12
 		// 实测 WorkBuddy 5.7.7 / AI 5.7.6）写加密对象 {"$wbEncrypted":1,...}，
-		// 代理无法解密——flex 收成空串保住整件解析，是否可用另由
-		// authTokenUsable 判定（选文件只选含明文 token 的）。
-		AccessToken     flexString `json:"accessToken"`
-		RefreshToken    flexString `json:"refreshToken"`
+		// wbToken 收形态、明文经 Resolve 走 at-rest 解密；是否可用由
+		// authTokenUsable 判定（明文非空或信封可解密）。
+		AccessToken     wbToken `json:"accessToken"`
+		RefreshToken    wbToken `json:"refreshToken"`
 		Domain          string `json:"domain"`
 		ExpiresAt       int64  `json:"expiresAt"`
 		RefreshExpiresAt int64 `json:"refreshExpiresAt"`
@@ -77,27 +117,70 @@ type sessionInfo struct {
 	} `json:"account"`
 }
 
-// authTokenUsable 该文件是否含可直接用的明文 token（非空字符串）。
-// 新版加密对象一律不可用——只读字段值做匹配，不打印、不落日志。
+// authTokenUsable 该文件是否含可用 token：明文非空即用；$wbEncrypted 信封
+// 能解密出非空明文即用（at-rest 解密，见 atrest.go）。只读字段值做匹配，
+// 凭据原文不打印、不落日志。
 func authTokenUsable(path string) bool {
+	return authTokenUnusableReason(path) == ""
+}
+
+// authTokenUnusableReason 不可用时返回短原因（""=可用；扫描日志用，不带原文）。
+func authTokenUnusableReason(path string) string {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return false
+		return "读文件失败"
 	}
 	var probe struct {
 		Auth struct {
-			AccessToken any `json:"accessToken"`
+			AccessToken json.RawMessage `json:"accessToken"`
 		} `json:"auth"`
 	}
-	if json.Unmarshal(b, &probe) != nil {
-		return false
+	if json.Unmarshal(b, &probe) != nil || len(probe.Auth.AccessToken) == 0 {
+		return "auth.accessToken 缺失"
 	}
-	s, ok := probe.Auth.AccessToken.(string)
-	return ok && s != ""
+	var s string
+	if err := json.Unmarshal(probe.Auth.AccessToken, &s); err == nil {
+		if s != "" {
+			return ""
+		}
+		return "明文 token 为空"
+	}
+	var v any
+	if err := json.Unmarshal(probe.Auth.AccessToken, &v); err != nil || !isEncryptedField(v) {
+		return "token 形态未知"
+	}
+	// 信封形态：结构先验（坏信封直接判死，不触发取 key）；结构对才解密。
+	if _, err := parseWbEnvelope(probe.Auth.AccessToken); err != nil {
+		return "加密信封损坏(" + err.Error() + ")"
+	}
+	pt, err := decryptEnvelopeRaw(probe.Auth.AccessToken, regionOfAuth(b))
+	if err != nil {
+		return "加密 token 解密失败(" + err.Error() + ")"
+	}
+	if pt == "" {
+		return "加密 token 解密后为空"
+	}
+	return ""
 }
 
-// countEncryptedFiles 该区域下"可解析、区域对、但 token 为加密形态"的文件数
-//（诊断用：区分"一个文件都没有"和"有文件但全是新版加密"）。
+// regionOfAuth 按 auth.domain 定区域（解密候选 exe 排序用；未知按 CN——
+// 解密以 envelope.keyId 匹配为准，排错序只多一次子进程，不误用）。
+func regionOfAuth(b []byte) Region {
+	var probe struct {
+		Auth struct {
+			Domain string `json:"domain"`
+		} `json:"auth"`
+	}
+	if json.Unmarshal(b, &probe) == nil &&
+		containsDomain(probe.Auth.Domain, regionConfigs[RegionINTL].DomainSuffix) {
+		return RegionINTL
+	}
+	return RegionCN
+}
+
+// countEncryptedFiles 该区域下"可解析、区域对、但 token 不可用"的文件数
+//（诊断用：区分"一个文件都没有"和"有文件但全解不出来"；可解密的加密文件
+// 已是可用文件，不计入）。
 func countEncryptedFiles(region Region) int {
 	suffix := regionConfigs[region].DomainSuffix
 	n := 0
@@ -180,9 +263,9 @@ func FindAuthFile() string {
 
 // FindAuthFileForRegion 同 FindAuthFile，但按区域过滤 auth.domain
 //（CN → 含 codebuddy.cn；INTL → 含 workbuddy.ai）。
-// 可用性优先：只选含明文 token 的文件（新版加密文件代理无法解密，选了等于
-// 断流）；同目录内按 mtime 取最新（目录优先级保持旧语义：默认目录优先）。
-// 零可用时如实区分"一个文件都没有"与"有文件但全是新版加密"，日志写清去哪找过。
+// 可用性优先：只选 token 可用的文件（明文非空或 $wbEncrypted 信封可解密）；
+// 同目录内按 mtime 取最新（目录优先级保持旧语义：默认目录优先）。
+// 零可用时如实区分"一个文件都没有"与"有文件但全解不出来"，日志写清去哪找过。
 func FindAuthFileForRegion(region Region) string {
 	suffix := regionConfigs[region].DomainSuffix
 	dirs := findAuthDirs()
@@ -211,7 +294,8 @@ func FindAuthFileForRegion(region Region) string {
 			}
 			if !authTokenUsable(p) {
 				encrypted++
-				log.Printf("[codebuddy] 跳过新版加密登录文件 %s（token 无法解密，用最后可用文件）", e.Name())
+				log.Printf("[codebuddy] 跳过不可用登录文件 %s（%s，用最后可用文件）",
+					e.Name(), authTokenUnusableReason(p))
 				continue
 			}
 			files = append(files, fi{p, info.ModTime()})
@@ -222,7 +306,7 @@ func FindAuthFileForRegion(region Region) string {
 		}
 	}
 	if encrypted > 0 {
-		log.Printf("[codebuddy] %s 有 %d 个登录文件但 token 均为新版加密形态（代理无法解密），已搜索目录：%s",
+		log.Printf("[codebuddy] %s 有 %d 个登录文件但 token 均不可用（加密解不出来或已损坏），已搜索目录：%s",
 			region, encrypted, strings.Join(dirs, "; "))
 	} else {
 		log.Printf("[codebuddy] 未找到 %s 登录文件，已搜索目录：%s", region, strings.Join(dirs, "; "))
@@ -260,7 +344,9 @@ func NewCredential(path string, region Region) *Credential {
 	}
 }
 
-// loadIfStale 文件 mtime 变了（桌面端外部刷新过）→ 重新加载。
+// loadIfStale 文件 mtime 变了（桌面端外部刷新过）→ 重新加载并解密 token。
+// 解密一次、随文件缓存：信封解密只在文件变化时发生，不在每请求重复调 exe。
+// 成功日志只打脱敏描述（JWT 头部前 20 字＋长度），凭据原文不出日志。
 func (c *Credential) loadIfStale() error {
 	st, err := os.Stat(c.path)
 	if err != nil {
@@ -277,6 +363,26 @@ func (c *Credential) loadIfStale() error {
 		}
 		c.cached = m
 		c.mtime = st.ModTime()
+		c.decAccess, c.decRefresh = "", ""
+		s, err := c.session()
+		if err != nil {
+			return err
+		}
+		access, err := s.Auth.AccessToken.Resolve(c.region)
+		if err != nil {
+			return fmt.Errorf("登录文件 %s 的加密 token 无法解密（%s）",
+				filepath.Base(c.path), err.Error())
+		}
+		refresh, err := s.Auth.RefreshToken.Resolve(c.region)
+		if err != nil {
+			return fmt.Errorf("登录文件 %s 的加密 token 无法解密（%s）",
+				filepath.Base(c.path), err.Error())
+		}
+		c.decAccess, c.decRefresh = access, refresh
+		if s.Auth.AccessToken.IsEncrypted() || s.Auth.RefreshToken.IsEncrypted() {
+			log.Printf("[codebuddy] at-rest 加密登录态解密成功：文件=%s %s",
+				filepath.Base(c.path), desensToken(access))
+		}
 	}
 	return nil
 }
@@ -297,9 +403,16 @@ func (c *Credential) expired(s *sessionInfo) bool {
 }
 
 // refresh 调后端刷新 token，写回 auth 文件与缓存。
+// 回写形态与原文件一致：原 token 是 $wbEncrypted 信封时，新 token 同样加密
+// 回写（nonce 随机，桌面端可读，登录态不被破坏）；明文原文件保持明文。
 func (c *Credential) refresh(ctx context.Context, s *sessionInfo) error {
-	h := c.buildHeaders(s)
-	h.Set("X-Refresh-Token", string(s.Auth.RefreshToken))
+	refreshToken, err := s.Auth.RefreshToken.Resolve(c.region)
+	if err != nil {
+		return fmt.Errorf("登录文件 %s 的加密 token 无法解密（%s）",
+			filepath.Base(c.path), err.Error())
+	}
+	h := c.buildHeaders(s, c.decAccess)
+	h.Set("X-Refresh-Token", refreshToken)
 	h.Set("X-Auth-Refresh-Source", "plugin")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
@@ -332,6 +445,33 @@ func (c *Credential) refresh(ctx context.Context, s *sessionInfo) error {
 	}
 	newAuth["lastRefreshTime"] = time.Now().UnixMilli()
 	fillExpires(newAuth, s.Auth.ExpiresAt)
+	// 加密回写：原文件 token 是信封形态才加密（形态保持，桌面端可读）。
+	// 刷新拿到的永远是明文（出站语义不变）：先记下明文同步解密缓存，再换成
+	// 信封写回，写回后再读文件（mtime 已变）不会因"密文对不上缓存"误事。
+	newAccess, _ := newAuth["accessToken"].(string)
+	newRefresh, _ := newAuth["refreshToken"].(string)
+	if s.Auth.AccessToken.IsEncrypted() || s.Auth.RefreshToken.IsEncrypted() {
+		if newAccess != "" {
+			enc, err := EncryptLike(s.Auth.AccessToken.raw, newAccess, c.region)
+			if err != nil {
+				return fmt.Errorf("刷新成功但加密回写失败（%s），未动登录文件", err.Error())
+			}
+			newAuth["accessToken"] = enc
+		}
+		if newRefresh != "" {
+			enc, err := EncryptLike(s.Auth.RefreshToken.raw, newRefresh, c.region)
+			if err != nil {
+				return fmt.Errorf("刷新成功但加密回写失败（%s），未动登录文件", err.Error())
+			}
+			newAuth["refreshToken"] = enc
+		}
+	}
+	if newAccess != "" {
+		c.decAccess = newAccess
+	}
+	if newRefresh != "" {
+		c.decRefresh = newRefresh
+	}
 	c.cached["auth"] = newAuth
 
 	// 原子写回
@@ -371,8 +511,8 @@ func toFloat(v any) (float64, bool) {
 	return f, ok
 }
 
-// buildHeaders 构造后端请求头。
-func (c *Credential) buildHeaders(s *sessionInfo) http.Header {
+// buildHeaders 构造后端请求头（access 取已解密的明文；出站语义不变）。
+func (c *Credential) buildHeaders(s *sessionInfo, access string) http.Header {
 	domain := s.Auth.Domain
 	if domain == "" {
 		domain = defaultDomain
@@ -380,7 +520,7 @@ func (c *Credential) buildHeaders(s *sessionInfo) http.Header {
 	h := http.Header{}
 	h.Set("Content-Type", "application/json")
 	h.Set("Accept", "application/json")
-	h.Set("Authorization", "Bearer "+string(s.Auth.AccessToken))
+	h.Set("Authorization", "Bearer "+access)
 	h.Set("X-User-Id", s.Account.UID)
 	h.Set("X-Enterprise-Id", s.Account.EnterpriseID)
 	h.Set("X-Tenant-Id", s.Account.EnterpriseID)
@@ -422,9 +562,11 @@ func (c *Credential) headersFor(ctx context.Context, path string) (http.Header, 
 	if err != nil {
 		return nil, err
 	}
-	// 兜底：加密形态文件绝不允许走到出站（选文件层已过滤；显式路径传入时在这里拦）。
-	if s.Auth.AccessToken == "" {
-		return nil, fmt.Errorf("登录文件 %s 的 token 为新版加密形态，代理无法解密", filepath.Base(c.path))
+	// 兜底：不可用文件绝不允许走到出站（选文件层已过滤；显式路径传入时在这里拦）。
+	// 错误只带文件名与原因类别，不带全路径、不带 token。
+	if c.decAccess == "" {
+		return nil, fmt.Errorf("登录文件 %s 的加密 token 无法解密（解密后为空）",
+			filepath.Base(c.path))
 	}
 	if c.expired(s) {
 		if regionConfigs[c.region].NoRefresh {
@@ -438,7 +580,7 @@ func (c *Credential) headersFor(ctx context.Context, path string) (http.Header, 
 			return nil, err
 		}
 	}
-	return c.buildHeaders(s), nil
+	return c.buildHeaders(s, c.decAccess), nil
 }
 
 // Summary 返回诊断信息（uid/昵称/企业/token 过期状态）。
