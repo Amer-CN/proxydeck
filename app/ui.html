@@ -10736,7 +10736,9 @@ var PT_I18N = {
     if (btn) { btn.disabled = true; btn.textContent = '检查中…'; }
     if (lamp) lamp.classList.add('on');
     var r = null;
-    try { r = await call('CheckUpdate'); } catch (e) { r = null; }
+    /* 手动首调用走 Force（清缓存+踢重拉，发版后 30 分钟保鲜期内也能查到新版）；
+       checking 重试（_chkRetries≥1）仍走普通 CheckUpdate 只读缓存，不叠加拉取 */
+    try { r = await call(_chkRetries === 0 ? 'CheckUpdateForce' : 'CheckUpdate'); } catch (e) { r = null; }
     if (!r || !r.ok) {
       if (r && r.msg === 'checking') {
         _chkRetries++;

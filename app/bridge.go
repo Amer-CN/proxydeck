@@ -471,6 +471,58 @@ var (
 	updateLastFetch time.Time                // 最近一次踢拉取的时刻（断网限频 30s）
 )
 
+// tryKickUpdateRefresh 踢一次更新检查后台重拉（非阻塞，通道去重）。
+// 本函数是踢取逻辑的可单测抽取：与 ccCheckUpdate 内的内联踢取块语义逐字一致
+// （条件取反表述：`Since<=30s 丢弃` ≡ 原 `Since>30s 才踢`；自动路径保持一字不动，
+// 故此处复述而非复用，改一处须对另一处）。
+// 限频语义（只约束经由本函数的自动过期踢取）：
+//   - 30s 踢取限频：距上次有效踢取不足 30s 时直接返回 false，不进通道、不产生拉取。
+//     前端 checking 每 2s 重试一次，没有这道门，断网/慢网时每次重试都会排一次拉取
+//     （通道去重只能合并"同时排队"的，拉取一完成、下一毫秒的重试又会排新拉取→风暴）。
+//   - 手动 Force（checkUpdateForce）不走本函数：它清缓存后无条件踢取（时钟照样前移），
+//     靠通道 cap=1 去重＋后台单 goroutine 串行单 fetch 防风暴。
+//   - 通道 cap=1 去重：突发 N 次踢取至多 1 个排队；后台单 goroutine 串行消费，
+//     同一时刻至多 1 个在途 + 1 个排队。
+//   - 匿名 60/h 不被绕过：消耗配额的拉取（成功 200 / 403）在稳态下被成功缓存 30 分钟 /
+//     负缓存 10 分钟挡住（Force 触发的那次拉取同样落缓存，同样受挡）。
+//
+// 返回 true = 本次踢取有效（已排队；若已有排队则合并，仍只一次有效拉取）；
+// false = 被 30s 限频丢弃，零拉取。
+func tryKickUpdateRefresh() bool {
+	updateCacheMu.Lock()
+	if time.Since(updateLastFetch) <= 30*time.Second {
+		updateCacheMu.Unlock()
+		return false
+	}
+	updateLastFetch = time.Now()
+	updateCacheMu.Unlock()
+	select {
+	case updateRefreshCh <- struct{}{}:
+	default: // 已有待处理拉取，合并，不叠加
+	}
+	return true
+}
+
+// checkUpdateForce 手动"立即检查"强制刷新的可单测内核：清缓存 + 无条件踢取，恒回 checking。
+// 发版后 30 分钟保鲜期内，旧缓存仍是"最新=发版前版本"——普通 CheckUpdate 只读缓存会误报
+// "已是最新"；Force 把缓存清掉，前端既有 checking 重试轮询（2s×4，仍走普通 CheckUpdate）
+// 拿到后台 fresh 结果。自动检查路径（ccCheckUpdate 缓存读）不受影响。
+// 注意：Force 无条件踢取，不走 30s 限频——GUI 启动自带一次拉取，30s 窗口内用户点手动检查时，
+// 若沿用限频会清掉好缓存又踢不出新拉取，前端 4 次重试后误报"暂时无法连接"。
+// 30s 限频只约束普通自动路径（tryKickUpdateRefresh 原样保留）；Force 的防风暴靠通道 cap=1
+// 去重＋后台单 goroutine 串行单 fetch，突发连点至多 1 个排队，不叠加有效拉取。
+func checkUpdateForce() string {
+	updateCacheMu.Lock()
+	updateCache = ""
+	updateLastFetch = time.Now()
+	updateCacheMu.Unlock()
+	select {
+	case updateRefreshCh <- struct{}{}:
+	default: // 已有待处理拉取，合并，不叠加
+	}
+	return `{"ok":false,"msg":"checking"}`
+}
+
 // 一键更新流程状态：bind 只读写这几个字段并瞬时返回，真正的下载/替换在
 // runOneKeyUpdateFlow 的 goroutine 里。updFlowActive 保证同一时间只跑一个流程。
 var (
@@ -796,6 +848,9 @@ func (a *app) bindAll(w webview.WebView) {
 		}
 		return `{"ok":false,"msg":"checking"}`
 	})
+	// 手动"立即检查"强制刷新：清缓存＋踢一次后台重拉＋回 checking（内核见 checkUpdateForce）。
+	// 自动检查（ccCheckUpdate）与每小时整点复查（ui.html 10915 区）一律不走这里，行为零变化。
+	_ = w.Bind("ccCheckUpdateForce", checkUpdateForce)
 	// 后台异步拉取 GitHub releases（不占 bind 队列；成功写缓存供前端重试读取）。
 	// 常驻循环：bind 发现缓存过期时踢一次（通道去重）——GUI 开着跨发版也能感知新版本。
 	// 通道优先级（第 46 轮实测教训：匿名 API 限额按出口 IP 计，共享 NAT/代理出口
