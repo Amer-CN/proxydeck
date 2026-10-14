@@ -241,6 +241,10 @@ func main() {
 	}
 
 	// GUI 模式：进程内静态服务提供内嵌界面（随机空闲端口，避免冲突）
+	// 更新后零残留：新 GUI 启动时，把还跑在旧包（*.old*）上的插件后端逐个换血
+	// （停旧→用新包拉起→等 health 绿），换完扫一次残留。只在 GUI 分支做——newApp 在
+	// 插件子进程/headless/浮窗里都会跑，那几处绝不能碰别的后端。异步跑，不阻塞界面。
+	go app.rollStaleBackends()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
