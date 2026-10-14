@@ -4,7 +4,10 @@ package main
 
 import (
 	"errors"
+	"net"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -122,7 +125,7 @@ func TestWaitBackendHealthy(t *testing.T) {
 // 换血顺序：stop→start→health 全绿才算成功；调用序列可审计。
 func TestRollOneOrder(t *testing.T) {
 	var calls []string
-	tgt := staleTarget{def: pluginDef{ID: "tj", Name: "团结", Port: 8788}, pid: 1111}
+	tgt := staleTarget{def: pluginDef{ID: "tj", Name: "团结", Port: 0}, pid: 1111} // Port 0 永不被占：rollOne 自带杀后端口复验，真端口会受环境影响
 	n := 0
 	msg := rollOne(tgt,
 		func(id string) error { calls = append(calls, "stop:"+id); return nil },
@@ -145,7 +148,7 @@ func TestRollOneOrder(t *testing.T) {
 
 func TestRollOneStopFailsSkipsRest(t *testing.T) {
 	var calls []string
-	tgt := staleTarget{def: pluginDef{ID: "tj", Name: "团结", Port: 8788}, pid: 1111}
+	tgt := staleTarget{def: pluginDef{ID: "tj", Name: "团结", Port: 0}, pid: 1111} // Port 0 永不被占：rollOne 自带杀后端口复验，真端口会受环境影响
 	msg := rollOne(tgt,
 		func(id string) error { calls = append(calls, "stop"); return errors.New("杀不掉") },
 		func(id string) error { calls = append(calls, "start"); return nil },
@@ -159,7 +162,7 @@ func TestRollOneStopFailsSkipsRest(t *testing.T) {
 
 func TestRollOneStartFailsSkipsHealth(t *testing.T) {
 	var calls []string
-	tgt := staleTarget{def: pluginDef{ID: "tj", Name: "团结", Port: 8788}, pid: 1111}
+	tgt := staleTarget{def: pluginDef{ID: "tj", Name: "团结", Port: 0}, pid: 1111} // Port 0 永不被占：rollOne 自带杀后端口复验，真端口会受环境影响
 	msg := rollOne(tgt,
 		func(id string) error { calls = append(calls, "stop"); return nil },
 		func(id string) error { calls = append(calls, "start"); return errors.New("拉不起") },
@@ -173,7 +176,7 @@ func TestRollOneStartFailsSkipsHealth(t *testing.T) {
 
 func TestRollOneUnhealthyReports(t *testing.T) {
 	calls := 0
-	tgt := staleTarget{def: pluginDef{ID: "tj", Name: "团结", Port: 8788}, pid: 1111}
+	tgt := staleTarget{def: pluginDef{ID: "tj", Name: "团结", Port: 0}, pid: 1111} // Port 0 永不被占：rollOne 自带杀后端口复验，真端口会受环境影响
 	msg := rollOne(tgt,
 		func(id string) error { return nil },
 		func(id string) error { return nil },
@@ -193,5 +196,77 @@ func TestImagePathOfPIDSelf(t *testing.T) {
 	}
 	if exe == "" || !strings.HasSuffix(strings.ToLower(exe), ".exe") {
 		t.Errorf("自己镜像路径异常: %q", exe)
+	}
+}
+
+// 换血标记往返：写→读回版本→文件消失；缺席/损坏返回 false（损坏文件照删，不重复触发）。
+func TestUpdateMarkerRoundTrip(t *testing.T) {
+	p := filepath.Join(t.TempDir(), ".update-rollover.json")
+	if _, ok := consumeUpdateMarkerFrom(p); ok {
+		t.Errorf("缺席必须返回 false")
+	}
+	if err := writeUpdateMarkerTo(p, "v9.9.9", 12345); err != nil {
+		t.Fatalf("写标记失败: %v", err)
+	}
+	to, ok := consumeUpdateMarkerFrom(p)
+	if !ok || to != "v9.9.9" {
+		t.Errorf("读回应为 v9.9.9/true，实际 %q/%v", to, ok)
+	}
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Errorf("消费后文件必须消失")
+	}
+	if err := os.WriteFile(p, []byte("{坏掉"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := consumeUpdateMarkerFrom(p); ok {
+		t.Errorf("损坏必须返回 false")
+	}
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Errorf("损坏文件也必须删掉，不重复触发")
+	}
+}
+
+// waitPortFree：空端口即 true；被占端口在超时内 false。
+func TestWaitPortFree(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("起监听失败: %v", err)
+	}
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	if waitPortFree(port, 500*time.Millisecond) {
+		t.Errorf("被占端口在超时内必须返回 false")
+	}
+	_ = ln.Close()
+	if !waitPortFree(port, 5*time.Second) {
+		t.Errorf("空端口必须返回 true")
+	}
+}
+
+// 杀后复验：stop 成功但端口仍被占 → 如实报错且不调 start（此前"弹回 running"的假成功根因）。
+func TestRollOneKillUnverified(t *testing.T) {
+	old := rollKillGrace
+	rollKillGrace = 100 * time.Millisecond
+	defer func() { rollKillGrace = old }()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("起监听失败: %v", err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+	var calls []string
+	tgt := staleTarget{def: pluginDef{ID: "tj", Name: "团结", Port: port}, pid: 1111}
+	msg := rollOne(tgt,
+		func(id string) error { calls = append(calls, "stop"); return nil },
+		func(id string) error { calls = append(calls, "start"); return nil },
+		func(d pluginDef) bool { calls = append(calls, "healthy"); return true },
+		time.Second,
+	)
+	if msg == "" || !strings.Contains(msg, "杀不掉") {
+		t.Errorf("应如实报杀不掉，实际 msg=%q calls=%v", msg, calls)
+	}
+	for _, c := range calls {
+		if c == "start" || c == "healthy" {
+			t.Errorf("杀不掉时 start/health 一律不得调用，calls=%v", calls)
+		}
 	}
 }

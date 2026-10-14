@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Amer-CN/proxydeck/internal/appdir"
 	"golang.org/x/sys/windows"
 )
 
@@ -118,6 +120,56 @@ func classifyHolders(defs []pluginDef, snap map[string][]int, imageOf func(int) 
 }
 
 // waitBackendHealthy 轮询插件 health 直到绿（或超时）。interval/timeout 可注入，单测用毫秒级。
+// rollKillGrace 杀后等端口空出的宽限（包变量，单测可调小；生产 5s）。
+var rollKillGrace = 5 * time.Second
+
+// updateMarkerPath 换血标记路径（数据目录，exe 换版也不丢；便携模式跟数据走）。
+func updateMarkerPath() string { return appdir.Path(".update-rollover.json") }
+
+// writeUpdateMarker 记录一次成功替换（to=新版本，at=纳秒时间戳），供新 GUI 换血用。
+func writeUpdateMarker(to string) error {
+	return writeUpdateMarkerTo(updateMarkerPath(), to, time.Now().UnixNano())
+}
+
+// writeUpdateMarkerTo 同上，路径可注入（单测走临时目录）。
+func writeUpdateMarkerTo(path, to string, at int64) error {
+	b, _ := json.Marshal(map[string]any{"to": to, "at": at})
+	return os.WriteFile(path, b, 0o600)
+}
+
+// consumeUpdateMarker 读走换血标记（读到即删，保证只换一轮；解析失败也删，不重复触发）。
+// 返回 ok=true = 刚发生过更新，调用方应对全部插件后端换血。
+func consumeUpdateMarker() (string, bool) { return consumeUpdateMarkerFrom(updateMarkerPath()) }
+
+// consumeUpdateMarkerFrom 同上，路径可注入（单测走临时目录）。
+func consumeUpdateMarkerFrom(path string) (string, bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	_ = os.Remove(path)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return "", false
+	}
+	to, _ := m["to"].(string)
+	return to, true
+}
+
+// waitPortFree 等端口空出来（只看 LISTENING，TIME_WAIT 残留不算）。单测可用临时监听。
+func waitPortFree(port string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if !portBusy(port) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+}
+
 func waitBackendHealthy(healthy func() bool, timeout, interval time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -142,6 +194,15 @@ func waitBackendHealthy(healthy func() bool, timeout, interval time.Duration) bo
 // 逐个串行，一路失败只记日志不连累其他路；全程异步，不阻塞界面；UI 经由既有
 // pluginList 轮询自然从 starting 翻成 running，无需动 ui.html。
 func (a *app) rollStaleBackends() {
+	// 1) 换血标记（更新器刚换完包）：全量滚，不猜镜像名——文件改名后运行中进程
+	// 上报的还是原名，靠名字永远认不出刚换过包的后端，只能靠标记。
+	if to, ok := consumeUpdateMarker(); ok {
+		log.Printf("[rollover] 检测到更新换血标记（→ %s），开始全量换血", to)
+		a.rollAllBackends()
+		cleanupOldExe()
+		return
+	}
+	// 2) 无标记：沿用镜像名判定（手动腾位/旧残留场景）。
 	snap, err := snapshotListeners()
 	if err != nil {
 		log.Printf("[rollover] 监听表快照失败，本次跳过换血检查：%v", err)
@@ -177,9 +238,29 @@ func (a *app) rollStaleBackends() {
 	cleanupOldExe()
 }
 
-// rollOne 给一台后端换血：停旧→用新包拉起→等 health 绿，返回 "" 表示成功。
+// rollAllBackends 把全部插件后端逐个换血（更新刚完成时用：所有后端都跑着旧包，
+// 无需逐个判定）。逐个串行，一路失败只记日志不连累其他路；最后扫一次残留。
+func (a *app) rollAllBackends() {
+	for _, d := range pluginDefs {
+		log.Printf("[rollover] %s 开始换血（更新后全量）", d.Name)
+		if msg := rollOne(staleTarget{def: d},
+			a.pluginStop,
+			a.pluginStart,
+			func(dd pluginDef) bool { return httpOK(a.pluginHealthURL(dd)) },
+			90*time.Second,
+		); msg != "" {
+			log.Print(msg)
+			continue
+		}
+		log.Printf("[rollover] %s 换血完成（已跑在新包上）", d.Name)
+	}
+}
+
+// rollOne 给一台后端换血：停旧→确认端口空出→用新包拉起→等 health 绿，返回 "" 表示成功。
 // stop/start/healthy 全部由调用方注入：生产传真实实现，单测传 mock（绝不碰真实端口）。
 // 任一步失败只返回一行日志文案，由调用方记日志后继续下一台——失败隔离，不中断整轮。
+// 其中杀后复验端口是故意的：pluginStop 杀失败也回 nil（历史行为），不复验就会出现
+// "拉杆弹回 running"的假成功；这里杀不掉就如实报错跳过。
 func rollOne(t staleTarget,
 	stop func(id string) error,
 	start func(id string) error,
@@ -188,6 +269,9 @@ func rollOne(t staleTarget,
 ) string {
 	if err := stop(t.def.ID); err != nil {
 		return fmt.Sprintf("[rollover] %s 停止旧实例失败，跳过换血：%v", t.def.Name, err)
+	}
+	if !waitPortFree(strconv.Itoa(t.def.Port), rollKillGrace) {
+		return fmt.Sprintf("[rollover] %s 旧进程杀不掉（端口 %d 仍被占，可能权限不足），跳过换血", t.def.Name, t.def.Port)
 	}
 	if err := start(t.def.ID); err != nil {
 		return fmt.Sprintf("[rollover] %s 用新包拉起失败，请手动拉杆：%v", t.def.Name, err)

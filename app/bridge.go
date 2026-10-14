@@ -1312,6 +1312,13 @@ func (a *app) runOneKeyUpdateFlow(w webview.WebView, latest, dlURL string, dlSiz
 		fail(fmt.Sprintf("替换失败（新包就位不成）: %v（旧程序在 %s，新包在 %s，可手动放回）", err, oldFile, newFile))
 		return
 	}
+	// 换血标记（新 GUI 看到即把后端全量滚一遍）：更新刚完成，所有后端都跑着旧包。
+	// 不靠镜像名认旧后端——Windows 下文件改名后运行中进程上报的还是原名，靠名字永远
+	// 认不出（自改名实验证实）。标记写在替换成功、拉起新进程之前：拉起失败时标记照样
+	// 在，用户手动起新 GUI 照样换血；替换失败则不写，免得下次白滚一遍。
+	if err := writeUpdateMarker(latest); err != nil {
+		log.Printf("[update] 换血标记写入失败（更新本身已成功，各后端需手动拉杆重启）：%v", err)
+	}
 	log.Printf("[update] 替换完成，拉起新进程并关闭旧窗口")
 
 	// 重启：先拉起新 exe（无参数 = 主界面，与现状启动模式一致；工作目录 = exe 目录，
