@@ -203,7 +203,7 @@ func (s *Server) addAccount(w http.ResponseWriter, r *http.Request, token string
 		writeOAIError(w, http.StatusBadRequest, invalidTokenMsg+"（"+err.Error()+"）", "INVALID_TOKEN")
 		return
 	}
-	st := &tokenState{Value: token, Exp: info.Exp, HasExp: info.hasExp()}
+	st := &tokenState{Value: token, Exp: info.Exp, HasExp: info.hasExp(), Sub: info.Sub}
 	_, existing := s.pool.addWithState(st)
 	if existing {
 		writeJSON(w, http.StatusOK, map[string]any{
