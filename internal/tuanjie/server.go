@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -454,7 +455,63 @@ func (s *Server) serveModels(w http.ResponseWriter, r *http.Request, mergeProvid
 		writeErr(w, 502, err.Error())
 		return
 	}
-	writeErr(w, 502, "上游模型列表不可用")
+	// 上游明确拒绝（如路由级 403）＋缓存也没有 → 静态候选池兜底（2026-10-14：
+	// 上游 /v1/models 网关 403，对话正常；冷后端矩阵全空）。
+	// 注意：不写缓存（恢复后下次即回 live）；语义从"已验证可用"降级为"已知候选"，
+	// 真用时 401 由凭据治理标死。网络层错误（err != nil）仍如实 502，不兜底。
+	static := s.staticModels()
+	if mergeProviders {
+		static = s.mergeProviderModels(static)
+	}
+	log.Printf("[tuanjie] 模型列表上游失败且无缓存，返回静态候选池")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	_, _ = w.Write(static)
+}
+
+// staticModels 静态候选池：账号认领 claim 并集 ＋ 已知上游 8 模型，去重排序。
+// 仅在"上游非 200 且无缓存"时用。输出标准 OpenAI 列表形（mergeProviderModels 兼容）。
+func (s *Server) staticModels() []byte {
+	known := []string{
+		"codely-core", "codely-basic", "codely-flash", "codely-air", "codely-vl",
+		"KIMI-K3", "GLM-5.3-FLASH", "DeepSeek-V4.1-Flash",
+	}
+	seen := map[string]bool{}
+	var ids []string
+	if s.pool != nil {
+		for _, uid := range s.pool.SortedUserIDs() {
+			acc := s.pool.Get(uid)
+			if acc == nil {
+				continue
+			}
+			for _, m := range acc.Models {
+				if !seen[m] {
+					seen[m] = true
+					ids = append(ids, m)
+				}
+			}
+		}
+	}
+	for _, m := range known {
+		if !seen[m] {
+			seen[m] = true
+			ids = append(ids, m)
+		}
+	}
+	sort.Strings(ids)
+	now := time.Now().Unix()
+	data := make([]any, 0, len(ids))
+	for _, id := range ids {
+		data = append(data, map[string]any{
+			"object":   "model",
+			"id":       id,
+			"created":  now,
+			"owned_by": "tuanjie",
+		})
+	}
+	out := map[string]any{"object": "list", "data": data}
+	b, _ := json.Marshal(out)
+	return b
 }
 
 // handleModelsFull 遍历账号池所有 enabled 账号，用各自 token 拉 /v1/models，
