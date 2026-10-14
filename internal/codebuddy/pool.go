@@ -147,7 +147,7 @@ func NewAccountPool(region Region) *AccountPool {
 // JSON 坏 / 无 uid）或区域不符的跳过，不整池报错；同 uid 只留 mtime 最新的一个。
 // 返回按 mtime 新→旧排序（池内顺序契约：第一次 Pick 即 mtime 最新的号）。
 func scanAuthFiles(region Region) []*Account {
-	suffix := regionConfigs[region].DomainSuffix
+	suffixes := regionConfigs[region].DomainSuffixes
 	type cand struct {
 		acct  Account
 		mtime time.Time
@@ -169,7 +169,7 @@ func scanAuthFiles(region Region) []*Account {
 			}
 			path := filepath.Join(dir, e.Name())
 			domain, uid, nick, ok := parseAuthInfo(path)
-			if !ok || !containsDomain(domain, suffix) {
+			if !ok || !containsDomain(domain, suffixes) {
 				log.Printf("[codebuddy] 账号池扫描：跳过无法解析或区域不符的文件 %s", e.Name())
 				continue
 			}

@@ -31,13 +31,15 @@ func ParseRegion(s string) Region {
 
 // regionCfg 一个区域的全部后端差异。
 type regionCfg struct {
-	BaseURL      string   // 官方后端（chat/quota/probe 全走它）
-	DomainSuffix string   // 凭据过滤：auth.domain 必须含此后缀（region 隔离，修 FindAuthFile 拿错文件的 bug）
-	UserAgent    string   // 出站 User-Agent
-	ForceSystem  bool     // 国际版 11128：首条消息必须是 system → 客户端没带时自动补一条
-	NoRefresh    bool     // 国际版独立 Keycloak realm：不刷新 token，每次请求重读 auth 文件
-	NoProbe      bool     // 关掉每小时自动探测（国际版：池内 id 已逐条实测，对付费模型探测等于白花钱）
-	Candidates   []string // 模型候选池（CN 经探测只留真实可用的）
+	BaseURL string // 官方后端（chat/quota/probe 全走它）
+	// DomainSuffixes 凭据过滤：auth.domain 必须含其中任一条后缀即命中
+	//（region 隔离，修 FindAuthFile 拿错文件的 bug）。
+	DomainSuffixes []string
+	UserAgent      string   // 出站 User-Agent
+	ForceSystem    bool     // 国际版 11128：首条消息必须是 system → 客户端没带时自动补一条
+	NoRefresh      bool     // 国际版独立 Keycloak realm：不刷新 token，每次请求重读 auth 文件
+	NoProbe        bool     // 关掉每小时自动探测（国际版：池内 id 已逐条实测，对付费模型探测等于白花钱）
+	Candidates     []string // 模型候选池（CN 经探测只留真实可用的）
 }
 
 // intlDefaultSystem INTL 客户端消息缺 system 时自动补的最小中性 system。
@@ -45,21 +47,25 @@ const intlDefaultSystem = "You are a helpful assistant."
 
 var regionConfigs = map[Region]regionCfg{
 	RegionCN: {
-		BaseURL:      "https://copilot.tencent.com",
-		DomainSuffix: "codebuddy.cn",
-		UserAgent:    "codebuddy2openai-go/1.0",
-		ForceSystem:  false,
-		NoRefresh:    false,
-		Candidates:   modelCandidates,
+		BaseURL: "https://copilot.tencent.com",
+		// 2026-10-13：WorkBuddy CN 桌面端 5.7.x 把 auth.domain 从
+		// www.codebuddy.cn 改成 www.workbuddy.cn——只认老后缀会让 region=CN
+		// 零命中（8787 起不来）。两条并认：老后缀兼容既存登录态，新后缀接新客户端。
+		DomainSuffixes: []string{"codebuddy.cn", "workbuddy.cn"},
+		UserAgent:      "codebuddy2openai-go/1.0",
+		ForceSystem:    false,
+		NoRefresh:      false,
+		Candidates:     modelCandidates,
 	},
 	RegionINTL: {
 		// 2026-09-11 实测两 host 均 200；选 codebuddy.ai（与国内域名同形，客户端默认）
-		BaseURL:      "https://www.codebuddy.ai",
-		DomainSuffix: "workbuddy.ai",
-		UserAgent:    "CLI/2.63.2 CodeBuddy/2.63.2",
-		ForceSystem:  true,
-		NoRefresh:    true,
-		NoProbe:      true,
+		BaseURL: "https://www.codebuddy.ai",
+		// INTL 判定语义不变：只认 workbuddy.ai
+		DomainSuffixes: []string{"workbuddy.ai"},
+		UserAgent:      "CLI/2.63.2 CodeBuddy/2.63.2",
+		ForceSystem:    true,
+		NoRefresh:      true,
+		NoProbe:        true,
 		// 池内 id 全部由主智能体 2026-09-11 客户端实测逐条验证（每条一条最小请求，无效 id 免费报错）：
 		//   免费 3（倍率 0.00x，均 200）：deepseek-v4.1-flash / hy4-preview / hy3
 		//   付费 10（均 200）：gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna / gpt-5.5 / gpt-5.4 /
@@ -91,14 +97,24 @@ func (s *Server) cfg() regionCfg {
 // validateRegion 区域要求的凭据文件缺失时如实报错（不许回退到另一区域的凭据）。
 func validateRegion(r Region, domain string) error {
 	c := regionConfigs[r]
-	if domain != "" && containsDomain(domain, c.DomainSuffix) {
+	if containsDomain(domain, c.DomainSuffixes) {
 		return nil
 	}
-	return fmt.Errorf("未找到 %s 区域凭据（需要 auth.domain 含 %s 的登录文件）", r, c.DomainSuffix)
+	return fmt.Errorf("未找到 %s 区域凭据（需要 auth.domain 含 %s 的登录文件）",
+		r, strings.Join(c.DomainSuffixes, " 或 "))
 }
 
-// containsDomain domain 匹配（子串包含即可：CN→codebuddy.cn，INTL→workbuddy.ai；
-// 两者互不包含，不会误配）。
-func containsDomain(domain, suffix string) bool {
-	return domain != "" && suffix != "" && strings.Contains(domain, suffix)
+// containsDomain domain 匹配（子串包含即可：CN→codebuddy.cn 或 workbuddy.cn，
+// INTL→workbuddy.ai；后缀给空串不参与匹配，空 domain 一律不命中。
+// 2026-10-13：CN 改多后缀后两区后缀集合仍互不包含，不会误配）。
+func containsDomain(domain string, suffixes []string) bool {
+	if domain == "" {
+		return false
+	}
+	for _, s := range suffixes {
+		if s != "" && strings.Contains(domain, s) {
+			return true
+		}
+	}
+	return false
 }

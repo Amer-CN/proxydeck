@@ -103,17 +103,17 @@ type sessionInfo struct {
 		// 实测 WorkBuddy 5.7.7 / AI 5.7.6）写加密对象 {"$wbEncrypted":1,...}，
 		// wbToken 收形态、明文经 Resolve 走 at-rest 解密；是否可用由
 		// authTokenUsable 判定（明文非空或信封可解密）。
-		AccessToken     wbToken `json:"accessToken"`
-		RefreshToken    wbToken `json:"refreshToken"`
-		Domain          string `json:"domain"`
-		ExpiresAt       int64  `json:"expiresAt"`
-		RefreshExpiresAt int64 `json:"refreshExpiresAt"`
+		AccessToken      wbToken `json:"accessToken"`
+		RefreshToken     wbToken `json:"refreshToken"`
+		Domain           string  `json:"domain"`
+		ExpiresAt        int64   `json:"expiresAt"`
+		RefreshExpiresAt int64   `json:"refreshExpiresAt"`
 	} `json:"auth"`
 	Account struct {
-		UID           string `json:"uid"`
-		Nickname      flexString `json:"nickname"`
-		EnterpriseID  string `json:"enterpriseId"`
-		EnterpriseName string `json:"enterpriseName"`
+		UID            string     `json:"uid"`
+		Nickname       flexString `json:"nickname"`
+		EnterpriseID   string     `json:"enterpriseId"`
+		EnterpriseName string     `json:"enterpriseName"`
 	} `json:"account"`
 }
 
@@ -165,6 +165,7 @@ func authTokenUnusableReason(path string) string {
 
 // regionOfAuth 按 auth.domain 定区域（解密候选 exe 排序用；未知按 CN——
 // 解密以 envelope.keyId 匹配为准，排错序只多一次子进程，不误用）。
+// 只按 INTL 后缀判国际，其余（含 CN 的新老域名）一律归 CN。
 func regionOfAuth(b []byte) Region {
 	var probe struct {
 		Auth struct {
@@ -172,7 +173,7 @@ func regionOfAuth(b []byte) Region {
 		} `json:"auth"`
 	}
 	if json.Unmarshal(b, &probe) == nil &&
-		containsDomain(probe.Auth.Domain, regionConfigs[RegionINTL].DomainSuffix) {
+		containsDomain(probe.Auth.Domain, regionConfigs[RegionINTL].DomainSuffixes) {
 		return RegionINTL
 	}
 	return RegionCN
@@ -182,7 +183,7 @@ func regionOfAuth(b []byte) Region {
 //（诊断用：区分"一个文件都没有"和"有文件但全解不出来"；可解密的加密文件
 // 已是可用文件，不计入）。
 func countEncryptedFiles(region Region) int {
-	suffix := regionConfigs[region].DomainSuffix
+	suffixes := regionConfigs[region].DomainSuffixes
 	n := 0
 	for _, d := range findAuthDirs() {
 		ents, err := os.ReadDir(d)
@@ -194,7 +195,7 @@ func countEncryptedFiles(region Region) int {
 				continue
 			}
 			p := filepath.Join(d, e.Name())
-			if authFileDomainMatches(p, suffix) && !authTokenUsable(p) {
+			if authFileDomainMatches(p, suffixes) && !authTokenUsable(p) {
 				n++
 			}
 		}
@@ -262,12 +263,12 @@ func FindAuthFile() string {
 }
 
 // FindAuthFileForRegion 同 FindAuthFile，但按区域过滤 auth.domain
-//（CN → 含 codebuddy.cn；INTL → 含 workbuddy.ai）。
+//（CN → 含 codebuddy.cn 或 workbuddy.cn；INTL → 含 workbuddy.ai）。
 // 可用性优先：只选 token 可用的文件（明文非空或 $wbEncrypted 信封可解密）；
 // 同目录内按 mtime 取最新（目录优先级保持旧语义：默认目录优先）。
 // 零可用时如实区分"一个文件都没有"与"有文件但全解不出来"，日志写清去哪找过。
 func FindAuthFileForRegion(region Region) string {
-	suffix := regionConfigs[region].DomainSuffix
+	suffixes := regionConfigs[region].DomainSuffixes
 	dirs := findAuthDirs()
 	encrypted := 0
 	for _, d := range dirs {
@@ -289,7 +290,7 @@ func FindAuthFileForRegion(region Region) string {
 				continue
 			}
 			p := filepath.Join(d, e.Name())
-			if !authFileDomainMatches(p, suffix) {
+			if !authFileDomainMatches(p, suffixes) {
 				continue
 			}
 			if !authTokenUsable(p) {
@@ -314,9 +315,10 @@ func FindAuthFileForRegion(region Region) string {
 	return ""
 }
 
-// authFileDomainMatches 读 auth 文件的 auth.domain 字段判断是否命中区域后缀。
-// 只取字段值，token 等其余内容不读入内存、不落任何输出。
-func authFileDomainMatches(path, suffix string) bool {
+// authFileDomainMatches 读 auth 文件的 auth.domain 字段判断是否命中区域后缀
+//（任一后缀命中即可，见 containsDomain）。只取字段值，token 等其余内容不读入
+// 内存、不落任何输出。
+func authFileDomainMatches(path string, suffixes []string) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return false
@@ -329,7 +331,7 @@ func authFileDomainMatches(path, suffix string) bool {
 	if json.Unmarshal(b, &probe) != nil {
 		return false
 	}
-	return containsDomain(probe.Auth.Domain, suffix)
+	return containsDomain(probe.Auth.Domain, suffixes)
 }
 
 // NewCredential 创建凭据管理器（path 为空则按 region 自动查找）。

@@ -79,7 +79,7 @@ func TestChatPreservesToolSchemaAndToolCalls(t *testing.T) {
 			for _, clean := range []bool{false, true} {
 				name := fmt.Sprintf("%s/%s/stream=%v/clean=%v", tc.region, tc.model, stream, clean)
 				t.Run(name, func(t *testing.T) {
-					path := writeAuthInfo(t, t.TempDir(), "test.info", regionConfigs[tc.region].DomainSuffix, "test-schema", "test", time.Now())
+					path := writeAuthInfo(t, t.TempDir(), "test.info", regionConfigs[tc.region].DomainSuffixes[0], "test-schema", "test", time.Now())
 					hits := 0
 					s := &Server{
 						region: tc.region, desensitize: clean,
