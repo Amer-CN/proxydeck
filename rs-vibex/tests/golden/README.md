@@ -52,9 +52,13 @@ Copy-Item .work\rust-rewrite\golden-vibex-go.json rs-vibex\tests\golden\golden-v
 
 ## 两档 / SKIP 口径
 
-本基准**只有一档**：全量入库（262 KB < 1 MB），**没有需要跳过的超大用例**，因此
+本基准**只有一档**：全量入库（256 KB < 1 MB），**没有需要跳过的超大用例**，因此
 `cargo test` 的汇总行里「显式跳过 0 组」是常量而不是省略。若将来要加超大场景，
 按 P1/P3 的口径办：超大档留在 `.work/`，缺失时**显式打印 `SKIP(...)` 并计数**，不静默跳过。
+
+> 本文件当前对应 2026-10-15 **D1 修复后重采**的那一版（`ca7f09f` 之后；
+> SHA-256 `B420C20C…`，261,886 B）。上一代（`481F1CC1…`）留档
+> `.work/rust-rewrite/_golden-vibex-backup-r4b.json`；变化清单见 `rs-vibex/README.md` 第七节。
 
 ⚠ 与 P1/P3 相同的可见性边界：汇总行（含跳过/允许差异计数）走 `println!`，
 **裸 `cargo test` 看不到**，要看带 `-- --nocapture`。

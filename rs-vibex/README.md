@@ -110,7 +110,7 @@
 | C62 | 路由 5 条：`/health`、`/accounts`、`/v1/models`、`/v1/stats`、`/v1/chat/completions`（Go `ServeMux` 精确匹配 + 子树；尾斜杠与未知路径由 mux 兜底 404） | `server.go:93-101` | `lib.rs` | `golden:routes` |
 | C63 | `/health` **常驻 200**（无 token 也 200，`token_configured:false`）；字段 `status/service=vibex-go/version=1.0.0/token_configured/tokens/base_url/model_default/app_name/uptimeSec` + 有条件 `days_left_max`/`days_left`；`model_default` 空串 → `null` | `server.go:124-144` | `lib.rs` | `golden:health` |
 | C64 | `/accounts` GET：`ok/action:"list"/tokens/pool_size/token_configured`（+`days_left`）；POST 非 JSON 体 → 400 `请求体解析失败`；`action` 空 = `add`；未知 action → **200 `ok:false`**；非 GET/POST → 405 `只接受 GET/POST` | `server.go:158-191` | `lib.rs` | `golden:accounts` |
-| C65 | `addAccount`：JWT 非法 → 400 `INVALID_TOKEN`（文案含 `Rh-Accesstoken`）；探活失败 → 400 `INVALID_TOKEN` + `invalidTokenMsg`；已在池 → 200 `existing:true`；成功 → 200 + `persisted` + `exp`/`days_left`/`expired`；落盘失败**不回滚内存态**、回 `persisted:false` + `warning` | `server.go:195-239` | `lib.rs` | `golden:accounts-add` |
+| C65 | `addAccount`：JWT 非法 → 400 `INVALID_TOKEN`（文案含 `Rh-Accesstoken`）；探活失败 → 400 `INVALID_TOKEN` + `invalidTokenMsg`；已在池 → 200 `existing:true`；成功 → 200 + `persisted` + `exp`/`days_left`/`expired`；落盘失败**不回滚内存态**、回 `persisted:false` + `warning`；建 state 时登记 JWT `sub`（`ca7f09f` 起），手动粘贴路径也按同号收敛（见二之二） | `server.go:195-239` | `lib.rs` | `golden:accounts-add` |
 | C66 | `action=auto` 三段：①直接探测（探活失败/已在池 → fall through）②拉起一次性 profile 浏览器 ③150s 长轮询（每 2s；客户端断即停）；超时文案逐字（含 `150 秒`） | `server.go:246-311` | `lib.rs` | `golden:accounts-auto` |
 | C67 | `/v1/models`：池空 → 401 `TOKEN_NOT_CONFIGURED` + `tokenHint`；`?refresh=1` 旁路；**5 分钟 TTL 内存缓存**；缓存命中不打上游；**错误不写缓存**；providers 空 → 502 `provider 列表为空`；条目 `{id,object:"model",created:0,owned_by:"vibex",vibex:{display_name,billing_tier,description}}`，`id` 为空跳过 | `server.go:336-387` | `lib.rs` | `golden:models` |
 | C68 | `/v1/chat/completions` 校验顺序：读体上限 32 MiB → TrimSpace 空 → 400；非 JSON 对象 → 400；`messages` 非数组或空 → 400；**然后**才判池空 401 | `server.go:390-410` | `lib.rs` | `golden:chat-validate` |
@@ -177,25 +177,31 @@
    本 crate 的取消由**写响应失败**触发（`stream_out` 的 abort 路径 → `Cancel` → 生产方 unwind），
    不额外接 axum 的连接生命周期钩子。
 
-## 二之二、已知 Go 侧缺陷（**逐字对齐，不擅自修**）
+## 二之二、D1：手动粘贴入池的同号收敛（**Go 已于 `ca7f09f` 修复，本 crate 已对齐**）
 
-### D1：手动粘贴入池的内存池**不按同号收敛**
-
-`internal/vibex/server.go:206` 的 `addAccount` 建 state 时**没有设 `Sub`**：
+**曾经的 Go 侧缺陷（D1）**：`internal/vibex/server.go` 的 `addAccount` 建 state 时漏了 `Sub`：
 
 ```go
-st := &tokenState{Value: token, Exp: info.Exp, HasExp: info.hasExp()}
-_, existing := s.pool.addWithState(st)
+st := &tokenState{Value: token, Exp: info.Exp, HasExp: info.hasExp()}   // 修复前
 ```
 
 而 `addWithState` 的同号替换分支是 `if st.Sub != "" { … }` → 该分支被跳过、新串直接**追加**，
-于是同号在内存池里会留下两条（旧串 + 新串）。同一份逻辑在另外两条路径上是收敛的：
-`NewPool`（重启加载）与 `handleAccountAuto`（自动探测，走 `tokenStateOf` 会设 `Sub`），
-落盘路径 `persistToken` 也按 `sub` 收敛。**三条路径只有手动粘贴这一条不收敛。**
+于是同号在内存池里会留下两条（旧串 + 新串）。`NewPool`（重启加载）、`handleAccountAuto`
+（自动探测，走 `tokenStateOf` 会设 `Sub`）与落盘路径 `persistToken` 三条路径本就收敛
+——**四路只有手动粘贴这一条不收敛**。P4 阶段 Rust 侧逐字复刻了它（`lib.rs::add_account`
+显式 `sub: String::new()` 并注明出处），门禁也把旧行为锁死（`accounts-add` #7 `pool_size:2`）。
 
-黄金基准把这条缺陷原样锁死（`accounts-add` 场景 #7：`pool_size:2`，#8 的 `tokens[]` 两条），
-Rust 侧逐字复刻（`lib.rs::add_account` 里显式 `sub: String::new()` 并注明出处），
-**不"顺手修好"**——修它就是与 Go 版行为不一致，那是另一个决定，需要单独提出。
+**修复**：用户授权后 Go 侧已改 `server.go:206` 为
+`&tokenState{Value: token, Exp: info.Exp, HasExp: info.hasExp(), Sub: info.Sub}`，提交 `ca7f09f`
+（`go build ./...` / `go vet ./internal/vibex` / `go test ./internal/vibex -count=1` 全绿，
+既有测试无需改动）。四路现一致收敛。
+
+**Rust 侧对齐**：`lib.rs::add_account` 的 `sub: String::new()` → `sub: info.sub.clone()`，
+「如实复刻 D1」的注释与特判一并删除；黄金基准用**修复后的 Go** 重采（变化清单见第七节）。
+门禁现在锁的是收敛后的形态：`accounts-add` #7 `pool_size:1`、#8 `tokens[]` 一条；
+`pool-converge` 同号入池后 1 条、再加不同号 2 条。`pool.rs` 里没有别处依赖「手动粘贴路径
+sub 为空」这个前提（`TokenState.sub` 只被 `pool.rs::add_with_state` 的同号替换分支读取；
+`client.rs` 的鉴权头是从 token 串现解 JWT，不读 state）。
 
 ## 三、黄金门禁设计
 
@@ -204,8 +210,8 @@ Rust 侧逐字复刻（`lib.rs::add_account` 里显式 `sub: String::new()` 并�
 * **基准来源**：Go 侧**同包**临时采集器 `internal/vibex/zz_vibex_golden_collect_test.go`
   （跑完立即删除，留档 `.work/rust-rewrite/collect-vibex_test.go`）。采集时上游是**进程内假 VibeX**
   （REST + WS 手写握手），**不碰 8790、不碰任何现行端口、不出网**。
-* **基准形态**：`golden-vibex-go.json`**单档全量入库**（262 KB < 1 MB），
-  **没有需要跳过的超大场景**；重采链与归一化规则见 `rs-vibex/tests/golden/README.md`。
+* **基准形态**：`golden-vibex-go.json`**单档全量入库**（256 KB < 1 MB；2026-10-15 D1 修复后重采，
+  见第七节），**没有需要跳过的超大场景**；重采链与归一化规则见 `rs-vibex/tests/golden/README.md`。
 * **加载顺序**：先 `rs-vibex/tests/golden/`，缺则回落 `.work/rust-rewrite/`。
 * **归一化**：`created` / `uptimeSec` / `days_left*` / 随机 `id` / 随机端口由断言侧归一，
   **其余逐字节**。
@@ -239,7 +245,7 @@ git status --short
 | 1 | `/health`、`/v1/models`（5 分钟缓存）与路由边界与 Go 同形 | 黄金门禁 `routes-no-token`（22 步）+ `models-shapes`（8 步）+ `models-cache`（10 步）逐字节；缓存命中/旁路用**上游命中计数精确等值**锁死 |
 | 2 | 两侧出站（REST 与 WS 帧）逐字节/逐帧一致 | 黄金 `http` 19 场景 60 步：每条上游请求的 method/path/契约头/体逐字节一致；WS 帧序（`init_root`→`new_session`→`prompt`，续轮变 `init`）与握手头（`Cookie`/`Origin`/`User-Agent`）逐字节一致 |
 | 3 | 非流式/流式各至少一次成功；chunk/`finish_reason`/`[DONE]` 与 Go 逐事件一致；`/v1/stats` 真 usage 入账 | `chat-stream` 场景 6 步：SSE 五帧（role → 你好 → 世界 → `finish_reason:stop` + usage → `[DONE]`）与非流式体逐字节；`/v1/stats` 响应与 Go 相同（usage 入账 12/7/19） |
-| 4 | token 池收敛行为与 Go 一致；配置权限/落盘形态一致 | `pool-converge` 场景：内存 `tokens[]` 与 Go 逐字节（**含 D1 那条不收敛**）；落盘经 DPAPI 解回的 `tokens` 数组、`tenant_id` 长度 32、磁盘上 `PDAPI1\n` 前缀逐项一致 |
+| 4 | token 池收敛行为与 Go 一致；配置权限/落盘形态一致 | `pool-converge` 场景：内存 `tokens[]` 与 Go 逐字节（**D1 修复后的收敛形态**：同号 1 条 → 加不同号 2 条；旧口径「含 D1 那条不收敛」已随 `ca7f09f` 作废，见第七节）；落盘经 DPAPI 解回的 `tokens` 数组、`tenant_id` 长度 32、磁盘上 `PDAPI1\n` 前缀逐项一致 |
 | 5 | `cargo test` 全绿；`go test`/`go vet` 干净；无发版动作 | 见下方「验收命令与真实输出」 |
 
 ### 覆盖之外的额外门禁
@@ -298,7 +304,7 @@ git status --short
 | 1 | `README.md` 差异 6、`tests/golden/README.md` 末节 | 更正根因表述：**不是**「axum/hyper 服务端丢 obs-text」，而是脚手架有损读取 | 见下第 3 步 |
 | 2 | `README.md`「采集器与临时文件」 | 补登记已删的一次性探针 `tests/zz_probe.rs`（含从构建痕迹复原的身份） | 见该条 |
 | 3 | `README.md` 本节 + `.work/rust-rewrite/_vibex-deviation-notes-r4.md`（新） | 补披露 `_live-compare-vibex.ps1` / `_mutation-check-vibex.ps1` **未交付**的改道原因与替代证据链 | 见该文件 |
-| 4 | `.work/rust-rewrite/collect-vibex_test.go`（原 `:1197,1200`）+ 两份 `golden-vibex-go.json` 里同两句 desc | 「GET /accounts（应只剩 1 条）」→「（D1 不收敛：实为 2 条）」；「（2 条）」→「（D1 + 不同号：实为 3 条）」。**只改 desc 字面，测量值一个字节未动** | 去掉所有 desc 行后逐字节比对**差异 0**、desc 行数 109→109、JSON 解析 OK；两份副本 SHA-256 同为 `481F1CC1622F1246EC5CA2C2555C10B96283F1458B823290B9A6D1A857AA2D4A` |
+| 4 | `.work/rust-rewrite/collect-vibex_test.go`（原 `:1197,1200`）+ 两份 `golden-vibex-go.json` 里同两句 desc | 「GET /accounts（应只剩 1 条）」→「（D1 不收敛：实为 2 条）」；「（2 条）」→「（D1 + 不同号：实为 3 条）」。**只改 desc 字面，测量值一个字节未动** | 去掉所有 desc 行后逐字节比对**差异 0**、desc 行数 109→109、JSON 解析 OK；两份副本 SHA-256 同为 `481F1CC1622F1246EC5CA2C2555C10B96283F1458B823290B9A6D1A857AA2D4A`。**⚠ 这两句（以及那一代基准）已随 D1 修复在第七节再次改写/重采，现口径见第七节** |
 | 5 | `tests/golden_vibex.rs`（浮点段两处注释） | 「README 差异 3」→「**差异 4**」（浮点最短表示是差异 4；差异 3 是 `X-Forwarded-For`/`Host`） | 全 crate `Select-String "差异 3"` 复扫 |
 | 6 | `.work/vibex-profile-probe/README.md` | 给目录里两个 exe 补一行来历登记（**不删**） | 见该文件 |
 
@@ -326,4 +332,80 @@ git status --short
 * 非 ASCII 头：见上第 3 步（黄金改 `小明`→`小朋` 判红，还原复绿）。
 * 黄金文案改动：去 desc 行后**零差异**（证明测量值没被顺手动过）。
 * 第 4 步两份副本同源：SHA-256 逐字节相同。
+
+## 七、P4b：D1 修复后的重对齐（2026-10-15）
+
+起因：用户授权 Go 侧修掉 D1（提交 `ca7f09f`），于是「逐字复刻旧行为」不再成立——基准与实现都必须
+对齐**修复后的 Go**。本轮只做对齐，不加功能。
+
+### 1. 黄金基准重采（用修复后的 Go）
+
+* 采集器 `.work/rust-rewrite/collect-vibex_test.go` → 临时放回 `internal/vibex/zz_vibex_golden_collect_test.go`
+  → 连跑两次（`_repro-vibex-b1.json` / `_repro-vibex-b2.json`）→ **立即删除** → 重新留档 `.work/`。
+  删除后 `git status --short internal/` 空、`go test ./internal/vibex -count=1` ok、`go vet ./internal/vibex` 退出码 0。
+* **可复现性**：两份新采集经 `.work/rust-rewrite/_diffvibex-r4b.mjs` 归一化（端口 / `uptimeSec` /
+  `created` / `chatcmpl` 随机 id / `days_left*` / `collected_at`；脚本另有一条防御性的 `date` 替换，
+  基准里没有 `Date` 头故不生效）后**差异 0 处**。
+* **新旧比对**（同一脚本，旧 = 上一代基准）：归一化后 **8 处差异**，逐条如下；除这 8 处外，上一代基准的
+  每一个测量值（`pure`/`cdp`/`floats` 三段、19 个场景的 `upstream_seen`/`ws_frames`/`ws_handshake`/
+  `upstream_hits`/响应头，以及 `pool-converge` 的落盘 `extra`）都被原样复现。
+
+| # | 路径（旧 → 新） | 旧（D1 未修） | 新（D1 已修） |
+|---|---|---|---|
+| 1 | `http[1] accounts-add #7` 同号新串入池 · 响应体 | `pool_size:2` | `pool_size:1` |
+| 2 | `http[1] accounts-add #8` 换旧后的 `/accounts` · 响应体 | `pool_size:2`，`tokens[]` 2 条（旧串 exp `2027-01-15` + 新串 exp `2027-01-16`） | `pool_size:1`，`tokens[]` **1 条**（只剩新串 exp `2027-01-16`） |
+| 3 | `http[18] pool-converge #0` 同号新串入池 · 响应体 | `pool_size:2` | `pool_size:1` |
+| 4 | `http[18] pool-converge #1` · desc | `GET /accounts（D1 不收敛：实为 2 条）` | `GET /accounts（同号已收敛：实为 1 条）` |
+| 5 | `http[18] pool-converge #1` · 响应体 | `pool_size:2`，`tokens[]` 2 条 | `pool_size:1`，`tokens[]` 1 条 |
+| 6 | `http[18] pool-converge #2` 不同号入池 · 响应体 | `pool_size:3` | `pool_size:2` |
+| 7 | `http[18] pool-converge #3` · desc | `GET /accounts（D1 + 不同号：实为 3 条）` | `GET /accounts（+ 不同号：实为 2 条）` |
+| 8 | `http[18] pool-converge #3` · 响应体 | `pool_size:3`，`tokens[]` 3 条 | `pool_size:2`，`tokens[]` 2 条 |
+
+* 第 4/7 条是**基准文案**（desc 随事实改写，数据本来就是对的）；其余 6 条是内存池的测量值。
+* `http[18].extra`（落盘 DPAPI 解回：`tokens:[B,C]`、`token_count:2`、`plaintext_contains_token_b:true`、
+  `tenant_id`、`on_disk_encrypted:true`）**新旧一致**——落盘路径本就按 sub 收敛，不受 D1 影响。
+* 新基准两份副本同源：`rs-vibex/tests/golden/golden-vibex-go.json` 与
+  `.work/rust-rewrite/golden-vibex-go.json` SHA-256 同为
+  `B420C20CA7E75FB515DE33D2DDFE90A9844FB16FCCF8DDC682C1A58AD4E44B47`（261,886 B）。
+  上一代（`481F1CC1…`，262,285 B）原样留档 `.work/rust-rewrite/_golden-vibex-backup-r4b.json`。
+
+### 2. 实现对齐（`src/**` 只此一处）
+
+| 位置 | 改动 |
+|---|---|
+| `src/lib.rs::add_account` | `sub: String::new()` → `sub: info.sub.clone()`；「如实复刻 D1 缺陷」的注释整段改写为「与修复后的 Go 一致（`ca7f09f`）」 |
+
+`src/pool.rs` 未动：`sub` 只在 `add_with_state` 的同号替换分支里被读，没有别处依赖「手动粘贴路径 sub 为空」。
+
+### 3. 反向验证（门禁非空转）
+
+拿**旧实现**（`sub: String::new()`）对新基准跑门禁 → 立刻判红（这就是本轮修复前的实跑输出）：
+
+```
+thread 'http_scenarios_match_go_golden' panicked at tests\golden_vibex.rs:509:9:
+assertion `left == right` failed: [accounts-add #7 同号新串入池（以新换旧）] 响应体
+  left:  …"pool_size":2…
+  right: …"pool_size":1…
+test result: FAILED. 2 passed; 1 failed
+```
+
+改回 `info.sub.clone()` 后全绿（下节输出）。
+
+### 4. 验收命令与真实输出
+
+```powershell
+cd rs-vibex; $env:CARGO_TARGET_DIR="E:\cargo-target\rs-vibex"; cargo test
+#   unittests src\lib.rs   : 37 passed; 0 failed
+#   unittests src\main.rs  :  0 passed
+#   tests\golden_vibex.rs  :  3 passed; 0 failed
+#   tests\http_contract.rs :  3 passed; 0 failed
+#   0 warning / 0 error
+cargo test -- --nocapture
+#   纯函数黄金对比：152 项与 Go 一致；… 差异 1 项（浮点最短表示，已登记，见差异 4）
+#   HTTP/WS 场景黄金对比：19 个场景逐字节一致；显式跳过 0 个；无 allowance 放行（非 ASCII 上游头值也逐字节比对）
+#   CDP 场景黄金对比：4 个场景全部一致
+cd ..; go test ./internal/vibex -count=1     # ok  github.com/Amer-CN/proxydeck/internal/vibex  6.286s
+go vet ./internal/vibex                      # 退出码 0
+git status --short internal/                 # 空（临时采集器已删净）
+```
 

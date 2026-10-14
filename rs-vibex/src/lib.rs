@@ -360,13 +360,11 @@ async fn add_account(s: Arc<Server>, token: String) -> Response {
         calls: 0,
         exp_ms: info.exp.map(|e| e * 1000),
         has_exp: info.has_exp(),
-        // **逐字对齐 Go 的缺陷**：`server.go:206` 的 `addAccount` 建 state 时**没有设 `Sub`**
-        // （`&tokenState{Value: token, Exp: info.Exp, HasExp: info.hasExp()}`），
-        // 于是手动粘贴路径的内存池**不按同号收敛**（同号新串会被追加，池里留两条旧串）；
-        // 落盘路径 `persistToken` 仍按 sub 收敛，重启加载（`NewPool` → `addWithState`）
-        // 又收敛回一条。三条路径只有这一条不收敛，Rust 侧如实复刻、不擅自"修好"
-        // —— 见 rs-vibex/README.md「已知 Go 侧缺陷」。
-        sub: String::new(),
+        // 与修复后的 Go 一致（`ca7f09f`）：`server.go:206` 的 `addAccount` 建 state 时补上了
+        // `Sub: info.Sub`，手动粘贴路径的内存池也按同号收敛（同号新串替换旧串，不再追加）。
+        // 此前这里是 `sub: String::new()`（如实复刻当时 Go 的 D1 缺陷）；Go 修好后随之对齐，
+        // 四路（手动粘贴 / 自动探测 / 重启加载 / 落盘）现全部收敛。
+        sub: info.sub.clone(),
     };
     let (_, existing) = s.pool.add_with_state(st);
     if existing {
