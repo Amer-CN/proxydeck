@@ -5,12 +5,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Amer-CN/proxydeck/internal/appdir"
 )
+
+// stopVerifyWait 停堆后等端口空出的宽限（包变量，单测可调小；交互路径 2s，不冻窗）。
+var stopVerifyWait = 2 * time.Second
 
 // ============ 插件托管（Python 服务收编 / Go 原生内置） ============
 type pluginDef struct {
@@ -341,14 +345,31 @@ func (a *app) pluginStop(id string) error {
 	}
 	states := a.pluginStates()
 	st := states[id]
+	portStr := strconv.Itoa(d.Port)
+	// 先杀：自 spawn 的直接 Kill，外部拉起的一律按端口杀（原逻辑）。
+	// 注意 cmd 先摘不先清 running：杀失败要恢复跟踪（进程将来退出时 watch 照常复位）。
 	st.mu.Lock()
-	if st.cmd != nil {
-		_ = st.cmd.Process.Kill()
+	cmd := st.cmd
+	st.cmd = nil
+	st.mu.Unlock()
+	if cmd != nil {
+		_ = cmd.Process.Kill()
 	}
+	_ = killByPort(portStr)
+	// 再验：端口还被占着 = 没杀掉（如对方以管理员身份运行），如实报错并恢复跟踪，
+	// 界面显示失败而不是先假装关掉、3 秒后探活又弹回 running。
+	if !waitPortFree(portStr, stopVerifyWait) {
+		st.mu.Lock()
+		st.cmd = cmd
+		st.running = true
+		st.lastErr = ""
+		st.mu.Unlock()
+		return fmt.Errorf("旧进程杀不掉（端口 %d 仍被占）：对方可能以管理员身份在运行，请右键以管理员身份运行本程序后重试，或从任务管理器结束该进程", d.Port)
+	}
+	st.mu.Lock()
 	st.running = false
 	st.cmd = nil
 	st.lastErr = ""
 	st.mu.Unlock()
-	_ = killByPort(fmt.Sprintf("%d", d.Port))
 	return nil
 }
