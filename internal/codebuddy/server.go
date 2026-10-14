@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -556,6 +558,20 @@ func failoverDecide(cfg failoverConfig, sentModel string, limited bool, status i
 	return d
 }
 
+// transientMaxRetry 上游瞬时拒绝（11133）的原地重试次数上限（2026-10-14 K3 实测抖动）。
+const transientMaxRetry = 2
+
+// isTransientReject 判定上游"瞬时拒绝"：腾讯网关 11133（Invalid request parameters /
+// the request parameters were rejected by the model provider）。
+// 2026-10-14 K3 排查实证属抖动：同账号同请求数秒后即 200，且真实请求全构件逐字回放
+// （241 工具 / 真实系统提示词 / 6 条真实消息 / 数组式 content / 全部白名单参数）一律 200。
+// 只认字段级 `"code":11133`（词边界）：裸子串会把 111330 这类不存在的码也误判成可重试。
+var transientRejectRe = regexp.MustCompile(`"code"\s*:\s*11133\b`)
+
+func isTransientReject(errBody string) bool {
+	return transientRejectRe.MatchString(errBody)
+}
+
 // reasoningDefaultFor 缺省 reasoning_effort 注入判定（纯逻辑，便于单测）。
 // 客户端已带 reasoning_effort 时不注入的分支由调用方保证（透传优先，不进本函数）。
 // 返回空串表示不注入：模型无元数据 / reasoning 矩阵缺失，或配置档位不在该模型矩阵。
@@ -967,6 +983,64 @@ func summarizeToolsForDiag(backendBody map[string]any) string {
 	return string(b)
 }
 
+// requestFingerprint 给出站请求体打一份**不含正文**的可 grep 指纹：规模、角色分布、
+// body 键、工具名单、档位/预算/流式开关，以及整份 body 的 sha256 前 6 字节。
+// 用途：把「跪的那次」和「好的那次」并排对比，一眼看出差在哪个维度（2026-10-14 11133）。
+func requestFingerprint(body map[string]any) string {
+	roleTally := map[string]int{}
+	msgs, _ := body["messages"].([]any)
+	for _, m := range msgs {
+		if mm, ok := m.(map[string]any); ok {
+			role, _ := mm["role"].(string)
+			roleTally[role]++
+		}
+	}
+	names := []string{}
+	if tools, ok := body["tools"].([]any); ok {
+		for _, t := range tools {
+			tm, ok := t.(map[string]any)
+			if !ok {
+				continue
+			}
+			fn, ok := tm["function"].(map[string]any)
+			if !ok {
+				continue
+			}
+			if n, ok := fn["name"].(string); ok {
+				names = append(names, n)
+			}
+		}
+	}
+	keys := make([]string, 0, len(body))
+	for k := range body {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	raw, _ := json.Marshal(body)
+	sum := sha256.Sum256(raw)
+	return fmt.Sprintf("bytes=%d sha=%x msgs=%d roles=%v keys=%v tools=%d tool_names=%v effort=%v max_tokens=%v stream=%v",
+		len(raw), sum[:6], len(msgs), roleTally, keys, len(names), names,
+		body["reasoning_effort"], body["max_tokens"], body["stream"])
+}
+
+// dumpRequestBody 把出站请求体整份落到本机数据目录（0600），供离线复现与二分定位。
+// 上限 10 份：够用来对比，也不会把盘堆满；写失败一律静默（诊断绝不能影响转发）。
+func dumpRequestBody(body map[string]any) string {
+	dir := appdir.DataDir()
+	if matches, _ := filepath.Glob(filepath.Join(dir, "diag-11133-*.json")); len(matches) >= 10 {
+		return ""
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return ""
+	}
+	p := filepath.Join(dir, fmt.Sprintf("diag-11133-%d.json", time.Now().UnixNano()))
+	if err := os.WriteFile(p, raw, 0o600); err != nil {
+		return ""
+	}
+	return p
+}
+
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -1080,6 +1154,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	accountResent := false // 账号级换号重发只允许一次（免费池一般就 2 个号）
 	deadResent := 0        // 凭据失效(401/403)换号重发计数，上限 = 池大小（全死防循环）
 	exhaustedResent := 0   // 额度耗尽(14018)换号重发计数，上限 = 池大小（全耗尽可能防循环）
+	transientResent := 0   // 上游瞬时拒绝(11133)原地重试计数，上限 transientMaxRetry
 	hy4Tripped := false    // hy4 模型级兜底重放只允许一次（恒 429 下防 trip→429→trip 死循环）
 	for attempt := 0; ; attempt++ {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
@@ -1149,6 +1224,33 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		// tools[0].parameters 里哪个字段不合法。转发行为不变。
 		if strings.Contains(string(errBody), "11129") || strings.Contains(string(errBody), "invalid_function_parameters") {
 			log.Printf("[codebuddy] 11129 工具定义校验失败 model=%s tools=%s err=%s", sentModel, truncate(summarizeToolsForDiag(backendBody), 8000), truncate(string(errBody), 4000))
+		}
+		// 11133 现场取证（2026-10-14 K3 间歇 400 排查）：白名单参数已逐个实测全 200、
+		// 体积/坏字节/长历史均 200，判定为**内容级拒绝**（上游原话「这次对话的内容这个
+		// 模型不接受」）→ 只靠猜无法定位。此处把出站请求整份落盘到本机数据目录（上限
+		// 10 份、0600），供离线复现与二分；同时打一份不含正文的可 grep 指纹。
+		if isTransientReject(string(errBody)) {
+			log.Printf("[codebuddy] 11133 内容级拒绝 model=%s 指纹=%s", sentModel, requestFingerprint(backendBody))
+			if p := dumpRequestBody(backendBody); p != "" {
+				log.Printf("[codebuddy] 11133 现场已落盘：%s", p)
+			}
+			// 上游瞬时拒绝 → 原地退避重试（2026-10-14 K3 排查实证：同账号、同请求、
+			// 数秒后即 200；真实请求全构件逐字回放——241 工具 / 真实系统提示词 /
+			// 6 条真实消息 / 数组式 content / 全部白名单参数 / 6MB 内体积——一律 200，
+			// 故非请求问题而是上游抖动）。重试上限 2 次，让客户端完全无感。
+			if transientResent < transientMaxRetry {
+				transientResent++
+				backoff := time.Duration(transientResent) * 800 * time.Millisecond
+				log.Printf("[codebuddy] 11133 属上游抖动，第 %d/%d 次退避 %v 后重试", transientResent, transientMaxRetry, backoff)
+				select {
+				case <-time.After(backoff):
+				case <-r.Context().Done():
+					writeErr(w, 499, "client closed request")
+					return
+				}
+				continue
+			}
+			log.Printf("[codebuddy] 11133 连续 %d 次仍被拒，如实透传", transientMaxRetry)
 		}
 		// 账号额度耗尽轮换（上游 14018 Credits exhausted）：不同于 429 频控——
 		// 该号本周期无额度，换号是唯一解。判定用业务码 14018（不是文案 "Credits
