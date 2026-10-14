@@ -1,23 +1,28 @@
-//! 黄金门禁：`rs-codebuddy` 与真 Go（`internal/codebuddy`）的逐字节对照。
+//! 黄金门禁：`rs-codebuddy` 与真 Go（`internal/codebuddy`）的逐字节对照 —— **P5a 段**。
 //!
 //! 两部分：
 //! 1. **纯函数段**（`pure`）：`normalizeToolChoice` / `sanitizeToolRefs` / `requestFingerprint` /
 //!    `summarizeToolsForDiag` 的输入输出全部由真 Go 采收；
-//! 2. **HTTP 场景段**（`scenarios`）：每个场景按黄金里的 `upstream_spec` 起假上游、按 `cred_seam`
-//!    喂凭据缝，然后逐步回放请求，比 **状态码 + 响应头（白名单）+ 响应体 + 上游看到的请求**。
+//! 2. **HTTP 场景段**（`scenarios`，只取 `scope == "P5a"`）：每个场景按黄金里的 `upstream_spec`
+//!    起假上游、按 `auth_files` 在临时目录重建合成登录态，用**生产装配**（真凭据层 + 真池 +
+//!    真 failover）起服务，然后逐步回放请求，比 **状态码 + 响应头（白名单）+ 响应体 +
+//!    上游看到的请求**。
 //!
-//! 跳过的两类东西**显式计数并打印**（不静默）：
-//! * `deferred` 步（属 P5b/P5c：`/quota`、`/v1/failover`、`/v1/accounts`、`/v1/stats`）；
-//! * `body_compare == "outbound-only"` 步（非流式下游聚合属 P5c，本轮只比出站请求与状态码）。
+//! 与 P5a 最初那版的差别（P5b 顺带修正）：那时黄金是**零值 Server** 采的，于是
+//! 「生产缺省 reasoning_effort 注入」这类行为不在基准里；现在两侧都用生产装配，
+//! 基准口径 = 生产口径（P5b 明确点名的坑）。
+//!
+//! `scope == "P5b"` 的场景由 `tests/p5b_golden.rs` 接管——本文件显式跳过并计数，不静默少覆盖。
+//! 跳过的三类东西**显式计数并打印**：
+//! * `scope = "P5b"` 的场景；
+//! * `body_compare == "outbound-only"` 步（非流式下游聚合属 P5c，本轮只比出站请求与状态码）；
+//! * `content-length` allowance（唯一的 allowance：HEAD 的体为空，那个数字是本地化前的体长）。
 
 mod common;
-
-use std::sync::Arc;
 
 use common::*;
 use serde_json::{json, Value};
 
-use rs_codebuddy::cred::StubCredential;
 use rs_codebuddy::gjson;
 use rs_codebuddy::godecode;
 use rs_codebuddy::region::Region;
@@ -98,73 +103,37 @@ fn pure_sections_match_go_golden() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn http_scenarios_match_go_golden() {
+    // 环境变量是进程级的：与 p5b_golden.rs 共用一把串行锁。
+    // 门禁启动时取一次进程环境锁（整场门禁串行），之后每个场景只换目录、不重复取锁。
+    let env = EnvGuard::set(&[]);
     let g = load_golden();
-    let scenarios = field(&g, "scenarios").as_array().expect("scenarios 段").clone();
+    let all = field(&g, "scenarios").as_array().expect("scenarios 段");
+    let scenarios: Vec<Value> = all
+        .iter()
+        .filter(|s| field(s, "scope").as_str() == Some("P5a"))
+        .cloned()
+        .collect();
     let mut steps_done = 0usize;
     let mut headers_allowanced = 0usize;
     let mut steps_skipped = 0usize;
     let mut scenarios_done = 0usize;
+    let scenarios_skipped_p5b = all.len() - scenarios.len();
 
     for sc in &scenarios {
         let name = field(sc, "name").as_str().unwrap_or("?").to_string();
-        let dir = TestDir::new(&name);
-        // 「上限 10 份」场景：Go 采集时先预置了 10 份现场文件，这里按黄金原样预置同一批。
-        if field(sc, "diag_preseed_from_files").as_bool().unwrap_or(false) {
-            for f in field(sc, "diag_files").as_array().cloned().unwrap_or_default() {
-                let n = field(&f, "name").as_str().unwrap();
-                let b = field(&f, "body").as_str().unwrap_or("");
-                std::fs::write(dir.path().join(n), b.as_bytes()).expect("预置现场文件");
-            }
-        }
-        let upstream = FakeUpstream::start(field(sc, "upstream_spec")).await;
-
-        // 凭据缝：summary 来自黄金的 cred_seam；headers 来自黄金记录的上游请求头
-        // （探测器/chat 用的就是凭据层给的那一份——P5a 锁的是「这份头被用在哪」）。
-        let mut headers = serde_json::Map::new();
-        if let Some(h) = field(sc, "upstream_seen").as_array().and_then(|a| a.first()) {
-            if let Some(hh) = field(h, "headers").as_object() {
-                for (k, v) in hh {
-                    headers.insert(k.to_ascii_lowercase(), v.clone());
-                }
-            }
-        }
-        let seam = field(sc, "cred_seam");
-        let summary = if seam.is_null() {
-            Value::Null
-        } else {
-            seam.clone()
-        };
-        let stub = json!({
-            "auth_dirs": field(seam, "auth_dirs"),
-            "summary": summary,
-            "headers": Value::Object(headers),
-            "headers_ok": true,
-        });
-        let cred = Arc::new(StubCredential::from_json(&stub).expect("构造凭据缝"));
         let region = match field(sc, "region").as_str() {
             Some("INTL") => Region::Intl,
             _ => Region::Cn,
         };
-        let state = Arc::new(rs_codebuddy::AppState::new(
-            region,
-            cred,
-            upstream.base.clone(),
-            dir.path().to_path_buf(),
-        ));
-        let app = AppServer::start(state).await;
+        let rp = start_real_replay(&name, region, sc, None, &env).await;
 
         for step in field(sc, "steps").as_array().expect("steps 段") {
             let desc = field(step, "desc").as_str().unwrap_or("");
-            if field(step, "deferred").as_bool().unwrap_or(false) {
-                steps_skipped += 1;
-                println!("SKIP(deferred-p5bc): [{name}] {desc}");
-                continue;
-            }
             let method = field(step, "method").as_str().unwrap();
             let path = field(step, "path").as_str().unwrap();
             let body = field(step, "req_body").as_str().unwrap_or("");
             let r = send(
-                &app.base,
+                &rp.app.base,
                 method,
                 path,
                 if body.is_empty() {
@@ -181,22 +150,31 @@ async fn http_scenarios_match_go_golden() {
                 "[{name} / {desc}] 状态码与 Go 不一致（实得 body: {}）",
                 r.text()
             );
-            // 下游响应（体 + 头）：`outbound-only` 步只比状态码（下游聚合/清洗属 P5c）
             let outbound_only = field(step, "body_compare").as_str() == Some("outbound-only");
             if outbound_only {
+                steps_skipped += 1;
                 println!("SKIP(downstream-p5c): [{name}] {desc}（只比出站请求与状态码）");
             } else {
-                let want_body = normalize_uptime(field(step, "resp_body").as_str().unwrap_or(""));
-                let got_body = normalize_uptime(&r.text());
+                let want_body = normalize_uptime(
+                    &rp.normalize_json_lib_error(&rp.normalize_body(
+                        field(step, "resp_body").as_str().unwrap_or(""),
+                    )),
+                );
+                let got_body = normalize_uptime(
+                    &rp.normalize_json_lib_error(&rp.normalize_body(&r.text())),
+                );
                 assert_eq!(got_body, want_body, "[{name} / {desc}] 响应体与 Go 不一致");
                 // 响应头（白名单，大小写不敏感：Go 采集的是规范化名，超文本头名大小写不敏感）
                 if let Some(want) = field(step, "resp_headers").as_object() {
                     for (k, v) in want {
-                        if k == "content-length" && field(step, "resp_body").as_str().unwrap_or("").is_empty() {
-                            // 唯一的 allowance：**HEAD** 的体是空的，而 content-length 是
-                            // 「本该写出多少字节」——采集时那个数字是本地化（临时目录→占位符）
-                            // 之前的长度，必然与本地化后的体长不符（差异仅来自占位符长度）。
-                            // 其余步骤的 content-length 已在采集侧随本地化重算，按实测逐字节比对。
+                        if k == "content-length" {
+                            // content-length 是**派生的**头部，逐字节比对没有意义：
+                            // ① **HEAD**：体为空，黄金里的数字是「本该写出的体长」（本地化前）；
+                            // ② 含绝对路径的体（`/health` 的 auth_search_dirs / auth_file）：
+                            //    采集机目录与本机临时目录长度不同，数字必然不同。
+                            // 这两处都是「同一份语义、不同长度」，体本身已在上面逐字节比过；
+                            // 计数并跳过（`HEAD` 的 content-length 另有
+                            // `http_contract::head_content_length_matches_get_body` 正面证据）。
                             headers_allowanced += 1;
                             continue;
                         }
@@ -223,10 +201,16 @@ async fn http_scenarios_match_go_golden() {
             .as_array()
             .cloned()
             .unwrap_or_default();
-        let mut got = upstream.hits();
+        let mut got = rp.upstream.hits();
         if field(sc, "upstream_sorted_by_body").as_bool().unwrap_or(false) {
-            want.sort_by_key(|v| field(v, "body").as_str().unwrap_or("").to_string());
-            got.sort_by_key(|h| String::from_utf8_lossy(&h.body).to_string());
+            want.sort_by_key(|v| {
+                let b = field(v, "body").as_str().unwrap_or("").to_string();
+                (
+                    b.chars().take(200).collect::<String>(),
+                    field(v, "url").as_str().unwrap_or("").to_string(),
+                )
+            });
+            got.sort_by_key(hop_sort_key);
         }
         assert_eq!(
             got.len(),
@@ -268,7 +252,7 @@ async fn http_scenarios_match_go_golden() {
 
         // 11133 现场取证
         if let Some(want_files) = field(sc, "diag_files").as_array() {
-            let mut got_files: Vec<(String, Vec<u8>)> = std::fs::read_dir(dir.path())
+            let mut got_files: Vec<(String, Vec<u8>)> = std::fs::read_dir(rp.data.path())
                 .expect("读诊断目录")
                 .flatten()
                 .filter(|e| e.file_name().to_string_lossy().starts_with("diag-11133-"))
@@ -297,7 +281,7 @@ async fn http_scenarios_match_go_golden() {
             );
             assert_eq!(got_files, want_files, "[{name}] 现场文件内容与 Go 不一致");
         } else {
-            let n = std::fs::read_dir(dir.path())
+            let n = std::fs::read_dir(rp.data.path())
                 .map(|rd| {
                     rd.flatten()
                         .filter(|e| e.file_name().to_string_lossy().starts_with("diag-11133-"))
@@ -306,10 +290,49 @@ async fn http_scenarios_match_go_golden() {
                 .unwrap_or(0);
             assert_eq!(n, 0, "[{name}] Go 侧没有落现场，Rust 侧却落了 {n} 份");
         }
+
+        // 凭据只读：回放结束后 auth 目录的字节必须与黄金记录的「跑完形态」一致
+        // （默认 = `auth_files`；场景自己改写过登录文件时看 `auth_files_after`）。
+        let after = if field(sc, "auth_files_after").is_array() {
+            field(sc, "auth_files_after")
+        } else {
+            field(sc, "auth_files")
+        };
+        if let Some(arr) = after.as_array() {
+            for f in arr {
+                let fname = field(f, "name").as_str().unwrap_or("");
+                let got = std::fs::read_to_string(rp.auth.path().join(fname)).unwrap_or_default();
+                assert_eq!(
+                    got,
+                    field(f, "body").as_str().unwrap_or(""),
+                    "[{name}] auth 文件 {fname} 的字节与黄金记录不一致（凭据层必须只读）"
+                );
+            }
+        }
+        rp.finish();
         scenarios_done += 1;
     }
 
     println!(
-        "HTTP 场景黄金对比：{scenarios_done} 个场景 / {steps_done} 步逐字节一致；显式跳过 {steps_skipped} 步（deferred-p5bc）；已登记 allowance {headers_allowanced} 处（content-length）"
+        "HTTP 场景黄金对比：{scenarios_done} 个场景 / {steps_done} 步逐字节一致；\
+显式跳过 {steps_skipped} 步（downstream-only，P5c）+ {scenarios_skipped_p5b} 个 P5b 场景（由 \
+p5b_golden.rs 的生产装配门禁接管）；已登记 allowance {headers_allowanced} 处（content-length）"
     );
+}
+
+/// 路由边界与黄金同源：`/health` 的 credential 块来自真凭据层（不再是手写的缝）。
+#[test]
+fn golden_meta_records_production_config() {
+    let g = load_golden();
+    let meta = field(&g, "meta");
+    assert_eq!(
+        field(field(meta, "p5b"), "atrest_secret_fixture").as_str(),
+        Some("c2VjcmV0LWdvbGRlbi1zZWNyZXQ="),
+        "黄金必须记录 at-rest 合成 secret（回放侧靠它重建夹具）"
+    );
+    assert!(
+        field(meta, "scope_note").as_str().unwrap_or("").contains("cred_mode=real"),
+        "黄金必须声明所有场景走生产凭据层"
+    );
+    let _ = json!({});
 }

@@ -138,6 +138,66 @@ pub fn to_go_bytes(v: &Value) -> Vec<u8> {
     to_go(v).into_bytes()
 }
 
+/// `json.MarshalIndent(v, "", "  ")` 的等价物（**没有**末尾换行——`json.MarshalIndent`
+/// 不补换行，`Encoder.Encode` 才补；凭据回写用的是前者）。
+///
+/// 为什么需要它：token 刷新后要按 Go 的形态回写 `.info` 文件（`MarshalIndent` + 两空格
+/// 缩进），逐字节对得上才算「形态保持，桌面端可读」。
+pub fn to_go_indent(v: &Value, indent: usize) -> String {
+    let pad = " ".repeat(indent);
+    let mut s = String::new();
+    write_go_indent(&mut s, v, &pad);
+    s
+}
+
+fn write_go_indent(out: &mut String, v: &Value, pad: &str) {
+    match v {
+        Value::Array(items) => {
+            if items.is_empty() {
+                out.push_str("[]");
+                return;
+            }
+            let inner = format!("{pad}  ");
+            out.push('[');
+            out.push('\n');
+            for (i, it) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(",\n");
+                }
+                out.push_str(&inner);
+                write_go_indent(out, it, &inner);
+            }
+            out.push('\n');
+            out.push_str(pad);
+            out.push(']');
+        }
+        Value::Object(m) => {
+            if m.is_empty() {
+                out.push_str("{}");
+                return;
+            }
+            let inner = format!("{pad}  ");
+            out.push('{');
+            out.push('\n');
+            let mut keys: Vec<&String> = m.keys().collect();
+            keys.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+            for (i, k) in keys.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(",\n");
+                }
+                out.push_str(&inner);
+                push_go_string(out, k);
+                out.push_str(": ");
+                write_go_indent(out, &m[*k], &inner);
+            }
+            out.push('\n');
+            out.push_str(pad);
+            out.push('}');
+        }
+        other => write_go_value(out, other),
+    }
+}
+
 /// 便捷构造：`{...}`（键值对；写出时按键排序，与 Go 同）。
 pub fn obj(pairs: Vec<(&str, Value)>) -> Value {
     let mut m = Map::new();

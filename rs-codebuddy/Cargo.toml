@@ -9,20 +9,35 @@ name = "rs-codebuddy"
 path = "src/main.rs"
 
 [dependencies]
+# at-rest（`$wbEncrypted`）解密/加密：AES-256-GCM。**不自己手搓密码学**——
+# 逐字节对齐 Go 的 `crypto/aes` + `crypto/cipher`，用审计过的实现。
+# `aes` 特性关掉：GCM 的密钥排程由 aes-gcm 内部处理，不需要直接调 AES。
+aes-gcm = { version = "0.11", default-features = false, features = ["aes"] }
 axum = "0.8"
+base64 = "0.23"
 bytes = "1"
 clap = { version = "4", features = ["derive"] }
 futures-util = "0.3"
 # 上游只有 https://copilot.tencent.com（CN）/ https://www.codebuddy.ai（INTL）两条出站；
 # TLS 栈显式声明，避免将来上游改默认时静默换栈（TLS 指纹差异是圆桌点名的风险项）。
+# **不开 `blocking`**：`reqwest::blocking::Client` 在 async handler 内首调必 panic
+# （tokio debug 断言建/拆嵌套 runtime，实测见 tests/p5b_refresh.rs），token 刷新改走
+# 「一次性 OS 线程 + 线程内 async 客户端」，见 `src/credential.rs::refresh_post_blocking`。
 reqwest = { version = "0.13", features = ["default-tls", "http2", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # `requestFingerprint` 要打整份出站体的 sha256 前 6 字节（Go `crypto/sha256`），是**生产路径**
-# 上真实用到的，不是测试专用：json.rs 的写出规则与它一起把「可 grep 指纹」逐字节对齐。
+# 上真实用到的，不是测试专用；at-rest 的密钥链派生（sha256 → sha256 → hex[:16]）也用它。
 sha2 = "0.10"
-# `sync` = 探测缓存的互斥；`time` = 11133 退避与探测 TTL；`signal` = Ctrl-C 退出。
+# `sync` = 池/额度/限流窗口的互斥；`time` = 11133 退避、探测 TTL、额度 15s 超时；
+# `signal` = Ctrl-C 退出。
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync"] }
+
+# 桌面端 exe 发现（at-rest 取密钥的候选来源）：注册表卸载表。
+# Go 用 `golang.org/x/sys/windows/registry`；Rust 用微软官方的 windows-registry
+# （只看 HKLM/HKCU 的 Uninstall，不写注册表）。
+[target.'cfg(windows)'.dependencies]
+windows-registry = "0.6"
 
 [profile.release]
 opt-level = 2

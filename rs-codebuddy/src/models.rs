@@ -87,17 +87,21 @@ pub fn reasoning_default_for(model: &str, cfg: &str) -> String {
     if cfg.is_empty() {
         return String::new();
     }
+    match reasoning_matrix(model) {
+        Some(matrix) if matrix.split('/').any(|tier| tier == cfg) => cfg.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// 该模型的 `reasoning` 矩阵（`modelMeta` 里的那一项）；无元数据给 `None`。
+/// `/model/info` 与缺省档注入（`/v1/chat/completions` 的 CN 路径）共用同一份表。
+pub fn reasoning_matrix(model: &str) -> Option<String> {
     for (k, v) in meta_entries(model) {
-        if k != "reasoning" {
-            continue;
-        }
-        if let Some(matrix) = v.as_str() {
-            if matrix.split('/').any(|tier| tier == cfg) {
-                return cfg.to_string();
-            }
+        if k == "reasoning" {
+            return v.as_str().map(|s| s.to_string());
         }
     }
-    String::new()
+    None
 }
 
 /// Go `Models`：候选池 + 每小时在线探测过滤（TTL 1h）。

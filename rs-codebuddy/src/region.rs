@@ -116,6 +116,31 @@ pub static REGION_INTL: RegionCfg = RegionCfg {
     candidates: INTL_CANDIDATES,
 };
 
+/// Go `containsDomain`：domain 匹配（子串包含即可：CN→`codebuddy.cn` 或 `workbuddy.cn`，
+/// INTL→`workbuddy.ai`；后缀给空串不参与匹配，空 domain 一律不命中。
+/// 2026-10-13：CN 改多后缀后两区后缀集合仍互不包含，不会误配）。
+pub fn contains_domain(domain: &str, suffixes: &[&str]) -> bool {
+    if domain.is_empty() {
+        return false;
+    }
+    suffixes
+        .iter()
+        .any(|s| !s.is_empty() && domain.contains(s))
+}
+
+/// Go `validateRegion`：区域要求的凭据文件缺失时如实报错（不许回退到另一区域的凭据）。
+pub fn validate_region(region: Region, domain: &str) -> Result<(), String> {
+    let c = region.cfg();
+    if contains_domain(domain, c.domain_suffixes) {
+        return Ok(());
+    }
+    Err(format!(
+        "未找到 {} 区域凭据（需要 auth.domain 含 {} 的登录文件）",
+        region.as_str(),
+        c.domain_suffixes.join(" 或 ")
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,5 +163,20 @@ mod tests {
         assert_eq!(Region::Intl.cfg().base_url, "https://www.codebuddy.ai");
         assert!(!Region::Cn.cfg().force_system && Region::Intl.cfg().force_system);
         assert!(!Region::Cn.cfg().no_probe && Region::Intl.cfg().no_probe);
+    }
+
+    #[test]
+    fn domain_matching_and_region_validation_match_go() {
+        assert!(contains_domain("www.codebuddy.cn", Region::Cn.cfg().domain_suffixes));
+        assert!(contains_domain("www.workbuddy.cn", Region::Cn.cfg().domain_suffixes));
+        assert!(!contains_domain("www.workbuddy.ai", Region::Cn.cfg().domain_suffixes));
+        assert!(contains_domain("www.workbuddy.ai", Region::Intl.cfg().domain_suffixes));
+        assert!(!contains_domain("", Region::Cn.cfg().domain_suffixes));
+        // 空后缀不参与匹配（Go 的同款守卫）
+        assert!(!contains_domain("anything", &[""]));
+        assert!(validate_region(Region::Cn, "www.workbuddy.cn").is_ok());
+        assert!(validate_region(Region::Cn, "www.workbuddy.ai").is_err());
+        assert!(validate_region(Region::Intl, "www.workbuddy.ai").is_ok());
+        assert!(validate_region(Region::Intl, "www.codebuddy.cn").is_err());
     }
 }

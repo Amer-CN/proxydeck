@@ -1,9 +1,4 @@
 {
-  "machine_paths": {
-    "auth_dir": "\u003c临时目录（已占位符化为 __AUTHDIR__）\u003e",
-    "data_dir": "\u003c临时目录（已占位符化为 __DATA__）\u003e",
-    "placeholders": "__AUTHDIR__=CODEBUDDY_AUTH_DIR 临时目录；__DATA__=PROXYDECK_DATA_DIR 临时目录（黄金与机器无关；占位符不含 HTML 转义字符，避免与 Go json.Marshal 的 \\u003c 转义打架）"
-  },
   "meta": {
     "auth_fixture": {
       "domain_cn": "codebuddy.cn",
@@ -33,7 +28,7 @@
       "deepseek-v4-flash",
       "deepseek-v4-pro"
     ],
-    "collected_at": "2026-10-15T04:46:15+08:00",
+    "collected_at": "2026-10-15T06:33:25+08:00",
     "diag_cap": 10,
     "generator": "internal/codebuddy/zz_codebuddy_golden_collect_test.go",
     "go_version": "go1.26.5",
@@ -64,14 +59,25 @@
     "region_cn": "{\"BaseURL\":\"https://copilot.tencent.com\",\"DomainSuffixes\":[\"codebuddy.cn\",\"workbuddy.cn\"],\"UserAgent\":\"codebuddy2openai-go/1.0\",\"ForceSystem\":false,\"NoRefresh\":false,\"NoProbe\":false,\"Candidates\":[\"auto\",\"hy4-preview\",\"hy3\",\"glm-5.3\",\"glm-5.3-flash\",\"glm-5.2\",\"glm-5.1\",\"glm-5v-turbo\",\"minimax-m3\",\"kimi-k3\",\"kimi-k2.7\",\"kimi-k2.6\",\"deepseek-v4.1-flash\",\"deepseek-v4-flash\",\"deepseek-v4-pro\"]}",
     "region_intl": "{\"BaseURL\":\"https://www.codebuddy.ai\",\"DomainSuffixes\":[\"workbuddy.ai\"],\"UserAgent\":\"CLI/2.63.2 CodeBuddy/2.63.2\",\"ForceSystem\":true,\"NoRefresh\":true,\"NoProbe\":true,\"Candidates\":[\"deepseek-v4.1-flash\",\"hy4-preview\",\"hy3\",\"gpt-5.6-sol\",\"gpt-5.6-terra\",\"gpt-5.6-luna\",\"gpt-5.5\",\"gpt-5.4\",\"gpt-5.3-codex\",\"glm-5.3\",\"glm-5.2\",\"kimi-k3\",\"kimi-k2.6\",\"gpt-6-astra\",\"gemini-3.5-flash\"]}",
     "source": "internal/codebuddy",
-    "transient_max": 2
+    "transient_max": 2,
+    "p5b": {
+      "collected_at": "2026-10-14T22:33:32.752Z",
+      "generator": "internal/codebuddy/zz_codebuddy_p5b_collect_test.go",
+      "atrest_secret_env": "WORKBUDDY_AT_REST_SECRET",
+      "atrest_secret_fixture": "c2VjcmV0LWdvbGRlbi1zZWNyZXQ=",
+      "atrest_key_id_fixture": "d0944e8ffb9d20ed",
+      "auth_fixture_cn_domain": "workbuddy.cn",
+      "auth_fixture_intl_domain": "workbuddy.ai",
+      "note": "全部场景都用**生产装配** NewServerForRegion（真凭据层 RealCredential + 真账号池 + 真 failover），不是零值 Server。生产缺省 failover = enabled:true / fallback:deepseek-v4-pro / default_reasoning:max。"
+    },
+    "scope_note": "scenarios[].scope：P5a = 合同与请求侧（含 chat-badjson / 11133 重试等）；P5b = 账号池 / 凭据 / 额度 / failover。两侧都走 cred_mode=real（Rust 侧按 auth_files 在临时 auth 目录重建合成 .info，含 $wbEncrypted 加密态）。"
   },
   "pure": {
     "fingerprint": [
       {
         "desc": "最小请求",
         "in": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
-        "out": "bytes=74 sha=625943e2c106 msgs=1 roles=map[user:1] keys=[messages model stream] tools=0 tool_names=[] effort=\u003cnil\u003e max_tokens=\u003cnil\u003e stream=true"
+        "out": "bytes=74 sha=625943e2c106 msgs=1 roles=map[user:1] keys=[messages model stream] tools=0 tool_names=[] effort=<nil> max_tokens=<nil> stream=true"
       },
       {
         "desc": "多角色 + 工具 + 档位",
@@ -81,12 +87,12 @@
       {
         "desc": "无 messages",
         "in": "{\"model\":\"auto\"}",
-        "out": "bytes=16 sha=3263355984f8 msgs=0 roles=map[] keys=[model] tools=0 tool_names=[] effort=\u003cnil\u003e max_tokens=\u003cnil\u003e stream=\u003cnil\u003e"
+        "out": "bytes=16 sha=3263355984f8 msgs=0 roles=map[] keys=[model] tools=0 tool_names=[] effort=<nil> max_tokens=<nil> stream=<nil>"
       },
       {
         "desc": "HTML 转义样本",
-        "in": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"\u003ca\u003e\u0026b\"}],\"stream\":true}",
-        "out": "bytes=92 sha=f1534c174b38 msgs=1 roles=map[user:1] keys=[messages model stream] tools=0 tool_names=[] effort=\u003cnil\u003e max_tokens=\u003cnil\u003e stream=true"
+        "in": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"<a>&b\"}],\"stream\":true}",
+        "out": "bytes=92 sha=f1534c174b38 msgs=1 roles=map[user:1] keys=[messages model stream] tools=0 tool_names=[] effort=<nil> max_tokens=<nil> stream=true"
       }
     ],
     "summarize_tool": [
@@ -286,6 +292,11 @@
       }
     ]
   },
+  "machine_paths": {
+    "auth_dir": "<临时目录（已占位符化为 __AUTHDIR__）>",
+    "data_dir": "<临时目录（已占位符化为 __DATA__）>",
+    "placeholders": "__AUTHDIR__=CODEBUDDY_AUTH_DIR 临时目录；__DATA__=PROXYDECK_DATA_DIR 临时目录（黄金与机器无关；占位符不含 HTML 转义字符，避免与 Go json.Marshal 的 \\u003c 转义打架）"
+  },
   "scenarios": [
     {
       "name": "routes",
@@ -313,6 +324,14 @@
           "uid": "u-golden"
         }
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017205088
+        }
+      ],
       "steps": [
         {
           "desc": "CORS 预检",
@@ -472,66 +491,6 @@
             "x-content-type-options": "nosniff"
           },
           "resp_body": "method not allowed\n"
-        },
-        {
-          "desc": "（P5b）quota 登记",
-          "method": "GET",
-          "path": "/quota",
-          "resp_status": 200,
-          "resp_headers": {
-            "access-control-allow-headers": "Content-Type, Authorization",
-            "access-control-allow-methods": "GET, POST, OPTIONS",
-            "access-control-allow-origin": "*",
-            "content-length": "197",
-            "content-type": "application/json"
-          },
-          "resp_body": "{\"total\":0,\"packs\":0,\"active\":{\"name\":\"\",\"used\":0,\"size\":0,\"end\":\"\"},\"nearestEnd\":{\"name\":\"\",\"date\":\"\",\"remain\":0},\"uid\":\"\",\"nickname\":\"\",\"source\":\"none\",\"err\":\"官方积分接口 HTTP 502: nope\"}\n",
-          "deferred": true
-        },
-        {
-          "desc": "（P5b）failover 登记",
-          "method": "GET",
-          "path": "/v1/failover",
-          "resp_status": 200,
-          "resp_headers": {
-            "access-control-allow-headers": "Content-Type, Authorization",
-            "access-control-allow-methods": "GET, POST, OPTIONS",
-            "access-control-allow-origin": "*",
-            "content-length": "49",
-            "content-type": "application/json"
-          },
-          "resp_body": "{\"enabled\":false,\"fallback\":\"\",\"hy4_limit\":null}\n",
-          "deferred": true
-        },
-        {
-          "desc": "（P5b）accounts 登记（无池 → 500）",
-          "method": "GET",
-          "path": "/v1/accounts",
-          "resp_status": 500,
-          "resp_headers": {
-            "access-control-allow-headers": "Content-Type, Authorization",
-            "access-control-allow-methods": "GET, POST, OPTIONS",
-            "access-control-allow-origin": "*",
-            "content-length": "73",
-            "content-type": "application/json"
-          },
-          "resp_body": "{\"error\":{\"message\":\"account pool unavailable\",\"type\":\"upstream_error\"}}\n",
-          "deferred": true
-        },
-        {
-          "desc": "（P5c）stats 登记",
-          "method": "GET",
-          "path": "/v1/stats",
-          "resp_status": 200,
-          "resp_headers": {
-            "access-control-allow-headers": "Content-Type, Authorization",
-            "access-control-allow-methods": "GET, POST, OPTIONS",
-            "access-control-allow-origin": "*",
-            "content-length": "28",
-            "content-type": "application/json"
-          },
-          "resp_body": "{\"models\":{},\"uptimeSec\":0}\n",
-          "deferred": true
         }
       ],
       "upstream_seen": [
@@ -552,7 +511,7 @@
           }
         },
         {
-          "seq": 7,
+          "seq": 6,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-flash\",\"stream\":true}",
@@ -568,7 +527,7 @@
           }
         },
         {
-          "seq": 12,
+          "seq": 5,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-pro\",\"stream\":true}",
@@ -584,7 +543,7 @@
           }
         },
         {
-          "seq": 3,
+          "seq": 7,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4.1-flash\",\"stream\":true}",
@@ -600,7 +559,7 @@
           }
         },
         {
-          "seq": 10,
+          "seq": 9,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.1\",\"stream\":true}",
@@ -616,7 +575,7 @@
           }
         },
         {
-          "seq": 8,
+          "seq": 15,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"stream\":true}",
@@ -632,7 +591,7 @@
           }
         },
         {
-          "seq": 5,
+          "seq": 8,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3\",\"stream\":true}",
@@ -648,7 +607,7 @@
           }
         },
         {
-          "seq": 9,
+          "seq": 2,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\",\"stream\":true}",
@@ -680,7 +639,7 @@
           }
         },
         {
-          "seq": 15,
+          "seq": 10,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy3\",\"stream\":true}",
@@ -696,7 +655,7 @@
           }
         },
         {
-          "seq": 2,
+          "seq": 3,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy4-preview\",\"stream\":true}",
@@ -712,7 +671,7 @@
           }
         },
         {
-          "seq": 14,
+          "seq": 4,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.6\",\"stream\":true}",
@@ -728,7 +687,7 @@
           }
         },
         {
-          "seq": 6,
+          "seq": 12,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.7\",\"stream\":true}",
@@ -744,7 +703,7 @@
           }
         },
         {
-          "seq": 4,
+          "seq": 14,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true}",
@@ -775,7 +734,8 @@
             "X-User-Id": "u-golden"
           }
         }
-      ]
+      ],
+      "scope": "P5a"
     },
     {
       "name": "models-probe-cn",
@@ -798,6 +758,14 @@
         }
       },
       "upstream_sorted_by_body": true,
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017205099
+        }
+      ],
       "steps": [
         {
           "desc": "首次探测",
@@ -844,7 +812,7 @@
       ],
       "upstream_seen": [
         {
-          "seq": 2,
+          "seq": 12,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true}",
@@ -876,7 +844,7 @@
           }
         },
         {
-          "seq": 13,
+          "seq": 1,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-pro\",\"stream\":true}",
@@ -892,7 +860,7 @@
           }
         },
         {
-          "seq": 9,
+          "seq": 10,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4.1-flash\",\"stream\":true}",
@@ -908,7 +876,7 @@
           }
         },
         {
-          "seq": 7,
+          "seq": 3,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.1\",\"stream\":true}",
@@ -924,7 +892,7 @@
           }
         },
         {
-          "seq": 11,
+          "seq": 13,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"stream\":true}",
@@ -940,7 +908,7 @@
           }
         },
         {
-          "seq": 4,
+          "seq": 9,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3\",\"stream\":true}",
@@ -972,7 +940,7 @@
           }
         },
         {
-          "seq": 10,
+          "seq": 2,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5v-turbo\",\"stream\":true}",
@@ -988,7 +956,7 @@
           }
         },
         {
-          "seq": 1,
+          "seq": 11,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy3\",\"stream\":true}",
@@ -1004,7 +972,7 @@
           }
         },
         {
-          "seq": 3,
+          "seq": 5,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy4-preview\",\"stream\":true}",
@@ -1020,7 +988,7 @@
           }
         },
         {
-          "seq": 12,
+          "seq": 8,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.6\",\"stream\":true}",
@@ -1036,7 +1004,7 @@
           }
         },
         {
-          "seq": 6,
+          "seq": 4,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.7\",\"stream\":true}",
@@ -1052,7 +1020,7 @@
           }
         },
         {
-          "seq": 8,
+          "seq": 6,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true}",
@@ -1068,7 +1036,7 @@
           }
         },
         {
-          "seq": 5,
+          "seq": 7,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"minimax-m3\",\"stream\":true}",
@@ -1083,7 +1051,8 @@
             "X-User-Id": "u-golden"
           }
         }
-      ]
+      ],
+      "scope": "P5a"
     },
     {
       "name": "models-intl",
@@ -1110,6 +1079,14 @@
           "uid": "u-intl-golden"
         }
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-intl.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-intl-golden\"},\"auth\":{\"accessToken\":\"tok-u-intl-golden\",\"domain\":\"workbuddy.ai\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017205108
+        }
+      ],
       "steps": [
         {
           "desc": "models",
@@ -1153,7 +1130,8 @@
           },
           "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://www.codebuddy.ai\",\"credential\":{\"auth_file\":\"__AUTHDIR__\\\\workbuddy-desktop-intl.info\",\"enterpriseName\":\"\",\"nickname\":\"goldenuser\",\"token_expired\":false,\"token_expires_at\":4102416000000,\"uid\":\"u-intl-golden\"},\"mode\":\"direct-proxy (native function calling)\",\"region\":\"INTL\",\"service\":\"codebuddy-go\",\"status\":\"ok\",\"uptimeSec\":0}\n"
         }
-      ]
+      ],
+      "scope": "P5a"
     },
     {
       "name": "chat-request",
@@ -1169,6 +1147,14 @@
           "Content-Type": "text/event-stream"
         }
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017205116
+        }
+      ],
       "steps": [
         {
           "desc": "完整请求（流式）",
@@ -1204,7 +1190,8 @@
             "X-User-Id": "u-golden"
           }
         }
-      ]
+      ],
+      "scope": "P5a"
     },
     {
       "name": "chat-request-edges",
@@ -1220,6 +1207,14 @@
           "Content-Type": "text/event-stream"
         }
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017205125
+        }
+      ],
       "steps": [
         {
           "desc": "缺 model 与 stream（默认 auto / stream 强制 true）",
@@ -1234,7 +1229,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-5de0d5373fa9\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-544c166518f6\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1250,7 +1245,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-927f466a5b29\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-027404b46d4d\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1266,7 +1261,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-fdc97b872b0a\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-35822156d891\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1282,7 +1277,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-45a9cff341a3\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-1c17f3ba87b6\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1307,7 +1302,7 @@
           "seq": 1,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -1323,7 +1318,7 @@
           "seq": 2,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[1,\"x\",{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[1,\"x\",{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -1339,7 +1334,7 @@
           "seq": 3,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -1355,7 +1350,7 @@
           "seq": 4,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -1371,7 +1366,7 @@
           "seq": 5,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":false}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":false}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -1383,7 +1378,8 @@
             "X-User-Id": "u-golden"
           }
         }
-      ]
+      ],
+      "scope": "P5a"
     },
     {
       "name": "chat-request-intl",
@@ -1399,6 +1395,14 @@
           "Content-Type": "text/event-stream"
         }
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-intl.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-intl-golden\"},\"auth\":{\"accessToken\":\"tok-u-intl-golden\",\"domain\":\"workbuddy.ai\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017205135
+        }
+      ],
       "steps": [
         {
           "desc": "无 system → 自动补",
@@ -1413,7 +1417,7 @@
             "content-length": "282",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-d0bf77306b32\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-c602be55e2c4\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1429,7 +1433,7 @@
             "content-length": "282",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-725ccc15356f\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-407b7c15a4a5\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         }
       ],
@@ -1466,7 +1470,8 @@
             "X-User-Id": "u-intl-golden"
           }
         }
-      ]
+      ],
+      "scope": "P5a"
     },
     {
       "name": "chat-badjson",
@@ -1482,6 +1487,14 @@
           "Content-Type": "text/event-stream"
         }
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017205143
+        }
+      ],
       "steps": [
         {
           "desc": "空体",
@@ -1735,7 +1748,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-73329db04e53\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-091e7c9d5061\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1835,7 +1848,7 @@
           "seq": 1,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"max_tokens\":0,\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"max_tokens\":0,\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -1863,7 +1876,8 @@
             "X-User-Id": "u-golden"
           }
         }
-      ]
+      ],
+      "scope": "P5a"
     },
     {
       "name": "chat-upstream-errors",
@@ -1908,6 +1922,14 @@
           }
         ]
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017205154
+        }
+      ],
       "steps": [
         {
           "desc": "上游 400 11101",
@@ -1944,15 +1966,15 @@
           "method": "POST",
           "path": "/v1/chat/completions",
           "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
-          "resp_status": 429,
+          "resp_status": 403,
           "resp_headers": {
             "access-control-allow-headers": "Content-Type, Authorization",
             "access-control-allow-methods": "GET, POST, OPTIONS",
             "access-control-allow-origin": "*",
-            "content-length": "132",
+            "content-length": "127",
             "content-type": "application/json"
           },
-          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":6004,\\\"msg\\\":\\\"Quota exceeded, will reset at 2026-10-15 06:20:02 UTC+8\\\"}\",\"type\":\"upstream_error\"}}\n"
+          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":11128,\\\"msg\\\":\\\"Illegal API invocation from an unapproved channel\\\"}\",\"type\":\"upstream_error\"}}\n"
         },
         {
           "desc": "上游 403 11128",
@@ -1975,7 +1997,7 @@
           "seq": 1,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -1991,7 +2013,7 @@
           "seq": 2,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2007,7 +2029,7 @@
           "seq": 3,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2023,7 +2045,23 @@
           "seq": 4,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 5,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2035,7 +2073,8 @@
             "X-User-Id": "u-golden"
           }
         }
-      ]
+      ],
+      "scope": "P5a"
     },
     {
       "name": "chat-11133-retry",
@@ -2072,6 +2111,14 @@
           }
         ]
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017205162
+        }
+      ],
       "steps": [
         {
           "desc": "11133×2 → 200",
@@ -2095,7 +2142,7 @@
           "seq": 1,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2111,7 +2158,7 @@
           "seq": 2,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2127,7 +2174,7 @@
           "seq": 3,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2142,17 +2189,18 @@
       ],
       "diag_files": [
         {
-          "name": "diag-11133-1792010775469494200.json",
-          "size": 117,
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+          "name": "diag-11133-1792017205169750400.json",
+          "size": 142,
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
         },
         {
-          "name": "diag-11133-1792010776270774900.json",
-          "size": 117,
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+          "name": "diag-11133-1792017205970747100.json",
+          "size": 142,
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
         }
       ],
-      "diag_note": "重试退避耗时 2.40s（下界 2.4s）"
+      "diag_note": "重试退避耗时 2.40s（下界 2.4s）",
+      "scope": "P5a"
     },
     {
       "name": "chat-11133-exhausted",
@@ -2168,6 +2216,14 @@
           "Content-Type": "application/json"
         }
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017207574
+        }
+      ],
       "steps": [
         {
           "desc": "11133 恒拒 → 透传",
@@ -2190,7 +2246,7 @@
           "seq": 1,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2206,7 +2262,7 @@
           "seq": 2,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2222,7 +2278,7 @@
           "seq": 3,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2237,21 +2293,22 @@
       ],
       "diag_files": [
         {
-          "name": "diag-11133-1792010777879718000.json",
-          "size": 117,
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+          "name": "diag-11133-1792017207581877600.json",
+          "size": 142,
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
         },
         {
-          "name": "diag-11133-1792010778680592000.json",
-          "size": 117,
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+          "name": "diag-11133-1792017208382740500.json",
+          "size": 142,
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
         },
         {
-          "name": "diag-11133-1792010780282171700.json",
-          "size": 117,
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+          "name": "diag-11133-1792017209983855300.json",
+          "size": 142,
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
         }
-      ]
+      ],
+      "scope": "P5a"
     },
     {
       "name": "chat-11133-diagcap",
@@ -2267,6 +2324,14 @@
           "Content-Type": "application/json"
         }
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017209985
+        }
+      ],
       "steps": [
         {
           "desc": "满额后不落盘",
@@ -2289,7 +2354,7 @@
           "seq": 1,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2305,7 +2370,7 @@
           "seq": 2,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2321,7 +2386,7 @@
           "seq": 3,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -2387,7 +2452,8 @@
         }
       ],
       "diag_note": "预置 10 份 seed 文件；采集后应仍为 10 份且内容不变",
-      "diag_preseed_from_files": true
+      "diag_preseed_from_files": true,
+      "scope": "P5a"
     },
     {
       "name": "health-credential-error",
@@ -2410,6 +2476,21 @@
         "kind": "error",
         "message": "auth 文件格式错误: unexpected end of JSON input"
       },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792017212400
+        }
+      ],
+      "auth_files_after": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"auth\":",
+          "mtime_unix_ms": 0
+        }
+      ],
       "steps": [
         {
           "desc": "坏凭据 health",
@@ -2425,7 +2506,1994 @@
           },
           "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://copilot.tencent.com\",\"message\":\"auth 文件格式错误: unexpected end of JSON input\",\"mode\":\"direct-proxy (native function calling)\",\"region\":\"CN\",\"service\":\"codebuddy-go\",\"status\":\"error\",\"uptimeSec\":0}\n"
         }
+      ],
+      "scope": "P5a"
+    },
+    {
+      "name": "credentials",
+      "desc": "生产凭据层：区域过滤（异域/坏文件跳过）+ 明文与 $wbEncrypted 双形态 + /health 的 credential 块",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "不应被调用",
+      "upstream_spec": {
+        "status": 500,
+        "body": "should-not-be-called",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "broken.info",
+          "body": "{\"auth\":",
+          "mtime_unix_ms": 1792017212432
+        },
+        {
+          "name": "workbuddy-desktop-ai.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"intluser\",\n    \"uid\": \"u-intl-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-intl-golden\",\n    \"domain\": \"workbuddy.ai\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-intl-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792040400000
+        },
+        {
+          "name": "workbuddy-desktop-enc.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"encuser\",\n    \"uid\": \"u-enc\"\n  },\n  \"auth\": {\n    \"accessToken\": {\n      \"$wbEncrypted\": 1,\n      \"envelope\": \"eyJhdXRoVGFnIjoidGJqTjNlTXZmVHZYWDVuVHAwNDhwdz09IiwiY2lwaGVydGV4dCI6IjFaWjVXZlZlQnB2NSIsImtleUlkIjoiZDA5NDRlOGZmYjlkMjBlZCIsIm5vbmNlIjoicWtjbHp1dUFxZjNjZS9UTCIsInN1aXRlIjoxfQ==\"\n    },\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": {\n      \"$wbEncrypted\": 1,\n      \"envelope\": \"eyJhdXRoVGFnIjoiTG5GU2ZCVU1mR1Ria2tHMlVEcFNNUT09IiwiY2lwaGVydGV4dCI6IjNiMEVGZHJxeWdtNmNmY00rVjJ4amFrPSIsImtleUlkIjoiZDA5NDRlOGZmYjlkMjBlZCIsIm5vbmNlIjoiTG1HS1A2ckMrL1NlcnE1cyIsInN1aXRlIjoxfQ==\"\n    }\n  }\n}",
+          "mtime_unix_ms": 1792033200000
+        },
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "health（真凭据，含加密态解析）",
+          "method": "GET",
+          "path": "/health",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "383",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://copilot.tencent.com\",\"credential\":{\"auth_file\":\"__AUTHDIR__\\\\workbuddy-desktop.info\",\"enterpriseName\":\"golden-ent\",\"nickname\":\"goldenuser\",\"token_expired\":false,\"token_expires_at\":4102416000000,\"uid\":\"u-golden\"},\"mode\":\"direct-proxy (native function calling)\",\"region\":\"CN\",\"service\":\"codebuddy-go\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+        }
       ]
+    },
+    {
+      "name": "credentials-missing",
+      "desc": "零可用凭据 → 生产装配如实报错（不许跨区域回退到 INTL 凭据）",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "不应被调用",
+      "upstream_spec": {
+        "status": 500,
+        "body": "nope",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "cred_mode": "real",
+      "steps": [
+        {
+          "desc": "装配错误文案（本地化）",
+          "method": "N/A",
+          "path": "NewServerForRegion",
+          "resp_status": 0,
+          "resp_headers": {},
+          "resp_body": "未找到 CN 区域的 CodeBuddy/WorkBuddy 登录文件，请先在桌面端完成登录（已搜索：__AUTHDIR__）"
+        }
+      ]
+    },
+    {
+      "name": "accounts",
+      "desc": "账号池：GET 快照（mtime 新→旧）+ toggle/remove/restore 的 ok 与落盘形态 + 未知 uid/未知 action + 405",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "不应被调用",
+      "upstream_spec": {
+        "status": 500,
+        "body": "should-not-be-called",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-b.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"seconduser\",\n    \"uid\": \"u-second\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-second\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-second-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792033200000
+        },
+        {
+          "name": "workbuddy-desktop-c.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"thirduser\",\n    \"uid\": \"u-third\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-third\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-third-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792029600000
+        },
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "GET 快照（3 个号，mtime 新→旧）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "811",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-c.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"thirduser\",\"removed\":false,\"uid\":\"u-third\",\"uid_short\":\"u-third\",\"use_count\":0}],\"ok\":true,\"region\":\"CN\"}\n"
+        },
+        {
+          "desc": "toggle 停用第二个号",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"toggle\",\"uid\":\"u-second\",\"enabled\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "12",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":true}\n"
+        },
+        {
+          "desc": "remove 移出第三个号",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"remove\",\"uid\":\"u-third\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "12",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":true}\n"
+        },
+        {
+          "desc": "快照（停用/移出已生效）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "811",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":false,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-c.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"thirduser\",\"removed\":true,\"uid\":\"u-third\",\"uid_short\":\"u-third\",\"use_count\":0}],\"ok\":true,\"region\":\"CN\"}\n"
+        },
+        {
+          "desc": "restore 恢复第三个号",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"restore\",\"uid\":\"u-third\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "12",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":true}\n"
+        },
+        {
+          "desc": "toggle 重新启用第二个号",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"toggle\",\"uid\":\"u-second\",\"enabled\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "12",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":true}\n"
+        },
+        {
+          "desc": "快照（全部复位）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "811",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-c.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"thirduser\",\"removed\":false,\"uid\":\"u-third\",\"uid_short\":\"u-third\",\"use_count\":0}],\"ok\":true,\"region\":\"CN\"}\n"
+        },
+        {
+          "desc": "clear_cool 未知 uid → ok:false",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"clear_cool\",\"uid\":\"nope\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "13",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":false}\n"
+        },
+        {
+          "desc": "clear_exhausted 未知 uid → ok:false",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"clear_exhausted\",\"uid\":\"nope\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "13",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":false}\n"
+        },
+        {
+          "desc": "toggle 未知 uid → ok:false",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"toggle\",\"uid\":\"nope\",\"enabled\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "13",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":false}\n"
+        },
+        {
+          "desc": "remove 未知 uid → ok:false",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"remove\",\"uid\":\"nope\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "13",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":false}\n"
+        },
+        {
+          "desc": "restore 未知 uid → ok:false",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"restore\",\"uid\":\"nope\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "13",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":false}\n"
+        },
+        {
+          "desc": "未知 action → 400",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"explode\"}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "72",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"unknown action: explode\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "坏 JSON → 400",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "87",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: unexpected end of JSON input\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "DELETE → 405",
+          "method": "DELETE",
+          "path": "/v1/accounts",
+          "resp_status": 405,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "67",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"method not allowed\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "rescan",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"rescan\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "811",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-c.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"thirduser\",\"removed\":false,\"uid\":\"u-third\",\"uid_short\":\"u-third\",\"use_count\":0}],\"ok\":true,\"region\":\"CN\"}\n"
+        }
+      ],
+      "pool_state": "{\"version\":1,\"accounts\":{\"u-golden\":{\"enabled\":true,\"removed\":false},\"u-second\":{\"enabled\":true,\"removed\":false},\"u-third\":{\"enabled\":true,\"removed\":false}}}",
+      "pool_state_exists": true
+    },
+    {
+      "name": "accounts-rescan-intent",
+      "desc": "rescan 继承 Enabled/Removed（停用/移出是用户意图，rescan 不得复活）+ 池状态只落 Enabled/Removed",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "不应被调用",
+      "upstream_spec": {
+        "status": 500,
+        "body": "should-not-be-called",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-b.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"seconduser\",\n    \"uid\": \"u-second\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-second\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-second-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792033200000
+        },
+        {
+          "name": "workbuddy-desktop-c.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"thirduser\",\n    \"uid\": \"u-third\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-third\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-third-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792029600000
+        },
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "停用第二个号",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"toggle\",\"uid\":\"u-second\",\"enabled\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "12",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":true}\n"
+        },
+        {
+          "desc": "移出第三个号",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"remove\",\"uid\":\"u-third\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "12",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":true}\n"
+        },
+        {
+          "desc": "rescan",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"rescan\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "811",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":false,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-c.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"thirduser\",\"removed\":true,\"uid\":\"u-third\",\"uid_short\":\"u-third\",\"use_count\":0}],\"ok\":true,\"region\":\"CN\"}\n"
+        },
+        {
+          "desc": "快照（停用/移出仍在）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "811",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":false,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-c.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"thirduser\",\"removed\":true,\"uid\":\"u-third\",\"uid_short\":\"u-third\",\"use_count\":0}],\"ok\":true,\"region\":\"CN\"}\n"
+        }
+      ],
+      "pool_state": "{\"version\":1,\"accounts\":{\"u-golden\":{\"enabled\":true,\"removed\":false},\"u-second\":{\"enabled\":false,\"removed\":false},\"u-third\":{\"enabled\":true,\"removed\":true}}}",
+      "pool_state_exists": true
+    },
+    {
+      "name": "chat-pool-401",
+      "desc": "池路径 401：MarkDead 当前号 → 换下一个非死号 → 重建头（X-User-Id 变了）→ 重发成功",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "u-golden 第一条 401、其后 SSE；u-second 恒 SSE",
+      "upstream_spec": {
+        "per_user": {
+          "u-golden": [
+            {
+              "status": 401,
+              "body": "{\"code\":11101,\"msg\":\"token expired\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            },
+            {
+              "status": 200,
+              "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+              "headers": {
+                "Content-Type": "text/event-stream"
+              }
+            }
+          ],
+          "u-second": [
+            {
+              "status": 200,
+              "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+              "headers": {
+                "Content-Type": "text/event-stream"
+              }
+            }
+          ]
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-b.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"seconduser\",\n    \"uid\": \"u-second\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-second\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-second-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792033200000
+        },
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "401 → 换号重发（流式）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        },
+        {
+          "desc": "快照（第一个号 dead）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "580",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":true,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":1},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":1}],\"ok\":true,\"region\":\"CN\"}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-second",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-second"
+          }
+        }
+      ],
+      "per_user_hits": {
+        "u-golden": 1,
+        "u-second": 1
+      }
+    },
+    {
+      "name": "chat-pool-429",
+      "desc": "池路径 429 配额报文：MarkLimited（冷却至上游给的重置时点）→ 换号重发成功；快照带 cooling/limited_until",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "u-golden 第一条 429 配额报文、其后 SSE；u-second 恒 SSE",
+      "upstream_spec": {
+        "per_user": {
+          "u-golden": [
+            {
+              "status": 429,
+              "body": "{\"code\":6004,\"msg\":\"Quota exceeded, will reset at 2026-10-16 06:20:02 UTC+8\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            },
+            {
+              "status": 200,
+              "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+              "headers": {
+                "Content-Type": "text/event-stream"
+              }
+            }
+          ],
+          "u-second": [
+            {
+              "status": 200,
+              "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+              "headers": {
+                "Content-Type": "text/event-stream"
+              }
+            }
+          ]
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-b.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"seconduser\",\n    \"uid\": \"u-second\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-second\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-second-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792033200000
+        },
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "429 → 冷却换号重发",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        },
+        {
+          "desc": "快照（第一个号 cooling）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "585",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":true,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"2026-10-16T06:20:02+08:00\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":1},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":1}],\"ok\":true,\"region\":\"CN\"}\n"
+        },
+        {
+          "desc": "clear_cool 提前恢复",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"clear_cool\",\"uid\":\"u-golden\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "12",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":true}\n"
+        },
+        {
+          "desc": "快照（冷却已解）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "581",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":1},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":1}],\"ok\":true,\"region\":\"CN\"}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-second",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-second"
+          }
+        }
+      ],
+      "per_user_hits": {
+        "u-golden": 1,
+        "u-second": 1
+      }
+    },
+    {
+      "name": "chat-hy4-trip",
+      "desc": "hy4-preview 429：记限流窗口 + 请求体 model 改写为 fallback 后重放；/health 与 /v1/failover 的 hy4_limit；窗口内第二个请求直接改写",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "第一条 429 配额报文，其后 SSE",
+      "upstream_spec": {
+        "per_user": {
+          "u-golden": [
+            {
+              "status": 429,
+              "body": "{\"code\":6004,\"msg\":\"Quota exceeded, will reset at 2026-10-16 06:20:02 UTC+8\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            },
+            {
+              "status": 200,
+              "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+              "headers": {
+                "Content-Type": "text/event-stream"
+              }
+            }
+          ]
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "hy4-preview 429 → fallback 重放",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"hy4-preview\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        },
+        {
+          "desc": "health（带 hy4_limit）",
+          "method": "GET",
+          "path": "/health",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "470",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://copilot.tencent.com\",\"credential\":{\"auth_file\":\"__AUTHDIR__\\\\workbuddy-desktop.info\",\"enterpriseName\":\"golden-ent\",\"nickname\":\"goldenuser\",\"token_expired\":false,\"token_expires_at\":4102416000000,\"uid\":\"u-golden\"},\"hy4_limit\":{\"active\":true,\"fallback\":\"deepseek-v4-pro\",\"until\":\"2026-10-16 06:20:02\"},\"mode\":\"direct-proxy (native function calling)\",\"region\":\"CN\",\"service\":\"codebuddy-go\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+        },
+        {
+          "desc": "failover GET（带 hy4_limit）",
+          "method": "GET",
+          "path": "/v1/failover",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "133",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"enabled\":true,\"fallback\":\"deepseek-v4-pro\",\"hy4_limit\":{\"active\":true,\"fallback\":\"deepseek-v4-pro\",\"until\":\"2026-10-16 06:20:02\"}}\n"
+        },
+        {
+          "desc": "窗口内第二个 hy4 请求 → 直接改写 fallback",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"hy4-preview\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy4-preview\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-pro\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-pro\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ],
+      "per_user_hits": {
+        "u-golden": 3
+      }
+    },
+    {
+      "name": "failover-config",
+      "desc": "failover 配置：生产缺省（enabled:true/fallback:deepseek-v4-pro）→ POST 改 fallback 与开关 → 落盘形态 → 非法 fallback/坏 JSON/405",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "不应被调用",
+      "upstream_spec": {
+        "status": 500,
+        "body": "should-not-be-called",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "GET 缺省（生产口径，不是零值 enabled:false）",
+          "method": "GET",
+          "path": "/v1/failover",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "63",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"enabled\":true,\"fallback\":\"deepseek-v4-pro\",\"hy4_limit\":null}\n"
+        },
+        {
+          "desc": "POST 只改 fallback",
+          "method": "POST",
+          "path": "/v1/failover",
+          "req_body": "{\"fallback\":\"glm-5.2\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "55",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"enabled\":true,\"fallback\":\"glm-5.2\",\"hy4_limit\":null}\n"
+        },
+        {
+          "desc": "POST 只关开关",
+          "method": "POST",
+          "path": "/v1/failover",
+          "req_body": "{\"enabled\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "56",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"enabled\":false,\"fallback\":\"glm-5.2\",\"hy4_limit\":null}\n"
+        },
+        {
+          "desc": "GET（改动已生效）",
+          "method": "GET",
+          "path": "/v1/failover",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "56",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"enabled\":false,\"fallback\":\"glm-5.2\",\"hy4_limit\":null}\n"
+        },
+        {
+          "desc": "POST 非法 fallback（不在候选池）→ 400",
+          "method": "POST",
+          "path": "/v1/failover",
+          "req_body": "{\"fallback\":\"not-a-model\"}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "84",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"unknown fallback model: not-a-model\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "POST 空 fallback → 400（非候选池）",
+          "method": "POST",
+          "path": "/v1/failover",
+          "req_body": "{\"fallback\":\"\"}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "73",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"unknown fallback model: \",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "POST 坏 JSON → 400",
+          "method": "POST",
+          "path": "/v1/failover",
+          "req_body": "{",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "87",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: unexpected end of JSON input\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "DELETE → 405",
+          "method": "DELETE",
+          "path": "/v1/failover",
+          "resp_status": 405,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "67",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"method not allowed\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "POST 复位",
+          "method": "POST",
+          "path": "/v1/failover",
+          "req_body": "{\"enabled\":true,\"fallback\":\"deepseek-v4-pro\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "63",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"enabled\":true,\"fallback\":\"deepseek-v4-pro\",\"hy4_limit\":null}\n"
+        },
+        {
+          "desc": "GET（复位后）",
+          "method": "GET",
+          "path": "/v1/failover",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "63",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"enabled\":true,\"fallback\":\"deepseek-v4-pro\",\"hy4_limit\":null}\n"
+        }
+      ],
+      "failover_file": "{\"enabled\":true,\"fallback\":\"deepseek-v4-pro\",\"default_reasoning\":\"max\"}",
+      "failover_file_exists": true
+    },
+    {
+      "name": "reasoning-default",
+      "desc": "CN 缺省 reasoning_effort 注入（档位来自 failover 配置，缺省 max）：未带则注入、已带不动、未入 modelMeta 的模型不注入",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "恒 200 SSE",
+      "upstream_spec": {
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "auto 未带 → 注入 max",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        },
+        {
+          "desc": "kimi-k3 已带 low → 不动",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true,\"reasoning_effort\":\"low\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        },
+        {
+          "desc": "未入 modelMeta 的模型 → 不注入",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"gpt-5.6-sol\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"low\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"gpt-5.6-sol\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reasoning-tier-from-config",
+      "desc": "档位来自 failover 配置（装配前磁盘 default_reasoning=low）→ 注入 low；证明档位不是写死的 max",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "恒 200 SSE",
+      "upstream_spec": {
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "配置档位 low 生效",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"low\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ],
+      "failover_seed": "{\"enabled\":true,\"fallback\":\"deepseek-v4-pro\",\"default_reasoning\":\"low\"}"
+    },
+    {
+      "name": "intl-region",
+      "desc": "INTL：凭据只认 workbuddy.ai（CN 文件必须被过滤）+ UA 为官方 CLI 形 + 不注入 reasoning_effort + 自动补首条 system",
+      "region": "INTL",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "恒 200 SSE",
+      "upstream_spec": {
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-ai.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"intluser\",\n    \"uid\": \"u-intl-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-intl-golden\",\n    \"domain\": \"workbuddy.ai\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-intl-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        },
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "health（INTL）",
+          "method": "GET",
+          "path": "/health",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "388",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://www.codebuddy.ai\",\"credential\":{\"auth_file\":\"__AUTHDIR__\\\\workbuddy-desktop-ai.info\",\"enterpriseName\":\"golden-ent\",\"nickname\":\"intluser\",\"token_expired\":false,\"token_expires_at\":4102416000000,\"uid\":\"u-intl-golden\"},\"mode\":\"direct-proxy (native function calling)\",\"region\":\"INTL\",\"service\":\"codebuddy-go\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+        },
+        {
+          "desc": "chat（INTL，未带 system → 自动补）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"hy3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        },
+        {
+          "desc": "accounts（INTL 池只含国际号）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "317",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-ai.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"intluser\",\"removed\":false,\"uid\":\"u-intl-golden\",\"uid_short\":\"u-intl-g\",\"use_count\":1}],\"ok\":true,\"region\":\"INTL\"}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://www.codebuddy.ai/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"You are a helpful assistant.\",\"role\":\"system\"},{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-intl-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "CLI/2.63.2 CodeBuddy/2.63.2",
+            "X-Domain": "workbuddy.ai",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-intl-golden"
+          }
+        }
+      ],
+      "intl_system": "You are a helpful assistant."
+    },
+    {
+      "name": "quota",
+      "desc": "积分：默认号（池内 mtime 最新）+ ?uid= 指定号的分键缓存（第二次 source:cache）+ 未知 uid + 401 标死 + refresh=1 旁路",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "积分路径按 uid 分派（u-third 恒 401）；其它路径 500",
+      "upstream_spec": {
+        "rules": [
+          {
+            "path": "/v2/billing/meter/get-user-resource",
+            "per_user": {
+              "u-golden": [
+                {
+                  "status": 200,
+                  "body": "{\"code\":0,\"msg\":\"\",\"data\":{\"Response\":{\"Data\":{\"Accounts\":[{\"PackageName\":\"周期包\",\"CycleStartTime\":\"2026-09-01 00:00:00\",\"CycleEndTime\":\"2099-01-01 00:00:00\",\"CapacitySize\":100,\"CapacityUsed\":25,\"CapacityRemain\":75,\"CycleCapacityRemain\":1569.69,\"CycleCapacitySize\":1600},{\"PackageName\":\"已过期包\",\"CycleStartTime\":\"2025-01-01 00:00:00\",\"CycleEndTime\":\"2025-02-01 00:00:00\",\"CapacitySize\":50,\"CapacityUsed\":50,\"CapacityRemain\":0,\"CycleCapacityRemain\":0,\"CycleCapacitySize\":50}]}}}}",
+                  "headers": {
+                    "Content-Type": "application/json"
+                  }
+                },
+                {
+                  "status": 200,
+                  "body": "{\"code\":0,\"msg\":\"\",\"data\":{\"Response\":{\"Data\":{\"Accounts\":[{\"PackageName\":\"周期包\",\"CycleStartTime\":\"2026-09-01 00:00:00\",\"CycleEndTime\":\"2099-01-01 00:00:00\",\"CapacitySize\":100,\"CapacityUsed\":25,\"CapacityRemain\":75,\"CycleCapacityRemain\":1569.69,\"CycleCapacitySize\":1600},{\"PackageName\":\"已过期包\",\"CycleStartTime\":\"2025-01-01 00:00:00\",\"CycleEndTime\":\"2025-02-01 00:00:00\",\"CapacitySize\":50,\"CapacityUsed\":50,\"CapacityRemain\":0,\"CycleCapacityRemain\":0,\"CycleCapacitySize\":50}]}}}}",
+                  "headers": {
+                    "Content-Type": "application/json"
+                  }
+                },
+                {
+                  "status": 200,
+                  "body": "{\"code\":0,\"msg\":\"\",\"data\":{\"Response\":{\"Data\":{\"Accounts\":[{\"PackageName\":\"周期包\",\"CycleStartTime\":\"2026-09-01 00:00:00\",\"CycleEndTime\":\"2099-01-01 00:00:00\",\"CapacitySize\":100,\"CapacityUsed\":25,\"CapacityRemain\":75,\"CycleCapacityRemain\":1569.69,\"CycleCapacitySize\":1600},{\"PackageName\":\"已过期包\",\"CycleStartTime\":\"2025-01-01 00:00:00\",\"CycleEndTime\":\"2025-02-01 00:00:00\",\"CapacitySize\":50,\"CapacityUsed\":50,\"CapacityRemain\":0,\"CycleCapacityRemain\":0,\"CycleCapacitySize\":50}]}}}}",
+                  "headers": {
+                    "Content-Type": "application/json"
+                  }
+                },
+                {
+                  "status": 200,
+                  "body": "{\"code\":0,\"msg\":\"\",\"data\":{\"Response\":{\"Data\":{\"Accounts\":[{\"PackageName\":\"周期包\",\"CycleStartTime\":\"2026-09-01 00:00:00\",\"CycleEndTime\":\"2099-01-01 00:00:00\",\"CapacitySize\":100,\"CapacityUsed\":25,\"CapacityRemain\":75,\"CycleCapacityRemain\":1569.69,\"CycleCapacitySize\":1600},{\"PackageName\":\"已过期包\",\"CycleStartTime\":\"2025-01-01 00:00:00\",\"CycleEndTime\":\"2025-02-01 00:00:00\",\"CapacitySize\":50,\"CapacityUsed\":50,\"CapacityRemain\":0,\"CycleCapacityRemain\":0,\"CycleCapacitySize\":50}]}}}}",
+                  "headers": {
+                    "Content-Type": "application/json"
+                  }
+                }
+              ],
+              "u-second": [
+                {
+                  "status": 200,
+                  "body": "{\"code\":0,\"msg\":\"\",\"data\":{\"Response\":{\"Data\":{\"Accounts\":[{\"PackageName\":\"周期包\",\"CycleStartTime\":\"2026-09-01 00:00:00\",\"CycleEndTime\":\"2099-01-01 00:00:00\",\"CapacitySize\":100,\"CapacityUsed\":25,\"CapacityRemain\":75,\"CycleCapacityRemain\":1569.69,\"CycleCapacitySize\":1600},{\"PackageName\":\"已过期包\",\"CycleStartTime\":\"2025-01-01 00:00:00\",\"CycleEndTime\":\"2025-02-01 00:00:00\",\"CapacitySize\":50,\"CapacityUsed\":50,\"CapacityRemain\":0,\"CycleCapacityRemain\":0,\"CycleCapacitySize\":50}]}}}}",
+                  "headers": {
+                    "Content-Type": "application/json"
+                  }
+                }
+              ],
+              "u-third": [
+                {
+                  "status": 401,
+                  "body": "{\"code\":401,\"msg\":\"unauthorized\"}",
+                  "headers": {
+                    "Content-Type": "application/json"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "path_prefix": "/",
+            "status": 500,
+            "body": "{\"code\":1,\"msg\":\"unexpected path\"}"
+          }
+        ]
+      },
+      "upstream_sorted_by_body": true,
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-b.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"seconduser\",\n    \"uid\": \"u-second\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-second\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-second-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792033200000
+        },
+        {
+          "name": "workbuddy-desktop-c.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"thirduser\",\n    \"uid\": \"u-third\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-third\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-third-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792029600000
+        },
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "默认号（池内最新）",
+          "method": "GET",
+          "path": "/quota",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "244",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":1569.69,\"packs\":1,\"active\":{\"name\":\"周期包\",\"used\":25,\"size\":100,\"end\":\"2099-01-01 00:00:00\"},\"nearestEnd\":{\"name\":\"周期包\",\"date\":\"2099-01-01 00:00:00\",\"remain\":1569.69},\"uid\":\"u-golden\",\"nickname\":\"goldenuser\",\"source\":\"live\"}\n"
+        },
+        {
+          "desc": "默认号第二次 → cache",
+          "method": "GET",
+          "path": "/quota",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "245",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":1569.69,\"packs\":1,\"active\":{\"name\":\"周期包\",\"used\":25,\"size\":100,\"end\":\"2099-01-01 00:00:00\"},\"nearestEnd\":{\"name\":\"周期包\",\"date\":\"2099-01-01 00:00:00\",\"remain\":1569.69},\"uid\":\"u-golden\",\"nickname\":\"goldenuser\",\"source\":\"cache\"}\n"
+        },
+        {
+          "desc": "指定 u-second（分键缓存）",
+          "method": "GET",
+          "path": "/quota?uid=u-second",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "244",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":1569.69,\"packs\":1,\"active\":{\"name\":\"周期包\",\"used\":25,\"size\":100,\"end\":\"2099-01-01 00:00:00\"},\"nearestEnd\":{\"name\":\"周期包\",\"date\":\"2099-01-01 00:00:00\",\"remain\":1569.69},\"uid\":\"u-second\",\"nickname\":\"seconduser\",\"source\":\"live\"}\n"
+        },
+        {
+          "desc": "指定 u-second 第二次 → cache",
+          "method": "GET",
+          "path": "/quota?uid=u-second",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "245",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":1569.69,\"packs\":1,\"active\":{\"name\":\"周期包\",\"used\":25,\"size\":100,\"end\":\"2099-01-01 00:00:00\"},\"nearestEnd\":{\"name\":\"周期包\",\"date\":\"2099-01-01 00:00:00\",\"remain\":1569.69},\"uid\":\"u-second\",\"nickname\":\"seconduser\",\"source\":\"cache\"}\n"
+        },
+        {
+          "desc": "未知 uid → source:none",
+          "method": "GET",
+          "path": "/quota?uid=nope",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "188",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":0,\"packs\":0,\"active\":{\"name\":\"\",\"used\":0,\"size\":0,\"end\":\"\"},\"nearestEnd\":{\"name\":\"\",\"date\":\"\",\"remain\":0},\"uid\":\"\",\"nickname\":\"\",\"source\":\"none\",\"err\":\"账号不在池中: nope\"}\n"
+        },
+        {
+          "desc": "u-third 401 → 标死 + 无缓存",
+          "method": "GET",
+          "path": "/quota?uid=u-third",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "232",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":0,\"packs\":0,\"active\":{\"name\":\"\",\"used\":0,\"size\":0,\"end\":\"\"},\"nearestEnd\":{\"name\":\"\",\"date\":\"\",\"remain\":0},\"uid\":\"\",\"nickname\":\"\",\"source\":\"none\",\"err\":\"官方积分接口 HTTP 401: {\\\"code\\\":401,\\\"msg\\\":\\\"unauthorized\\\"}\"}\n"
+        },
+        {
+          "desc": "refresh=1 旁路缓存",
+          "method": "GET",
+          "path": "/quota?refresh=1",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "244",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":1569.69,\"packs\":1,\"active\":{\"name\":\"周期包\",\"used\":25,\"size\":100,\"end\":\"2099-01-01 00:00:00\"},\"nearestEnd\":{\"name\":\"周期包\",\"date\":\"2099-01-01 00:00:00\",\"remain\":1569.69},\"uid\":\"u-golden\",\"nickname\":\"goldenuser\",\"source\":\"live\"}\n"
+        },
+        {
+          "desc": "快照（u-third 已标死）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "810",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":0},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":0},{\"cooling\":false,\"dead\":true,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-c.info\",\"inflight\":0,\"last_used\":\"\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"thirduser\",\"removed\":false,\"uid\":\"u-third\",\"uid_short\":\"u-third\",\"use_count\":0}],\"ok\":true,\"region\":\"CN\"}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-15 06:33:32\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-15 06:33:32\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-second",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-second"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-15 06:33:32\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-third",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-third"
+          }
+        },
+        {
+          "seq": 4,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-15 06:33:32\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ],
+      "per_user_hits": {
+        "u-golden": 2,
+        "u-second": 1,
+        "u-third": 1
+      }
+    },
+    {
+      "name": "chat-14018-200",
+      "desc": "非流式 200 体里的 14018：MarkExhausted → 换号重发（下游体属 P5c，只比出站）",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "u-golden 恒 200 14018；u-second 恒 SSE",
+      "upstream_spec": {
+        "per_user": {
+          "u-golden": [
+            {
+              "status": 200,
+              "body": "{\"code\":14018,\"msg\":\"Credits exhausted\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            }
+          ],
+          "u-second": [
+            {
+              "status": 200,
+              "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+              "headers": {
+                "Content-Type": "text/event-stream"
+              }
+            }
+          ]
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-b.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"seconduser\",\n    \"uid\": \"u-second\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-second\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-second-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792033200000
+        },
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "14018@200 → 换号（非流式）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "283",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017212,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-78b82fc26712\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
+          "body_compare": "outbound-only"
+        },
+        {
+          "desc": "快照（第一个号 exhausted）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "580",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":true,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":1},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":1}],\"ok\":true,\"region\":\"CN\"}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-second",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-second"
+          }
+        }
+      ],
+      "per_user_hits": {
+        "u-golden": 1,
+        "u-second": 1
+      }
+    },
+    {
+      "name": "chat-14018-exhausted",
+      "desc": "非 200 的 14018：全池耗尽 → 如实透传 400（不编造成功）；clear_exhausted 复活",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "两个号都恒 400 14018",
+      "upstream_spec": {
+        "per_user": {
+          "u-golden": [
+            {
+              "status": 400,
+              "body": "{\"code\":14018,\"msg\":\"Credits exhausted\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            }
+          ],
+          "u-second": [
+            {
+              "status": 400,
+              "body": "{\"code\":14018,\"msg\":\"Credits exhausted\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            }
+          ]
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-b.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"seconduser\",\n    \"uid\": \"u-second\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-second\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-second-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792033200000
+        },
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "全池耗尽 → 透传",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "95",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":14018,\\\"msg\\\":\\\"Credits exhausted\\\"}\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "快照（两个号都 exhausted）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "579",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":true,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":1},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":true,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":1}],\"ok\":true,\"region\":\"CN\"}\n"
+        },
+        {
+          "desc": "clear_exhausted 复活第一个号",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"clear_exhausted\",\"uid\":\"u-golden\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "12",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":true}\n"
+        },
+        {
+          "desc": "快照（已复活）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "580",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":1},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":true,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":1}],\"ok\":true,\"region\":\"CN\"}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-second",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-second"
+          }
+        }
+      ],
+      "per_user_hits": {
+        "u-golden": 1,
+        "u-second": 1
+      }
+    },
+    {
+      "name": "chat-pool-alldead",
+      "desc": "单号池 401：标死后 Pick 返回 nil → 401 如实透传（不编造响应）；第二个请求无可用号仍透传",
+      "region": "CN",
+      "scope": "P5b",
+      "in_p5a_scope": true,
+      "upstream_desc": "恒 401",
+      "upstream_spec": {
+        "per_user": {
+          "u-golden": [
+            {
+              "status": 401,
+              "body": "{\"code\":11101,\"msg\":\"nope\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            },
+            {
+              "status": 401,
+              "body": "{\"code\":11101,\"msg\":\"nope\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            },
+            {
+              "status": 401,
+              "body": "{\"code\":11101,\"msg\":\"nope\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            },
+            {
+              "status": 401,
+              "body": "{\"code\":11101,\"msg\":\"nope\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            },
+            {
+              "status": 401,
+              "body": "{\"code\":11101,\"msg\":\"nope\"}",
+              "headers": {
+                "Content-Type": "application/json"
+              }
+            }
+          ]
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"goldenuser\",\n    \"uid\": \"u-golden\"\n  },\n  \"auth\": {\n    \"accessToken\": \"tok-u-golden\",\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": \"tok-u-golden-refresh\"\n  }\n}",
+          "mtime_unix_ms": 1792036800000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "第一个请求 → 标死 + 透传",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 401,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "82",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":11101,\\\"msg\\\":\\\"nope\\\"}\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "快照（dead）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "308",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"accounts\":[{\"cooling\":false,\"dead\":true,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":1}],\"ok\":true,\"region\":\"CN\"}\n"
+        },
+        {
+          "desc": "第二个请求（无可用号，沿用当前凭据）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 401,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "82",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":11101,\\\"msg\\\":\\\"nope\\\"}\",\"type\":\"upstream_error\"}}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ],
+      "per_user_hits": {
+        "u-golden": 2
+      }
     }
   ]
 }

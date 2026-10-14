@@ -3,7 +3,8 @@
 //! 覆盖：Go `corsWith` 的 CORS 头与 OPTIONS 204、`ServeMux` 的 404 文案、chat 非 POST 的
 //! 405 形状（`Allow: POST` + `text/plain` + `nosniff`）、HEAD 的 `content-length` 自洽、
 //! **64MB 读体口径不得退回 axum 的 2MB 默认上限**（3.6MB 体必须逐字节到上游）、
-//! 以及两条「本轮显式不做」的诚实性断言：P5b/P5c 端点的 501、未接入凭据时的 health 报错。
+//! `//v1/models` 的**路径清洗已知差异**（Go `ServeMux` 307，axum 404）、以及
+//! `/v1/stats`（P5c）仍回 501 的诚实性断言。
 
 mod common;
 
@@ -12,7 +13,7 @@ use std::sync::Arc;
 use common::*;
 use serde_json::{json, Value};
 
-use rs_codebuddy::cred::{PendingCredential, StubCredential};
+use rs_codebuddy::cred::StubCredential;
 
 const SSE_SPEC: &str = r#"{"kind":"fixed","status":200,"body":"data: {\"choices\":[{\"delta\":{}}]}\n\ndata: [DONE]\n\n","headers":{"Content-Type":"text/event-stream"}}"#;
 
@@ -79,27 +80,55 @@ async fn route_boundaries_match_go() {
     assert_eq!(up.hits().len(), hits_before, "OPTIONS 不该打上游");
 }
 
-/// 本轮**显式不做**的端点：回 501（不是假 404，也不是静默缺路由）。
+/// P5c 的端点仍**显式 501**（不是假 404，也不是静默缺路由）；P5b 三条已放开。
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn deferred_endpoints_answer_501() {
+async fn p5c_endpoint_answers_501_and_p5b_endpoints_are_live() {
     let dir = TestDir::new("deferred-501");
     let up = FakeUpstream::start(&sse_spec()).await;
     let app = AppServer::start(state_with(&dir, &up.base, rs_codebuddy::region::Region::Cn).await).await;
-    for (path, round) in [
-        ("/quota", "P5b"),
-        ("/v1/failover", "P5b"),
-        ("/v1/accounts", "P5b"),
-        ("/v1/stats", "P5c"),
-    ] {
-        let r = send(&app.base, "GET", path, None).await;
-        assert_eq!(r.status, 501, "{path} 应 501");
-        assert!(
-            r.text().contains(round),
-            "{path} 的 501 文案应点名 {round}：{}",
-            r.text()
-        );
-    }
-    assert_eq!(up.hits().len(), 0, "未迁端点不该打上游");
+    let r = send(&app.base, "GET", "/v1/stats", None).await;
+    assert_eq!(r.status, 501, "/v1/stats 应 501");
+    assert!(r.text().contains("P5c"), "501 文案应点名 P5c：{}", r.text());
+
+    // P5b 放开的端点：零值 Server（无池）下的形状与 Go 一致。
+    // `/quota` → Go 无池时走当前凭据文件（这里 stub 头可用但上游是假 SSE，解析必然失败
+    // → source:none + err，绝不该是 501）。
+    let r = send(&app.base, "GET", "/quota", None).await;
+    assert_eq!(r.status, 200, "/quota 已实现的证据：不再 501");
+    let v: Value = serde_json::from_slice(&r.body).unwrap();
+    assert!(
+        v.get("source").is_some(),
+        "/quota 应回积分快照形状：{}",
+        r.text()
+    );
+    // `/v1/accounts` → 零值 Server 守卫（Go 回 500 "account pool unavailable"）。
+    let r = send(&app.base, "GET", "/v1/accounts", None).await;
+    assert_eq!(r.status, 500, "无池时 /v1/accounts 应 500: {}", r.text());
+    assert!(r.text().contains("account pool unavailable"));
+    // `/v1/failover` → 生产缺省 enabled:true / deepseek-v4-pro（**不是**零值口径）。
+    let r = send(&app.base, "GET", "/v1/failover", None).await;
+    assert_eq!(r.status, 200);
+    let v: Value = serde_json::from_slice(&r.body).unwrap();
+    assert_eq!(v["enabled"], Value::Bool(true));
+    assert_eq!(v["fallback"], Value::String("deepseek-v4-pro".into()));
+    assert_eq!(v["hy4_limit"], Value::Null);
+}
+
+/// `//v1/models` 的**已知差异**：Go `ServeMux` 把双斜杠清洗成单斜杠并回 307；
+/// axum 不做清洗，故这里回 404。补一条对照把差异钉死（防止后人当 bug 追）。
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn double_slash_path_is_a_known_deviation() {
+    let dir = TestDir::new("dbl-slash");
+    let up = FakeUpstream::start(&sse_spec()).await;
+    let app = AppServer::start(state_with(&dir, &up.base, rs_codebuddy::region::Region::Cn).await).await;
+    let r = send(&app.base, "GET", "//v1/models", None).await;
+    assert_eq!(
+        r.status, 404,
+        "Rust 侧不清洗双斜杠：Go 回 307（已知差异，登记在 README），Rust 回 404"
+    );
+    // 单斜杠（客户端实际会送出的形态，Go 的 307 也是往它跳）必须正常
+    let r = send(&app.base, "GET", "/v1/models", None).await;
+    assert_eq!(r.status, 200);
 }
 
 /// HEAD 的 `content-length` 自洽（黄金里那一处 allowance 的替代证据）。
@@ -147,13 +176,22 @@ async fn large_body_reaches_upstream() {
     assert_eq!(sent["stream"], Value::Bool(true));
 }
 
-/// 未接入凭据层（P5a 默认）时 `/health` 必须**如实报错**，不得假装 ok。
+/// 未接入凭据（`headers_ok=false`）时 `/health` 必须**如实报错**，不得假装 ok。
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn health_reports_missing_credential_layer() {
-    let dir = TestDir::new("health-pending");
+async fn health_reports_credential_error() {
+    let dir = TestDir::new("health-cred-err");
+    let cred = Arc::new(
+        StubCredential::from_json(&json!({
+            "auth_dirs": ["__AUTHDIR__"],
+            "summary": {"kind":"error","message":"（测试）未找到登录文件，已搜索目录：__AUTHDIR__"},
+            "headers": {},
+            "headers_ok": false,
+        }))
+        .unwrap(),
+    );
     let state = Arc::new(rs_codebuddy::AppState::new(
         rs_codebuddy::region::Region::Cn,
-        Arc::new(PendingCredential),
+        cred,
         "http://127.0.0.1:1".to_string(),
         dir.path().to_path_buf(),
     ));
@@ -163,8 +201,11 @@ async fn health_reports_missing_credential_layer() {
     let v: Value = serde_json::from_slice(&r.body).unwrap();
     assert_eq!(v["status"], Value::String("error".into()));
     assert!(
-        v["message"].as_str().unwrap_or("").contains("P5b"),
-        "报错文案应点名 P5b：{}",
+        v["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("未找到登录文件"),
+        "报错文案应如实透出凭据层的原因：{}",
         r.text()
     );
     assert!(v.get("credential").is_none(), "错误路径不该带 credential 块");
@@ -181,7 +222,9 @@ async fn desensitize_flag_is_refused() {
         desensitize: true,
         upstream_base: String::new(),
         cred_stub: String::new(),
+        auth_dir: String::new(),
         diag_dir: String::new(),
+        pool_dir: String::new(),
     };
     let err = rs_codebuddy::run(args).await.unwrap_err();
     assert!(err.contains("P5c"), "应点名 P5c：{err}");
