@@ -15,6 +15,9 @@ app.exe
 !ProxyDeck.exe
 *.exe~
 .work/
+
+# 子智能体执行工具运行目录（可能含会话草稿与凭据残留，一律不入库）
+.workbuddy-ai/
 tuanjie-pacing.json
 tuanjie-accounts.json
 tuanjie-accounts.json.bak-*

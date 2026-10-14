@@ -259,8 +259,8 @@ func (a *app) rollAllBackends() {
 // rollOne 给一台后端换血：停旧→确认端口空出→用新包拉起→等 health 绿，返回 "" 表示成功。
 // stop/start/healthy 全部由调用方注入：生产传真实实现，单测传 mock（绝不碰真实端口）。
 // 任一步失败只返回一行日志文案，由调用方记日志后继续下一台——失败隔离，不中断整轮。
-// 其中杀后复验端口是故意的：pluginStop 杀失败也回 nil（历史行为），不复验就会出现
-// "拉杆弹回 running"的假成功；这里杀不掉就如实报错跳过。
+// 其中杀后复验端口是双保险：pluginStop 自身已如实报错（杀不掉回非 nil 错误），
+// 这里再验一次，防其他 stop 路径的假成功导致"拉杆弹回 running"；杀不掉就如实报错跳过。
 func rollOne(t staleTarget,
 	stop func(id string) error,
 	start func(id string) error,
