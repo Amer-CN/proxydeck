@@ -238,22 +238,50 @@ func (a *app) rollStaleBackends() {
 	cleanupOldExe()
 }
 
-// rollAllBackends 把全部插件后端逐个换血（更新刚完成时用：所有后端都跑着旧包，
-// 无需逐个判定）。逐个串行，一路失败只记日志不连累其他路；最后扫一次残留。
+// rollAllBackends 把"正跑着"的插件后端逐个换血（更新刚完成时用）。
+// 没活人的端口保持关闭——更新不替你点火（重启 GUI 本来也不会自动点火，换血
+// 不能借机改变开关状态）。快照失败宁可整轮跳过，也不盲滚。逐个串行，一路失败
+// 只记日志不连累其他路。
 func (a *app) rollAllBackends() {
-	for _, d := range pluginDefs {
-		log.Printf("[rollover] %s 开始换血（更新后全量）", d.Name)
-		if msg := rollOne(staleTarget{def: d},
-			a.pluginStop,
-			a.pluginStart,
-			func(dd pluginDef) bool { return httpOK(a.pluginHealthURL(dd)) },
-			90*time.Second,
-		); msg != "" {
+	snap, err := snapshotListeners()
+	if err != nil {
+		log.Printf("[rollover] 监听表快照失败，跳过本轮换血（不盲滚，避免点着已关的后端）：%v", err)
+		return
+	}
+	rolled, skipped := rollAllWith(pluginDefs, snap,
+		a.pluginStop,
+		a.pluginStart,
+		func(d pluginDef) bool { return httpOK(a.pluginHealthURL(d)) },
+		90*time.Second,
+	)
+	for _, n := range skipped {
+		log.Printf("[rollover] %s 未在运行，保持关闭（更新不替你点火）", n)
+	}
+	for _, n := range rolled {
+		log.Printf("[rollover] %s 换血完成（已跑在新包上）", n)
+	}
+}
+
+// rollAllWith 是 rollAllBackends 的可测核心：snap 快照决定谁有活人；stop/start/
+// healthy 注入（生产真实实现，单测 mock，绝不碰真实端口）。返回换血成功与跳过名单。
+func rollAllWith(defs []pluginDef, snap map[string][]int,
+	stop func(id string) error,
+	start func(id string) error,
+	healthy func(d pluginDef) bool,
+	timeout time.Duration,
+) (rolled, skipped []string) {
+	for _, d := range defs {
+		if len(snap[strconv.Itoa(d.Port)]) == 0 {
+			skipped = append(skipped, d.Name)
+			continue
+		}
+		if msg := rollOne(staleTarget{def: d}, stop, start, healthy, timeout); msg != "" {
 			log.Print(msg)
 			continue
 		}
-		log.Printf("[rollover] %s 换血完成（已跑在新包上）", d.Name)
+		rolled = append(rolled, d.Name)
 	}
+	return rolled, skipped
 }
 
 // rollOne 给一台后端换血：停旧→确认端口空出→用新包拉起→等 health 绿，返回 "" 表示成功。

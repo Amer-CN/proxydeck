@@ -270,3 +270,34 @@ func TestRollOneKillUnverified(t *testing.T) {
 		}
 	}
 }
+
+// rollAllWith 只换有活人的端口：没活人的保持关闭（更新不替你点火）；快照缺席
+// 的端口同样跳过。stop/start/health 全 mock，绝不碰真实端口。
+func TestRollAllSkipsIdle(t *testing.T) {
+	defs := []pluginDef{
+		{ID: "on", Name: "开着", Port: 0}, // Port 0 永不被占（参 TestRollOne* 同理）
+		{ID: "off", Name: "关着", Port: 8786}, // 走不到端口：snap 缺席即跳过
+	}
+	snap := map[string][]int{"0": {4242}}
+	var stopped, started []string
+	rolled, skipped := rollAllWith(defs, snap,
+		func(id string) error { stopped = append(stopped, id); return nil },
+		func(id string) error { started = append(started, id); return nil },
+		func(d pluginDef) bool { return true },
+		time.Second,
+	)
+	if len(rolled) != 1 || rolled[0] != "开着" {
+		t.Errorf("只应换血开着的，实际 rolled=%v", rolled)
+	}
+	if len(skipped) != 1 || skipped[0] != "关着" {
+		t.Errorf("关着的应进跳过名单，实际 skipped=%v", skipped)
+	}
+	for _, s := range started {
+		if s == "off" {
+			t.Errorf("关着的后端 start 一律不得调用，started=%v", started)
+		}
+	}
+	if len(stopped) != 1 || stopped[0] != "on" {
+		t.Errorf("只应停开着的，实际 stopped=%v", stopped)
+	}
+}
