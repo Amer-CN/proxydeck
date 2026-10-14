@@ -1,0 +1,39 @@
+[package]
+name = "rs-qoder"
+version = "0.1.0"
+edition = "2021"
+description = "ProxyDeck Qoder 插件 Rust 重写（绞杀者路线 P3，测试端口用，未接入 GUI）"
+
+[[bin]]
+name = "rs-qoder"
+path = "src/main.rs"
+
+[dependencies]
+# AES-256-GCM：Qoder CN 的 `auth.v1.dat` 是 Chromium 那套 `v10` 封装
+# （nonce=dat[3:15]、密文+tag=dat[15:]），key 由 DPAPI 解出。
+# 自己手搓 AES 不划算也不安全 —— 用 RustCrypto 的标准件（版本已锁进 Cargo.lock）。
+aes-gcm = "0.11"
+axum = "0.8"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+# 上游只有 https://openapi.qoder.com.cn（额度查询）一条出站 HTTP；TLS 栈显式声明，
+# 避免将来上游改默认时静默换栈（TLS 指纹差异是圆桌点名的风险项）。
+reqwest = { version = "0.13", features = ["default-tls", "http2", "stream"] }
+serde = { version = "1", features = ["derive"] }
+# `preserve_order` 是**必须的**，不是口味：Go 的 `encoding/json` 按**文档顺序**处理对象键，
+# 重复/大小写变体的键「后者生效」（`{"spent":1,"SPENT":2}` → 2，黄金基准锁住了这条）。
+# serde_json 默认用 BTreeMap 按键排序，会把顺序洗掉、把结果算成 1。
+# （代价：`preserve_order` 把内部 map 换成 `indexmap`，多一条依赖链 —— 这是刻意换来的键序保真。）
+serde_json = { version = "1", features = ["preserve_order"] }
+# 各 feature 的用处：`process` = spawn 官方 worker 子进程；`io-util` = 逐行读它的 stdout
+# （`read_until`）；`sync` = 聊天与流式之间的 mpsc 管道；其余是 axum/服务端的基础件。
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util", "process"] }
+
+[dev-dependencies]
+# **只用于门禁**：校验入库假 worker（整条 argv/stdin 证据链的「测量仪器」）的源码哈希
+# 与黄金记录一致，见 tests/http_contract.rs::fake_worker_source_hash_matches_golden。
+sha2 = "0.10"
+
+[profile.release]
+opt-level = 2

@@ -1,0 +1,2848 @@
+{
+  "chat": [
+    {
+      "body_in": "{\"model\":\"Auto\",\"stream\":false,\"messages\":[{\"role\":\"system\",\"content\":\"S\"},{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello 世界 \\u003c\\u0026\\u003e \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-3979164989122432748\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":1.25,\"spentThisSession\":1.25},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+      "ledger_after": "{\"spent\":1.25,\"updatedAt\":1792003604268}",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "301",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[System]\\nS\\n[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Qwen3.8-Max\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}]}",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"拼接文本\",\"role\":\"assistant\"}}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-4745062406329295647\",\"model\":\"qmodel_38max\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal-no-final",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "284",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "qmodel_38max",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal-no-final"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nx\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"x\"}]}",
+      "body_out": "{\"error\":{\"message\":\"ResourceUsageOverlimit: 本月配额已用完\",\"type\":\"upstream_error\"}}\n",
+      "cwd_env": "",
+      "health_after": "{\"credits\":{\"quotaExceeded\":true,\"spent\":3.75,\"spentThisSession\":3.75},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+      "method": "POST",
+      "mode": "error-result",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "94",
+        "content-type": "application/json"
+      },
+      "status": 502,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "error-result"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nx\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "data: {\"choices\":[{\"delta\":{\"content\":\"Hello \"},\"finish_reason\":null,\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-5213825531052181918\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"reasoning_content\":\"想一下\"},\"finish_reason\":null,\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-5213825531052181918\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"世界 \\u003c\\u0026\\u003e \\\"q\\\"\"},\"finish_reason\":null,\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-5213825531052181918\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-5213825531052181918\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"gmodel\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "data: {\"choices\":[{\"delta\":{\"content\":\"块0\"},\"finish_reason\":null,\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-3273880215990232989\",\"model\":\"gmodel\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"块1\"},\"finish_reason\":null,\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-3273880215990232989\",\"model\":\"gmodel\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"块2\"},\"finish_reason\":null,\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-3273880215990232989\",\"model\":\"gmodel\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"块3\"},\"finish_reason\":null,\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-3273880215990232989\",\"model\":\"gmodel\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-3273880215990232989\",\"model\":\"gmodel\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "stream-slow",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "gmodel",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "stream-slow"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"只有思考\"},\"finish_reason\":null,\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-5233560200033428033\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1792003604,\"id\":\"chatcmpl-qoder-5233560200033428033\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal-thinking-only",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal-thinking-only"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "data: {\"choices\":[{\"delta\":{\"content\":\"部分\"},\"finish_reason\":null,\"index\":0}],\"created\":1792003605,\"id\":\"chatcmpl-qoder-3597208589122680327\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1792003605,\"id\":\"chatcmpl-qoder-3597208589122680327\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "error-result",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "error-result"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "{\"error\":{\"message\":\"[{\\\"error\\\":{\\\"code\\\":112,\\\"message\\\":\\\"超过配额\\\"}}]\",\"type\":\"upstream_error\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "error-immediate",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-length": "106",
+        "content-type": "application/json"
+      },
+      "status": 502,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "error-immediate"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1792003605,\"id\":\"chatcmpl-qoder-1078175953848911507\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "empty-success",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-type": "text/event-stream"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "empty-success"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "{\"error\":{\"message\":\"worker 结束但未收到 result\",\"type\":\"upstream_error\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "no-result",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "81",
+        "content-type": "application/json"
+      },
+      "status": 502,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "no-result"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "{\"error\":{\"message\":\"worker 握手失败（未收到 initialize 应答）\",\"type\":\"upstream_error\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "no-init",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "101",
+        "content-type": "application/json"
+      },
+      "status": 502,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "no-init"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "{\"error\":{\"message\":\"worker 退出异常: exit status 3\",\"type\":\"upstream_error\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "exit-nonzero",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "83",
+        "content-type": "application/json"
+      },
+      "status": 502,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "exit-nonzero"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 3,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "{\"error\":{\"message\":\"worker 结束但未收到 result; stderr: 这是 stderr 尾巴\",\"type\":\"upstream_error\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "stderr-tail",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "111",
+        "content-type": "application/json"
+      },
+      "status": 502,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "stderr-tail"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "{\"error\":{\"message\":\"真原因\",\"type\":\"upstream_error\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "error-blank-first",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "58",
+        "content-type": "application/json"
+      },
+      "status": 502,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "error-blank-first"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "",
+      "body_out": "{\"error\":{\"message\":\"仅支持 POST\",\"type\":\"invalid_request\"}}\n",
+      "cwd_env": "",
+      "method": "GET",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "64",
+        "content-type": "application/json"
+      },
+      "status": 405,
+      "worker_log": null
+    },
+    {
+      "body_in": "{\"model\":\"nope\",\"messages\":[]}",
+      "body_out": "{\"error\":{\"message\":\"不支持的模型: nope（/v1/models 查看可用列表，或改用 auto 由 Qoder 自动路由）\",\"type\":\"invalid_model\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "147",
+        "content-type": "application/json"
+      },
+      "status": 502,
+      "worker_log": null
+    },
+    {
+      "body_in": "{\"messages\":[{\"role\":\"user\",\"content\":\"x\"}]}",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello 世界 \\u003c\\u0026\\u003e \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1792003606,\"id\":\"chatcmpl-qoder-2653265548943394490\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "301",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nx\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{not json",
+      "body_out": "{\"error\":{\"message\":\"请求体解析失败: invalid character 'n' looking for beginning of object key string\",\"type\":\"invalid_request\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "137",
+        "content-type": "application/json"
+      },
+      "status": 400,
+      "worker_log": null
+    },
+    {
+      "body_in": "[]",
+      "body_out": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal array into Go value of type qoder.chatRequest\",\"type\":\"invalid_request\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "141",
+        "content-type": "application/json"
+      },
+      "status": 400,
+      "worker_log": null
+    },
+    {
+      "body_in": "",
+      "body_out": "{\"error\":{\"message\":\"请求体解析失败: EOF\",\"type\":\"invalid_request\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "76",
+        "content-type": "application/json"
+      },
+      "status": 400,
+      "worker_log": null
+    },
+    {
+      "body_in": "{\"stream\":\"x\",\"messages\":[]}",
+      "body_out": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal string into Go struct field chatRequest.stream of type bool\",\"type\":\"invalid_request\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "155",
+        "content-type": "application/json"
+      },
+      "status": 400,
+      "worker_log": null
+    },
+    {
+      "body_in": "{\"model\":123,\"messages\":[]}",
+      "body_out": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal number into Go struct field chatRequest.model of type string\",\"type\":\"invalid_request\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "156",
+        "content-type": "application/json"
+      },
+      "status": 400,
+      "worker_log": null
+    },
+    {
+      "body_in": "{\"messages\":{}}",
+      "body_out": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal object into Go struct field chatRequest.messages of type []interface {}\",\"type\":\"invalid_request\"}}\n",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "167",
+        "content-type": "application/json"
+      },
+      "status": 400,
+      "worker_log": null
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[]} trailing",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello 世界 \\u003c\\u0026\\u003e \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1792003606,\"id\":\"chatcmpl-qoder-2600454508674426824\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "301",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"MODEL\":\"gmodel\",\"messages\":[]}",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello 世界 \\u003c\\u0026\\u003e \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1792003606,\"id\":\"chatcmpl-qoder-1593059800838550797\",\"model\":\"gmodel\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "303",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "gmodel",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "null",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello 世界 \\u003c\\u0026\\u003e \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1792003606,\"id\":\"chatcmpl-qoder-5686327476067629045\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "301",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "E:\\Temp",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[{\"role\":\"system\",\"content\":\"Working directory: C:\\\\Windows\"},{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello 世界 \\u003c\\u0026\\u003e \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1792003606,\"id\":\"chatcmpl-qoder-4774512643464595310\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "C:\\Windows",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "301",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "C:\\Windows",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[System]\\nWorking directory: C:\\\\Windows\\n[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[{\"role\":\"system\",\"content\":\"工作目录：C:\\\\Windows\"},{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello 世界 \\u003c\\u0026\\u003e \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1792003606,\"id\":\"chatcmpl-qoder-1493240575676616757\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "C:\\Windows",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "301",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "C:\\Windows",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[System]\\n工作目录：C:\\\\Windows\\n[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[{\"role\":\"system\",\"content\":\"Working directory: F:\\\\AIXM\\\\no-such-dir-xyz\"},{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello 世界 \\u003c\\u0026\\u003e \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1792003606,\"id\":\"chatcmpl-qoder-1529381006570890971\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "C:\\Windows",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "301",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "C:\\Windows",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[System]\\nWorking directory: F:\\\\AIXM\\\\no-such-dir-xyz\\n[User]\\nhi\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[{\"role\":\"user\",\"content\":\"no marker\"}]}",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello 世界 \\u003c\\u0026\\u003e \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1792003606,\"id\":\"chatcmpl-qoder-8702265850993656711\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "C:\\Windows",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "301",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "C:\\Windows",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nno marker\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    },
+    {
+      "body_in": "{\"model\":\"Auto\",\"messages\":[{\"role\":\"user\",\"content\":\"no marker 2\"}]}",
+      "body_out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello 世界 \\u003c\\u0026\\u003e \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1792003607,\"id\":\"chatcmpl-qoder-5437527694091802794\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+      "cwd_env": "F:\\AIXM\\proxydeck",
+      "method": "POST",
+      "mode": "normal",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "301",
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "worker_log": [
+        {
+          "argv": [
+            "\u003cWORKER\u003e",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--input-format",
+            "stream-json",
+            "--model",
+            "Auto",
+            "--disable-builtin-skills",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config"
+          ],
+          "cwd": "F:\\AIXM\\proxydeck",
+          "env_payload_path": "\u003cPAYLOAD\u003e",
+          "env_qoder_entrypoint": "sdk-ts",
+          "env_qoder_version": "1.0.27",
+          "kind": "start",
+          "node_options": "absent",
+          "payload_content": "{\"hostTokenCallback\":true,\"type\":\"jobToken\",\"jobTokenProvider\":\"host\"}",
+          "scenario_mode": "normal"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"request\":{\"initializeTimeoutMs\":120000,\"modelPolicyProvider\":false,\"subtype\":\"initialize\",\"supportsCatalogReadyInitialize\":true,\"type\":\"initialize\"},\"request_id\":\"pd-init\",\"type\":\"control_request\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"message\":{\"content\":[{\"text\":\"[User]\\nno marker 2\",\"type\":\"text\"}],\"role\":\"user\"},\"type\":\"user\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"job-1\",\"response\":{\"expires_at\":4071006245000,\"token\":\"dt-fake-token-for-golden\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"request_id\":\"tool-1\",\"response\":{\"behavior\":\"allow\",\"toolUseID\":\"tu-1\"},\"subtype\":\"success\"},\"type\":\"control_response\"}"
+        },
+        {
+          "kind": "stdin",
+          "line": "{\"response\":{\"error\":\"unhandled control request: list_mcp_servers\",\"request_id\":\"u-1\",\"subtype\":\"error\"},\"type\":\"control_response\"}"
+        },
+        {
+          "code": 0,
+          "kind": "exit"
+        }
+      ]
+    }
+  ],
+  "chat_no_license": {
+    "body": "{\"error\":{\"message\":\"未找到 Qoder 登录态，请先在 Qoder CN App 登录\",\"type\":\"no_license\"}}\n",
+    "resp_headers": {
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-origin": "*",
+      "content-length": "102",
+      "content-type": "application/json"
+    },
+    "status": 503,
+    "worker_log": null
+  },
+  "chunks": [
+    {
+      "id": "text-plain",
+      "kind": "text",
+      "delta": "hi",
+      "finish": "",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"delta\":{\"content\":\"hi\"},\"finish_reason\":null,\"index\":0}],\"created\":1234567890,\"id\":\"text-plain\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}"
+    },
+    {
+      "id": "text-empty",
+      "kind": "text",
+      "delta": "",
+      "finish": "",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"delta\":{},\"finish_reason\":null,\"index\":0}],\"created\":1234567890,\"id\":\"text-empty\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}"
+    },
+    {
+      "id": "text-html",
+      "kind": "text",
+      "delta": "\u003ca\u003e \u0026 \"b\"",
+      "finish": "",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"delta\":{\"content\":\"\\u003ca\\u003e \\u0026 \\\"b\\\"\"},\"finish_reason\":null,\"index\":0}],\"created\":1234567890,\"id\":\"text-html\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}"
+    },
+    {
+      "id": "text-controls",
+      "kind": "text",
+      "delta": "行一\n行二\t制表\r回车\b\f\u0001",
+      "finish": "",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"delta\":{\"content\":\"行一\\n行二\\t制表\\r回车\\b\\f\\u0001\"},\"finish_reason\":null,\"index\":0}],\"created\":1234567890,\"id\":\"text-controls\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}"
+    },
+    {
+      "id": "text-u2028",
+      "kind": "text",
+      "delta": "行\u2028分隔\u2029完",
+      "finish": "",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"delta\":{\"content\":\"行\\u2028分隔\\u2029完\"},\"finish_reason\":null,\"index\":0}],\"created\":1234567890,\"id\":\"text-u2028\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}"
+    },
+    {
+      "id": "text-finish-stop",
+      "kind": "text",
+      "delta": "",
+      "finish": "stop",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1234567890,\"id\":\"text-finish-stop\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}"
+    },
+    {
+      "id": "text-finish-tool",
+      "kind": "text",
+      "delta": "x",
+      "finish": "tool_calls",
+      "model": "gmodel",
+      "out": "{\"choices\":[{\"delta\":{\"content\":\"x\"},\"finish_reason\":\"tool_calls\",\"index\":0}],\"created\":1234567890,\"id\":\"text-finish-tool\",\"model\":\"gmodel\",\"object\":\"chat.completion.chunk\"}"
+    },
+    {
+      "id": "reasoning-plain",
+      "kind": "reasoning",
+      "delta": "想",
+      "finish": "",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"delta\":{\"reasoning_content\":\"想\"},\"finish_reason\":null,\"index\":0}],\"created\":1234567890,\"id\":\"reasoning-plain\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}"
+    },
+    {
+      "id": "reasoning-empty",
+      "kind": "reasoning",
+      "delta": "",
+      "finish": "",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"delta\":{},\"finish_reason\":null,\"index\":0}],\"created\":1234567890,\"id\":\"reasoning-empty\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}"
+    },
+    {
+      "id": "reasoning-finish",
+      "kind": "reasoning",
+      "delta": "想",
+      "finish": "stop",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"delta\":{\"reasoning_content\":\"想\"},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1234567890,\"id\":\"reasoning-finish\",\"model\":\"Auto\",\"object\":\"chat.completion.chunk\"}"
+    }
+  ],
+  "complete": [
+    {
+      "content": "hello",
+      "id": "cid",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hello\",\"role\":\"assistant\"}}],\"created\":1234567890,\"id\":\"cid\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}"
+    },
+    {
+      "content": "",
+      "id": "cid",
+      "model": "Auto",
+      "out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"\",\"role\":\"assistant\"}}],\"created\":1234567890,\"id\":\"cid\",\"model\":\"Auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}"
+    },
+    {
+      "content": "\u003c\u0026\u003e \n \"q\"",
+      "id": "cid",
+      "model": "gmodel",
+      "out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"\\u003c\\u0026\\u003e \\n \\\"q\\\"\",\"role\":\"assistant\"}}],\"created\":1234567890,\"id\":\"cid\",\"model\":\"gmodel\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}"
+    }
+  ],
+  "credits_ledger": {
+    "parse": [
+      {
+        "in": "{\"spent\":1.5,\"updatedAt\":1700000000000}",
+        "out": 1.5
+      },
+      {
+        "in": "{\"spent\":0}",
+        "out": 0
+      },
+      {
+        "in": "{\"spent\":0.30000000000000004,\"updatedAt\":1}",
+        "out": 0.30000000000000004
+      },
+      {
+        "in": "{\"Spent\":2.5}",
+        "out": 2.5
+      },
+      {
+        "in": "{\"SPENT\":3}",
+        "out": 3
+      },
+      {
+        "in": "{\"spent\":1,\"SPENT\":2}",
+        "out": 2
+      },
+      {
+        "in": "{\"spent\":1,\"extra\":true}",
+        "out": 1
+      },
+      {
+        "in": "{\"spent\":null}",
+        "out": 0
+      },
+      {
+        "in": "{\"spent\":\"x\"}",
+        "out": 0
+      },
+      {
+        "in": "{}",
+        "out": 0
+      },
+      {
+        "in": "null",
+        "out": 0
+      },
+      {
+        "in": "[]",
+        "out": 0
+      },
+      {
+        "in": "{not json",
+        "out": 0
+      },
+      {
+        "in": "",
+        "out": 0
+      },
+      {
+        "in": "\u003cabsent\u003e",
+        "out": 0
+      }
+    ],
+    "write_first": "{\"spent\":1.5,\"updatedAt\":1792003604065}",
+    "write_zero": "{\"spent\":0,\"updatedAt\":1792003604065}"
+  },
+  "credits_set": [
+    {
+      "id": "set-zero",
+      "method": "POST",
+      "body_in": "{\"spent\":0}",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "12",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"ok\":true}\n",
+      "ledger_after": "{\"spent\":0,\"updatedAt\":1792003604102}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":0,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-nonzero",
+      "method": "POST",
+      "body_in": "{\"spent\":1}",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "52",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"error\":\"只支持清零（spent=0）\",\"ok\":false}\n",
+      "ledger_after": "{\"spent\":9.5,\"updatedAt\":1}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":9.5,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-get",
+      "method": "GET",
+      "body_in": "",
+      "status": 405,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "allow": "POST",
+        "content-length": "38",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"error\":\"仅支持 POST\",\"ok\":false}\n",
+      "ledger_after": "{\"spent\":9.5,\"updatedAt\":1}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":9.5,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-empty",
+      "method": "POST",
+      "body_in": "",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "50",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"error\":\"请求体解析失败: EOF\",\"ok\":false}\n",
+      "ledger_after": "{\"spent\":9.5,\"updatedAt\":1}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":9.5,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-null",
+      "method": "POST",
+      "body_in": "null",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "12",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"ok\":true}\n",
+      "ledger_after": "{\"spent\":0,\"updatedAt\":1792003604107}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":0,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-empty-object",
+      "method": "POST",
+      "body_in": "{}",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "12",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"ok\":true}\n",
+      "ledger_after": "{\"spent\":0,\"updatedAt\":1792003604108}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":0,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-bad-type",
+      "method": "POST",
+      "body_in": "{\"spent\":\"x\"}",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "120",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"error\":\"请求体解析失败: json: cannot unmarshal string into Go struct field .spent of type float64\",\"ok\":false}\n",
+      "ledger_after": "{\"spent\":9.5,\"updatedAt\":1}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":9.5,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-array",
+      "method": "POST",
+      "body_in": "[]",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "145",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"error\":\"请求体解析失败: json: cannot unmarshal array into Go value of type struct { Spent float64 \\\"json:\\\\\\\"spent\\\\\\\"\\\" }\",\"ok\":false}\n",
+      "ledger_after": "{\"spent\":9.5,\"updatedAt\":1}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":9.5,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-bad-json",
+      "method": "POST",
+      "body_in": "{not json",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "111",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"error\":\"请求体解析失败: invalid character 'n' looking for beginning of object key string\",\"ok\":false}\n",
+      "ledger_after": "{\"spent\":9.5,\"updatedAt\":1}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":9.5,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-case-field",
+      "method": "POST",
+      "body_in": "{\"Spent\":0}",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "12",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"ok\":true}\n",
+      "ledger_after": "{\"spent\":0,\"updatedAt\":1792003604112}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":0,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-trailing-data",
+      "method": "POST",
+      "body_in": "{\"spent\":0}x",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "12",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"ok\":true}\n",
+      "ledger_after": "{\"spent\":0,\"updatedAt\":1792003604113}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":0,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-trailing-nonzero",
+      "method": "POST",
+      "body_in": "{\"spent\":1}x",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "52",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"error\":\"只支持清零（spent=0）\",\"ok\":false}\n",
+      "ledger_after": "{\"spent\":9.5,\"updatedAt\":1}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":9.5,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    },
+    {
+      "id": "set-number-overflow",
+      "method": "POST",
+      "body_in": "{\"spent\":1e999}",
+      "status": 200,
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "126",
+        "content-type": "application/json"
+      },
+      "body_out": "{\"error\":\"请求体解析失败: json: cannot unmarshal number 1e999 into Go struct field .spent of type float64\",\"ok\":false}\n",
+      "ledger_after": "{\"spent\":9.5,\"updatedAt\":1}",
+      "health_after": "{\"credits\":{\"quotaExceeded\":false,\"spent\":9.5,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+    }
+  ],
+  "flatten": [
+    {
+      "id": "plain-three-roles",
+      "messages": [
+        {
+          "content": "S",
+          "role": "system"
+        },
+        {
+          "content": "U",
+          "role": "user"
+        },
+        {
+          "content": "A",
+          "role": "assistant"
+        }
+      ],
+      "out": "[System]\nS\n[User]\nU\n[Assistant]\nA"
+    },
+    {
+      "id": "content-parts",
+      "messages": [
+        {
+          "content": [
+            {
+              "text": "A",
+              "type": "text"
+            },
+            {
+              "text": "B",
+              "type": "text"
+            },
+            {
+              "text": "ignored?",
+              "type": "image"
+            },
+            {
+              "type": "text"
+            }
+          ],
+          "role": "user"
+        }
+      ],
+      "out": "[User]\nABignored?"
+    },
+    {
+      "id": "unknown-role-and-nonobject",
+      "messages": [
+        "not-an-object",
+        {
+          "content": "T",
+          "role": "tool"
+        },
+        {
+          "content": "no-role"
+        }
+      ],
+      "out": "[tool]\nT\n[]\nno-role"
+    },
+    {
+      "id": "no-role-empty",
+      "messages": [
+        "x"
+      ],
+      "out": ""
+    },
+    {
+      "id": "trailing-newlines",
+      "messages": [
+        {
+          "content": "a\n\n",
+          "role": "user"
+        }
+      ],
+      "out": "[User]\na"
+    },
+    {
+      "id": "tool-calls-ignored",
+      "messages": [
+        {
+          "content": "C",
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "x"
+            }
+          ]
+        }
+      ],
+      "out": "[Assistant]\nC"
+    }
+  ],
+  "floats": [
+    {
+      "in": 0,
+      "out": "0"
+    },
+    {
+      "in": 0,
+      "out": "0"
+    },
+    {
+      "in": 1,
+      "out": "1"
+    },
+    {
+      "in": 1.25,
+      "out": "1.25"
+    },
+    {
+      "in": 0.1,
+      "out": "0.1"
+    },
+    {
+      "in": 3,
+      "out": "3"
+    },
+    {
+      "in": 1234567.891,
+      "out": "1234567.891"
+    },
+    {
+      "in": 0.3,
+      "out": "0.3"
+    },
+    {
+      "in": 100000000000000000000,
+      "out": "100000000000000000000"
+    },
+    {
+      "in": 1e+21,
+      "out": "1e+21"
+    },
+    {
+      "in": 0.000001,
+      "out": "0.000001"
+    },
+    {
+      "in": 1e-7,
+      "out": "1e-7"
+    },
+    {
+      "in": 1.5e-7,
+      "out": "1.5e-7"
+    },
+    {
+      "in": -2.5e-8,
+      "out": "-2.5e-8"
+    },
+    {
+      "in": 1e+100,
+      "out": "1e+100"
+    },
+    {
+      "in": 1.2345678901234e-300,
+      "out": "1.2345678901234e-300"
+    },
+    {
+      "in": 9007199254740992,
+      "out": "9007199254740992"
+    }
+  ],
+  "health_bad_encrypted_key": {
+    "body": "{\"status\":\"no_license\"}\n",
+    "status": 200
+  },
+  "health_bad_local_state": {
+    "body": "{\"status\":\"no_license\"}\n",
+    "status": 200
+  },
+  "health_no_license": {
+    "body": "{\"status\":\"no_license\"}\n",
+    "resp_headers": {
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-origin": "*",
+      "content-length": "24",
+      "content-type": "application/json"
+    },
+    "status": 200
+  },
+  "health_ok": {
+    "body": "{\"credits\":{\"quotaExceeded\":false,\"spent\":1.25,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+    "post_body": "{\"credits\":{\"quotaExceeded\":false,\"spent\":1.25,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+    "post_status": 200,
+    "resp_headers": {
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-origin": "*",
+      "content-length": "116",
+      "content-type": "application/json"
+    },
+    "status": 200,
+    "usage_hits": null
+  },
+  "health_quota_exceeded": {
+    "body": "{\"credits\":{\"quotaExceeded\":true,\"realtime\":{\"isQuotaExceeded\":true,\"packages\":[],\"packagesRemaining\":0,\"plan\":{\"remaining\":0,\"total\":10,\"unit\":\"c\",\"used\":10},\"totalRemaining\":0},\"spent\":1.25,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+    "status": 200,
+    "usage_body": "{\"isQuotaExceeded\":true,\"userQuota\":{\"total\":10,\"used\":10,\"remaining\":0,\"unit\":\"c\"}}",
+    "usage_status": 200
+  },
+  "health_refresh": {
+    "body": "{\"credits\":{\"quotaExceeded\":false,\"realtime\":{\"isQuotaExceeded\":false,\"packages\":[{\"available\":true,\"expiresAt\":1790000000000,\"remaining\":90,\"total\":100,\"used\":10}],\"packagesRemaining\":90,\"plan\":{\"remaining\":749.5,\"total\":1000,\"unit\":\"credits\",\"used\":250.5},\"totalRemaining\":839.5},\"spent\":1.25,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+    "cache_body": "{\"credits\":{\"quotaExceeded\":false,\"realtime\":{\"isQuotaExceeded\":false,\"packages\":[{\"available\":true,\"expiresAt\":1790000000000,\"remaining\":90,\"total\":100,\"used\":10}],\"packagesRemaining\":90,\"plan\":{\"remaining\":749.5,\"total\":1000,\"unit\":\"credits\",\"used\":250.5},\"totalRemaining\":839.5},\"spent\":1.25,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+    "cache_status": 200,
+    "resp_headers": {
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-origin": "*",
+      "content-length": "364",
+      "content-type": "application/json"
+    },
+    "status": 200,
+    "usage_body": "{\"isQuotaExceeded\":false,\"userQuota\":{\"total\":1000,\"used\":250.5,\"remaining\":749.5,\"unit\":\"credits\"},\"dedicatedResourcePackages\":[{\"total\":100,\"used\":10,\"remaining\":90,\"available\":true,\"expiresAt\":1790000000000}]}",
+    "usage_hits": [
+      {
+        "accept": "application/json",
+        "auth": "Bearer dt-fake-token-for-golden",
+        "cosy": "1",
+        "method": "GET",
+        "ua": "Qoder",
+        "url": "https://openapi.qoder.com.cn/api/v2/quota/usage"
+      }
+    ],
+    "usage_hits_second": null,
+    "usage_status": 200
+  },
+  "health_refresh_bad_json": {
+    "body": "{\"credits\":{\"quotaExceeded\":true,\"realtime\":{\"isQuotaExceeded\":true,\"packages\":[],\"packagesRemaining\":0,\"plan\":{\"remaining\":0,\"total\":10,\"unit\":\"c\",\"used\":10},\"totalRemaining\":0},\"spent\":1.25,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+    "status": 200,
+    "usage_body": "{not json",
+    "usage_status": 200
+  },
+  "health_refresh_cold_fail": {
+    "body": "{\"credits\":{\"quotaExceeded\":false,\"spent\":1.25,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+    "status": 200,
+    "usage_body": "boom",
+    "usage_status": 500
+  },
+  "health_refresh_fail": {
+    "body": "{\"credits\":{\"quotaExceeded\":true,\"realtime\":{\"isQuotaExceeded\":true,\"packages\":[],\"packagesRemaining\":0,\"plan\":{\"remaining\":0,\"total\":10,\"unit\":\"c\",\"used\":10},\"totalRemaining\":0},\"spent\":1.25,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+    "status": 200,
+    "usage_body": "boom",
+    "usage_status": 500
+  },
+  "meta": {
+    "collected_at": "2026-10-14T18:46:44Z",
+    "machine_paths": {
+      "repo_root": "F:\\AIXM\\proxydeck",
+      "temp_dir": "E:\\Temp"
+    },
+    "note": "P3 黄金基准：HTTP 合同 + worker 出站观测 + 纯函数。假 worker 源码哈希见 worker_source_sha256。",
+    "source": "internal/qoder (Go 1.26.5)"
+  },
+  "models_delete": {
+    "body": "{\"data\":[{\"display_name\":\"Auto\",\"id\":\"Auto\",\"object\":\"model\"},{\"display_name\":\"Qwen3.8-Max\",\"id\":\"qmodel_38max\",\"object\":\"model\"},{\"display_name\":\"Qwen3.8-Flash\",\"id\":\"qfmodel\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Flash\",\"id\":\"q37fmodel\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Max\",\"id\":\"qmodel_latest\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Plus\",\"id\":\"qmodel\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Pro\",\"id\":\"dmodel\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Flash\",\"id\":\"dfmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.3\",\"id\":\"gmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.3-Flash\",\"id\":\"gfmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.2\",\"id\":\"gm51model\",\"object\":\"model\"},{\"display_name\":\"Kimi-K2.7-Code\",\"id\":\"kmodel\",\"object\":\"model\"},{\"display_name\":\"MiniMax-M3\",\"id\":\"mmodel\",\"object\":\"model\"}],\"object\":\"list\"}\n",
+    "resp_headers": {
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-origin": "*",
+      "content-length": "857",
+      "content-type": "application/json"
+    },
+    "status": 200
+  },
+  "models_get": {
+    "body": "{\"data\":[{\"display_name\":\"Auto\",\"id\":\"Auto\",\"object\":\"model\"},{\"display_name\":\"Qwen3.8-Max\",\"id\":\"qmodel_38max\",\"object\":\"model\"},{\"display_name\":\"Qwen3.8-Flash\",\"id\":\"qfmodel\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Flash\",\"id\":\"q37fmodel\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Max\",\"id\":\"qmodel_latest\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Plus\",\"id\":\"qmodel\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Pro\",\"id\":\"dmodel\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Flash\",\"id\":\"dfmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.3\",\"id\":\"gmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.3-Flash\",\"id\":\"gfmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.2\",\"id\":\"gm51model\",\"object\":\"model\"},{\"display_name\":\"Kimi-K2.7-Code\",\"id\":\"kmodel\",\"object\":\"model\"},{\"display_name\":\"MiniMax-M3\",\"id\":\"mmodel\",\"object\":\"model\"}],\"object\":\"list\"}\n",
+    "resp_headers": {
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-origin": "*",
+      "content-length": "857",
+      "content-type": "application/json"
+    },
+    "status": 200
+  },
+  "models_head": {
+    "body": "",
+    "resp_headers": {
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-origin": "*",
+      "content-length": "857",
+      "content-type": "application/json"
+    },
+    "status": 200
+  },
+  "models_options": {
+    "body": "",
+    "resp_headers": {
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-origin": "*"
+    },
+    "status": 204
+  },
+  "models_post": {
+    "body": "{\"data\":[{\"display_name\":\"Auto\",\"id\":\"Auto\",\"object\":\"model\"},{\"display_name\":\"Qwen3.8-Max\",\"id\":\"qmodel_38max\",\"object\":\"model\"},{\"display_name\":\"Qwen3.8-Flash\",\"id\":\"qfmodel\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Flash\",\"id\":\"q37fmodel\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Max\",\"id\":\"qmodel_latest\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Plus\",\"id\":\"qmodel\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Pro\",\"id\":\"dmodel\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Flash\",\"id\":\"dfmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.3\",\"id\":\"gmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.3-Flash\",\"id\":\"gfmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.2\",\"id\":\"gm51model\",\"object\":\"model\"},{\"display_name\":\"Kimi-K2.7-Code\",\"id\":\"kmodel\",\"object\":\"model\"},{\"display_name\":\"MiniMax-M3\",\"id\":\"mmodel\",\"object\":\"model\"}],\"object\":\"list\"}\n",
+    "resp_headers": {
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-origin": "*",
+      "content-length": "857",
+      "content-type": "application/json"
+    },
+    "status": 200
+  },
+  "models_put": {
+    "body": "{\"data\":[{\"display_name\":\"Auto\",\"id\":\"Auto\",\"object\":\"model\"},{\"display_name\":\"Qwen3.8-Max\",\"id\":\"qmodel_38max\",\"object\":\"model\"},{\"display_name\":\"Qwen3.8-Flash\",\"id\":\"qfmodel\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Flash\",\"id\":\"q37fmodel\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Max\",\"id\":\"qmodel_latest\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Plus\",\"id\":\"qmodel\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Pro\",\"id\":\"dmodel\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Flash\",\"id\":\"dfmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.3\",\"id\":\"gmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.3-Flash\",\"id\":\"gfmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.2\",\"id\":\"gm51model\",\"object\":\"model\"},{\"display_name\":\"Kimi-K2.7-Code\",\"id\":\"kmodel\",\"object\":\"model\"},{\"display_name\":\"MiniMax-M3\",\"id\":\"mmodel\",\"object\":\"model\"}],\"object\":\"list\"}\n",
+    "resp_headers": {
+      "access-control-allow-headers": "Content-Type, Authorization",
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-origin": "*",
+      "content-length": "857",
+      "content-type": "application/json"
+    },
+    "status": 200
+  },
+  "quota_error": [
+    {
+      "in": "",
+      "out": false
+    },
+    {
+      "in": "ResourceUsageOverlimit",
+      "out": true
+    },
+    {
+      "in": "本月配额已用完",
+      "out": true
+    },
+    {
+      "in": "请升级专业版",
+      "out": true
+    },
+    {
+      "in": "免费限额用尽",
+      "out": true
+    },
+    {
+      "in": "auto-free-individual",
+      "out": true
+    },
+    {
+      "in": "{\"code\":119}",
+      "out": true
+    },
+    {
+      "in": "code=112",
+      "out": true
+    },
+    {
+      "in": "code:111",
+      "out": false
+    },
+    {
+      "in": "code=1100",
+      "out": true
+    },
+    {
+      "in": "普通网络错误",
+      "out": false
+    }
+  ],
+  "resolve": [
+    {
+      "in": "",
+      "out": "Auto"
+    },
+    {
+      "in": "auto",
+      "out": "Auto"
+    },
+    {
+      "in": "Auto",
+      "out": "Auto"
+    },
+    {
+      "in": "AUTO",
+      "out": "Auto"
+    },
+    {
+      "in": "aUtO",
+      "out": "Auto"
+    },
+    {
+      "in": "Auto2",
+      "out": ""
+    },
+    {
+      "in": "qmodel_38max",
+      "out": "qmodel_38max"
+    },
+    {
+      "in": "Qwen3.8-Max",
+      "out": "qmodel_38max"
+    },
+    {
+      "in": "qwen3.8-max",
+      "out": "qmodel_38max"
+    },
+    {
+      "in": "QWEN3.8-MAX",
+      "out": "qmodel_38max"
+    },
+    {
+      "in": "qfmodel",
+      "out": "qfmodel"
+    },
+    {
+      "in": "Qwen3.8-Flash",
+      "out": "qfmodel"
+    },
+    {
+      "in": "q37fmodel",
+      "out": "q37fmodel"
+    },
+    {
+      "in": "Qwen3.7-Flash",
+      "out": "q37fmodel"
+    },
+    {
+      "in": "qmodel_latest",
+      "out": "qmodel_latest"
+    },
+    {
+      "in": "Qwen3.7-Max",
+      "out": "qmodel_latest"
+    },
+    {
+      "in": "qmodel",
+      "out": "qmodel"
+    },
+    {
+      "in": "Qwen3.7-Plus",
+      "out": "qmodel"
+    },
+    {
+      "in": "dmodel",
+      "out": "dmodel"
+    },
+    {
+      "in": "DeepSeek-V4-Pro",
+      "out": "dmodel"
+    },
+    {
+      "in": "dfmodel",
+      "out": "dfmodel"
+    },
+    {
+      "in": "DeepSeek-V4-Flash",
+      "out": "dfmodel"
+    },
+    {
+      "in": "gmodel",
+      "out": "gmodel"
+    },
+    {
+      "in": "GLM-5.3",
+      "out": "gmodel"
+    },
+    {
+      "in": "gfmodel",
+      "out": "gfmodel"
+    },
+    {
+      "in": "GLM-5.3-Flash",
+      "out": "gfmodel"
+    },
+    {
+      "in": "gm51model",
+      "out": "gm51model"
+    },
+    {
+      "in": "GLM-5.2",
+      "out": "gm51model"
+    },
+    {
+      "in": "kmodel",
+      "out": "kmodel"
+    },
+    {
+      "in": "Kimi-K2.7-Code",
+      "out": "kmodel"
+    },
+    {
+      "in": "mmodel",
+      "out": "mmodel"
+    },
+    {
+      "in": "MiniMax-M3",
+      "out": "mmodel"
+    },
+    {
+      "in": "performance",
+      "out": ""
+    },
+    {
+      "in": "efficient",
+      "out": ""
+    },
+    {
+      "in": "Cantus",
+      "out": ""
+    },
+    {
+      "in": "cmodel",
+      "out": ""
+    },
+    {
+      "in": "Kimi-K3",
+      "out": ""
+    },
+    {
+      "in": "kmodel_latest",
+      "out": ""
+    },
+    {
+      "in": "quest-ultimate",
+      "out": ""
+    },
+    {
+      "in": "Ultimate",
+      "out": ""
+    },
+    {
+      "in": "Qwen3.8-Max-Preview",
+      "out": ""
+    },
+    {
+      "in": "qmodel_preview",
+      "out": ""
+    },
+    {
+      "in": "not-a-model",
+      "out": ""
+    },
+    {
+      "in": " gmodel ",
+      "out": ""
+    }
+  ],
+  "rfc3339": [
+    {
+      "err": null,
+      "in": "2026-10-15T08:30:00Z",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1792053000000
+    },
+    {
+      "err": null,
+      "in": "2026-10-15T08:30:00.5Z",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1792053000500
+    },
+    {
+      "err": null,
+      "in": "2026-10-15T08:30:00.123Z",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1792053000123
+    },
+    {
+      "err": null,
+      "in": "2026-10-15T08:30:00.123456789Z",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1792053000123
+    },
+    {
+      "err": null,
+      "in": "2026-10-15T08:30:00,25Z",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1792053000250
+    },
+    {
+      "err": null,
+      "in": "2026-10-15T08:30:00+08:00",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1792024200000
+    },
+    {
+      "err": null,
+      "in": "2026-10-15T08:30:00-05:30",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1792072800000
+    },
+    {
+      "err": null,
+      "in": "2026-10-15T08:30:00+00:00",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1792053000000
+    },
+    {
+      "err": null,
+      "in": "0001-01-01T00:00:00Z",
+      "is_zero": true,
+      "ok": true,
+      "unix_ms": -62135596800000
+    },
+    {
+      "err": null,
+      "in": "2026-10-15T23:59:59Z",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1792108799000
+    },
+    {
+      "err": null,
+      "in": "2026-10-15T00:00:00Z",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1792022400000
+    },
+    {
+      "err": "parsing time \"\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"2006\"",
+      "in": "",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"2026-10-15\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"T\"",
+      "in": "2026-10-15",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"2026-10-15T08:30:00\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"Z07:00\"",
+      "in": "2026-10-15T08:30:00",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"2026-10-15T08:30:00Z \": extra text: \" \"",
+      "in": "2026-10-15T08:30:00Z ",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"2026-10-15T08:30:00ZZ\": extra text: \"Z\"",
+      "in": "2026-10-15T08:30:00ZZ",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"2026-13-15T08:30:00Z\": month out of range",
+      "in": "2026-13-15T08:30:00Z",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"2026-10-32T08:30:00Z\": day out of range",
+      "in": "2026-10-32T08:30:00Z",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"2026-10-15T25:30:00Z\": hour out of range",
+      "in": "2026-10-15T25:30:00Z",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"2026-10-15T08:30:00+0800\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"+0800\" as \"Z07:00\"",
+      "in": "2026-10-15T08:30:00+0800",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"2026-10-15t08:30:00Z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"t08:30:00Z\" as \"T\"",
+      "in": "2026-10-15t08:30:00Z",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"not-a-time\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"not-a-time\" as \"2006\"",
+      "in": "not-a-time",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": "parsing time \"2026-02-29T00:00:00Z\": day out of range",
+      "in": "2026-02-29T00:00:00Z",
+      "is_zero": true,
+      "ok": false,
+      "unix_ms": null
+    },
+    {
+      "err": null,
+      "in": "2024-02-29T00:00:00Z",
+      "is_zero": false,
+      "ok": true,
+      "unix_ms": 1709164800000
+    }
+  ],
+  "routes": [
+    {
+      "body": "404 page not found\n",
+      "method": "GET",
+      "path": "/health/",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "19",
+        "content-type": "text/plain; charset=utf-8",
+        "x-content-type-options": "nosniff"
+      },
+      "status": 404
+    },
+    {
+      "body": "404 page not found\n",
+      "method": "GET",
+      "path": "/v1/models/",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "19",
+        "content-type": "text/plain; charset=utf-8",
+        "x-content-type-options": "nosniff"
+      },
+      "status": 404
+    },
+    {
+      "body": "404 page not found\n",
+      "method": "GET",
+      "path": "/v1/chat/completions/",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "19",
+        "content-type": "text/plain; charset=utf-8",
+        "x-content-type-options": "nosniff"
+      },
+      "status": 404
+    },
+    {
+      "body": "404 page not found\n",
+      "method": "GET",
+      "path": "/credits/set/",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "19",
+        "content-type": "text/plain; charset=utf-8",
+        "x-content-type-options": "nosniff"
+      },
+      "status": 404
+    },
+    {
+      "body": "\u003ca href=\"/v1/models\"\u003eTemporary Redirect\u003c/a\u003e.\n\n",
+      "method": "GET",
+      "path": "//v1/models",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "46",
+        "content-type": "text/html; charset=utf-8",
+        "location": "/v1/models"
+      },
+      "status": 307
+    },
+    {
+      "body": "\u003ca href=\"/a/b\"\u003eTemporary Redirect\u003c/a\u003e.\n\n",
+      "method": "GET",
+      "path": "/a//b/./c/..",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "40",
+        "content-type": "text/html; charset=utf-8",
+        "location": "/a/b"
+      },
+      "status": 307
+    },
+    {
+      "body": "\u003ca href=\"/a/b/\"\u003eTemporary Redirect\u003c/a\u003e.\n\n",
+      "method": "GET",
+      "path": "/a//b/./c/../",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "41",
+        "content-type": "text/html; charset=utf-8",
+        "location": "/a/b/"
+      },
+      "status": 307
+    },
+    {
+      "body": "\u003ca href=\"/v1/models\"\u003eTemporary Redirect\u003c/a\u003e.\n\n",
+      "method": "GET",
+      "path": "/health/../v1/models",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "46",
+        "content-type": "text/html; charset=utf-8",
+        "location": "/v1/models"
+      },
+      "status": 307
+    },
+    {
+      "body": "404 page not found\n",
+      "method": "GET",
+      "path": "/nope",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "19",
+        "content-type": "text/plain; charset=utf-8",
+        "x-content-type-options": "nosniff"
+      },
+      "status": 404
+    },
+    {
+      "body": "404 page not found\n",
+      "method": "GET",
+      "path": "/",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "19",
+        "content-type": "text/plain; charset=utf-8",
+        "x-content-type-options": "nosniff"
+      },
+      "status": 404
+    },
+    {
+      "body": "{\"data\":[{\"display_name\":\"Auto\",\"id\":\"Auto\",\"object\":\"model\"},{\"display_name\":\"Qwen3.8-Max\",\"id\":\"qmodel_38max\",\"object\":\"model\"},{\"display_name\":\"Qwen3.8-Flash\",\"id\":\"qfmodel\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Flash\",\"id\":\"q37fmodel\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Max\",\"id\":\"qmodel_latest\",\"object\":\"model\"},{\"display_name\":\"Qwen3.7-Plus\",\"id\":\"qmodel\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Pro\",\"id\":\"dmodel\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Flash\",\"id\":\"dfmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.3\",\"id\":\"gmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.3-Flash\",\"id\":\"gfmodel\",\"object\":\"model\"},{\"display_name\":\"GLM-5.2\",\"id\":\"gm51model\",\"object\":\"model\"},{\"display_name\":\"Kimi-K2.7-Code\",\"id\":\"kmodel\",\"object\":\"model\"},{\"display_name\":\"MiniMax-M3\",\"id\":\"mmodel\",\"object\":\"model\"}],\"object\":\"list\"}\n",
+      "method": "GET",
+      "path": "/v1/models?x=1",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "857",
+        "content-type": "application/json"
+      },
+      "status": 200
+    },
+    {
+      "body": "404 page not found\n",
+      "method": "POST",
+      "path": "/nope",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "19",
+        "content-type": "text/plain; charset=utf-8",
+        "x-content-type-options": "nosniff"
+      },
+      "status": 404
+    },
+    {
+      "body": "",
+      "method": "HEAD",
+      "path": "/nope",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "19",
+        "content-type": "text/plain; charset=utf-8",
+        "x-content-type-options": "nosniff"
+      },
+      "status": 404
+    },
+    {
+      "body": "",
+      "method": "OPTIONS",
+      "path": "/nope",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*"
+      },
+      "status": 204
+    },
+    {
+      "body": "",
+      "method": "OPTIONS",
+      "path": "/v1/chat/completions",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*"
+      },
+      "status": 204
+    },
+    {
+      "body": "{\"credits\":{\"quotaExceeded\":false,\"spent\":0,\"spentThisSession\":0},\"service\":\"qoder\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+      "method": "DELETE",
+      "path": "/health",
+      "resp_headers": {
+        "access-control-allow-headers": "Content-Type, Authorization",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-origin": "*",
+        "content-length": "113",
+        "content-type": "application/json"
+      },
+      "status": 200
+    }
+  ],
+  "usage_view": [
+    {
+      "err": null,
+      "in": "{\"isQuotaExceeded\":false,\"userQuota\":{\"total\":1000,\"used\":250.5,\"remaining\":749.5,\"unit\":\"credits\"},\"dedicatedResourcePackages\":[{\"total\":100,\"used\":10,\"remaining\":90,\"available\":true,\"expiresAt\":1790000000000},{\"total\":50,\"used\":50,\"remaining\":0,\"available\":false,\"expiresAt\":0}]}",
+      "out": "{\"isQuotaExceeded\":false,\"packages\":[{\"available\":true,\"expiresAt\":1790000000000,\"remaining\":90,\"total\":100,\"used\":10},{\"available\":false,\"expiresAt\":0,\"remaining\":0,\"total\":50,\"used\":50}],\"packagesRemaining\":90,\"plan\":{\"remaining\":749.5,\"total\":1000,\"unit\":\"credits\",\"used\":250.5},\"totalRemaining\":839.5}"
+    },
+    {
+      "err": null,
+      "in": "{\"isQuotaExceeded\":true,\"userQuota\":{\"total\":1,\"used\":1,\"remaining\":0,\"unit\":\"c\"}}",
+      "out": "{\"isQuotaExceeded\":true,\"packages\":[],\"packagesRemaining\":0,\"plan\":{\"remaining\":0,\"total\":1,\"unit\":\"c\",\"used\":1},\"totalRemaining\":0}"
+    },
+    {
+      "err": null,
+      "in": "{\"isQuotaExceeded\":true}",
+      "out": null
+    },
+    {
+      "err": null,
+      "in": "{\"userQuota\":null}",
+      "out": null
+    },
+    {
+      "err": null,
+      "in": "{\"userQuota\":{\"total\":1,\"used\":0,\"remaining\":1,\"unit\":\"c\"},\"dedicatedResourcePackages\":null}",
+      "out": "{\"isQuotaExceeded\":false,\"packages\":[],\"packagesRemaining\":0,\"plan\":{\"remaining\":1,\"total\":1,\"unit\":\"c\",\"used\":0},\"totalRemaining\":1}"
+    },
+    {
+      "err": null,
+      "in": "{\"userQuota\":{\"total\":1.5,\"used\":0.25,\"remaining\":1.25,\"unit\":\"\"},\"dedicatedResourcePackages\":[]}",
+      "out": "{\"isQuotaExceeded\":false,\"packages\":[],\"packagesRemaining\":0,\"plan\":{\"remaining\":1.25,\"total\":1.5,\"unit\":\"\",\"used\":0.25},\"totalRemaining\":1.25}"
+    },
+    {
+      "err": null,
+      "in": "{\"userQuota\":{\"total\":9007199254740993,\"used\":0,\"remaining\":9007199254740993,\"unit\":\"x\"},\"unknown\":1}",
+      "out": "{\"isQuotaExceeded\":false,\"packages\":[],\"packagesRemaining\":0,\"plan\":{\"remaining\":9007199254740992,\"total\":9007199254740992,\"unit\":\"x\",\"used\":0},\"totalRemaining\":9007199254740992}"
+    }
+  ],
+  "worker_source_sha256": "cd1d3f4a332e75b3ab2e0a7b8c698095cf310b1986dc7e2b04d0cb0338b7b1b5"
+}
