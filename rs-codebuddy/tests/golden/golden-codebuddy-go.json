@@ -1,0 +1,2431 @@
+{
+  "machine_paths": {
+    "auth_dir": "\u003c临时目录（已占位符化为 __AUTHDIR__）\u003e",
+    "data_dir": "\u003c临时目录（已占位符化为 __DATA__）\u003e",
+    "placeholders": "__AUTHDIR__=CODEBUDDY_AUTH_DIR 临时目录；__DATA__=PROXYDECK_DATA_DIR 临时目录（黄金与机器无关；占位符不含 HTML 转义字符，避免与 Go json.Marshal 的 \\u003c 转义打架）"
+  },
+  "meta": {
+    "auth_fixture": {
+      "domain_cn": "codebuddy.cn",
+      "domain_intl": "workbuddy.ai",
+      "enterprise_id": "ent",
+      "expires_at": 4102416000000,
+      "nickname": "goldenuser",
+      "token_cn": "tok-u-golden",
+      "token_intl": "tok-u-intl-golden",
+      "uid_cn": "u-golden",
+      "uid_intl": "u-intl-golden"
+    },
+    "candidates": [
+      "auto",
+      "hy4-preview",
+      "hy3",
+      "glm-5.3",
+      "glm-5.3-flash",
+      "glm-5.2",
+      "glm-5.1",
+      "glm-5v-turbo",
+      "minimax-m3",
+      "kimi-k3",
+      "kimi-k2.7",
+      "kimi-k2.6",
+      "deepseek-v4.1-flash",
+      "deepseek-v4-flash",
+      "deepseek-v4-pro"
+    ],
+    "collected_at": "2026-10-15T04:46:15+08:00",
+    "diag_cap": 10,
+    "generator": "internal/codebuddy/zz_codebuddy_golden_collect_test.go",
+    "go_version": "go1.26.5",
+    "intl_system": "You are a helpful assistant.",
+    "model_meta": "{\"auto\":{\"note\":\"后端自动路由到合适模型\",\"reasoning\":\"low/medium/high/max\"},\"deepseek-v3.2\":{\"reasoning\":\"low/medium/high/max\"},\"deepseek-v4-flash\":{\"maxInput\":1048576,\"note\":\"思考深：思考消耗输出预算，max_tokens 建议 ≥8000\",\"reasoning\":\"low/medium/high/max\"},\"deepseek-v4-pro\":{\"maxInput\":1048576,\"note\":\"上下文实测 1M\",\"reasoning\":\"low/medium/high/max\"},\"deepseek-v4.1-flash\":{\"note\":\"新模型 · 官方 0.03x 独家优惠\",\"reasoning\":\"low/medium/high/max\"},\"glm-5.1\":{\"reasoning\":\"off/low/medium/high/max\"},\"glm-5.2\":{\"maxInput\":1048576,\"note\":\"上下文实测 1M\",\"reasoning\":\"off/low/medium/high/max\"},\"glm-5.3\":{\"note\":\"新模型\",\"reasoning\":\"off/low/medium/high/max\"},\"glm-5.3-flash\":{\"reasoning\":\"off/low/medium/high/max\"},\"glm-5v-turbo\":{\"note\":\"视觉模型\",\"reasoning\":\"off/low/medium/high/max\"},\"hy3\":{\"reasoning\":\"off/low/medium/high/max\"},\"hy3-preview\":{\"reasoning\":\"off/low/medium/high/max\"},\"hy3-preview-agent\":{\"reasoning\":\"off/low/medium/high/max\"},\"hy4-preview\":{\"reasoning\":\"off/low/medium/high/max\"},\"kimi-k2.5\":{\"reasoning\":\"off/low/medium/high/max\"},\"kimi-k2.6\":{\"reasoning\":\"off/low/medium/high/max\"},\"kimi-k2.7\":{\"reasoning\":\"off/low/medium/high/max\"},\"kimi-k3\":{\"reasoning\":\"off/low/medium/high/max\"},\"minimax-m3\":{\"reasoning\":\"off/low/medium/high/max\"},\"minimax-m3-pay\":{\"reasoning\":\"off/low/medium/high/max\"}}",
+    "passthrough": [
+      "model",
+      "messages",
+      "tools",
+      "tool_choice",
+      "temperature",
+      "max_tokens",
+      "max_completion_tokens",
+      "top_p",
+      "stream",
+      "stream_options",
+      "stop",
+      "presence_penalty",
+      "frequency_penalty",
+      "n",
+      "response_format",
+      "seed",
+      "user",
+      "reasoning_effort",
+      "verbosity",
+      "reasoning_summary"
+    ],
+    "region_cn": "{\"BaseURL\":\"https://copilot.tencent.com\",\"DomainSuffixes\":[\"codebuddy.cn\",\"workbuddy.cn\"],\"UserAgent\":\"codebuddy2openai-go/1.0\",\"ForceSystem\":false,\"NoRefresh\":false,\"NoProbe\":false,\"Candidates\":[\"auto\",\"hy4-preview\",\"hy3\",\"glm-5.3\",\"glm-5.3-flash\",\"glm-5.2\",\"glm-5.1\",\"glm-5v-turbo\",\"minimax-m3\",\"kimi-k3\",\"kimi-k2.7\",\"kimi-k2.6\",\"deepseek-v4.1-flash\",\"deepseek-v4-flash\",\"deepseek-v4-pro\"]}",
+    "region_intl": "{\"BaseURL\":\"https://www.codebuddy.ai\",\"DomainSuffixes\":[\"workbuddy.ai\"],\"UserAgent\":\"CLI/2.63.2 CodeBuddy/2.63.2\",\"ForceSystem\":true,\"NoRefresh\":true,\"NoProbe\":true,\"Candidates\":[\"deepseek-v4.1-flash\",\"hy4-preview\",\"hy3\",\"gpt-5.6-sol\",\"gpt-5.6-terra\",\"gpt-5.6-luna\",\"gpt-5.5\",\"gpt-5.4\",\"gpt-5.3-codex\",\"glm-5.3\",\"glm-5.2\",\"kimi-k3\",\"kimi-k2.6\",\"gpt-6-astra\",\"gemini-3.5-flash\"]}",
+    "source": "internal/codebuddy",
+    "transient_max": 2
+  },
+  "pure": {
+    "fingerprint": [
+      {
+        "desc": "最小请求",
+        "in": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+        "out": "bytes=74 sha=625943e2c106 msgs=1 roles=map[user:1] keys=[messages model stream] tools=0 tool_names=[] effort=\u003cnil\u003e max_tokens=\u003cnil\u003e stream=true"
+      },
+      {
+        "desc": "多角色 + 工具 + 档位",
+        "in": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"system\",\"content\":\"s\"},{\"role\":\"user\",\"content\":\"u\"},{\"role\":\"assistant\",\"content\":\"a\"},{\"role\":\"tool\",\"content\":\"t\"},{\"role\":\"user\",\"content\":\"u2\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"Agent\"}},{\"type\":\"function\",\"function\":{\"name\":\"Read\"}}],\"reasoning_effort\":\"high\",\"max_tokens\":8192,\"stream\":false}",
+        "out": "bytes=354 sha=831ecdda3add msgs=5 roles=map[assistant:1 system:1 tool:1 user:2] keys=[max_tokens messages model reasoning_effort stream tools] tools=2 tool_names=[Agent Read] effort=high max_tokens=8192 stream=false"
+      },
+      {
+        "desc": "无 messages",
+        "in": "{\"model\":\"auto\"}",
+        "out": "bytes=16 sha=3263355984f8 msgs=0 roles=map[] keys=[model] tools=0 tool_names=[] effort=\u003cnil\u003e max_tokens=\u003cnil\u003e stream=\u003cnil\u003e"
+      },
+      {
+        "desc": "HTML 转义样本",
+        "in": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"\u003ca\u003e\u0026b\"}],\"stream\":true}",
+        "out": "bytes=92 sha=f1534c174b38 msgs=1 roles=map[user:1] keys=[messages model stream] tools=0 tool_names=[] effort=\u003cnil\u003e max_tokens=\u003cnil\u003e stream=true"
+      }
+    ],
+    "summarize_tool": [
+      {
+        "desc": "含 parameters 与 strict",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"Agent\",\"description\":\"d\",\"parameters\":{\"type\":\"object\"},\"strict\":true}}],\"tool_choice\":\"required\"}",
+        "out": "{\"tool_choice\":\"required\",\"tool_count\":1,\"tools\":[{\"description\":\"d\",\"index\":0,\"name\":\"Agent\",\"parameters\":{\"type\":\"object\"},\"strict\":true,\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "parameters 缺失",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\"}}]}",
+        "out": "{\"tool_count\":1,\"tools\":[{\"index\":0,\"name\":\"t\",\"parameters\":\"missing\",\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "非 object 工具项",
+        "in": "{\"tools\":[1,\"junk\"]}",
+        "out": "{\"tool_count\":2,\"tools\":[{\"index\":0,\"note\":\"non-object tool\"},{\"index\":1,\"note\":\"non-object tool\"}]}"
+      },
+      {
+        "desc": "扁平形态（无 function 嵌套）",
+        "in": "{\"tools\":[{\"name\":\"flat\",\"parameters\":{\"type\":\"string\"}}]}",
+        "out": "{\"tool_count\":1,\"tools\":[{\"index\":0,\"name\":\"flat\",\"parameters\":{\"type\":\"string\"}}]}"
+      },
+      {
+        "desc": "无 tools",
+        "in": "{\"model\":\"auto\"}",
+        "out": "{\"tool_count\":0,\"tools\":[]}"
+      },
+      {
+        "desc": "tool_choice 为 null 不写入",
+        "in": "{\"tools\":[],\"tool_choice\":null}",
+        "out": "{\"tool_count\":0,\"tools\":[]}"
+      }
+    ],
+    "tool_choice": [
+      {
+        "desc": "对象式强制指定 → required",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"a\"}}}",
+        "out": "{\"tool_choice\":\"required\",\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "对象式 auto",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":{\"type\":\"auto\"}}",
+        "out": "{\"tool_choice\":\"auto\",\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "对象式 none",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":{\"type\":\"none\"}}",
+        "out": "{\"tool_choice\":\"none\",\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "对象式 required",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":{\"type\":\"required\"}}",
+        "out": "{\"tool_choice\":\"required\",\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "对象式未知 type",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":{\"type\":\"banana\"}}",
+        "out": "{\"tool_choice\":\"required\",\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "对象式 type 非字符串",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":{\"type\":123}}",
+        "out": "{\"tool_choice\":\"required\",\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "对象式无 type 字段",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":{\"function\":{\"name\":\"a\"}}}",
+        "out": "{\"tool_choice\":\"required\",\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "字符串式原样",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":\"auto\"}",
+        "out": "{\"tool_choice\":\"auto\",\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "数组式原样",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":[{\"type\":\"auto\"}]}",
+        "out": "{\"tool_choice\":[{\"type\":\"auto\"}],\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "null 原样",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":null}",
+        "out": "{\"tool_choice\":null,\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "数字原样",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}],\"tool_choice\":7}",
+        "out": "{\"tool_choice\":7,\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "无 tools 时删除",
+        "in": "{\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"a\"}}}",
+        "out": "{}"
+      },
+      {
+        "desc": "tools 为 null 时仍降级",
+        "in": "{\"tools\":null,\"tool_choice\":{\"type\":\"auto\"}}",
+        "out": "{\"tool_choice\":\"auto\",\"tools\":null}"
+      },
+      {
+        "desc": "tools 非数组时仍降级",
+        "in": "{\"tools\":\"nope\",\"tool_choice\":{\"type\":\"auto\"}}",
+        "out": "{\"tool_choice\":\"auto\",\"tools\":\"nope\"}"
+      },
+      {
+        "desc": "无 tool_choice 不动",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\"}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"a\"},\"type\":\"function\"}]}"
+      }
+    ],
+    "tool_refs": [
+      {
+        "desc": "简单引用 + $defs 丢弃",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#/$defs/A\"}},\"$defs\":{\"A\":{\"type\":\"string\"}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"a\":{\"type\":\"string\"}},\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "兄弟键按 2020-12 合并（同名兄弟键优先）",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"$ref\":\"#/$defs/A\",\"description\":\"override\",\"$defs\":{\"A\":{\"type\":\"string\",\"description\":\"orig\"}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"description\":\"override\",\"type\":\"string\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "循环引用截断 A→B→A",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"$ref\":\"#/$defs/A\",\"$defs\":{\"A\":{\"type\":\"object\",\"properties\":{\"n\":{\"$ref\":\"#/$defs/B\"}}},\"B\":{\"type\":\"object\",\"properties\":{\"n\":{\"$ref\":\"#/$defs/A\"}}}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"n\":{\"properties\":{\"n\":{\"description\":\"cyclic-ref-removed\",\"type\":\"object\"}},\"type\":\"object\"}},\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "自引用截断 A→A",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"$ref\":\"#/$defs/A\",\"$defs\":{\"A\":{\"type\":\"object\",\"properties\":{\"self\":{\"$ref\":\"#/$defs/A\"}}}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"self\":{\"description\":\"cyclic-ref-removed\",\"type\":\"object\"}},\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "链式 A→B→C",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"$ref\":\"#/$defs/A\",\"$defs\":{\"A\":{\"$ref\":\"#/$defs/B\"},\"B\":{\"$ref\":\"#/$defs/C\"},\"C\":{\"type\":\"integer\"}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"type\":\"integer\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "外部引用原样保留",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"https://example.com/s.json#/x\"}},\"$defs\":{\"A\":{\"type\":\"string\"}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"a\":{\"$ref\":\"https://example.com/s.json#/x\"}},\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "指向缺失定义原样保留",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#/$defs/Nope\"}},\"$defs\":{\"A\":{\"type\":\"string\"}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"a\":{\"$ref\":\"#/$defs/Nope\"}},\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "无 $defs 的引用原样保留",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#/$defs/A\"}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"a\":{\"$ref\":\"#/$defs/A\"}},\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "无 $ref 的工具一字不动",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}},\"required\":[\"a\"]}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"a\":{\"type\":\"string\"}},\"required\":[\"a\"],\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "嵌套数组里的引用",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"anyOf\":[{\"$ref\":\"#/$defs/A\"},{\"type\":\"null\"}]}},\"$defs\":{\"A\":{\"type\":\"string\",\"minLength\":1}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"a\":{\"anyOf\":[{\"minLength\":1,\"type\":\"string\"},{\"type\":\"null\"}]}},\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "带 $schema 与 $defs 的 2020-12 形",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"d\":{\"$ref\":\"#/$defs/D\"}},\"required\":[\"d\"],\"$defs\":{\"D\":{\"type\":\"object\",\"properties\":{\"p\":{\"$ref\":\"#/$defs/P\"}},\"required\":[\"p\"]},\"P\":{\"type\":\"string\"}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"d\":{\"properties\":{\"p\":{\"type\":\"string\"}},\"required\":[\"p\"],\"type\":\"object\"}},\"required\":[\"d\"],\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "$ref 非字符串原样",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":42}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"a\":{\"$ref\":42}},\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "$ref 指向深层路径（末段当键名）",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#/$defs/A/properties/x\"}},\"$defs\":{\"A\":{\"properties\":{\"x\":{\"type\":\"string\"}}}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"a\":{\"$ref\":\"#/$defs/A/properties/x\"}},\"type\":\"object\"}},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "非 object 工具与缺 function 原样",
+        "in": "{\"tools\":[1,\"junk\",{\"type\":\"function\"},{\"type\":\"function\",\"function\":{\"name\":\"t\"}},{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":\"nope\"}}]}",
+        "out": "{\"tools\":[1,\"junk\",{\"type\":\"function\"},{\"function\":{\"name\":\"t\"},\"type\":\"function\"},{\"function\":{\"name\":\"t\",\"parameters\":\"nope\"},\"type\":\"function\"}]}"
+      },
+      {
+        "desc": "tools 非数组不动",
+        "in": "{\"tools\":\"nope\"}",
+        "out": "{\"tools\":\"nope\"}"
+      },
+      {
+        "desc": "无 tools 不动",
+        "in": "{\"model\":\"auto\"}",
+        "out": "{\"model\":\"auto\"}"
+      },
+      {
+        "desc": "多工具混合（含真 MCP 形）",
+        "in": "{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"a\",\"parameters\":{\"type\":\"object\",\"properties\":{\"i\":{\"$ref\":\"#/$defs/In\"}},\"$defs\":{\"In\":{\"type\":\"object\",\"properties\":{\"x\":{\"$ref\":\"#/$defs/S\"}}}}}}},{\"type\":\"function\",\"function\":{\"name\":\"b\",\"parameters\":{\"type\":\"object\",\"properties\":{\"s\":{\"$ref\":\"#/$defs/S\"}},\"$defs\":{\"S\":{\"type\":\"string\"}}}}}]}",
+        "out": "{\"tools\":[{\"function\":{\"name\":\"a\",\"parameters\":{\"properties\":{\"i\":{\"properties\":{\"x\":{\"$ref\":\"#/$defs/S\"}},\"type\":\"object\"}},\"type\":\"object\"}},\"type\":\"function\"},{\"function\":{\"name\":\"b\",\"parameters\":{\"properties\":{\"s\":{\"type\":\"string\"}},\"type\":\"object\"}},\"type\":\"function\"}]}"
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "name": "routes",
+      "desc": "CORS 预检 / 任意方法 / 未知路径 404 / chat 非 POST 405 / 路径清洗（假上游恒 502，探测全失败）",
+      "region": "CN",
+      "in_p5a_scope": true,
+      "upstream_desc": "全部 502",
+      "upstream_spec": {
+        "kind": "fixed",
+        "status": 502,
+        "body": "nope"
+      },
+      "upstream_sorted_by_body": true,
+      "cred_seam": {
+        "auth_dirs": [
+          "__AUTHDIR__"
+        ],
+        "kind": "ok",
+        "pairs": {
+          "auth_file": "__AUTHDIR__\\workbuddy-desktop.info",
+          "enterpriseName": "",
+          "nickname": "goldenuser",
+          "token_expired": false,
+          "token_expires_at": 4102416000000,
+          "uid": "u-golden"
+        }
+      },
+      "steps": [
+        {
+          "desc": "CORS 预检",
+          "method": "OPTIONS",
+          "path": "/health",
+          "resp_status": 204,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*"
+          },
+          "resp_body": ""
+        },
+        {
+          "desc": "health GET",
+          "method": "GET",
+          "path": "/health",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "373",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://copilot.tencent.com\",\"credential\":{\"auth_file\":\"__AUTHDIR__\\\\workbuddy-desktop.info\",\"enterpriseName\":\"\",\"nickname\":\"goldenuser\",\"token_expired\":false,\"token_expires_at\":4102416000000,\"uid\":\"u-golden\"},\"mode\":\"direct-proxy (native function calling)\",\"region\":\"CN\",\"service\":\"codebuddy-go\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+        },
+        {
+          "desc": "health POST（不看方法）",
+          "method": "POST",
+          "path": "/health",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "373",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://copilot.tencent.com\",\"credential\":{\"auth_file\":\"__AUTHDIR__\\\\workbuddy-desktop.info\",\"enterpriseName\":\"\",\"nickname\":\"goldenuser\",\"token_expired\":false,\"token_expires_at\":4102416000000,\"uid\":\"u-golden\"},\"mode\":\"direct-proxy (native function calling)\",\"region\":\"CN\",\"service\":\"codebuddy-go\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+        },
+        {
+          "desc": "health HEAD",
+          "method": "HEAD",
+          "path": "/health",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "457",
+            "content-type": "application/json"
+          },
+          "resp_body": ""
+        },
+        {
+          "desc": "models DELETE（不看方法；探测全失败→回退候选池）",
+          "method": "DELETE",
+          "path": "/v1/models",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "1242",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"data\":[{\"created\":1700000000,\"id\":\"auto\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"hy4-preview\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"hy3\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"glm-5.3\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"glm-5.3-flash\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"glm-5.2\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"glm-5.1\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"glm-5v-turbo\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"minimax-m3\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"kimi-k3\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"kimi-k2.7\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"kimi-k2.6\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"deepseek-v4.1-flash\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"deepseek-v4-pro\",\"object\":\"model\",\"owned_by\":\"codebuddy\"}],\"object\":\"list\"}\n"
+        },
+        {
+          "desc": "model/info POST（不看方法）",
+          "method": "POST",
+          "path": "/model/info",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "1285",
+            "content-type": "application/json"
+          },
+          "resp_body": "[{\"name\":\"auto\",\"note\":\"后端自动路由到合适模型\",\"reasoning\":\"low/medium/high/max\"},{\"name\":\"hy4-preview\",\"note\":\"\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"hy3\",\"note\":\"\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"glm-5.3\",\"note\":\"新模型\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"glm-5.3-flash\",\"note\":\"\",\"reasoning\":\"off/low/medium/high/max\"},{\"maxInput\":1048576,\"name\":\"glm-5.2\",\"note\":\"上下文实测 1M\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"glm-5.1\",\"note\":\"\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"glm-5v-turbo\",\"note\":\"视觉模型\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"minimax-m3\",\"note\":\"\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"kimi-k3\",\"note\":\"\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"kimi-k2.7\",\"note\":\"\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"kimi-k2.6\",\"note\":\"\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"deepseek-v4.1-flash\",\"note\":\"新模型 · 官方 0.03x 独家优惠\",\"reasoning\":\"low/medium/high/max\"},{\"maxInput\":1048576,\"name\":\"deepseek-v4-flash\",\"note\":\"思考深：思考消耗输出预算，max_tokens 建议 ≥8000\",\"reasoning\":\"low/medium/high/max\"},{\"maxInput\":1048576,\"name\":\"deepseek-v4-pro\",\"note\":\"上下文实测 1M\",\"reasoning\":\"low/medium/high/max\"}]\n"
+        },
+        {
+          "desc": "未知路径 404",
+          "method": "GET",
+          "path": "/nope",
+          "resp_status": 404,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "19",
+            "content-type": "text/plain; charset=utf-8",
+            "x-content-type-options": "nosniff"
+          },
+          "resp_body": "404 page not found\n"
+        },
+        {
+          "desc": "未知路径 404（带子路径）",
+          "method": "GET",
+          "path": "/v1/unknown",
+          "resp_status": 404,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "19",
+            "content-type": "text/plain; charset=utf-8",
+            "x-content-type-options": "nosniff"
+          },
+          "resp_body": "404 page not found\n"
+        },
+        {
+          "desc": "尾斜杠 /v1/models/",
+          "method": "GET",
+          "path": "/v1/models/",
+          "resp_status": 404,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "19",
+            "content-type": "text/plain; charset=utf-8",
+            "x-content-type-options": "nosniff"
+          },
+          "resp_body": "404 page not found\n"
+        },
+        {
+          "desc": "chat GET → 405",
+          "method": "GET",
+          "path": "/v1/chat/completions",
+          "resp_status": 405,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "allow": "POST",
+            "content-length": "19",
+            "content-type": "text/plain; charset=utf-8",
+            "x-content-type-options": "nosniff"
+          },
+          "resp_body": "method not allowed\n"
+        },
+        {
+          "desc": "chat PUT → 405",
+          "method": "PUT",
+          "path": "/v1/chat/completions",
+          "resp_status": 405,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "allow": "POST",
+            "content-length": "19",
+            "content-type": "text/plain; charset=utf-8",
+            "x-content-type-options": "nosniff"
+          },
+          "resp_body": "method not allowed\n"
+        },
+        {
+          "desc": "（P5b）quota 登记",
+          "method": "GET",
+          "path": "/quota",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "197",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":0,\"packs\":0,\"active\":{\"name\":\"\",\"used\":0,\"size\":0,\"end\":\"\"},\"nearestEnd\":{\"name\":\"\",\"date\":\"\",\"remain\":0},\"uid\":\"\",\"nickname\":\"\",\"source\":\"none\",\"err\":\"官方积分接口 HTTP 502: nope\"}\n",
+          "deferred": true
+        },
+        {
+          "desc": "（P5b）failover 登记",
+          "method": "GET",
+          "path": "/v1/failover",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "49",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"enabled\":false,\"fallback\":\"\",\"hy4_limit\":null}\n",
+          "deferred": true
+        },
+        {
+          "desc": "（P5b）accounts 登记（无池 → 500）",
+          "method": "GET",
+          "path": "/v1/accounts",
+          "resp_status": 500,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "73",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"account pool unavailable\",\"type\":\"upstream_error\"}}\n",
+          "deferred": true
+        },
+        {
+          "desc": "（P5c）stats 登记",
+          "method": "GET",
+          "path": "/v1/stats",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "28",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"models\":{},\"uptimeSec\":0}\n",
+          "deferred": true
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 7,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-flash\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 12,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-pro\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4.1-flash\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 10,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.1\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 8,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 5,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 9,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 13,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5v-turbo\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 15,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy3\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy4-preview\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 14,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.6\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 6,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.7\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 4,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 11,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"minimax-m3\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "models-probe-cn",
+      "desc": "CN 候选池 15 条并行探测（4 条 200）+ 1h 缓存：第二次不再打上游",
+      "region": "CN",
+      "in_p5a_scope": true,
+      "upstream_desc": "auto/kimi-k3/deepseek-v4.1-flash/glm-5.2 回 200 SSE，其余 400 11102",
+      "upstream_spec": {
+        "kind": "probe",
+        "ok_models": [
+          "auto",
+          "kimi-k3",
+          "deepseek-v4.1-flash",
+          "glm-5.2"
+        ],
+        "fail_status": 400,
+        "fail_body": "{\"code\":11102,\"msg\":\"model not exist\"}",
+        "fail_headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "upstream_sorted_by_body": true,
+      "steps": [
+        {
+          "desc": "首次探测",
+          "method": "GET",
+          "path": "/v1/models",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "348",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"data\":[{\"created\":1700000000,\"id\":\"auto\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"glm-5.2\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"kimi-k3\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"deepseek-v4.1-flash\",\"object\":\"model\",\"owned_by\":\"codebuddy\"}],\"object\":\"list\"}\n"
+        },
+        {
+          "desc": "第二次命中缓存",
+          "method": "GET",
+          "path": "/v1/models",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "348",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"data\":[{\"created\":1700000000,\"id\":\"auto\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"glm-5.2\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"kimi-k3\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"deepseek-v4.1-flash\",\"object\":\"model\",\"owned_by\":\"codebuddy\"}],\"object\":\"list\"}\n"
+        },
+        {
+          "desc": "model/info 走同一份列表",
+          "method": "GET",
+          "path": "/model/info",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "379",
+            "content-type": "application/json"
+          },
+          "resp_body": "[{\"name\":\"auto\",\"note\":\"后端自动路由到合适模型\",\"reasoning\":\"low/medium/high/max\"},{\"maxInput\":1048576,\"name\":\"glm-5.2\",\"note\":\"上下文实测 1M\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"kimi-k3\",\"note\":\"\",\"reasoning\":\"off/low/medium/high/max\"},{\"name\":\"deepseek-v4.1-flash\",\"note\":\"新模型 · 官方 0.03x 独家优惠\",\"reasoning\":\"low/medium/high/max\"}]\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 14,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-flash\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 13,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-pro\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 9,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4.1-flash\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 7,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.1\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 11,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 4,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 15,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 10,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5v-turbo\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy3\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy4-preview\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 12,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.6\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 6,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.7\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 8,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 5,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"minimax-m3\",\"stream\":true}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "models-intl",
+      "desc": "INTL NoProbe：直接回候选池，零上游",
+      "region": "INTL",
+      "in_p5a_scope": true,
+      "upstream_desc": "不应被调用",
+      "upstream_spec": {
+        "kind": "fixed",
+        "status": 500,
+        "body": "should-not-be-called"
+      },
+      "cred_seam": {
+        "auth_dirs": [
+          "__AUTHDIR__"
+        ],
+        "kind": "ok",
+        "pairs": {
+          "auth_file": "__AUTHDIR__\\workbuddy-desktop-intl.info",
+          "enterpriseName": "",
+          "nickname": "goldenuser",
+          "token_expired": false,
+          "token_expires_at": 4102416000000,
+          "uid": "u-intl-golden"
+        }
+      },
+      "steps": [
+        {
+          "desc": "models",
+          "method": "GET",
+          "path": "/v1/models",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "1245",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"data\":[{\"created\":1700000000,\"id\":\"deepseek-v4.1-flash\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"hy4-preview\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"hy3\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"gpt-5.6-sol\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"gpt-5.6-terra\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"gpt-5.6-luna\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"gpt-5.5\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"gpt-5.4\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"gpt-5.3-codex\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"glm-5.3\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"glm-5.2\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"kimi-k3\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"kimi-k2.6\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"gpt-6-astra\",\"object\":\"model\",\"owned_by\":\"codebuddy\"},{\"created\":1700000000,\"id\":\"gemini-3.5-flash\",\"object\":\"model\",\"owned_by\":\"codebuddy\"}],\"object\":\"list\"}\n"
+        },
+        {
+          "desc": "model/info（INTL 无 modelMeta，如实空 meta）",
+          "method": "GET",
+          "path": "/model/info",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "485",
+            "content-type": "application/json"
+          },
+          "resp_body": "[{\"name\":\"deepseek-v4.1-flash\",\"note\":\"\"},{\"name\":\"hy4-preview\",\"note\":\"\"},{\"name\":\"hy3\",\"note\":\"\"},{\"name\":\"gpt-5.6-sol\",\"note\":\"\"},{\"name\":\"gpt-5.6-terra\",\"note\":\"\"},{\"name\":\"gpt-5.6-luna\",\"note\":\"\"},{\"name\":\"gpt-5.5\",\"note\":\"\"},{\"name\":\"gpt-5.4\",\"note\":\"\"},{\"name\":\"gpt-5.3-codex\",\"note\":\"\"},{\"name\":\"glm-5.3\",\"note\":\"\"},{\"name\":\"glm-5.2\",\"note\":\"\"},{\"name\":\"kimi-k3\",\"note\":\"\"},{\"name\":\"kimi-k2.6\",\"note\":\"\"},{\"name\":\"gpt-6-astra\",\"note\":\"\"},{\"name\":\"gemini-3.5-flash\",\"note\":\"\"}]\n"
+        },
+        {
+          "desc": "health INTL",
+          "method": "GET",
+          "path": "/health",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "382",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://www.codebuddy.ai\",\"credential\":{\"auth_file\":\"__AUTHDIR__\\\\workbuddy-desktop-intl.info\",\"enterpriseName\":\"\",\"nickname\":\"goldenuser\",\"token_expired\":false,\"token_expires_at\":4102416000000,\"uid\":\"u-intl-golden\"},\"mode\":\"direct-proxy (native function calling)\",\"region\":\"INTL\",\"service\":\"codebuddy-go\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+        }
+      ]
+    },
+    {
+      "name": "chat-request",
+      "desc": "入站解析 + 出站体重建（白名单透传 / stream 强制 true / stream_options 缺省 / tool_choice 归一 / $ref 内联 / developer→system / 未知键丢弃）",
+      "region": "CN",
+      "in_p5a_scope": true,
+      "upstream_desc": "恒 200 SSE（干净载荷：无空 content/reasoning 键）",
+      "upstream_spec": {
+        "kind": "fixed",
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "steps": [
+        {
+          "desc": "完整请求（流式）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"developer\",\"content\":\"sys\"},{\"role\":\"user\",\"content\":\"hi\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#/$defs/A\"},\"b\":{\"$ref\":\"https://x/y\"},\"c\":{\"type\":\"string\"}},\"$defs\":{\"A\":{\"type\":\"object\",\"properties\":{\"n\":{\"$ref\":\"#/$defs/A\"}}}}}}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"t\"}},\"temperature\":0.7,\"max_tokens\":4096,\"stream\":true,\"unknown_key\":\"dropped\",\"stream_options\":{\"include_usage\":true},\"reasoning_effort\":\"high\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"max_tokens\":4096,\"messages\":[{\"content\":\"sys\",\"role\":\"system\"},{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"high\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.7,\"tool_choice\":\"required\",\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"properties\":{\"a\":{\"properties\":{\"n\":{\"description\":\"cyclic-ref-removed\",\"type\":\"object\"}},\"type\":\"object\"},\"b\":{\"$ref\":\"https://x/y\"},\"c\":{\"type\":\"string\"}},\"type\":\"object\"}},\"type\":\"function\"}]}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "chat-request-edges",
+      "desc": "入站边界：缺 model / 缺 stream / messages 非对象项 / tool_choice 无 tools / 非流式（下游聚合留给 P5c）",
+      "region": "CN",
+      "in_p5a_scope": true,
+      "upstream_desc": "恒 200 SSE",
+      "upstream_spec": {
+        "kind": "fixed",
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "steps": [
+        {
+          "desc": "缺 model 与 stream（默认 auto / stream 强制 true）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "283",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-5de0d5373fa9\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "body_compare": "outbound-only"
+        },
+        {
+          "desc": "messages 含非对象项",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[1,\"x\",{\"role\":\"user\",\"content\":\"hi\"}]}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "283",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-927f466a5b29\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "body_compare": "outbound-only"
+        },
+        {
+          "desc": "tool_choice 无 tools → 删除",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"tool_choice\":{\"type\":\"auto\"}}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "283",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-fdc97b872b0a\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "body_compare": "outbound-only"
+        },
+        {
+          "desc": "非流式（下游聚合 = P5c）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "283",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-45a9cff341a3\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "body_compare": "outbound-only"
+        },
+        {
+          "desc": "已带 stream_options 不覆盖",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true,\"stream_options\":{\"include_usage\":false}}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[1,\"x\",{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 4,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 5,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":false}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "chat-request-intl",
+      "desc": "INTL 强制首条 system（客户端没带时自动补最小 system；已带则不动）",
+      "region": "INTL",
+      "in_p5a_scope": true,
+      "upstream_desc": "恒 200 SSE",
+      "upstream_spec": {
+        "kind": "fixed",
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "steps": [
+        {
+          "desc": "无 system → 自动补",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"hy3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "282",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-d0bf77306b32\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "body_compare": "outbound-only"
+        },
+        {
+          "desc": "已有 system → 不动",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"hy3\",\"messages\":[{\"role\":\"system\",\"content\":\"s\"},{\"role\":\"user\",\"content\":\"hi\"}]}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "282",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-725ccc15356f\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "body_compare": "outbound-only"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://www.codebuddy.ai/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"You are a helpful assistant.\",\"role\":\"system\"},{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-intl-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "CLI/2.63.2 CodeBuddy/2.63.2",
+            "X-Domain": "workbuddy.ai",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-intl-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://www.codebuddy.ai/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"s\",\"role\":\"system\"},{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-intl-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "CLI/2.63.2 CodeBuddy/2.63.2",
+            "X-Domain": "workbuddy.ai",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-intl-golden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "chat-badjson",
+      "desc": "入站解析错误的逐字文案（Go json.Unmarshal 的 scanner 文案）",
+      "region": "CN",
+      "in_p5a_scope": true,
+      "upstream_desc": "不应被调用",
+      "upstream_spec": {
+        "kind": "fixed",
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "steps": [
+        {
+          "desc": "空体",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "87",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: unexpected end of JSON input\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "只有空白",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "   ",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "87",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: unexpected end of JSON input\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "截断对象",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "87",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: unexpected end of JSON input\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "键无冒号",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\" 1}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "97",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: invalid character '1' after object key\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "值非法",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\": tru}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "112",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: invalid character '}' in literal true (expecting 'e')\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "顶层数组",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "[1,2]",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "133",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: json: cannot unmarshal array into Go value of type map[string]interface {}\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "顶层字符串",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "\"x\"",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "134",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: json: cannot unmarshal string into Go value of type map[string]interface {}\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "顶层数字",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "42",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "134",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: json: cannot unmarshal number into Go value of type map[string]interface {}\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "尾随数据",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[]}x",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "102",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: invalid character 'x' after top-level value\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "尾随 JSON",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[]}{\"a\":1}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "102",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: invalid character '{' after top-level value\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "对象尾逗号",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[],}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "123",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: invalid character '}' looking for beginning of object key string\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "数组尾逗号",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[1,]}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "111",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: invalid character ']' looking for beginning of value\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "字符串未闭合",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[{\"role\":\"user\",\"content\":\"abc}]}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "87",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: unexpected end of JSON input\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "非法转义",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[{\"role\":\"user\",\"content\":\"\\q\"}]}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "102",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: invalid character 'q' in string escape code\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "控制字符",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[{\"role\":\"user\",\"content\":\"a\nb\"}]}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "100",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: invalid character '\\\\n' in string literal\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "数字溢出",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[],\"max_tokens\":1e999}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "124",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"bad json: json: cannot unmarshal number 1e999 into Go value of type float64\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "数字下溢不算错",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":1e-999}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "283",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792010775,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-73329db04e53\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n",
+          "body_compare": "outbound-only"
+        },
+        {
+          "desc": "重复键后者生效",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"a\",\"model\":\"b\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        },
+        {
+          "desc": "null 体 → messages is required",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "null",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "69",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"messages is required\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "空对象 → messages is required",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "69",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"messages is required\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "messages 为对象 → messages is required",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":{}}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "69",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"messages is required\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "messages 为 null → messages is required",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":null}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "69",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"messages is required\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "messages 空数组 → messages is required",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"messages\":[]}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "69",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"messages is required\",\"type\":\"upstream_error\"}}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"max_tokens\":0,\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"b\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "chat-upstream-errors",
+      "desc": "上游非 200 如实透传（writeErr 形状：状态码 + error.message + type=upstream_error）",
+      "region": "CN",
+      "in_p5a_scope": true,
+      "upstream_desc": "依次 400/500/429/403（429 报文含 Quota exceeded + 重置时点）",
+      "upstream_spec": {
+        "kind": "sequence",
+        "items": [
+          {
+            "kind": "",
+            "status": 400,
+            "body": "{\"code\":11101,\"msg\":\"param invalid\"}",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          {
+            "kind": "",
+            "status": 500,
+            "body": "boom",
+            "headers": {
+              "Content-Type": "text/plain"
+            }
+          },
+          {
+            "kind": "",
+            "status": 429,
+            "body": "{\"code\":6004,\"msg\":\"Quota exceeded, will reset at 2026-10-15 06:20:02 UTC+8\"}",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          {
+            "kind": "",
+            "status": 403,
+            "body": "{\"code\":11128,\"msg\":\"Illegal API invocation from an unapproved channel\"}",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "desc": "上游 400 11101",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "91",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":11101,\\\"msg\\\":\\\"param invalid\\\"}\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "上游 500 文本",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 500,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "53",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"boom\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "上游 429 配额报文",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 429,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "132",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":6004,\\\"msg\\\":\\\"Quota exceeded, will reset at 2026-10-15 06:20:02 UTC+8\\\"}\",\"type\":\"upstream_error\"}}\n"
+        },
+        {
+          "desc": "上游 403 11128",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 403,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "127",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":11128,\\\"msg\\\":\\\"Illegal API invocation from an unapproved channel\\\"}\",\"type\":\"upstream_error\"}}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 4,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "chat-11133-retry",
+      "desc": "11133 退避重试（上限 2 次：800ms/1600ms）后成功；每次 11133 都落一份现场",
+      "region": "CN",
+      "in_p5a_scope": true,
+      "upstream_desc": "前两次 400 11133，第三次 200 SSE",
+      "upstream_spec": {
+        "kind": "sequence",
+        "items": [
+          {
+            "kind": "",
+            "status": 400,
+            "body": "{\"code\":11133,\"msg\":\"Invalid request parameters\"}",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          {
+            "kind": "",
+            "status": 400,
+            "body": "{\"code\":11133,\"msg\":\"Invalid request parameters\"}",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          {
+            "kind": "fixed",
+            "status": 200,
+            "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+            "headers": {
+              "Content-Type": "text/event-stream"
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "desc": "11133×2 → 200",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ],
+      "diag_files": [
+        {
+          "name": "diag-11133-1792010775469494200.json",
+          "size": 117,
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+        },
+        {
+          "name": "diag-11133-1792010776270774900.json",
+          "size": 117,
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+        }
+      ],
+      "diag_note": "重试退避耗时 2.40s（下界 2.4s）"
+    },
+    {
+      "name": "chat-11133-exhausted",
+      "desc": "11133 恒返回：共 3 次尝试（1+2 重试）后如实透传；三份现场",
+      "region": "CN",
+      "in_p5a_scope": true,
+      "upstream_desc": "恒 400 11133",
+      "upstream_spec": {
+        "kind": "fixed",
+        "status": 400,
+        "body": "{\"code\":11133,\"msg\":\"Invalid request parameters\"}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "steps": [
+        {
+          "desc": "11133 恒拒 → 透传",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "104",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":11133,\\\"msg\\\":\\\"Invalid request parameters\\\"}\",\"type\":\"upstream_error\"}}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ],
+      "diag_files": [
+        {
+          "name": "diag-11133-1792010777879718000.json",
+          "size": 117,
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+        },
+        {
+          "name": "diag-11133-1792010778680592000.json",
+          "size": 117,
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+        },
+        {
+          "name": "diag-11133-1792010780282171700.json",
+          "size": 117,
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+        }
+      ]
+    },
+    {
+      "name": "chat-11133-diagcap",
+      "desc": "数据目录已有 10 份现场 → 不再落新文件（上限 10 份）",
+      "region": "CN",
+      "in_p5a_scope": true,
+      "upstream_desc": "恒 400 11133",
+      "upstream_spec": {
+        "kind": "fixed",
+        "status": 400,
+        "body": "{\"code\":11133}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "steps": [
+        {
+          "desc": "满额后不落盘",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 400,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "65",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":11133}\",\"type\":\"upstream_error\"}}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-golden",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "codebuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-golden"
+          }
+        }
+      ],
+      "diag_files": [
+        {
+          "name": "diag-11133-00000000000000000000.json",
+          "size": 10,
+          "body": "{\"seed\":0}"
+        },
+        {
+          "name": "diag-11133-00000000000000000001.json",
+          "size": 10,
+          "body": "{\"seed\":1}"
+        },
+        {
+          "name": "diag-11133-00000000000000000002.json",
+          "size": 10,
+          "body": "{\"seed\":2}"
+        },
+        {
+          "name": "diag-11133-00000000000000000003.json",
+          "size": 10,
+          "body": "{\"seed\":3}"
+        },
+        {
+          "name": "diag-11133-00000000000000000004.json",
+          "size": 10,
+          "body": "{\"seed\":4}"
+        },
+        {
+          "name": "diag-11133-00000000000000000005.json",
+          "size": 10,
+          "body": "{\"seed\":5}"
+        },
+        {
+          "name": "diag-11133-00000000000000000006.json",
+          "size": 10,
+          "body": "{\"seed\":6}"
+        },
+        {
+          "name": "diag-11133-00000000000000000007.json",
+          "size": 10,
+          "body": "{\"seed\":7}"
+        },
+        {
+          "name": "diag-11133-00000000000000000008.json",
+          "size": 10,
+          "body": "{\"seed\":8}"
+        },
+        {
+          "name": "diag-11133-00000000000000000009.json",
+          "size": 10,
+          "body": "{\"seed\":9}"
+        }
+      ],
+      "diag_note": "预置 10 份 seed 文件；采集后应仍为 10 份且内容不变",
+      "diag_preseed_from_files": true
+    },
+    {
+      "name": "health-credential-error",
+      "desc": "凭据文件读不出（半截 JSON）→ status=error + message（credential 键不出现）",
+      "region": "CN",
+      "in_p5a_scope": true,
+      "upstream_desc": "不应被调用",
+      "upstream_spec": {
+        "kind": "fixed",
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "cred_seam": {
+        "auth_dirs": [
+          "__AUTHDIR__"
+        ],
+        "kind": "error",
+        "message": "auth 文件格式错误: unexpected end of JSON input"
+      },
+      "steps": [
+        {
+          "desc": "坏凭据 health",
+          "method": "GET",
+          "path": "/health",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "261",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://copilot.tencent.com\",\"message\":\"auth 文件格式错误: unexpected end of JSON input\",\"mode\":\"direct-proxy (native function calling)\",\"region\":\"CN\",\"service\":\"codebuddy-go\",\"status\":\"error\",\"uptimeSec\":0}\n"
+        }
+      ]
+    }
+  ]
+}
