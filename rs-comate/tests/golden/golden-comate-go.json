@@ -1,0 +1,3091 @@
+{
+ "chunks": [
+  {
+   "id": "chunk-text",
+   "kind": "text",
+   "delta": "甲",
+   "id_arg": "chatcmpl-comate-1",
+   "model_arg": "auto",
+   "created": 1700000000,
+   "out": "{\"choices\":[{\"delta\":{\"content\":\"甲\"},\"finish_reason\":null,\"index\":0}],\"created\":1700000000,\"id\":\"chatcmpl-comate-1\",\"model\":\"auto\",\"object\":\"chat.completion.chunk\"}"
+  },
+  {
+   "id": "chunk-thinking",
+   "kind": "reasoning",
+   "delta": "想",
+   "id_arg": "chatcmpl-comate-2",
+   "model_arg": "glm-5.3",
+   "created": 1700000001,
+   "out": "{\"choices\":[{\"delta\":{\"reasoning_content\":\"想\"},\"finish_reason\":null,\"index\":0}],\"created\":1700000001,\"id\":\"chatcmpl-comate-2\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}"
+  },
+  {
+   "id": "chunk-stop",
+   "kind": "text",
+   "finish": "stop",
+   "id_arg": "chatcmpl-comate-3",
+   "model_arg": "auto",
+   "created": 1700000002,
+   "out": "{\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1700000002,\"id\":\"chatcmpl-comate-3\",\"model\":\"auto\",\"object\":\"chat.completion.chunk\"}"
+  },
+  {
+   "id": "chunk-thinking-html",
+   "kind": "reasoning",
+   "delta": "\u003ca\u003e \u0026 \"b\" \\c",
+   "id_arg": "chatcmpl-comate-4",
+   "model_arg": "auto",
+   "created": 1700000003,
+   "out": "{\"choices\":[{\"delta\":{\"reasoning_content\":\"\\u003ca\\u003e \\u0026 \\\"b\\\" \\\\c\"},\"finish_reason\":null,\"index\":0}],\"created\":1700000003,\"id\":\"chatcmpl-comate-4\",\"model\":\"auto\",\"object\":\"chat.completion.chunk\"}"
+  },
+  {
+   "id": "chunk-text-html",
+   "kind": "text",
+   "delta": "\u003cfinal\u003ex \u0026 y\u003c/final\u003e",
+   "id_arg": "chatcmpl-comate-5",
+   "model_arg": "auto",
+   "created": 1700000004,
+   "out": "{\"choices\":[{\"delta\":{\"content\":\"\\u003cfinal\\u003ex \\u0026 y\\u003c/final\\u003e\"},\"finish_reason\":null,\"index\":0}],\"created\":1700000004,\"id\":\"chatcmpl-comate-5\",\"model\":\"auto\",\"object\":\"chat.completion.chunk\"}"
+  },
+  {
+   "id": "chunk-text-controls",
+   "kind": "text",
+   "delta": "行一\n行二\t制表\r回车\b\f",
+   "id_arg": "chatcmpl-comate-6",
+   "model_arg": "auto",
+   "created": 1700000005,
+   "out": "{\"choices\":[{\"delta\":{\"content\":\"行一\\n行二\\t制表\\r回车\\b\\f\"},\"finish_reason\":null,\"index\":0}],\"created\":1700000005,\"id\":\"chatcmpl-comate-6\",\"model\":\"auto\",\"object\":\"chat.completion.chunk\"}"
+  },
+  {
+   "id": "chunk-text-u2028",
+   "kind": "text",
+   "delta": "行\u2028分隔\u2029完",
+   "id_arg": "chatcmpl-comate-10",
+   "model_arg": "auto",
+   "created": 1700000009,
+   "out": "{\"choices\":[{\"delta\":{\"content\":\"行\\u2028分隔\\u2029完\"},\"finish_reason\":null,\"index\":0}],\"created\":1700000009,\"id\":\"chatcmpl-comate-10\",\"model\":\"auto\",\"object\":\"chat.completion.chunk\"}"
+  },
+  {
+   "id": "chunk-empty-model",
+   "kind": "text",
+   "delta": "x",
+   "id_arg": "chatcmpl-comate-11",
+   "model_arg": "",
+   "created": 1700000010,
+   "out": "{\"choices\":[{\"delta\":{\"content\":\"x\"},\"finish_reason\":null,\"index\":0}],\"created\":1700000010,\"id\":\"chatcmpl-comate-11\",\"model\":\"\",\"object\":\"chat.completion.chunk\"}"
+  },
+  {
+   "id": "chunk-id-quotes",
+   "kind": "text",
+   "delta": "x",
+   "id_arg": "id\"with\\quotes",
+   "model_arg": "auto",
+   "created": 1700000011,
+   "out": "{\"choices\":[{\"delta\":{\"content\":\"x\"},\"finish_reason\":null,\"index\":0}],\"created\":1700000011,\"id\":\"id\\\"with\\\\quotes\",\"model\":\"auto\",\"object\":\"chat.completion.chunk\"}"
+  },
+  {
+   "id": "complete-basic",
+   "kind": "complete",
+   "content": "答案",
+   "id_arg": "chatcmpl-comate-7",
+   "model_arg": "auto",
+   "created": 1700000006,
+   "out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案\",\"role\":\"assistant\"}}],\"created\":1700000006,\"id\":\"chatcmpl-comate-7\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}"
+  },
+  {
+   "id": "complete-html",
+   "kind": "complete",
+   "content": "\u003cb\u003ea \u0026 b\u003c/b\u003e\n第二行",
+   "id_arg": "chatcmpl-comate-8",
+   "model_arg": "glm-5.3",
+   "created": 1700000007,
+   "out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"\\u003cb\\u003ea \\u0026 b\\u003c/b\\u003e\\n第二行\",\"role\":\"assistant\"}}],\"created\":1700000007,\"id\":\"chatcmpl-comate-8\",\"model\":\"glm-5.3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}"
+  },
+  {
+   "id": "complete-empty",
+   "kind": "complete",
+   "id_arg": "chatcmpl-comate-9",
+   "model_arg": "auto",
+   "created": 1700000008,
+   "out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"\",\"role\":\"assistant\"}}],\"created\":1700000008,\"id\":\"chatcmpl-comate-9\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}"
+  },
+  {
+   "id": "complete-unicode-escape",
+   "kind": "complete",
+   "content": "中文é中",
+   "id_arg": "chatcmpl-comate-12",
+   "model_arg": "auto",
+   "created": 1700000012,
+   "out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"中文é中\",\"role\":\"assistant\"}}],\"created\":1700000012,\"id\":\"chatcmpl-comate-12\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}"
+  }
+ ],
+ "flatten": [
+  {
+   "id": "flat-empty",
+   "in": null,
+   "out": ""
+  },
+  {
+   "id": "flat-unknown-role",
+   "in": [
+    {
+     "content": "T",
+     "role": "tool"
+    }
+   ],
+   "out": "[tool]\nT"
+  },
+  {
+   "id": "flat-trailing-newline",
+   "in": [
+    {
+     "content": "no newline at end",
+     "role": "user"
+    }
+   ],
+   "out": "[User]\nno newline at end"
+  },
+  {
+   "id": "flat-blank-lines",
+   "in": [
+    {
+     "content": "a\n\nb\n",
+     "role": "user"
+    }
+   ],
+   "out": "[User]\na\n\nb"
+  },
+  {
+   "id": "flat-content-null",
+   "in": [
+    {
+     "content": null,
+     "role": "user"
+    }
+   ],
+   "out": "[User]"
+  },
+  {
+   "id": "flat-part-nontext",
+   "in": [
+    {
+     "content": [
+      {
+       "text": 5
+      },
+      {
+       "type": "text"
+      }
+     ],
+     "role": "user"
+    }
+   ],
+   "out": "[User]"
+  },
+  {
+   "id": "flat-empty-message",
+   "in": [
+    {}
+   ],
+   "out": "[]"
+  }
+ ],
+ "health": [
+  {
+   "id": "health-no-license",
+   "ctx": {
+    "license": ""
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "24",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:49 GMT"
+   },
+   "body_raw": "{\"status\":\"no_license\"}\n"
+  },
+  {
+   "id": "health-no-license-post",
+   "ctx": {
+    "license": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "24",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:49 GMT"
+   },
+   "body_raw": "{\"status\":\"no_license\"}\n"
+  },
+  {
+   "id": "health-no-license-null",
+   "ctx": {
+    "license": ""
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "24",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:49 GMT"
+   },
+   "body_raw": "{\"status\":\"no_license\"}\n"
+  },
+  {
+   "id": "health-no-license-null-post",
+   "ctx": {
+    "license": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "24",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:49 GMT"
+   },
+   "body_raw": "{\"status\":\"no_license\"}\n"
+  },
+  {
+   "id": "health-no-license-missing-file",
+   "ctx": {
+    "license": ""
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "24",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:49 GMT"
+   },
+   "body_raw": "{\"status\":\"no_license\"}\n"
+  },
+  {
+   "id": "health-no-license-missing-file-post",
+   "ctx": {
+    "license": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "24",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:49 GMT"
+   },
+   "body_raw": "{\"status\":\"no_license\"}\n"
+  },
+  {
+   "id": "health-bad-json",
+   "ctx": {
+    "license": ""
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "24",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:49 GMT"
+   },
+   "body_raw": "{\"status\":\"no_license\"}\n"
+  },
+  {
+   "id": "health-bad-json-post",
+   "ctx": {
+    "license": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "24",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:49 GMT"
+   },
+   "body_raw": "{\"status\":\"no_license\"}\n"
+  },
+  {
+   "id": "health-with-license",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "49",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:49 GMT"
+   },
+   "body_raw": "{\"service\":\"comate\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+  },
+  {
+   "id": "health-with-license-post",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "49",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:49 GMT"
+   },
+   "body_raw": "{\"service\":\"comate\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+  }
+ ],
+ "meta": {
+  "collected_at": "2026-10-15T01:22:51+08:00",
+  "cwd_sentinel": "C:\\Windows",
+  "fake_zulu_program": "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {\n\tif len(os.Args) \u003e 1 \u0026\u0026 os.Args[1] == \"list-model\" {\n\t\tif logPath := os.Getenv(\"FAKE_ZULU_LOG\"); logPath != \"\" {\n\t\t\tif f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {\n\t\t\t\t_, _ = fmt.Fprintln(f, \"list-model\")\n\t\t\t\t_ = f.Close()\n\t\t\t}\n\t\t}\n\t\tfmt.Print(os.Getenv(\"FAKE_ZULU_LIST\"))\n\t}\n}\n",
+  "go_version": "go1.26.5",
+  "license_sentinel": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+  "list_model_bad": "not json at all",
+  "list_model_json": "[{\"modelId\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"displayName\":\"DeepSeek-V4-Flash\",\"description\":\"x\"},{\"modelId\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\"},{\"modelId\":\"no-suffix-model\"},{\"modelId\":\"_leading-underscore\"}]",
+  "notes": {
+   "downstream": "打网关的跳必须用 clientRaw（绕拦截器 + 不跟随重定向）；用 http.DefaultClient 会被拦截器截走，采回假上游的合成响应",
+   "once": "真 HTTP 路径（真 Server mux + httptest）＋出站请求经 http.DefaultTransport 拦截器合成上游响应",
+   "outbound": "生产 postUpstream 的真实出站字节（拦截器记录），与档 3 同源 body 构造",
+   "routes": "补采：ServeMux 路径清洗重定向 / 404 形状 / OPTIONS / HEAD",
+   "stream": "流式读循环由 #2 采集器从 server.go 机械抽取后采（见 golden-comate-stream-go.json）",
+   "volatile": "created / id / uptimeSec 每次运行都不同，回放时按正则归一化",
+   "zulu_calls": "每用例的假 zulu 调用次数（models 段的 ctx.zulu_calls；证明 10 分钟模型缓存是否短路）"
+  },
+  "package": "internal/comate",
+  "part": "1-baseline",
+  "sources": {
+   "chunk": "internal/comate/translate.go:47-96",
+   "complete": "internal/comate/translate.go:99-118",
+   "cwd": "internal/clientcwd/cwd.go:20-68",
+   "errwriter": "internal/comate/server.go:221-227",
+   "flatten": "internal/comate/translate.go:11-44",
+   "handler": "internal/comate/server.go:237-464",
+   "models": "internal/comate/server.go:130-211",
+   "postupst": "internal/comate/server.go:229-234",
+   "readfull": "internal/comate/server.go:320-350",
+   "zulu": "internal/comate/zulu.go:24-148"
+  },
+  "upstream_base": "http://127.0.0.1:8792"
+ },
+ "models": [
+  {
+   "id": "models-live#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "[{\"modelId\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"displayName\":\"DeepSeek-V4-Flash\",\"description\":\"x\"},{\"modelId\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\"},{\"modelId\":\"no-suffix-model\"},{\"modelId\":\"_leading-underscore\"}]",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "286",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:50 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Flash\",\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"no-suffix-model\",\"object\":\"model\"},{\"id\":\"_leading-underscore\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-fallback-no-license#0",
+   "ctx": {
+    "license": "",
+    "list": "[{\"modelId\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"displayName\":\"DeepSeek-V4-Flash\",\"description\":\"x\"},{\"modelId\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\"},{\"modelId\":\"no-suffix-model\"},{\"modelId\":\"_leading-underscore\"}]",
+    "zulu": true,
+    "zulu_calls": ""
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "674",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:50 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"deepseek-v4-pro\",\"object\":\"model\"},{\"id\":\"glm-4.7-fc\",\"object\":\"model\"},{\"id\":\"glm-5-turbo-fc\",\"object\":\"model\"},{\"id\":\"glm-5.0-fc\",\"object\":\"model\"},{\"id\":\"glm-5.1\",\"object\":\"model\"},{\"id\":\"glm-5.2\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"glm-5.3-flash\",\"object\":\"model\"},{\"id\":\"glm-5v-turbo\",\"object\":\"model\"},{\"id\":\"kimi-k2.5-oneapi\",\"object\":\"model\"},{\"id\":\"kimi-k2.6-oneapi\",\"object\":\"model\"},{\"id\":\"minimax-m2.5-fc\",\"object\":\"model\"},{\"id\":\"minimax-m3\",\"object\":\"model\"},{\"id\":\"minimax-m2.7-fc\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-fallback-no-zulu#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "[{\"modelId\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"displayName\":\"DeepSeek-V4-Flash\",\"description\":\"x\"},{\"modelId\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\"},{\"modelId\":\"no-suffix-model\"},{\"modelId\":\"_leading-underscore\"}]",
+    "zulu": false,
+    "zulu_calls": ""
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "674",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:50 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"deepseek-v4-pro\",\"object\":\"model\"},{\"id\":\"glm-4.7-fc\",\"object\":\"model\"},{\"id\":\"glm-5-turbo-fc\",\"object\":\"model\"},{\"id\":\"glm-5.0-fc\",\"object\":\"model\"},{\"id\":\"glm-5.1\",\"object\":\"model\"},{\"id\":\"glm-5.2\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"glm-5.3-flash\",\"object\":\"model\"},{\"id\":\"glm-5v-turbo\",\"object\":\"model\"},{\"id\":\"kimi-k2.5-oneapi\",\"object\":\"model\"},{\"id\":\"kimi-k2.6-oneapi\",\"object\":\"model\"},{\"id\":\"minimax-m2.5-fc\",\"object\":\"model\"},{\"id\":\"minimax-m3\",\"object\":\"model\"},{\"id\":\"minimax-m2.7-fc\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-fallback-list-error#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "not json at all",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "674",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:50 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"deepseek-v4-pro\",\"object\":\"model\"},{\"id\":\"glm-4.7-fc\",\"object\":\"model\"},{\"id\":\"glm-5-turbo-fc\",\"object\":\"model\"},{\"id\":\"glm-5.0-fc\",\"object\":\"model\"},{\"id\":\"glm-5.1\",\"object\":\"model\"},{\"id\":\"glm-5.2\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"glm-5.3-flash\",\"object\":\"model\"},{\"id\":\"glm-5v-turbo\",\"object\":\"model\"},{\"id\":\"kimi-k2.5-oneapi\",\"object\":\"model\"},{\"id\":\"kimi-k2.6-oneapi\",\"object\":\"model\"},{\"id\":\"minimax-m2.5-fc\",\"object\":\"model\"},{\"id\":\"minimax-m3\",\"object\":\"model\"},{\"id\":\"minimax-m2.7-fc\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-empty-list#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "[]",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "85",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:50 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-cached-second-call#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "[{\"modelId\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"displayName\":\"DeepSeek-V4-Flash\",\"description\":\"x\"},{\"modelId\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\"},{\"modelId\":\"no-suffix-model\"},{\"modelId\":\"_leading-underscore\"}]",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "286",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:50 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Flash\",\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"no-suffix-model\",\"object\":\"model\"},{\"id\":\"_leading-underscore\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-cached-second-call#1",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "[{\"modelId\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"displayName\":\"DeepSeek-V4-Flash\",\"description\":\"x\"},{\"modelId\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\"},{\"modelId\":\"no-suffix-model\"},{\"modelId\":\"_leading-underscore\"}]",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "286",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:50 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Flash\",\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"no-suffix-model\",\"object\":\"model\"},{\"id\":\"_leading-underscore\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-method-mismatch#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "[{\"modelId\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"displayName\":\"DeepSeek-V4-Flash\",\"description\":\"x\"},{\"modelId\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\"},{\"modelId\":\"no-suffix-model\"},{\"modelId\":\"_leading-underscore\"}]",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/models",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "286",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:50 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"display_name\":\"DeepSeek-V4-Flash\",\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"no-suffix-model\",\"object\":\"model\"},{\"id\":\"_leading-underscore\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-empty-and-null-entry#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "[{}, {\"modelId\":null}, {\"modelId\":\"glm-5.3_37c5\",\"displayName\":null}]",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "173",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"id\":\"\",\"object\":\"model\"},{\"id\":\"\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-type-error#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "[{\"modelId\":123}]",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "674",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"deepseek-v4-pro\",\"object\":\"model\"},{\"id\":\"glm-4.7-fc\",\"object\":\"model\"},{\"id\":\"glm-5-turbo-fc\",\"object\":\"model\"},{\"id\":\"glm-5.0-fc\",\"object\":\"model\"},{\"id\":\"glm-5.1\",\"object\":\"model\"},{\"id\":\"glm-5.2\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"glm-5.3-flash\",\"object\":\"model\"},{\"id\":\"glm-5v-turbo\",\"object\":\"model\"},{\"id\":\"kimi-k2.5-oneapi\",\"object\":\"model\"},{\"id\":\"kimi-k2.6-oneapi\",\"object\":\"model\"},{\"id\":\"minimax-m2.5-fc\",\"object\":\"model\"},{\"id\":\"minimax-m3\",\"object\":\"model\"},{\"id\":\"minimax-m2.7-fc\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-not-array#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "{\"modelId\":\"x\"}",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "674",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"deepseek-v4-pro\",\"object\":\"model\"},{\"id\":\"glm-4.7-fc\",\"object\":\"model\"},{\"id\":\"glm-5-turbo-fc\",\"object\":\"model\"},{\"id\":\"glm-5.0-fc\",\"object\":\"model\"},{\"id\":\"glm-5.1\",\"object\":\"model\"},{\"id\":\"glm-5.2\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"glm-5.3-flash\",\"object\":\"model\"},{\"id\":\"glm-5v-turbo\",\"object\":\"model\"},{\"id\":\"kimi-k2.5-oneapi\",\"object\":\"model\"},{\"id\":\"kimi-k2.6-oneapi\",\"object\":\"model\"},{\"id\":\"minimax-m2.5-fc\",\"object\":\"model\"},{\"id\":\"minimax-m3\",\"object\":\"model\"},{\"id\":\"minimax-m2.7-fc\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-blank-list#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "   \n\t ",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "674",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"deepseek-v4-pro\",\"object\":\"model\"},{\"id\":\"glm-4.7-fc\",\"object\":\"model\"},{\"id\":\"glm-5-turbo-fc\",\"object\":\"model\"},{\"id\":\"glm-5.0-fc\",\"object\":\"model\"},{\"id\":\"glm-5.1\",\"object\":\"model\"},{\"id\":\"glm-5.2\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"glm-5.3-flash\",\"object\":\"model\"},{\"id\":\"glm-5v-turbo\",\"object\":\"model\"},{\"id\":\"kimi-k2.5-oneapi\",\"object\":\"model\"},{\"id\":\"kimi-k2.6-oneapi\",\"object\":\"model\"},{\"id\":\"minimax-m2.5-fc\",\"object\":\"model\"},{\"id\":\"minimax-m3\",\"object\":\"model\"},{\"id\":\"minimax-m2.7-fc\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-list-error-twice#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "not json at all",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "674",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"deepseek-v4-pro\",\"object\":\"model\"},{\"id\":\"glm-4.7-fc\",\"object\":\"model\"},{\"id\":\"glm-5-turbo-fc\",\"object\":\"model\"},{\"id\":\"glm-5.0-fc\",\"object\":\"model\"},{\"id\":\"glm-5.1\",\"object\":\"model\"},{\"id\":\"glm-5.2\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"glm-5.3-flash\",\"object\":\"model\"},{\"id\":\"glm-5v-turbo\",\"object\":\"model\"},{\"id\":\"kimi-k2.5-oneapi\",\"object\":\"model\"},{\"id\":\"kimi-k2.6-oneapi\",\"object\":\"model\"},{\"id\":\"minimax-m2.5-fc\",\"object\":\"model\"},{\"id\":\"minimax-m3\",\"object\":\"model\"},{\"id\":\"minimax-m2.7-fc\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-list-error-twice#1",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "not json at all",
+    "zulu": true,
+    "zulu_calls": "list-model\nlist-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "674",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\"},{\"id\":\"deepseek-v4-pro\",\"object\":\"model\"},{\"id\":\"glm-4.7-fc\",\"object\":\"model\"},{\"id\":\"glm-5-turbo-fc\",\"object\":\"model\"},{\"id\":\"glm-5.0-fc\",\"object\":\"model\"},{\"id\":\"glm-5.1\",\"object\":\"model\"},{\"id\":\"glm-5.2\",\"object\":\"model\"},{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"glm-5.3-flash\",\"object\":\"model\"},{\"id\":\"glm-5v-turbo\",\"object\":\"model\"},{\"id\":\"kimi-k2.5-oneapi\",\"object\":\"model\"},{\"id\":\"kimi-k2.6-oneapi\",\"object\":\"model\"},{\"id\":\"minimax-m2.5-fc\",\"object\":\"model\"},{\"id\":\"minimax-m3\",\"object\":\"model\"},{\"id\":\"minimax-m2.7-fc\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-null-list-twice#0",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "null",
+    "zulu": true,
+    "zulu_calls": "list-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "85",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  },
+  {
+   "id": "models-null-list-twice#1",
+   "ctx": {
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "list": "null",
+    "zulu": true,
+    "zulu_calls": "list-model\nlist-model\n"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "85",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"data\":[{\"display_name\":\"Auto-Free\",\"id\":\"auto\",\"object\":\"model\"}],\"object\":\"list\"}\n"
+  }
+ ],
+ "once": [
+  {
+   "id": "once-plain",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"be brief\",\"role\":\"system\"},{\"content\":\"你好\",\"role\":\"user\"}],\"model\":\"gpt-x\"}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "280",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-6315830634421919143\",\"model\":\"gpt-x\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"gpt-x\",\"query\":\"[System]\\nbe brief\\n[User]\\n你好\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-unknown-model",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"some-unknown-model\"}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "292",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-141419007465422301\",\"model\":\"some-unknown-model\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"some-unknown-model\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-no-model",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "279",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-1785981252551709008\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-mode-ask",
+   "ctx": {
+    "mode": "Ask",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "279",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-7229868002442356968\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"mode\":\"Ask\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-cwd-marker",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"Working directory: C:\\\\Windows\\nrest\",\"role\":\"system\"},{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "279",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-2365447580879839485\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\nWorking directory: C:\\\\Windows\\nrest\\n[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-html-content",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"\u003cb\u003e带 \u0026 与 \\\"引号\\\"\u003c/b\u003e\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "317",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"\\u003cb\\u003e带 \\u0026 与 \\\"引号\\\"\\u003c/b\\u003e\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-5661546903759337193\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-empty-content",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "265",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-5446583777066324824\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-missing-content",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"ok\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "265",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-6450748474667943615\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-status-failed",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"task_failed\",\"content\":\"引擎任务失败\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 502,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "67",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"引擎任务失败\",\"type\":\"upstream_error\"}}\n",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-status-failed-no-content",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"task_failed\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 502,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "60",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"task_failed\",\"type\":\"upstream_error\"}}\n",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-sse-cut",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"x\"}]}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 502,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "105",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"上游会话结束但未收到 completed（SSE 中断）\",\"type\":\"upstream_error\"}}\n",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-oversize-line",
+   "ctx": {
+    "mode": "",
+    "rebuild": "prefix + repeat×count + suffix",
+    "sse_omitted_bytes": 1843255,
+    "sse_prefix": "data: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"",
+    "sse_repeat": "长",
+    "sse_repeat_count": 614400,
+    "sse_suffix": "\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 502,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "97",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"上游 SSE 中断: bufio.Scanner: token too long\",\"type\":\"upstream_error\"}}\n",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-http-500",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 502,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "70",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"上游 HTTP 500: boom\",\"type\":\"upstream_error\"}}\n",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-method-mismatch",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/chat/completions"
+   },
+   "status": 405,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "64",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"仅支持 POST\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-bad-body",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{not json"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "137",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: invalid character 'n' looking for beginning of object key string\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-no-license",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 503,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "114",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"未找到 Comate 登录态，请先在 Comate IDE 或 zulu CLI 登录\",\"type\":\"no_license\"}}\n"
+  },
+  {
+   "id": "once-unset-zulu-env",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "279",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-7584694147467212596\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-empty-body",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    }
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "76",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: EOF\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-body-scalar",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "\"hi\""
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "143",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal string into Go value of type comate.chatRequest\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-body-array",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "[1,2]"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "142",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal array into Go value of type comate.chatRequest\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-body-bad-first-char",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "x"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "125",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: invalid character 'x' looking for beginning of value\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-body-bad-key-char",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{1:2}"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "137",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: invalid character '1' looking for beginning of object key string\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-body-truncated",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"role\":\"user\""
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "87",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: unexpected EOF\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-field-model-number",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":123}"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "156",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal number into Go struct field chatRequest.model of type string\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-field-stream-string",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"stream\":\"yes\"}"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "155",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal string into Go struct field chatRequest.stream of type bool\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-field-messages-string",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":\"x\"}"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "167",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal string into Go struct field chatRequest.messages of type []interface {}\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-field-model-then-stream-bad",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":123,\"stream\":\"yes\"}"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "156",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal number into Go struct field chatRequest.model of type string\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-field-messages-null",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"auto\",\"messages\":null}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "279",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-2904835437712291055\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-trailing-garbage",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}TRAILING"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "279",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-2616183663686429073\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-unknown-field",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"extra\":{\"deep\":1}}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "279",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-5558841935515771123\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-uppercase-top-fields",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"MODEL\":\"deepseek-v4-flash\",\"MESSAGES\":[{\"ROLE\":\"user\",\"CONTENT\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "292",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-5881950141097089126\",\"model\":\"deepseek-v4-flash\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"query\":\"[]\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-uppercase-model-only",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"Model\":\"glm-5.3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "281",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-405037317729522870\",\"model\":\"glm-5.3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  },
+  {
+   "id": "once-field-model-object",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":{}}"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "156",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal object into Go struct field chatRequest.model of type string\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-field-model-array",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":[]}"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "155",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal array into Go struct field chatRequest.model of type string\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-field-messages-bool",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":true}"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "165",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal bool into Go struct field chatRequest.messages of type []interface {}\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-field-stream-number",
+   "ctx": {
+    "mode": "",
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"stream\":1}"
+   },
+   "status": 400,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "155",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"请求体解析失败: json: cannot unmarshal number into Go struct field chatRequest.stream of type bool\",\"type\":\"invalid_request\"}}\n"
+  },
+  {
+   "id": "once-duplicate-key-last-wins",
+   "ctx": {
+    "mode": "",
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"答案正文 A\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"model\":\"deepseek-v4-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "292",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"答案正文 A\",\"role\":\"assistant\"}}],\"created\":1791998571,\"id\":\"chatcmpl-comate-4391974794750950246\",\"model\":\"deepseek-v4-flash\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}",
+   "upstream": [
+    {
+     "method": "GET",
+     "url": "http://127.0.0.1:8792/health",
+     "body": ""
+    },
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"query\":\"[User]\\nhi\"}"
+    }
+   ]
+  }
+ ],
+ "out": [
+  {
+   "id": "out-empty-messages",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"\"}"
+  },
+  {
+   "id": "out-single-system",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "S",
+      "role": "system"
+     }
+    ],
+    "mode": "",
+    "model_in": ""
+   },
+   "query": "[System]\nS",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\nS\"}"
+  },
+  {
+   "id": "out-three-roles",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "S",
+      "role": "system"
+     },
+     {
+      "content": "U",
+      "role": "user"
+     },
+     {
+      "content": "A",
+      "role": "assistant"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[System]\nS\n[User]\nU\n[Assistant]\nA",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\nS\\n[User]\\nU\\n[Assistant]\\nA\"}"
+  },
+  {
+   "id": "out-content-parts",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": [
+       {
+        "text": "部分一",
+        "type": "text"
+       },
+       {
+        "image_url": {
+         "url": "http://x/y.png"
+        },
+        "type": "image_url"
+       },
+       {
+        "text": "部分二",
+        "type": "text"
+       }
+      ],
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[User]\n部分一部分二",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\n部分一部分二\"}"
+  },
+  {
+   "id": "out-unknown-role",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "T",
+      "role": "tool"
+     },
+     {
+      "content": "D",
+      "role": "developer"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[tool]\nT\n[developer]\nD",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[tool]\\nT\\n[developer]\\nD\"}"
+  },
+  {
+   "id": "out-ignored-fields",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "带工具",
+      "name": "n",
+      "role": "assistant",
+      "tool_calls": [
+       {
+        "id": "c1"
+       }
+      ]
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[Assistant]\n带工具",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[Assistant]\\n带工具\"}"
+  },
+  {
+   "id": "out-cwd-marker-en",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "Working directory: C:\\Windows\nrest",
+      "role": "system"
+     },
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[System]\nWorking directory: C:\\Windows\nrest\n[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\nWorking directory: C:\\\\Windows\\nrest\\n[User]\\nhi\"}"
+  },
+  {
+   "id": "out-cwd-marker-cn",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "工作目录：C:\\Windows\nrest",
+      "role": "system"
+     },
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[System]\n工作目录：C:\\Windows\nrest\n[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\n工作目录：C:\\\\Windows\\nrest\\n[User]\\nhi\"}"
+  },
+  {
+   "id": "out-cwd-marker-nonexistent",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "Working directory: F:\\AIXM\\no-such-dir-xyz",
+      "role": "system"
+     },
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[System]\nWorking directory: F:\\AIXM\\no-such-dir-xyz\n[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\nWorking directory: F:\\\\AIXM\\\\no-such-dir-xyz\\n[User]\\nhi\"}"
+  },
+  {
+   "id": "out-model-shortname",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "deepseek-v4-flash"
+   },
+   "query": "[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"query\":\"[User]\\nhi\"}"
+  },
+  {
+   "id": "out-model-shortname-casefold",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "GLM-5.3"
+   },
+   "query": "[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+  },
+  {
+   "id": "out-model-exact-id",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3"
+   },
+   "query": "[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+  },
+  {
+   "id": "out-model-unknown",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "some-unknown-model"
+   },
+   "query": "[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "some-unknown-model",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"some-unknown-model\",\"query\":\"[User]\\nhi\"}"
+  },
+  {
+   "id": "out-model-auto-free",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto-free"
+   },
+   "query": "[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto-free",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+  },
+  {
+   "id": "out-mode-ask",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "Ask",
+    "model_in": "auto"
+   },
+   "query": "[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"mode\":\"Ask\",\"query\":\"[User]\\nhi\"}"
+  },
+  {
+   "id": "out-mode-spaces",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "  Plan  ",
+    "model_in": "auto"
+   },
+   "query": "[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"mode\":\"Plan\",\"query\":\"[User]\\nhi\"}"
+  },
+  {
+   "id": "out-content-nonstring",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": 42,
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[User]",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\"}"
+  },
+  {
+   "id": "out-null-message",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     null,
+     {
+      "content": "after-null",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[User]\nafter-null",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nafter-null\"}"
+  },
+  {
+   "id": "out-empty-role",
+   "ctx": {
+    "lic_len": 45,
+    "license": "COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL",
+    "messages": [
+     {
+      "content": "no role"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[]\nno role",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[]\\nno role\"}"
+  },
+  {
+   "id": "out-license-quotes",
+   "ctx": {
+    "lic_len": 16,
+    "license": "sent\"with\\quotes",
+    "messages": [
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"sent\\\"with\\\\quotes\",\"query\":\"[User]\\nhi\"}"
+  },
+  {
+   "id": "out-no-license",
+   "ctx": {
+    "lic_len": 0,
+    "license": "",
+    "messages": [
+     {
+      "content": "hi",
+      "role": "user"
+     }
+    ],
+    "mode": "",
+    "model_in": "auto"
+   },
+   "query": "[User]\nhi",
+   "resolved_cwd": "C:\\Windows",
+   "resolved_model": "auto",
+   "body_raw": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"\",\"query\":\"[User]\\nhi\"}"
+  }
+ ],
+ "readfull": [
+  {
+   "id": "read-ok",
+   "ctx": {
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"ignored\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"正文\"}\n\n"
+   },
+   "hop": {
+    "method": "",
+    "path": ""
+   },
+   "status": 6,
+   "resp_headers": {
+    "content": "正文",
+    "err": ""
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "read-first-completed-wins",
+   "ctx": {
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"第一\"}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"第二\"}\n\n"
+   },
+   "hop": {
+    "method": "",
+    "path": ""
+   },
+   "status": 6,
+   "resp_headers": {
+    "content": "第一",
+    "err": ""
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "read-status-failed",
+   "ctx": {
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"task_failed\",\"content\":\"失败正文\"}\n\n"
+   },
+   "hop": {
+    "method": "",
+    "path": ""
+   },
+   "status": 0,
+   "resp_headers": {
+    "content": "",
+    "err": "失败正文"
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "read-status-failed-no-content",
+   "ctx": {
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"task_failed\"}\n\n"
+   },
+   "hop": {
+    "method": "",
+    "path": ""
+   },
+   "status": 0,
+   "resp_headers": {
+    "content": "",
+    "err": "task_failed"
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "read-no-completed",
+   "ctx": {
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[]}\n\n"
+   },
+   "hop": {
+    "method": "",
+    "path": ""
+   },
+   "status": 0,
+   "resp_headers": {
+    "content": "",
+    "err": "上游会话结束但未收到 completed（SSE 中断）"
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "read-empty",
+   "ctx": {
+    "sse": ""
+   },
+   "hop": {
+    "method": "",
+    "path": ""
+   },
+   "status": 0,
+   "resp_headers": {
+    "content": "",
+    "err": "上游会话结束但未收到 completed（SSE 中断）"
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "read-noise",
+   "ctx": {
+    "sse": ": c\n\nevent: x\ndata: not-json\n\n"
+   },
+   "hop": {
+    "method": "",
+    "path": ""
+   },
+   "status": 0,
+   "resp_headers": {
+    "content": "",
+    "err": "上游会话结束但未收到 completed（SSE 中断）"
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "read-oversize",
+   "ctx": {
+    "rebuild": "prefix + repeat×count + suffix",
+    "sse_omitted_bytes": 1843255,
+    "sse_prefix": "data: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"",
+    "sse_repeat": "长",
+    "sse_repeat_count": 614400,
+    "sse_suffix": "\"}\n\n"
+   },
+   "hop": {
+    "method": "",
+    "path": ""
+   },
+   "status": 0,
+   "resp_headers": {
+    "content": "",
+    "err": "上游 SSE 中断: bufio.Scanner: token too long"
+   },
+   "body_raw": ""
+  }
+ ],
+ "routes": [
+  {
+   "id": "route-get-_health_",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/health/"
+   },
+   "status": 404,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "19",
+    "content-type": "text/plain; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "x-content-type-options": "nosniff"
+   },
+   "body_raw": "404 page not found\n"
+  },
+  {
+   "id": "route-get-_v1_models_",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/models/"
+   },
+   "status": 404,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "19",
+    "content-type": "text/plain; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "x-content-type-options": "nosniff"
+   },
+   "body_raw": "404 page not found\n"
+  },
+  {
+   "id": "route-post-_v1_chat_completions_",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions/",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\"}"
+   },
+   "status": 404,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "19",
+    "content-type": "text/plain; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "x-content-type-options": "nosniff"
+   },
+   "body_raw": "404 page not found\n"
+  },
+  {
+   "id": "route-get-__v1_models",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "//v1/models"
+   },
+   "status": 307,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "46",
+    "content-type": "text/html; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "location": "/v1/models"
+   },
+   "body_raw": "\u003ca href=\"/v1/models\"\u003eTemporary Redirect\u003c/a\u003e.\n\n"
+  },
+  {
+   "id": "route-get-_nope",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/nope"
+   },
+   "status": 404,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "19",
+    "content-type": "text/plain; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "x-content-type-options": "nosniff"
+   },
+   "body_raw": "404 page not found\n"
+  },
+  {
+   "id": "route-get-_v1_nope",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/v1/nope"
+   },
+   "status": 404,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "19",
+    "content-type": "text/plain; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "x-content-type-options": "nosniff"
+   },
+   "body_raw": "404 page not found\n"
+  },
+  {
+   "id": "route-options-_health",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "OPTIONS",
+    "path": "/health"
+   },
+   "status": 204,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "route-head-_health",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "HEAD",
+    "path": "/health"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "49",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "route-head-_v1_models",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "HEAD",
+    "path": "/v1/models"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "286",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT"
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "route-head-_nope",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "HEAD",
+    "path": "/nope"
+   },
+   "status": 404,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "19",
+    "content-type": "text/plain; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "x-content-type-options": "nosniff"
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "route-head-__v1_models",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "HEAD",
+    "path": "//v1/models"
+   },
+   "status": 307,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-type": "text/html; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "location": "/v1/models"
+   },
+   "body_raw": ""
+  },
+  {
+   "id": "route-get-_a__b_._c_..",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/a//b/./c/.."
+   },
+   "status": 307,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "40",
+    "content-type": "text/html; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "location": "/a/b"
+   },
+   "body_raw": "\u003ca href=\"/a/b\"\u003eTemporary Redirect\u003c/a\u003e.\n\n"
+  },
+  {
+   "id": "route-get-_a__b_._c_.._",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/a//b/./c/../"
+   },
+   "status": 307,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "41",
+    "content-type": "text/html; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "location": "/a/b/"
+   },
+   "body_raw": "\u003ca href=\"/a/b/\"\u003eTemporary Redirect\u003c/a\u003e.\n\n"
+  },
+  {
+   "id": "route-get-_health_.._v1_models",
+   "ctx": {
+    "zulu_calls": "n/a"
+   },
+   "hop": {
+    "method": "GET",
+    "path": "/health/../v1/models"
+   },
+   "status": 307,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "content-length": "46",
+    "content-type": "text/html; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 17:22:51 GMT",
+    "location": "/v1/models"
+   },
+   "body_raw": "\u003ca href=\"/v1/models\"\u003eTemporary Redirect\u003c/a\u003e.\n\n"
+  }
+ ],
+ "wire": [
+  {
+   "id": "out-empty-messages-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-single-system-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\nS\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-three-roles-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\nS\\n[User]\\nU\\n[Assistant]\\nA\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-content-parts-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\n部分一部分二\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-unknown-role-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[tool]\\nT\\n[developer]\\nD\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-ignored-fields-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[Assistant]\\n带工具\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-cwd-marker-en-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\nWorking directory: C:\\\\Windows\\nrest\\n[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-cwd-marker-cn-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\n工作目录：C:\\\\Windows\\nrest\\n[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-cwd-marker-nonexistent-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[System]\\nWorking directory: F:\\\\AIXM\\\\no-such-dir-xyz\\n[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-model-shortname-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"deepseek-v4-flash_a8668ea86c3d40e7ad1f8ee45715d447\",\"query\":\"[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-model-shortname-casefold-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-model-exact-id-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-model-unknown-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"some-unknown-model\",\"query\":\"[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-model-auto-free-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-mode-ask-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"mode\":\"Ask\",\"query\":\"[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-mode-spaces-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"mode\":\"Plan\",\"query\":\"[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-content-nonstring-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-null-message-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[User]\\nafter-null\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-empty-role-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"query\":\"[]\\nno role\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-license-quotes-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"sent\\\"with\\\\quotes\",\"query\":\"[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  },
+  {
+   "id": "out-no-license-wire",
+   "ctx": null,
+   "hop": {
+    "method": "POST",
+    "path": "http://127.0.0.1:8792/api/v1/conversations/init",
+    "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"\",\"query\":\"[User]\\nhi\"}"
+   },
+   "status": 0,
+   "resp_headers": {},
+   "body_raw": ""
+  }
+ ]
+}

@@ -1,0 +1,2 @@
+# cargo 构建产物不入库（仓库根 .gitignore 没盖住 target/）
+/target/

@@ -1,0 +1,24 @@
+[package]
+name = "rs-comate"
+version = "0.1.0"
+edition = "2021"
+description = "ProxyDeck Comate 插件 Rust 重写（绞杀者路线 P2，测试端口用，未接入 GUI）"
+
+[[bin]]
+name = "rs-comate"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+# 上游只可能是 127.0.0.1:8792 的明文 HTTP，TLS 栈在本阶段不参与；显式列特性避免
+# 将来上游改默认时静默换栈（TLS 指纹差异是圆桌点名的风险项，本项目一律显式声明）。
+reqwest = { version = "0.13", features = ["default-tls", "http2", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync"] }
+
+[profile.release]
+opt-level = 2

@@ -1,0 +1,527 @@
+{
+ "cases": [
+  {
+   "id": "stream-text",
+   "ctx": {
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"甲\"},{\"kind\":\"text-delta\",\"delta\":\"乙\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "data: {\"choices\":[{\"delta\":{\"content\":\"甲\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-8368607988015238683\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"乙\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-8368607988015238683\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-8368607988015238683\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"甲\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"乙\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"甲\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"乙\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_committed": true
+  },
+  {
+   "id": "stream-thinking-then-text",
+   "ctx": {
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"thinking-delta\",\"delta\":\"想 A\"}]}\n\ndata: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"答 A\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"想 A\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-6482975382566307036\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"答 A\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-6482975382566307036\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-6482975382566307036\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"想 A\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"答 A\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_normalized": "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"想 A\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"答 A\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_committed": true
+  },
+  {
+   "id": "stream-mixed-one-batch",
+   "ctx": {
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"thinking-delta\",\"delta\":\"想 1\"},{\"kind\":\"text-delta\",\"delta\":\"文 1\"},{\"kind\":\"thinking-delta\",\"delta\":\"想 2\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"想 1\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-8756957796172437916\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"文 1\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-8756957796172437916\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"reasoning_content\":\"想 2\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-8756957796172437916\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-8756957796172437916\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"想 1\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"文 1\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"reasoning_content\":\"想 2\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_normalized": "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"想 1\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"文 1\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"reasoning_content\":\"想 2\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_committed": true
+  },
+  {
+   "id": "stream-element-add",
+   "ctx": {
+    "sse": "data: {\"kind\":\"element-add\",\"element\":{\"type\":\"TEXT\",\"content\":\"\u003cfinal\u003e残渣\u003c/final\u003e\"}}\n\ndata: {\"kind\":\"element-add\",\"element\":{\"type\":\"REASON\",\"content\":\"累积思考不透\"}}\n\ndata: {\"kind\":\"element-add\",\"element\":{\"type\":\"TEXT\",\"content\":\"\"}}\n\ndata: {\"kind\":\"element-add\"}\n\ndata: {\"kind\":\"element-add\",\"element\":null}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "data: {\"choices\":[{\"delta\":{\"content\":\"\\u003cfinal\\u003e残渣\\u003c/final\\u003e\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-7502755311252132007\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-7502755311252132007\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"\\u003cfinal\\u003e残渣\\u003c/final\\u003e\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"\\u003cfinal\\u003e残渣\\u003c/final\\u003e\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_committed": true
+  },
+  {
+   "id": "stream-empty-delta-skipped",
+   "ctx": {
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"\"},{\"kind\":\"unknown-kind\",\"delta\":\"X\"},{\"kind\":\"text-delta\",\"delta\":\"只有我\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "data: {\"choices\":[{\"delta\":{\"content\":\"只有我\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-6687413309139222684\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-6687413309139222684\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"只有我\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"只有我\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_committed": true
+  },
+  {
+   "id": "stream-sse-noise",
+   "ctx": {
+    "sse": ": comment\n\nevent: ping\ndata: not-json\n\ndata:[{\"kind\":\"text-delta\"}]\n\ndata:    {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"噪声后\"}]}   \n\ndata: {\"kind\":\"completed\",\"status\":\"ok\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "data: {\"choices\":[{\"delta\":{\"content\":\"噪声后\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-2657740935377691503\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-2657740935377691503\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"噪声后\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"噪声后\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_committed": true
+  },
+  {
+   "id": "stream-html-escape",
+   "ctx": {
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"\u003ca\u003e \u0026 \\\"b\\\"\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"ok\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "data: {\"choices\":[{\"delta\":{\"content\":\"\\u003ca\\u003e \\u0026 \\\"b\\\"\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-6724874351219045540\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-6724874351219045540\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"\\u003ca\\u003e \\u0026 \\\"b\\\"\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"\\u003ca\\u003e \\u0026 \\\"b\\\"\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_committed": true
+  },
+  {
+   "id": "stream-error-before-output",
+   "ctx": {
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"task_failed\",\"content\":\"引擎报错：任务失败\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 502,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-length": "76",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"引擎报错：任务失败\",\"type\":\"upstream_error\"}}\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "{\"error\":{\"message\":\"引擎报错：任务失败\",\"type\":\"upstream_error\"}}\n",
+   "loop_normalized": "{\"error\":{\"message\":\"引擎报错：任务失败\",\"type\":\"upstream_error\"}}\n",
+   "loop_committed": false
+  },
+  {
+   "id": "stream-error-before-output-no-content",
+   "ctx": {
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"task_failed\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 502,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-length": "60",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"task_failed\",\"type\":\"upstream_error\"}}\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "{\"error\":{\"message\":\"task_failed\",\"type\":\"upstream_error\"}}\n",
+   "loop_normalized": "{\"error\":{\"message\":\"task_failed\",\"type\":\"upstream_error\"}}\n",
+   "loop_committed": false
+  },
+  {
+   "id": "stream-error-after-output",
+   "ctx": {
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"前半段\"}]}\n\ndata: {\"kind\":\"completed\",\"status\":\"failed\",\"content\":\"中途炸了\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "data: {\"choices\":[{\"delta\":{\"content\":\"前半段\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-9163099980602608658\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-9163099980602608658\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"前半段\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"前半段\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_committed": true
+  },
+  {
+   "id": "stream-sse-cut-before-output",
+   "ctx": {
+    "sse": ""
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 502,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-length": "66",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"上游 SSE 中断\",\"type\":\"upstream_error\"}}\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "{\"error\":{\"message\":\"上游 SSE 中断\",\"type\":\"upstream_error\"}}\n",
+   "loop_normalized": "{\"error\":{\"message\":\"上游 SSE 中断\",\"type\":\"upstream_error\"}}\n",
+   "loop_committed": false
+  },
+  {
+   "id": "stream-sse-cut-after-output",
+   "ctx": {
+    "sse": "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"只有一个\"}]}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "data: {\"choices\":[{\"delta\":{\"content\":\"只有一个\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-6434929106375773442\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-6434929106375773442\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"只有一个\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"只有一个\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_committed": true
+  },
+  {
+   "id": "stream-completed-then-more",
+   "ctx": {
+    "sse": "data: {\"kind\":\"completed\",\"status\":\"ok\"}\n\ndata: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"text-delta\",\"delta\":\"完成后还有\"}]}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 200,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "data: {\"choices\":[{\"delta\":{\"content\":\"完成后还有\"},\"finish_reason\":null,\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-8468480887981034459\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1791997745,\"id\":\"chatcmpl-comate-8468480887981034459\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"完成后还有\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_normalized": "data: {\"choices\":[{\"delta\":{\"content\":\"完成后还有\"},\"finish_reason\":null,\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":\u003cCREATED\u003e,\"id\":\"\u003cID\u003e\",\"model\":\"glm-5.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+   "loop_committed": true
+  },
+  {
+   "id": "stream-oversize-line",
+   "ctx": {
+    "rebuild": "prefix + repeat×count + suffix",
+    "sse_omitted_bytes": 1843255,
+    "sse_prefix": "data: {\"kind\":\"completed\",\"status\":\"ok\",\"content\":\"",
+    "sse_repeat": "长",
+    "sse_repeat_count": 614400,
+    "sse_suffix": "\"}\n\n"
+   },
+   "hop": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "headers": {
+     "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"glm-5.3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+   },
+   "status": 502,
+   "resp_headers": {
+    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-origin": "*",
+    "cache-control": "no-cache",
+    "connection": "keep-alive",
+    "content-length": "66",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 17:09:05 GMT"
+   },
+   "body_raw": "{\"error\":{\"message\":\"上游 SSE 中断\",\"type\":\"upstream_error\"}}\n",
+   "upstream": [
+    {
+     "method": "POST",
+     "url": "http://127.0.0.1:8792/api/v1/conversations/init",
+     "body": "{\"cwd\":\"C:\\\\Windows\",\"license\":\"COMATE-LICENSE-SENTINEL-NOT-A-REAL-CREDENTIAL\",\"model\":\"glm-5.3_37c550fc6d5b4fb2825abc2c1c88a6b3\",\"query\":\"[User]\\nhi\"}"
+    }
+   ],
+   "normalized": "{\"error\":{\"message\":\"上游 SSE 中断\",\"type\":\"upstream_error\"}}\n",
+   "loop_normalized": "{\"error\":{\"message\":\"上游 SSE 中断\",\"type\":\"upstream_error\"}}\n",
+   "loop_committed": false
+  }
+ ],
+ "meta": {
+  "collected_at": "2026-10-15T01:09:05+08:00",
+  "generator": ".work/rust-rewrite/mkcomate-splice.mjs",
+  "loop_stats": {
+   "continue": 3,
+   "emitThinking_c": 1,
+   "emit_c": 1,
+   "emit_element": 1
+  },
+  "output_contract": "body_raw 是走完生产 handleChatStream 的下游字节（含 finish_reason=stop 与 [DONE]）；normalized 是它把 id/created 归一化后的形态；loop_normalized 是抽取循环同一套归一化的产出，两者必须逐字节相同（采集器当场断言，committed=false 的用例是 502 错误 JSON，归一化是恒等变换）",
+  "package": "internal/comate",
+  "part": "2-stream-loop",
+  "source_file": "internal/comate/server.go",
+  "stream_loop_begin": "okDone := false",
+  "stream_loop_end": "}\n\tif upstreamErr != \"\" {",
+  "stream_loop_lines": 41,
+  "stream_loop_text": "\tokDone := false\n\tupstreamErr := \"\"\n\tscanner := bufio.NewScanner(resp.Body)\n\tscanner.Buffer(make([]byte, 64*1024), 1024*1024)\n\tfor scanner.Scan() {\n\t\tline := strings.TrimSpace(scanner.Text())\n\t\tif !strings.HasPrefix(line, \"data:\") {\n\t\t\tcontinue\n\t\t}\n\t\tvar ev sseEvent\n\t\tif json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, \"data:\"))), \u0026ev) != nil {\n\t\t\tcontinue\n\t\t}\n\t\tswitch ev.Kind {\n\t\tcase \"delta-batch\":\n\t\t\tfor _, c := range ev.Chunks {\n\t\t\t\tif c.Delta == \"\" {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tswitch c.Kind {\n\t\t\t\tcase \"text-delta\":\n\t\t\t\t\temit(c.Delta)\n\t\t\t\tcase \"thinking-delta\":\n\t\t\t\t\temitThinking(c.Delta)\n\t\t\t\t}\n\t\t\t}\n\t\tcase \"element-add\":\n\t\t\tif ev.Element != nil \u0026\u0026 ev.Element.Type == \"TEXT\" \u0026\u0026 ev.Element.Content != \"\" {\n\t\t\t\temit(ev.Element.Content)\n\t\t\t}\n\t\tcase \"completed\":\n\t\t\tif ev.Status == \"ok\" {\n\t\t\t\tokDone = true\n\t\t\t} else {\n\t\t\t\tupstreamErr = ev.Status\n\t\t\t\tif ev.Content != \"\" {\n\t\t\t\t\tupstreamErr = ev.Content\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n",
+  "upstream_injection": "http.DefaultTransport 拦截器：postUpstream 用默认 Transport，故能拦到",
+  "volatile_fields": [
+   "created",
+   "id",
+   "uptimeSec"
+  ]
+ }
+}
