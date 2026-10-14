@@ -1,0 +1,38 @@
+[package]
+name = "rs-vibex"
+version = "0.1.0"
+edition = "2021"
+description = "ProxyDeck VibeX 插件 Rust 重写（绞杀者路线 P4，测试端口用，未接入 GUI）"
+
+[[bin]]
+name = "rs-vibex"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+# 上游只有 https://vibex.runninghub.cn 一条出站（REST + REST 探活）；TLS 栈显式声明，
+# 避免将来上游改默认时静默换栈（TLS 指纹差异是圆桌点名的风险项）。
+reqwest = { version = "0.13", features = ["default-tls", "http2", "stream"] }
+serde = { version = "1", features = ["derive"] }
+# `preserve_order`：Go 的 `encoding/json` 按**文档顺序**处理对象键，重复/大小写变体「后者生效」；
+# 且 `/accounts` 的字段匹配规则建立在文档顺序上（见 godecode.rs）。serde_json 默认 BTreeMap
+# 会把顺序洗掉。代价是内部 map 换成 indexmap，多一条依赖链——刻意换来的键序保真。
+serde_json = { version = "1", features = ["preserve_order"] }
+# WS 握手要算 Sec-WebSocket-Accept = base64(sha1(key + GUID))：标准件，不手搓加密原语。
+sha1 = "0.10"
+# `io-util` = WS 帧的 read_exact/write_all；`sync` = turn 事件管道；其余是 axum/服务端基础件。
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }
+# WS 是手写 RFC6455（对齐 Go 的零依赖实现：自定握手头、必带掩码、无扩展协商）；
+# 但 `wss://` 的 TLS 需要一条与 reqwest 同源的栈 —— native-tls 在 Windows 即 schannel。
+tokio-native-tls = "0.3"
+
+[dev-dependencies]
+# **只用于测试**：假的 VibeX 上游要自己当 WS 服务端（被测的 WS 客户端是手写的，
+# 对端用现成实现省事）。`ws` 特性只在这里开，生产依赖保持最小。
+axum = { version = "0.8", features = ["ws"] }
+
+[profile.release]
+opt-level = 2
