@@ -1,0 +1,1598 @@
+{
+  "generator": "bai-p1-golden (in-package collector, real Server.Start over a real socket)",
+  "note": "逐字节响应（含响应头）由真 Server.Start() 采集；seed_stats 记的是取响应时服务端的累计表，回放时用同一张表预置。",
+  "upstream_list_raw": "{\"object\":\"list\",\"data\":[\n\t\t{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},\n\t\t{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},\n\t\t{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}\n\t]}",
+  "cases": [
+    {
+      "id": "matrix-live-and-cache",
+      "desc": "/model/matrix 首拉 live、轮询吃缓存、refresh=1 旁路、非 GET 405",
+      "channels_config": "[{\"id\":\"command\",\"key\":\"sk-other\"},{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "首次：真打上游，source=live",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "352",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 3,
+            "data": [
+              {
+                "created": 1626777600,
+                "id": "glm-5.3",
+                "object": "model",
+                "owned_by": "system",
+                "supported_endpoint_types": [
+                  "openai",
+                  "anthropic"
+                ]
+              },
+              {
+                "created": 1626777600,
+                "id": "deepseek-v4-flash",
+                "object": "model",
+                "owned_by": "system"
+              },
+              {
+                "created": 1626777600,
+                "id": "hy3",
+                "object": "model",
+                "owned_by": "system"
+              }
+            ],
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "live"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791996192,\"count\":3,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}]}\n",
+          "upstream": 1,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "轮询第 1 次：吃缓存，上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "353",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 3,
+            "data": [
+              {
+                "created": 1626777600,
+                "id": "glm-5.3",
+                "object": "model",
+                "owned_by": "system",
+                "supported_endpoint_types": [
+                  "openai",
+                  "anthropic"
+                ]
+              },
+              {
+                "created": 1626777600,
+                "id": "deepseek-v4-flash",
+                "object": "model",
+                "owned_by": "system"
+              },
+              {
+                "created": 1626777600,
+                "id": "hy3",
+                "object": "model",
+                "owned_by": "system"
+              }
+            ],
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996192,\"count\":3,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "轮询第 2 次：吃缓存，上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "353",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 3,
+            "data": [
+              {
+                "created": 1626777600,
+                "id": "glm-5.3",
+                "object": "model",
+                "owned_by": "system",
+                "supported_endpoint_types": [
+                  "openai",
+                  "anthropic"
+                ]
+              },
+              {
+                "created": 1626777600,
+                "id": "deepseek-v4-flash",
+                "object": "model",
+                "owned_by": "system"
+              },
+              {
+                "created": 1626777600,
+                "id": "hy3",
+                "object": "model",
+                "owned_by": "system"
+              }
+            ],
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996192,\"count\":3,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "轮询第 3 次：吃缓存，上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "353",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 3,
+            "data": [
+              {
+                "created": 1626777600,
+                "id": "glm-5.3",
+                "object": "model",
+                "owned_by": "system",
+                "supported_endpoint_types": [
+                  "openai",
+                  "anthropic"
+                ]
+              },
+              {
+                "created": 1626777600,
+                "id": "deepseek-v4-flash",
+                "object": "model",
+                "owned_by": "system"
+              },
+              {
+                "created": 1626777600,
+                "id": "hy3",
+                "object": "model",
+                "owned_by": "system"
+              }
+            ],
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996192,\"count\":3,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "轮询第 4 次：吃缓存，上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "353",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 3,
+            "data": [
+              {
+                "created": 1626777600,
+                "id": "glm-5.3",
+                "object": "model",
+                "owned_by": "system",
+                "supported_endpoint_types": [
+                  "openai",
+                  "anthropic"
+                ]
+              },
+              {
+                "created": 1626777600,
+                "id": "deepseek-v4-flash",
+                "object": "model",
+                "owned_by": "system"
+              },
+              {
+                "created": 1626777600,
+                "id": "hy3",
+                "object": "model",
+                "owned_by": "system"
+              }
+            ],
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996192,\"count\":3,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "轮询第 5 次：吃缓存，上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "353",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 3,
+            "data": [
+              {
+                "created": 1626777600,
+                "id": "glm-5.3",
+                "object": "model",
+                "owned_by": "system",
+                "supported_endpoint_types": [
+                  "openai",
+                  "anthropic"
+                ]
+              },
+              {
+                "created": 1626777600,
+                "id": "deepseek-v4-flash",
+                "object": "model",
+                "owned_by": "system"
+              },
+              {
+                "created": 1626777600,
+                "id": "hy3",
+                "object": "model",
+                "owned_by": "system"
+              }
+            ],
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996192,\"count\":3,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "?refresh=1：旁路缓存强制刷新",
+          "method": "GET",
+          "path": "/model/matrix?refresh=1",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "352",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 3,
+            "data": [
+              {
+                "created": 1626777600,
+                "id": "glm-5.3",
+                "object": "model",
+                "owned_by": "system",
+                "supported_endpoint_types": [
+                  "openai",
+                  "anthropic"
+                ]
+              },
+              {
+                "created": 1626777600,
+                "id": "deepseek-v4-flash",
+                "object": "model",
+                "owned_by": "system"
+              },
+              {
+                "created": 1626777600,
+                "id": "hy3",
+                "object": "model",
+                "owned_by": "system"
+              }
+            ],
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "live"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791996192,\"count\":3,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}]}\n",
+          "upstream": 1,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "?refresh=0 不走旁路（吃缓存）",
+          "method": "GET",
+          "path": "/model/matrix?refresh=0",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "353",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 3,
+            "data": [
+              {
+                "created": 1626777600,
+                "id": "glm-5.3",
+                "object": "model",
+                "owned_by": "system",
+                "supported_endpoint_types": [
+                  "openai",
+                  "anthropic"
+                ]
+              },
+              {
+                "created": 1626777600,
+                "id": "deepseek-v4-flash",
+                "object": "model",
+                "owned_by": "system"
+              },
+              {
+                "created": 1626777600,
+                "id": "hy3",
+                "object": "model",
+                "owned_by": "system"
+              }
+            ],
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996192,\"count\":3,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "非 GET：405 method not allowed（纯文本 + nosniff）",
+          "method": "POST",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 405,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "19",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT",
+            "x-content-type-options": "nosniff"
+          },
+          "seed_stats": {},
+          "body_raw": "method not allowed\n",
+          "upstream": 0
+        }
+      ]
+    },
+    {
+      "id": "matrix-data-compact",
+      "desc": "上游 data 非紧凑且含 HTML 敏感字符 → 对齐 Go 的 compact + HTML 转义",
+      "channels_config": "[{\"id\":\"command\",\"key\":\"sk-other\"},{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "@@raw:{\"object\":\"list\",\"data\":[\n  {\"id\": \"a\u003cb\", \"desc\": \"x\u0026y\", \"tag\": \"\u003ez\"},\n  {\"id\": \"c\", \"note\": \"keep  spaces\"}\n]}",
+      "steps": [
+        {
+          "desc": "上游 data 带换行/缩进与 \u003c\u003e\u0026：Go compact 去空白 + HTML 转义后嵌入",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "@@raw:{\"object\":\"list\",\"data\":[\n  {\"id\": \"a\u003cb\", \"desc\": \"x\u0026y\", \"tag\": \"\u003ez\"},\n  {\"id\": \"c\", \"note\": \"keep  spaces\"}\n]}",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "156",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 2,
+            "data": [
+              {
+                "desc": "x\u0026y",
+                "id": "a\u003cb",
+                "tag": "\u003ez"
+              },
+              {
+                "id": "c",
+                "note": "keep  spaces"
+              }
+            ],
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "live"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791996192,\"count\":2,\"data\":[{\"id\":\"a\\u003cb\",\"desc\":\"x\\u0026y\",\"tag\":\"\\u003ez\"},{\"id\":\"c\",\"note\":\"keep  spaces\"}]}\n",
+          "upstream": 1,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "同一份 data 的第二轮：吃缓存（缓存里存的是紧凑化后的字节）",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "@@raw:{\"object\":\"list\",\"data\":[\n  {\"id\": \"a\u003cb\", \"desc\": \"x\u0026y\", \"tag\": \"\u003ez\"},\n  {\"id\": \"c\", \"note\": \"keep  spaces\"}\n]}",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "157",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 2,
+            "data": [
+              {
+                "desc": "x\u0026y",
+                "id": "a\u003cb",
+                "tag": "\u003ez"
+              },
+              {
+                "id": "c",
+                "note": "keep  spaces"
+              }
+            ],
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996192,\"count\":2,\"data\":[{\"id\":\"a\\u003cb\",\"desc\":\"x\\u0026y\",\"tag\":\"\\u003ez\"},{\"id\":\"c\",\"note\":\"keep  spaces\"}]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "matrix-data-null",
+      "desc": "上游 data 为 null：不得当成上游错误（Go 视为成功且 loaded=true）",
+      "channels_config": "[{\"id\":\"command\",\"key\":\"sk-other\"},{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "null",
+      "steps": [
+        {
+          "desc": "上游 {\"data\":null}：Go 视为成功，ok=true / source=live / count=0 / data:null",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "null",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "74",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "live"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791996192,\"count\":0,\"data\":null}\n",
+          "upstream": 1,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "data:null 之后轮询：loaded=true，吃缓存不打上游",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "null",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "75",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "fetched_at": 1791996192,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996192,\"count\":0,\"data\":null}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "matrix-need-key",
+      "desc": "渠道配置无 bai 条目：need_key 且不打上游",
+      "channels_config": "[{\"id\":\"command\",\"key\":\"sk-other\"}]",
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "无 bai 条目：need_key 且不打上游",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "95",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "need_key",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"need_key\"}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "matrix-config-tolerance",
+      "desc": "渠道配置条目缺 id/key：逐条容忍（Go 的零值语义），不整文件失败；取第一个 bai 条目",
+      "channels_config": "[{\"id\":\"bai\"},{\"key\":\"sk-only-key\"},{\"id\":\"other\",\"key\":\"sk-o\"},{\"id\":\"bai\",\"key\":\"sk-bai-later\"}]",
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "配置含 {id:\"bai\"}（缺 key）：Go 逐条容忍、取**第一个** bai 条目 → key 为空 → need_key",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "95",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "need_key",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"need_key\"}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "matrix-config-type-error",
+      "desc": "渠道配置存在类型不匹配的字段：Go 整份解析失败 → need_key",
+      "channels_config": "[{\"id\":\"bai\",\"key\":\"sk-ok\"},{\"id\":123}]",
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "配置含 {\"id\":123}（类型不对）：Go 的 json.Unmarshal 整体失败 → 空串 → need_key",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "95",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:12 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "need_key",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"need_key\"}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "matrix-missing-config",
+      "desc": "渠道配置文件不存在：need_key，不打上游",
+      "channels_config": null,
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "配置文件不存在：need_key，不打上游",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "95",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:13 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "need_key",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"need_key\"}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "matrix-upstream-error",
+      "desc": "上游 502：upstream_error（一次拉取最多 3 次尝试，上游命中 3 次）；随后 60s 负缓存不再重试",
+      "channels_config": "[{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "bad",
+      "steps": [
+        {
+          "desc": "首次 502：3 次尝试后 upstream_error（上游命中 3 次）",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "bad",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "101",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:13 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "upstream_error",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"upstream_error\"}\n",
+          "upstream": 3,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "负缓存第 1 次：上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "bad",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "101",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:13 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "upstream_error",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"upstream_error\"}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "负缓存第 2 次：上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "bad",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "101",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:13 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "upstream_error",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"upstream_error\"}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "负缓存第 3 次：上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "bad",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "101",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:13 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "upstream_error",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"upstream_error\"}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "负缓存第 4 次：上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "bad",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "101",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:13 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "upstream_error",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"upstream_error\"}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "负缓存第 5 次：上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "bad",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "101",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:13 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "upstream_error",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"upstream_error\"}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "refresh=1 旁路负缓存（仍失败，3 次尝试）",
+          "method": "GET",
+          "path": "/model/matrix?refresh=1",
+          "upstream_mode": "bad",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "101",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": null,
+            "err": "upstream_error",
+            "fetched_at": -62135596800,
+            "ok": false,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":false,\"source\":\"cache\",\"fetched_at\":-62135596800,\"count\":0,\"data\":null,\"err\":\"upstream_error\"}\n",
+          "upstream": 3,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "matrix-keeps-stale",
+      "desc": "已有清单后上游挂：ok=true/source=cache/条数不丢（预热步骤不计入 steps）",
+      "channels_config": "[{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "ok",
+      "warmup_upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "上游转 502 后 refresh=1：回旧清单 + source=cache",
+          "method": "GET",
+          "path": "/model/matrix?refresh=1",
+          "upstream_mode": "bad",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "353",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 3,
+            "data": [
+              {
+                "created": 1626777600,
+                "id": "glm-5.3",
+                "object": "model",
+                "owned_by": "system",
+                "supported_endpoint_types": [
+                  "openai",
+                  "anthropic"
+                ]
+              },
+              {
+                "created": 1626777600,
+                "id": "deepseek-v4-flash",
+                "object": "model",
+                "owned_by": "system"
+              },
+              {
+                "created": 1626777600,
+                "id": "hy3",
+                "object": "model",
+                "owned_by": "system"
+              }
+            ],
+            "fetched_at": 1791996194,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996194,\"count\":3,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}]}\n",
+          "upstream": 3,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "matrix-empty-list",
+      "desc": "上游空数组：ok=true/count=0（空判用 loaded 而非 count）",
+      "channels_config": "[{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "empty",
+      "steps": [
+        {
+          "desc": "空数组首拉：live",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "empty",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "72",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": [],
+            "fetched_at": 1791996194,
+            "ok": true,
+            "source": "live"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791996194,\"count\":0,\"data\":[]}\n",
+          "upstream": 1,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "空清单后第 1 次轮询：上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "empty",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "73",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": [],
+            "fetched_at": 1791996194,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996194,\"count\":0,\"data\":[]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "空清单后第 2 次轮询：上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "empty",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "73",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": [],
+            "fetched_at": 1791996194,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996194,\"count\":0,\"data\":[]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        },
+        {
+          "desc": "空清单后第 3 次轮询：上游 0 次",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "empty",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "73",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 0,
+            "data": [],
+            "fetched_at": 1791996194,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996194,\"count\":0,\"data\":[]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "matrix-single-flight",
+      "desc": "8 并发（缓存态）不发散；随后一次吃缓存（批量命中记 batch_upstream，本轮基准为 0；预热单独记 warmup_upstream_mode）",
+      "channels_config": "[{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "ok",
+      "warmup_upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "8 并发（缓存态）后单发一次：吃缓存（批量命中 0 次，响应非空 8 个）",
+          "method": "GET",
+          "path": "/model/matrix",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "353",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "count": 3,
+            "data": [
+              {
+                "created": 1626777600,
+                "id": "glm-5.3",
+                "object": "model",
+                "owned_by": "system",
+                "supported_endpoint_types": [
+                  "openai",
+                  "anthropic"
+                ]
+              },
+              {
+                "created": 1626777600,
+                "id": "deepseek-v4-flash",
+                "object": "model",
+                "owned_by": "system"
+              },
+              {
+                "created": 1626777600,
+                "id": "hy3",
+                "object": "model",
+                "owned_by": "system"
+              }
+            ],
+            "fetched_at": 1791996194,
+            "ok": true,
+            "source": "cache"
+          },
+          "body_raw": "{\"ok\":true,\"source\":\"cache\",\"fetched_at\":1791996194,\"count\":3,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\",\"supported_endpoint_types\":[\"openai\",\"anthropic\"]},{\"id\":\"deepseek-v4-flash\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"},{\"id\":\"hy3\",\"object\":\"model\",\"created\":1626777600,\"owned_by\":\"system\"}]}\n",
+          "upstream": 0,
+          "extra": {
+            "fetched_at_is_zero": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "stats-basics",
+      "desc": "/v1/stats 的空态、全零不入账、累计与 total 兜底、落盘形态、不看方法",
+      "channels_config": "[{\"id\":\"command\",\"key\":\"sk-other\"},{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "冷启动：models 空对象",
+          "method": "GET",
+          "path": "/v1/stats",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "28",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "models": {},
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"models\":{},\"uptimeSec\":0}\n",
+          "upstream": 0,
+          "extra": {
+            "uptime_sec_nonneg": true
+          }
+        },
+        {
+          "desc": "in/out/total 全 0：不建条目",
+          "method": "GET",
+          "path": "/v1/stats",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "28",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "models": {},
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"models\":{},\"uptimeSec\":0}\n",
+          "upstream": 0,
+          "extra": {
+            "uptime_sec_nonneg": true
+          }
+        },
+        {
+          "desc": "同模型两次累计：total=0 兜底 in+out",
+          "method": "GET",
+          "path": "/v1/stats",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "103",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {
+            "glm-5.3": {
+              "calls": 2,
+              "inputTokens": 110,
+              "outputTokens": 55,
+              "totalTokens": 165
+            }
+          },
+          "body_json": {
+            "models": {
+              "glm-5.3": {
+                "calls": 2,
+                "inputTokens": 110,
+                "outputTokens": 55,
+                "totalTokens": 165
+              }
+            },
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"models\":{\"glm-5.3\":{\"calls\":2,\"inputTokens\":110,\"outputTokens\":55,\"totalTokens\":165}},\"uptimeSec\":0}\n",
+          "upstream": 0,
+          "extra": {
+            "uptime_sec_nonneg": true
+          }
+        },
+        {
+          "desc": "落盘形态：map[model]modelStat，无缩进无换行",
+          "method": "FILE",
+          "path": "bai-stats.json",
+          "upstream_mode": "ok",
+          "status": 0,
+          "resp_headers": {},
+          "seed_stats": {
+            "glm-5.3": {
+              "calls": 2,
+              "inputTokens": 110,
+              "outputTokens": 55,
+              "totalTokens": 165
+            },
+            "hy3": {
+              "calls": 1,
+              "inputTokens": 7,
+              "outputTokens": 3,
+              "totalTokens": 10
+            }
+          },
+          "body_raw": "{\"glm-5.3\":{\"calls\":2,\"inputTokens\":110,\"outputTokens\":55,\"totalTokens\":165},\"hy3\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":3,\"totalTokens\":10}}",
+          "upstream": 0
+        },
+        {
+          "desc": "多模型：键序升序、字段序同 Go",
+          "method": "GET",
+          "path": "/v1/stats",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "171",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {
+            "glm-5.3": {
+              "calls": 2,
+              "inputTokens": 110,
+              "outputTokens": 55,
+              "totalTokens": 165
+            },
+            "hy3": {
+              "calls": 1,
+              "inputTokens": 7,
+              "outputTokens": 3,
+              "totalTokens": 10
+            }
+          },
+          "body_json": {
+            "models": {
+              "glm-5.3": {
+                "calls": 2,
+                "inputTokens": 110,
+                "outputTokens": 55,
+                "totalTokens": 165
+              },
+              "hy3": {
+                "calls": 1,
+                "inputTokens": 7,
+                "outputTokens": 3,
+                "totalTokens": 10
+              }
+            },
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"models\":{\"glm-5.3\":{\"calls\":2,\"inputTokens\":110,\"outputTokens\":55,\"totalTokens\":165},\"hy3\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":3,\"totalTokens\":10}},\"uptimeSec\":0}\n",
+          "upstream": 0,
+          "extra": {
+            "uptime_sec_nonneg": true
+          }
+        },
+        {
+          "desc": "POST 也照回统计（Go 该 handler 不看方法）",
+          "method": "POST",
+          "path": "/v1/stats",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "171",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {
+            "glm-5.3": {
+              "calls": 2,
+              "inputTokens": 110,
+              "outputTokens": 55,
+              "totalTokens": 165
+            },
+            "hy3": {
+              "calls": 1,
+              "inputTokens": 7,
+              "outputTokens": 3,
+              "totalTokens": 10
+            }
+          },
+          "body_json": {
+            "models": {
+              "glm-5.3": {
+                "calls": 2,
+                "inputTokens": 110,
+                "outputTokens": 55,
+                "totalTokens": 165
+              },
+              "hy3": {
+                "calls": 1,
+                "inputTokens": 7,
+                "outputTokens": 3,
+                "totalTokens": 10
+              }
+            },
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"models\":{\"glm-5.3\":{\"calls\":2,\"inputTokens\":110,\"outputTokens\":55,\"totalTokens\":165},\"hy3\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":3,\"totalTokens\":10}},\"uptimeSec\":0}\n",
+          "upstream": 0,
+          "extra": {
+            "uptime_sec_nonneg": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "stats-reload",
+      "desc": "重启后从 bai-stats.json 读回历史累计",
+      "channels_config": "[{\"id\":\"command\",\"key\":\"sk-other\"},{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "启动即读回历史",
+          "method": "GET",
+          "path": "/v1/stats",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "28",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "models": {},
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"models\":{},\"uptimeSec\":0}\n",
+          "upstream": 0,
+          "extra": {
+            "uptime_sec_nonneg": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "stats-broken-file",
+      "desc": "bai-stats.json 不是合法 JSON：当作空统计，不 panic",
+      "channels_config": "[{\"id\":\"command\",\"key\":\"sk-other\"},{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "坏文件 → 空 models，不 panic",
+          "method": "GET",
+          "path": "/v1/stats",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "28",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "models": {},
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"models\":{},\"uptimeSec\":0}\n",
+          "upstream": 0,
+          "extra": {
+            "uptime_sec_nonneg": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "stats-empty-object",
+      "desc": "bai-stats.json 为 {}（合法空表）：models 空对象",
+      "channels_config": "[{\"id\":\"command\",\"key\":\"sk-other\"},{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "空对象 {} → models 空对象",
+          "method": "GET",
+          "path": "/v1/stats",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "28",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "models": {},
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"models\":{},\"uptimeSec\":0}\n",
+          "upstream": 0,
+          "extra": {
+            "uptime_sec_nonneg": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "stats-single",
+      "desc": "单模型累计的字段序与取值",
+      "channels_config": "[{\"id\":\"command\",\"key\":\"sk-other\"},{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "单模型：字段序 calls/inputTokens/outputTokens/totalTokens",
+          "method": "GET",
+          "path": "/v1/stats",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "28",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "models": {},
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"models\":{},\"uptimeSec\":0}\n",
+          "upstream": 0,
+          "extra": {
+            "uptime_sec_nonneg": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "health-methods",
+      "desc": "/health 不看方法：GET/POST 都 200 + 同形 health JSON",
+      "channels_config": "[{\"id\":\"command\",\"key\":\"sk-other\"},{\"id\":\"bai\",\"key\":\"sk-bai-fixture\"}]",
+      "upstream_mode": "ok",
+      "steps": [
+        {
+          "desc": "GET /health：200 + health JSON（handler 不看方法）",
+          "method": "GET",
+          "path": "/health",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "49",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "service": "bai-go",
+            "status": "ok",
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"service\":\"bai-go\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+          "upstream": 0
+        },
+        {
+          "desc": "POST /health：200 + health JSON（handler 不看方法）",
+          "method": "POST",
+          "path": "/health",
+          "upstream_mode": "ok",
+          "status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "49",
+            "content-type": "application/json",
+            "date": "Wed, 14 Oct 2026 16:43:14 GMT"
+          },
+          "seed_stats": {},
+          "body_json": {
+            "service": "bai-go",
+            "status": "ok",
+            "uptimeSec": 0
+          },
+          "body_raw": "{\"service\":\"bai-go\",\"status\":\"ok\",\"uptimeSec\":0}\n",
+          "upstream": 0
+        }
+      ]
+    }
+  ]
+}

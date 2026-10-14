@@ -1,6 +1,8 @@
 // adapt.rs —— Go 侧 `internal/bai/server.go` 的 `adaptQuirks` / `truncateToContext` / `estTokens`
-// 的 Rust 对应实现。字节级等价由 `tests/golden_adapt.rs` 对 `.work/rust-rewrite/golden-adapt-go.json`
-// 逐条 diff 把关（那份 golden 由逐字副本的 Go 模型产出）。
+// 的 Rust 对应实现。字节级等价由 `tests/golden_adapt.rs` 逐条 diff 把关，基准分两档：
+// 入库的小号基准 `tests/golden/golden-adapt-go.small.json`（常规用例 F1~F6、F9~F12），
+// 加上 `.work/rust-rewrite/golden-adapt-go.json` 里的 F7/F8 超大用例（那份缺了则显式跳过并计数）。
+// 两档都由逐字副本的 Go 模型（`.work/cli/go-adapter`）产出。
 //
 // 四条改写（与 Go 侧注释逐条对应）：
 //  1. 不认 developer 角色 → 降级为 system（否则 400）

@@ -6,9 +6,9 @@
 //   * /v1/models 透传 Authorization，且把响应原样（含上游自定义头）回给下游
 //   * /v1/chat/completions 到达假上游的是**改写后**的体（developer→system、8192 钳制）
 //   * >2MB 的请求体经 HTTP 路径照样到达上游（对齐 Go bufferBody 的 32MB，而不是 axum 默认 2MB）
-//   * /model/matrix、/v1/stats 由本进程 503 应答，绝不漏给上游（Go 侧这两条是本地应答）
+//   * /model/matrix、/v1/stats 由本进程应答、绝不漏给上游（Go 侧这两条也是本地应答；
+//     端到端的逐字节对照在 tests/p1_golden.rs）
 //   * 上游 5xx 会重试（最多 3 次）
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -95,7 +95,24 @@ struct TestServer {
     rec: Recorded,
 }
 
+/// 与生产 `run()` 里挂的同一层：把 axum 默认的 405 空体补成 Go `http.Error` 的纯文本。
+async fn method_not_allowed_text(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let mut resp = next.run(req).await;
+    if resp.status() == StatusCode::METHOD_NOT_ALLOWED {
+        resp.headers_mut().insert(
+            axum::http::header::CONTENT_TYPE,
+            axum::http::HeaderValue::from_static("text/plain; charset=utf-8"),
+        );
+        *resp.body_mut() = axum::body::Body::from("method not allowed\n");
+    }
+    resp
+}
+
 /// 起一个真的监听 socket：假上游 + rs-bai（upstream 指向假上游）。
+/// 数据目录相关路径全部指向临时目录，**绝不碰 %APPDATA% 下的真实文件**。
 async fn start() -> TestServer {
     let rec = Recorded::default();
     let upstream = Router::new()
@@ -111,7 +128,17 @@ async fn start() -> TestServer {
     });
 
     let client = rs_bai::UpstreamClient::with_proxy(&format!("http://{up_addr}"), None).unwrap();
-    let app = rs_bai::router(Arc::new(rs_bai::AppState::new(client)));
+    let tmp = std::env::temp_dir().join(format!("rs-bai-http-contract-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let channels = tmp.join("tuanjie-water-channels.json");
+    // 没有 bai 条目 → 矩阵走 need_key 分支，绝不打上游
+    std::fs::write(&channels, br#"[{"id":"command","key":"sk-other"}]"#).unwrap();
+    let stats_path = tmp.join("bai-stats.json");
+    let _ = std::fs::remove_file(&stats_path);
+
+    let state = Arc::new(rs_bai::AppState::with_paths(client, channels, stats_path));
+    // 与生产 `run()` 同一层包装（405 的纯文本补体中间件）
+    let app = rs_bai::router(state).layer(axum::middleware::from_fn(method_not_allowed_text));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -295,21 +322,89 @@ async fn large_body_reaches_upstream() {
     assert_eq!(got, raw, "该体量不该触发任何改写，出站字节应与入站逐字节相同");
 }
 
+/// `/model/matrix` 与 `/v1/stats` 由本进程应答，绝不漏给上游（Go 侧这两条也是本地应答）。
+/// 逐字节的字段形状对照在 `tests/p1_golden.rs`；这里只守"本地应答 + 不打上游"这条路由约束。
 #[tokio::test]
-async fn not_migrated_endpoints_answer_locally() {
+async fn local_endpoints_answer_locally() {
     let t = start().await;
     let c = reqwest::Client::new();
-    for path in ["/model/matrix", "/v1/stats"] {
-        let resp = c.get(format!("{}{path}", t.base)).send().await.unwrap();
-        assert_eq!(resp.status(), 503, "{path} 应由本进程 503");
-        let v: serde_json::Value = resp.json().await.unwrap();
-        assert_eq!(v["error"]["type"], "not_implemented_in_pilot");
-    }
+
+    let resp = c.get(format!("{}/model/matrix", t.base)).send().await.unwrap();
+    assert_eq!(resp.status(), 200, "/model/matrix 必须本地 200");
+    let v: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(v["ok"], false);
+    // 测试夹具的渠道配置里没有 bai 条目 → 走 need_key 分支，且不打上游
+    assert_eq!(v["err"], "need_key");
+    assert_eq!(v["source"], "cache");
+    assert_eq!(v["count"], 0);
+    assert!(v["data"].is_null(), "无清单时 data 应为 null（对齐 Go RawMessage(nil)）");
+
+    let resp = c.get(format!("{}/v1/stats", t.base)).send().await.unwrap();
+    assert_eq!(resp.status(), 200, "/v1/stats 必须本地 200");
+    let v: serde_json::Value = resp.json().await.unwrap();
+    assert!(v["models"].is_object(), "统计形状应为 {{models,uptimeSec}}");
+    assert!(v["uptimeSec"].as_i64().is_some());
+
     assert_eq!(
         t.rec.calls.load(Ordering::SeqCst),
         0,
-        "未迁端点绝不许漏给上游（Go 侧这两条是本地应答）"
+        "本地端点绝不许漏给上游（Go 侧这两条是本地应答）"
     );
+}
+
+/// 非 GET 打 `/model/matrix`：405 + 纯文本 `method not allowed\n`（对齐 Go `http.Error`，
+/// 它同时固定带 `X-Content-Type-Options: nosniff`）。
+#[tokio::test]
+async fn matrix_non_get_is_405_plain_text() {
+    let t = start().await;
+    let c = reqwest::Client::new();
+    let resp = c
+        .post(format!("{}/model/matrix", t.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 405);
+    let ct = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        ct.starts_with("text/plain"),
+        "405 应是纯文本（Go http.Error 口径），实得 {ct}"
+    );
+    assert_eq!(
+        resp.headers()
+            .get("x-content-type-options")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or(""),
+        "nosniff",
+        "Go 的 http.Error 固定带 X-Content-Type-Options: nosniff，本条必须同形"
+    );
+    let body = resp.text().await.unwrap();
+    assert_eq!(body, "method not allowed\n");
+    assert_eq!(t.rec.calls.load(Ordering::SeqCst), 0, "405 不得打上游");
+}
+
+/// `/health` 不看方法：POST 也回 200 + health JSON（Go 的 handler 不判方法）。
+#[tokio::test]
+async fn health_answers_any_method() {
+    let t = start().await;
+    let c = reqwest::Client::new();
+    for m in ["GET", "POST"] {
+        let resp = if m == "POST" {
+            c.post(format!("{}/health", t.base)).send().await.unwrap()
+        } else {
+            c.get(format!("{}/health", t.base)).send().await.unwrap()
+        };
+        assert_eq!(resp.status(), 200, "{m} /health 应 200（Go 的 handler 不判方法）");
+        let v: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(v["status"], "ok");
+        assert_eq!(v["service"], "bai-go");
+        assert!(v["uptimeSec"].as_i64().is_some());
+    }
+    assert_eq!(t.rec.calls.load(Ordering::SeqCst), 0, "/health 不得打上游");
 }
 
 #[tokio::test]
@@ -331,10 +426,19 @@ async fn unknown_paths_are_forwarded_and_5xx_retried() {
 
 #[test]
 fn golden_files_exist() {
-    // 黄金门禁文件必须随任务在 .work 下就位（不进库，但缺失即视为门禁失效）
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf();
-    for f in ["fixtures.json", "golden-adapt-go.json"] {
-        let p = root.join(".work/rust-rewrite").join(f);
+    // 黄金门禁的必需基准已**入库**在 rs-bai/tests/golden/（缺则回落 .work/rust-rewrite/）。
+    // 这条守「入库副本别被误删」——入库副本不在、且 .work 也被清掉时，整批黄金门禁会转红。
+    //
+    // 第 4 轮起入库的是**小号基准**：`fixtures.small.json` / `golden-adapt-go.small.json`
+    // （常规用例 F1~F6、F9~F12）。全量的那两个（65MB 工作树体积）不入库、只留 .work/，
+    // 其中 F7/F8 两条超大用例在缺基准时由 `golden_adapt` 显式跳过并计数。
+    for f in [
+        "fixtures.small.json",
+        "golden-adapt-go.small.json",
+        "golden-p1-go.json",
+        "golden-compact-go.json",
+    ] {
+        let p = rs_bai::golden_path(f);
         assert!(p.exists(), "缺黄金材料 {}", p.display());
     }
 }

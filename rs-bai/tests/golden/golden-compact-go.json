@@ -1,0 +1,66 @@
+{
+  "generator": "recompact (standard library only, real encoding/json)",
+  "note": "In = 上游 data 的原始字节；Out = Go 编码整条 matrixResp 的逐字节结果（含末尾换行）。Out 为空表示 Go 编码整体失败。",
+  "samples": [
+    {
+      "id": "compact-ascii",
+      "desc": "上游原文已紧凑（真实 api.b.ai 形态）— 应逐字节原样嵌入",
+      "in": "[{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"hy3\",\"object\":\"model\"}]",
+      "out": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791991397,\"count\":0,\"data\":[{\"id\":\"glm-5.3\",\"object\":\"model\"},{\"id\":\"hy3\",\"object\":\"model\"}]}\n"
+    },
+    {
+      "id": "whitespace-and-html",
+      "desc": "带空白与 \u003c\u003e\u0026 的原文：compact 去空白 + HTML 转义",
+      "in": "[\n  {\"id\": \"a\u003cb\", \"desc\": \"x\u0026y\", \"tag\": \"\u003ez\"},\n  {\"id\": \"c\", \"note\": \"keep  spaces\"}\n]",
+      "out": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791991397,\"count\":0,\"data\":[{\"id\":\"a\\u003cb\",\"desc\":\"x\\u0026y\",\"tag\":\"\\u003ez\"},{\"id\":\"c\",\"note\":\"keep  spaces\"}]}\n"
+    },
+    {
+      "id": "unicode-line-separators",
+      "desc": "字符串内的 U+2028/U+2029 必须转义成 \\u2028/\\u2029",
+      "in": "[{\"note\":\"a\u2028b\u2029c\"}]",
+      "out": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791991397,\"count\":0,\"data\":[{\"note\":\"a\\u2028b\\u2029c\"}]}\n"
+    },
+    {
+      "id": "null",
+      "desc": "上游 data 为 null：RawMessage 非空（4 字节），Go 视为成功、count=0",
+      "in": "null",
+      "out": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791991397,\"count\":0,\"data\":null}\n"
+    },
+    {
+      "id": "empty-array",
+      "desc": "上游 data 为空数组",
+      "in": "[]",
+      "out": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791991397,\"count\":0,\"data\":[]}\n"
+    },
+    {
+      "id": "nested-and-numbers",
+      "desc": "嵌套对象/数组与数字、转义、真实换行",
+      "in": "{\"a\": [1, 2.5, -3e2, true, false, null], \"b\": {\"c\": \"line\\nbreak\", \"d\": \"quote\\\"here\", \"e\": \"back\\\\slash\"}}",
+      "out": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791991397,\"count\":0,\"data\":{\"a\":[1,2.5,-3e2,true,false,null],\"b\":{\"c\":\"line\\nbreak\",\"d\":\"quote\\\"here\",\"e\":\"back\\\\slash\"}}}\n"
+    },
+    {
+      "id": "huge-number",
+      "desc": "超范围数字：Go 的 compact 逐字节搬运不重新解析数值",
+      "in": "{\"big\": 1e999, \"neg\": -0.0, \"exp\": 1E+2}",
+      "out": "{\"ok\":true,\"source\":\"live\",\"fetched_at\":1791991397,\"count\":0,\"data\":{\"big\":1e999,\"neg\":-0.0,\"exp\":1E+2}}\n"
+    },
+    {
+      "id": "invalid-number",
+      "desc": "非法数字 token：Go 的 compact 在这里报错 → 编码整体失败",
+      "in": "{\"a\": 1x2}",
+      "out": ""
+    },
+    {
+      "id": "real-newline-in-string",
+      "desc": "字符串内含**真换行**：非法 JSON，Go 的 scanner 在字符串态校验控制字符 → 编码整体失败（Out 为空）",
+      "in": "[{\"note\":\"a\nb\"}]",
+      "out": ""
+    },
+    {
+      "id": "not-json",
+      "desc": "非法 JSON（裸词开头）：Go 的 appendCompact 报错 → Encoder.Encode 整体失败（响应体为空）",
+      "in": "{not json",
+      "out": ""
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "generator": "go-adapter (verbatim copy of internal/bai/server.go adaptQuirks)",
+  "results": [
+    {
+      "id": "F1-plain-passthrough",
+      "in": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"只回复两个字：收到\"}],\"max_tokens\":64,\"temperature\":0.2,\"stream\":false}",
+      "out": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"只回复两个字：收到\"}],\"max_tokens\":64,\"temperature\":0.2,\"stream\":false}",
+      "out_len": 200,
+      "changed": false
+    },
+    {
+      "id": "F2-developer-to-system",
+      "in": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"developer\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":32}",
+      "out": "{\"max_tokens\":32,\"messages\":[{\"content\":\"You are a terse assistant.\",\"role\":\"system\"},{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\"}",
+      "out_len": 142,
+      "changed": true
+    },
+    {
+      "id": "F3-max-tokens-clamp",
+      "in": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":99999}",
+      "out": "{\"max_tokens\":8192,\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\"}",
+      "out_len": 87,
+      "changed": true
+    },
+    {
+      "id": "F4-reasoning-effort-max",
+      "in": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"reasoning_effort\":\"max\"}",
+      "out": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\",\"reasoning_effort\":\"high\"}",
+      "out_len": 95,
+      "changed": true
+    },
+    {
+      "id": "F5-combined-rewrite",
+      "in": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"developer\",\"content\":\"development rules\"},{\"role\":\"user\",\"content\":\"从 1 数到 3\"}],\"max_tokens\":99999,\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "out": "{\"max_tokens\":8192,\"messages\":[{\"content\":\"development rules\",\"role\":\"system\"},{\"content\":\"从 1 数到 3\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\",\"reasoning_effort\":\"high\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+      "out_len": 227,
+      "changed": true
+    },
+    {
+      "id": "F6-no-rewrite-boundaries",
+      "in": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"},{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":8192,\"reasoning_effort\":\"high\",\"temperature\":1}",
+      "out": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"},{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":8192,\"reasoning_effort\":\"high\",\"temperature\":1}",
+      "out_len": 163,
+      "changed": false
+    },
+    {
+      "id": "F9-clamp-8193-and-stringy",
+      "in": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":8193,\"reasoning_effort\":\"low\"}",
+      "out": "{\"max_tokens\":8192,\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\",\"reasoning_effort\":\"low\"}",
+      "out_len": 112,
+      "changed": true
+    },
+    {
+      "id": "F10-nonobject-and-nonnumeric",
+      "in": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":\"99999\",\"reasoning_effort\":\"max\",\"extra_unknown\":{\"nested\":[1,2,3]},\"top_p\":null}",
+      "out": "{\"extra_unknown\":{\"nested\":[1,2,3]},\"max_tokens\":\"99999\",\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\",\"reasoning_effort\":\"high\",\"top_p\":null}",
+      "out_len": 164,
+      "changed": true
+    },
+    {
+      "id": "F11-tool-call-heavy",
+      "in": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"tools enabled\"},{\"role\":\"user\",\"content\":\"查一下天气\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_a\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"北京\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_a\",\"content\":\"晴 22℃\"},{\"role\":\"user\",\"content\":\"谢谢\"}],\"max_tokens\":128}",
+      "out": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"tools enabled\"},{\"role\":\"user\",\"content\":\"查一下天气\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_a\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"北京\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_a\",\"content\":\"晴 22℃\"},{\"role\":\"user\",\"content\":\"谢谢\"}],\"max_tokens\":128}",
+      "out_len": 395,
+      "changed": false
+    },
+    {
+      "id": "F12-bad-json",
+      "in": "not-a-json-body {{",
+      "out": "not-a-json-body {{",
+      "out_len": 18,
+      "changed": false
+    }
+  ],
+  "source_ref": "internal/bai/server.go:223-376 @ 3a5ee06"
+}

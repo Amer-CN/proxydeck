@@ -18,8 +18,10 @@ http-body-util = "0.1"
 # 这里按需显式列出，避免将来上游改默认时静默换掉 TLS 栈（TLS 栈差异是圆桌点名的风险项）。
 reqwest = { version = "0.13", features = ["default-tls", "http2", "stream", "json"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
+# raw_value：矩阵端点要用 `RawValue` 把上游 `data` 字段的原文字节抠出来（对应 Go 的
+# `json.RawMessage`）——解析成 Value 再序列化会重排对象键序，就不是上游原文了。
+serde_json = { version = "1", features = ["raw_value"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync"] }
 url = "2"
 
 [profile.release]

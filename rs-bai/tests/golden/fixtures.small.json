@@ -1,0 +1,55 @@
+{
+  "note": "脱敏改写用例集（无 Authorization / 无真实账号） —— **小号基准**（入库形态）：已裁掉 2 条超大用例 [F7-truncate-oversized, F8-truncate-tool-pairing]，全量见 .work/rust-rewrite/fixtures.json，再生成路径见 rs-bai/tests/golden/README.md",
+  "fixtures": [
+    {
+      "id": "F1-plain-passthrough",
+      "desc": "普通请求：无 developer、无超限字段 → 必须原样逐字节透传（不改写就不重排）",
+      "body": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"只回复两个字：收到\"}],\"max_tokens\":64,\"temperature\":0.2,\"stream\":false}"
+    },
+    {
+      "id": "F2-developer-to-system",
+      "desc": "developer → system",
+      "body": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"developer\",\"content\":\"You are a terse assistant.\"},{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":32}"
+    },
+    {
+      "id": "F3-max-tokens-clamp",
+      "desc": "max_tokens>8192 → 钳到 8192（99999 / 8193 两个值各一例见 F9）",
+      "body": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":99999}"
+    },
+    {
+      "id": "F4-reasoning-effort-max",
+      "desc": "reasoning_effort=\"max\" → \"high\"",
+      "body": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"reasoning_effort\":\"max\"}"
+    },
+    {
+      "id": "F5-combined-rewrite",
+      "desc": "三改齐全：developer→system + 钳制 + effort（含 stream_options 透传）",
+      "body": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"developer\",\"content\":\"development rules\"},{\"role\":\"user\",\"content\":\"从 1 数到 3\"}],\"max_tokens\":99999,\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+    },
+    {
+      "id": "F6-no-rewrite-boundaries",
+      "desc": "边界值不该被改：max_tokens=8192 恰等、reasoning_effort=\"high\"、role=system",
+      "body": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"},{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":8192,\"reasoning_effort\":\"high\",\"temperature\":1}"
+    },
+    {
+      "id": "F9-clamp-8193-and-stringy",
+      "desc": "max_tokens=8193（刚超 1）钳制；同请求带 string 型 max_tokens 的另一例见 F10",
+      "body": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":8193,\"reasoning_effort\":\"low\"}"
+    },
+    {
+      "id": "F10-nonobject-and-nonnumeric",
+      "desc": "非数字 max_tokens 与未知字段：一律不动（Go 的 .(float64) 断言失败即跳过）",
+      "body": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":\"99999\",\"reasoning_effort\":\"max\",\"extra_unknown\":{\"nested\":[1,2,3]},\"top_p\":null}"
+    },
+    {
+      "id": "F11-tool-call-heavy",
+      "desc": "含 tool_calls 的普通请求（estTokens 计入 arguments，但不该触发截断）",
+      "body": "{\"model\":\"glm-5.3-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"tools enabled\"},{\"role\":\"user\",\"content\":\"查一下天气\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_a\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"北京\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_a\",\"content\":\"晴 22℃\"},{\"role\":\"user\",\"content\":\"谢谢\"}],\"max_tokens\":128}"
+    },
+    {
+      "id": "F12-bad-json",
+      "desc": "非 JSON 请求体：解析失败原样放行（Go 的 json.Unmarshal 失败即透传）",
+      "body": "not-a-json-body {{"
+    }
+  ]
+}
