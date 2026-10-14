@@ -45,6 +45,7 @@ API Key:   你的 CommandCode Key（commandcode.ai/studio → API keys）
 | Comate（百度） | 8786 | 自动读取 ~/.comate/cli-login.json |
 | Qoder（阿里） | 8785 | 自动读取桌面端登录态 |
 | B.AI | 8891 | 注水检测页填入密钥 |
+| VIBEX | 8790 | 自动探测或手动粘贴 token |
 
 > **平台各自需要你自己的有效订阅**——本工具只做接口转换，不含任何账号资源。
 
