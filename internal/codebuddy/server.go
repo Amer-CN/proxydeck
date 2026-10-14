@@ -930,6 +930,90 @@ func normalizeToolChoice(body map[string]any) {
 	}
 }
 
+// sanitizeToolRefs 把 tools 里各工具 parameters 中的 $ref 就地内联展开
+// （相对引用 #/$defs/...，按 2020-12 语义与兄弟键合并，同名兄弟键优先），并丢弃
+// 用完的 $defs。无 $ref 的工具一律不动。
+//
+// 背景：腾讯后端不解析 $ref（2026-10-14 K3 实证：158 个带真 $ref 的 MCP 工具整批
+// 400/11133，全量内联到零残留后同批 200；裸 $ref、内联版 oneOf、兄弟键 $ref 的
+// 极简探针全过——毒的是 $ref 指向含 oneOf 等复杂构造的定义块时的组合形态，
+// 整体内联后无残留即过）。内联是无损变换（语义不变，只变大），故全模型通用。
+func sanitizeToolRefs(body map[string]any) {
+	tools, ok := body["tools"].([]any)
+	if !ok {
+		return
+	}
+	for _, raw := range tools {
+		tm, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		fn, ok := tm["function"].(map[string]any)
+		if !ok {
+			continue
+		}
+		params, ok := fn["parameters"].(map[string]any)
+		if !ok {
+			continue
+		}
+		defs, _ := params["$defs"].(map[string]any)
+		fn["parameters"] = inlineSchemaRefs(params, defs, nil)
+		if pm, ok := fn["parameters"].(map[string]any); ok {
+			delete(pm, "$defs")
+		}
+	}
+}
+
+// inlineSchemaRefs 递归解开 #/$defs/... 引用。兄弟键按 2020-12 合并（同名兄弟键优先）。
+// chain 记录当前解析栈用于截断循环引用（畸形输入不断流）；非 #/$defs/ 开头的外部
+// 引用、以及指向不存在定义的引用，原样保留。
+func inlineSchemaRefs(node any, defs map[string]any, chain []string) any {
+	m, ok := node.(map[string]any)
+	if !ok {
+		if arr, ok := node.([]any); ok {
+			out := make([]any, len(arr))
+			for i, v := range arr {
+				out[i] = inlineSchemaRefs(v, defs, chain)
+			}
+			return out
+		}
+		return node
+	}
+	if rv, ok := m["$ref"].(string); ok && strings.HasPrefix(rv, "#/$defs/") {
+		key := rv[strings.LastIndex(rv, "/")+1:]
+		cyclic := false
+		for _, c := range chain {
+			if c == key {
+				cyclic = true
+				break
+			}
+		}
+		if cyclic {
+			return map[string]any{"type": "object", "description": "cyclic-ref-removed"}
+		}
+		if target, ok := defs[key]; ok {
+			merged := map[string]any{}
+			if tm, ok := target.(map[string]any); ok {
+				for k, v := range tm {
+					merged[k] = v
+				}
+			}
+			for k, v := range m {
+				if k != "$ref" {
+					merged[k] = v
+				}
+			}
+			nc := append(append([]string{}, chain...), key)
+			return inlineSchemaRefs(merged, defs, nc)
+		}
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = inlineSchemaRefs(v, defs, chain)
+	}
+	return out
+}
+
 // summarizeToolsForDiag 11129 结构诊断用：只提取 tools 定义与 tool_choice，
 // 不碰 messages（消息正文不进日志）、不碰认证头。返回 JSON 字符串，调用方
 // 负责截断长度。backendBody 为出站前实际发送的请求体（含脱敏后 tools）。
@@ -1080,6 +1164,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 	// 对象式 tool_choice → 字符串式（腾讯后端该字段是 string，见 normalizeToolChoice）
 	normalizeToolChoice(backendBody)
+	// $ref 内联（腾讯后端不解析工具 schema 里的 $ref：2026-10-14 K3 实证，
+	// 158 个带真 $ref 的 MCP 工具整批 400/11133，全量内联（零残留）后同批 200）。
+	// 只动含 $ref 的工具（无则原样，零行为变化）；$defs 用完即弃；循环引用截断。
+	sanitizeToolRefs(backendBody)
 	// developer → system（腾讯后端不认 developer，见 normalizeRoles）
 	if bm, ok := backendBody["messages"].([]any); ok {
 		backendBody["messages"] = normalizeRoles(bm)
