@@ -5,12 +5,22 @@
 //!
 //! 本小轮**不含**服务与转发编排（`server.go`/`handlers_extra.go` 等，属 P8b）；
 //! 出站 TLS 指纹的取舍见 `README.md`「uTLS 路线取证结论」（P8a 用 rustls，差异已登记）。
+//!
+//! **P8b 切片（本轮）**已迁入 `pacing`（KIMI-K3 429 兜底）/ `inflight`（进行中注册表 +
+//! 实时动态）/ `opencode_session`（`x-opencode-session`）/ `dist`（分布指纹纯函数）/
+//! `channels`（注水渠道静态表）；剩余 P8b 面（`server.go`/`handlers_extra.go`/`accounts.go`/
+//! `quota.go`/`providers.go`/两条转发/`media.go`/`probes.go`）见 `README.md` 的未覆盖清单。
 
 pub mod appdir;
+pub mod channels;
 pub mod client;
 pub mod credentials;
+pub mod dist;
 pub mod gojson;
 pub mod headers;
+pub mod inflight;
+pub mod opencode_session;
+pub mod pacing;
 pub mod reqshape;
 pub mod session;
 pub mod sign;

@@ -1,0 +1,640 @@
+{
+  "channels": {
+    "config_fn": "tuanjie-water-channels.json",
+    "defs": [
+      {
+        "base_url": "",
+        "bearer_from": "",
+        "id": "tuanjie",
+        "name": "团结",
+        "port": 8788
+      },
+      {
+        "base_url": "http://127.0.0.1:55990",
+        "bearer_from": "api-key.txt",
+        "id": "command",
+        "name": "Command",
+        "port": 55990
+      },
+      {
+        "base_url": "http://127.0.0.1:8787",
+        "bearer_from": "",
+        "id": "workbuddy",
+        "name": "WorkBuddy",
+        "port": 8787
+      },
+      {
+        "base_url": "http://127.0.0.1:8789",
+        "bearer_from": "",
+        "id": "workbuddy-intl",
+        "name": "WorkBuddy Intl",
+        "port": 8789
+      },
+      {
+        "base_url": "http://127.0.0.1:8891",
+        "bearer_from": "config",
+        "id": "bai",
+        "name": "B.ai",
+        "port": 8891
+      },
+      {
+        "base_url": "http://127.0.0.1:8786",
+        "bearer_from": "",
+        "id": "comate",
+        "name": "Comate",
+        "port": 8786
+      },
+      {
+        "base_url": "http://127.0.0.1:8785",
+        "bearer_from": "",
+        "id": "qoder",
+        "name": "Qoder",
+        "port": 8785
+      },
+      {
+        "base_url": "https://api.tokenrouter.com",
+        "bearer_from": "config",
+        "id": "tokenrouter",
+        "name": "TokenRouter",
+        "port": 0
+      }
+    ],
+    "name_of": [
+      {
+        "id": "",
+        "want": "团结"
+      },
+      {
+        "id": "tuanjie",
+        "want": "团结"
+      },
+      {
+        "id": "command",
+        "want": "Command"
+      },
+      {
+        "id": "workbuddy",
+        "want": "WorkBuddy"
+      },
+      {
+        "id": "workbuddy-intl",
+        "want": "WorkBuddy Intl"
+      },
+      {
+        "id": "bai",
+        "want": "B.ai"
+      },
+      {
+        "id": "comate",
+        "want": "Comate"
+      },
+      {
+        "id": "qoder",
+        "want": "Qoder"
+      },
+      {
+        "id": "tokenrouter",
+        "want": "TokenRouter"
+      },
+      {
+        "id": "unknown",
+        "want": "unknown"
+      },
+      {
+        "id": "BAI",
+        "want": "BAI"
+      }
+    ],
+    "strong": [
+      {
+        "id": "tuanjie",
+        "want": true
+      },
+      {
+        "id": "comate",
+        "want": true
+      },
+      {
+        "id": "qoder",
+        "want": true
+      },
+      {
+        "id": "tokenrouter",
+        "want": true
+      },
+      {
+        "id": "command",
+        "want": false
+      },
+      {
+        "id": "workbuddy",
+        "want": false
+      },
+      {
+        "id": "bai",
+        "want": false
+      },
+      {
+        "id": "",
+        "want": false
+      },
+      {
+        "id": "unknown",
+        "want": false
+      }
+    ]
+  },
+  "collected_by": "internal/tuanjie/zz_p8b_collect_test.go（临时采集器，跑完即删）",
+  "dist": {
+    "abs_neg": 7,
+    "buckets": 355,
+    "compare": [
+      {
+        "a": {
+          "1": 10,
+          "2": 30
+        },
+        "b": {
+          "1": 10,
+          "2": 30
+        },
+        "cosine": 1,
+        "distrib_score": 1,
+        "js_divergence": 0,
+        "mode_a": 2,
+        "mode_b": 2,
+        "mode_score": 1,
+        "overall": 1,
+        "valid_a": 40,
+        "valid_b": 40
+      },
+      {
+        "a": {
+          "1": 20
+        },
+        "b": {
+          "2": 20
+        },
+        "cosine": 0,
+        "distrib_score": 0,
+        "js_divergence": 0.5,
+        "mode_a": 1,
+        "mode_b": 2,
+        "mode_score": 0.98,
+        "overall": 0.49,
+        "valid_a": 40,
+        "valid_b": 40
+      },
+      {
+        "a": {
+          "1": 10,
+          "2": 30
+        },
+        "b": {
+          "1": 10,
+          "2": 30
+        },
+        "cosine": 0,
+        "distrib_score": 0,
+        "js_divergence": 0,
+        "mode_a": 0,
+        "mode_b": 0,
+        "mode_score": 0,
+        "overall": 0,
+        "valid_a": 39,
+        "valid_b": 40
+      },
+      {
+        "a": {
+          "300": 15,
+          "5": 25
+        },
+        "b": {
+          "310": 15,
+          "6": 25
+        },
+        "cosine": 0,
+        "distrib_score": 0,
+        "js_divergence": 1,
+        "mode_a": 5,
+        "mode_b": 6,
+        "mode_score": 0.98,
+        "overall": 0.49,
+        "valid_a": 40,
+        "valid_b": 40
+      }
+    ],
+    "math_round_check": 3,
+    "math_round_ties": [
+      0.13,
+      1,
+      0.0001
+    ],
+    "max_samples": 200,
+    "parse": [
+      {
+        "in": "",
+        "out": 0
+      },
+      {
+        "in": " ",
+        "out": 0
+      },
+      {
+        "in": "123",
+        "out": 123
+      },
+      {
+        "in": "355",
+        "out": 355
+      },
+      {
+        "in": "356",
+        "out": 0
+      },
+      {
+        "in": "0",
+        "out": 0
+      },
+      {
+        "in": "1",
+        "out": 1
+      },
+      {
+        "in": "007",
+        "out": 7
+      },
+      {
+        "in": "  42  ",
+        "out": 42
+      },
+      {
+        "in": "42。",
+        "out": 42
+      },
+      {
+        "in": "答案是 77",
+        "out": 77
+      },
+      {
+        "in": "-5",
+        "out": 0
+      },
+      {
+        "in": "- 5",
+        "out": 5
+      },
+      {
+        "in": "3.5",
+        "out": 3
+      },
+      {
+        "in": "abc",
+        "out": 0
+      },
+      {
+        "in": "2a",
+        "out": 2
+      },
+      {
+        "in": "1 2",
+        "out": 1
+      },
+      {
+        "in": "\"5\"",
+        "out": 5
+      },
+      {
+        "in": "３５５",
+        "out": 0
+      },
+      {
+        "in": "3555",
+        "out": 0
+      },
+      {
+        "in": "99999999999999999999",
+        "out": 0
+      },
+      {
+        "in": "100\n",
+        "out": 100
+      },
+      {
+        "in": "第 200 个",
+        "out": 200
+      },
+      {
+        "in": "1,2",
+        "out": 1
+      },
+      {
+        "in": "＋7",
+        "out": 7
+      }
+    ],
+    "progress": "分布采样 3/60",
+    "prompt": "请从1到355之间随机选择一个数字，只输出这个数字，不要有任何其他内容。",
+    "round2_sample": 1,
+    "round4_sample": 0.1235,
+    "stats": [
+      {
+        "counts": {},
+        "mean": 0,
+        "median": 0,
+        "mode": 0,
+        "mode_count": 0,
+        "std_dev": 0
+      },
+      {
+        "counts": {
+          "1": 1
+        },
+        "mean": 1,
+        "median": 1,
+        "mode": 1,
+        "mode_count": 1,
+        "std_dev": 0
+      },
+      {
+        "counts": {
+          "1": 2,
+          "2": 2
+        },
+        "mean": 1.5,
+        "median": 1.5,
+        "mode": 1,
+        "mode_count": 2,
+        "std_dev": 0.5
+      },
+      {
+        "counts": {
+          "1": 1,
+          "2": 2,
+          "3": 3
+        },
+        "mean": 2.33,
+        "median": 2.5,
+        "mode": 3,
+        "mode_count": 3,
+        "std_dev": 0.75
+      },
+      {
+        "counts": {
+          "100": 5,
+          "200": 3
+        },
+        "mean": 137.5,
+        "median": 100,
+        "mode": 100,
+        "mode_count": 5,
+        "std_dev": 48.41
+      },
+      {
+        "counts": {
+          "1": 1,
+          "355": 1
+        },
+        "mean": 178,
+        "median": 178,
+        "mode": 1,
+        "mode_count": 1,
+        "std_dev": 177
+      }
+    ],
+    "unknown_label": "red",
+    "verdict": [
+      {
+        "label": "red",
+        "overall": 0,
+        "pct": 0,
+        "verdict": "显著偏差"
+      },
+      {
+        "label": "red",
+        "overall": 0.5,
+        "pct": 50,
+        "verdict": "显著偏差"
+      },
+      {
+        "label": "yellow",
+        "overall": 0.899,
+        "pct": 90,
+        "verdict": "轻微偏差"
+      },
+      {
+        "label": "yellow",
+        "overall": 0.9,
+        "pct": 90,
+        "verdict": "轻微偏差"
+      },
+      {
+        "label": "green",
+        "overall": 0.955,
+        "pct": 96,
+        "verdict": "一致"
+      },
+      {
+        "label": "green",
+        "overall": 0.96,
+        "pct": 96,
+        "verdict": "一致"
+      },
+      {
+        "label": "green",
+        "overall": 1,
+        "pct": 100,
+        "verdict": "一致"
+      }
+    ]
+  },
+  "inflight": {
+    "activity": {
+      "cap_200": true,
+      "event_fields": [
+        "kind",
+        "message",
+        "seq",
+        "time"
+      ],
+      "first_is_newest": true,
+      "last_is_oldest": true,
+      "limit3": 3,
+      "seq_of_first": 210
+    },
+    "after_501": 500,
+    "after_finish": 499,
+    "capacity": 500,
+    "elapsed_desc": true,
+    "load_of": {
+      "none": 0,
+      "uA": 3,
+      "uB": 1
+    },
+    "newest_present": true,
+    "oldest_evicted": true,
+    "rid_first_5": [
+      "000000000001",
+      "000000000002",
+      "000000000003",
+      "000000000004",
+      "000000000005"
+    ],
+    "rid_len": 12,
+    "rid_regex_ok": true,
+    "snapshot_fields": [
+      "bytes",
+      "elapsed",
+      "idle",
+      "model",
+      "rid",
+      "stream",
+      "user_id"
+    ]
+  },
+  "opencode": {
+    "apply_table": [
+      {
+        "base": "https://opencode.ai/zen",
+        "same_as_id": true,
+        "set": true
+      },
+      {
+        "base": "https://api.opencode.ai/v1",
+        "same_as_id": true,
+        "set": true
+      },
+      {
+        "base": "opencode.ai",
+        "same_as_id": true,
+        "set": true
+      },
+      {
+        "base": "https://OPENCODE.AI",
+        "same_as_id": false,
+        "set": false
+      },
+      {
+        "base": "https://example.com",
+        "same_as_id": false,
+        "set": false
+      },
+      {
+        "base": "",
+        "same_as_id": false,
+        "set": false
+      },
+      {
+        "base": "https://xopencode.ai",
+        "same_as_id": true,
+        "set": true
+      }
+    ],
+    "header_name": "x-opencode-session",
+    "sample_shape": "uuid-v4",
+    "stable": true,
+    "uuid_v4_ok": true
+  },
+  "pacing": {
+    "default_enabled": false,
+    "file_off": "{\"enabled\":false}",
+    "file_on": "{\"enabled\":true}",
+    "is_pacing_model": [
+      {
+        "model": "KIMI-K3",
+        "want": true
+      },
+      {
+        "model": "kimi-k3",
+        "want": true
+      },
+      {
+        "model": "Kimi-K3",
+        "want": true
+      },
+      {
+        "model": "KIMI",
+        "want": true
+      },
+      {
+        "model": "xkimi",
+        "want": true
+      },
+      {
+        "model": "KIMI-K3-pro",
+        "want": true
+      },
+      {
+        "model": "GLM-5.3-FLASH",
+        "want": false
+      },
+      {
+        "model": "codely-core",
+        "want": false
+      },
+      {
+        "model": "",
+        "want": false
+      },
+      {
+        "model": "muse-spark-1.3-contributor-free",
+        "want": false
+      }
+    ],
+    "max_wait_s": 1800,
+    "reload_off": false,
+    "reload_on": true,
+    "retry_default_s": 60,
+    "retry_wait": [
+      {
+        "in": "",
+        "out_s": 60
+      },
+      {
+        "in": " ",
+        "out_s": 60
+      },
+      {
+        "in": "0",
+        "out_s": 60
+      },
+      {
+        "in": "-1",
+        "out_s": 60
+      },
+      {
+        "in": "abc",
+        "out_s": 60
+      },
+      {
+        "in": "60",
+        "out_s": 60
+      },
+      {
+        "in": " 120 ",
+        "out_s": 120
+      },
+      {
+        "in": "1.5",
+        "out_s": 60
+      },
+      {
+        "in": "+30",
+        "out_s": 30
+      },
+      {
+        "in": "99999999999999999999",
+        "out_s": 60
+      },
+      {
+        "in": "3600",
+        "out_s": 3600
+      },
+      {
+        "in": "\t90\n",
+        "out_s": 90
+      }
+    ],
+    "tmp_left_behind": false
+  }
+}

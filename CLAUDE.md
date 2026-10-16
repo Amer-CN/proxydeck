@@ -186,7 +186,12 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
   的旧结论**作废**（成因未定：当时 CLI 版本更老或抓包时段无 chat 流量）——
   **入口域名这个轴上我们与官方一致，无需也无处改路径**。
 - **现行风控认知**：封号轴心 = session + 签名凭证链（官方客服原话，见下方红线节）；
-  UA 无版本门槛（rc.54/55/58 直连全 200）、TLS 指纹与官方同源，均不在判定主轴。
+  UA 无版本门槛（rc.54/55/58 直连全 200）。**TLS 指纹一条已推翻旧认知（2026-10-16 实证）**：
+  官方两条轨道（npm rc.60 的 `gemini.js`、桌面端 release.52 的 `codely.exe`）都是**纯 Node
+  默认 TLS**（裸 fetch，无自定义 ciphers/ALPN/agent；桌面端是 Node SEA 单文件、不是
+  Electron）；Chrome 口音只存在于**我们自己的 Go 反代**（`utls_transport.go` 的
+  `HelloChrome_Auto`），没有任何官方客户端说这种口音——它是长期被上游容忍的自选行为，
+  不是官方同源。若上游将来按口音执法，正确动作是 Go+Rust 一起搬到 Node 口音。
 - **次一级差异**（本地 8788 诊断日志对比，仍成立）：官方 CLI 请求体极简
   （model/max_tokens/messages、2 条消息、无 stream/tools）；ZCode/agent 带
   stream_options/tools/tool_choice、超大消息。协议角色差异（gemini 系角色 vs OpenAI
