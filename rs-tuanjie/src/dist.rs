@@ -22,7 +22,10 @@ pub const DIST_PROMPT: &str =
 pub const DIST_MAX_SAMPLES: usize = 200;
 
 /// 分布统计摘要 —— `distStats`（`dist.go:27-33`）。
-#[derive(Debug, Clone, Serialize, Default, PartialEq)]
+///
+/// `Deserialize` 给基准库加载用（`Baseline.dist.stats` 要从 `tuanjie-baselines.json`
+/// 读回，P8b 第五片的基线内存态）。
+#[derive(Debug, Clone, Serialize, serde::Deserialize, Default, PartialEq)]
 pub struct DistStats {
     pub mean: f64,
     pub median: f64,

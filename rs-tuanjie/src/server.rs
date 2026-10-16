@@ -82,10 +82,19 @@ pub struct AppState {
     pub registry: Arc<RequestRegistry>,
     pub activity: Arc<ActivityLog>,
     pub quota_cache: Arc<QuotaCache>,
-    /// 媒体改路由累计次数（`server.go:48` 的 `mediaReroutes`）——media 未迁，本片恒 0。
+    /// 媒体改路由累计次数（`server.go:48` 的 `mediaReroutes`）。
     pub media_reroutes: AtomicI64,
     /// chat 路径的可注入时序（池路径 429 兜底的换号退避）。
     pub chat_timing: crate::chat::ChatTiming,
+    /// 外部账号（`server.go:46` 的 `providers`）——管理 + 信息展示 + 三协议转发。
+    pub providers: Arc<crate::providers::ProviderStore>,
+    /// 媒体模型状态（`media.go` 的四处包级全局）——识图/生图/生视频 + 回落链。
+    pub media: Arc<crate::media::MediaState>,
+    /// 绝对基准库（`server.go:47` 的 `baselines`）——**启动时加载进内存**，
+    /// 改/删条目必须重启才生效（CLAUDE.md 坑 15）。
+    pub baselines: Arc<crate::probes::BaselineStore>,
+    /// 远程图片下载客户端（`media.go:434` 的 `fetchImgClient`：15s 超时）。
+    pub fetch_img_client: reqwest::Client,
 }
 
 impl AppState {
@@ -102,6 +111,13 @@ impl AppState {
             quota_cache: Arc::new(QuotaCache::new()),
             media_reroutes: AtomicI64::new(0),
             chat_timing: crate::chat::ChatTiming::default(),
+            providers: Arc::new(crate::providers::ProviderStore::new()),
+            media: Arc::new(crate::media::MediaState::new()),
+            baselines: Arc::new(crate::probes::BaselineStore::new()),
+            fetch_img_client: reqwest::Client::builder()
+                .timeout(crate::media::FETCH_IMG_TIMEOUT)
+                .build()
+                .map_err(crate::Error::Forward)?,
         })
     }
 }
@@ -124,6 +140,23 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/accounts", any(handle_accounts))
         .route("/activity", any(handle_activity))
         .route("/inflight", any(handle_inflight))
+        // 外部账号（管理 + 信息展示）与媒体三选择器 —— `server.go:131-133`。
+        .route("/providers", any(crate::providers::handle_providers))
+        .route("/vision-config", any(crate::media::handle_vision_config))
+        .route("/media-config", any(crate::media::handle_media_config))
+        // 生图 / 生视频（Agnes 合同）—— `server.go:135-138`。
+        .route(
+            "/v1/images/generations",
+            any(crate::media::handle_images_generations),
+        )
+        .route("/v1/videos", any(crate::media::handle_video_create))
+        // Go 的 mux 注册的是**前缀** `/v1/videos/`；axum 需要两条：
+        // 尾斜杠本身（`/v1/videos/`）与带段的通配（`/v1/videos/{*rest}`）——
+        // 后者带 `a/b` 时进同一个 handler，由它自己判 400（与 Go 的
+        // `strings.Contains(videoID,"/")` 同款）。
+        .route("/v1/videos/", any(crate::media::handle_video_query))
+        .route("/v1/videos/{*rest}", any(crate::media::handle_video_query))
+        .route("/agnesapi", any(crate::media::handle_video_query))
         // 未匹配路径：Go `http.ServeMux` 的 404 体（`http.NotFound` → `http.Error` 的
         // `"404 page not found\n"` + `text/plain; charset=utf-8` + nosniff）。
         // axum 默认回**空体**，不补就对不上。**未迁**：ServeMux 的路径清洗 307
@@ -544,7 +577,7 @@ pub fn parse_enabled(body: &[u8]) -> Option<bool> {
 /// Go `json.Decoder.Decode` 的"读一个值"语义：`serde_json::from_slice` 要求整个
 /// 输入恰好是一个值（尾随 `x` 即错），而 Go 读完第一个值就停、后面不管。
 /// 用流式迭代器只取第一个值，其余字节原样忽略。
-fn first_json_value(body: &[u8]) -> Option<serde_json::Value> {
+pub(crate) fn first_json_value(body: &[u8]) -> Option<serde_json::Value> {
     serde_json::Deserializer::from_slice(body)
         .into_iter::<serde_json::Value>()
         .next()?

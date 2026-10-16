@@ -1,0 +1,3093 @@
+{
+  "baseline": {
+    "keys": [
+      "codely-basic|tuanjie",
+      "codely-core|comate",
+      "codely-core|tuanjie"
+    ],
+    "dump": {
+      "codely-basic|tuanjie": {
+        "model": "",
+        "channel": "tuanjie",
+        "official": true,
+        "schema_version": 3,
+        "probes": [
+          {
+            "name": "tokenizer_en",
+            "value": "12",
+            "status": "ok"
+          },
+          {
+            "name": "tokenizer_cjk",
+            "value": "30",
+            "status": "ok"
+          },
+          {
+            "name": "tokenizer_code",
+            "value": "44",
+            "status": "ok"
+          },
+          {
+            "name": "tokenizer_mixed",
+            "value": "20",
+            "status": "ok"
+          },
+          {
+            "name": "error_temp2",
+            "value": "bad temp",
+            "status": "ok"
+          },
+          {
+            "name": "error_maxtok",
+            "value": "too large",
+            "status": "ok"
+          },
+          {
+            "name": "finish_stop",
+            "value": "stop",
+            "status": "ok"
+          },
+          {
+            "name": "finish_length",
+            "value": "length",
+            "status": "ok"
+          }
+        ],
+        "dist": {
+          "counts": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "valid": 710,
+          "invalid": 0,
+          "unanswered": 0,
+          "stats": {
+            "mean": 177,
+            "median": 178,
+            "std_dev": 102.5,
+            "mode": 0,
+            "mode_count": 5
+          },
+          "insufficient": false
+        },
+        "sampled_at": "2026-02-01T00:00:00Z",
+        "account": "uid-x",
+        "sample_count": 710
+      },
+      "codely-core|comate": {
+        "model": "codely-core",
+        "channel": "comate",
+        "official": true,
+        "schema_version": 3,
+        "probes": [
+          {
+            "name": "tokenizer_en",
+            "value": "12",
+            "status": "ok"
+          },
+          {
+            "name": "tokenizer_cjk",
+            "value": "30",
+            "status": "ok"
+          },
+          {
+            "name": "tokenizer_code",
+            "value": "44",
+            "status": "ok"
+          },
+          {
+            "name": "tokenizer_mixed",
+            "value": "20",
+            "status": "ok"
+          },
+          {
+            "name": "error_temp2",
+            "value": "bad temp",
+            "status": "ok"
+          },
+          {
+            "name": "error_maxtok",
+            "value": "too large",
+            "status": "ok"
+          },
+          {
+            "name": "finish_stop",
+            "value": "stop",
+            "status": "ok"
+          },
+          {
+            "name": "finish_length",
+            "value": "length",
+            "status": "ok"
+          }
+        ],
+        "dist": {
+          "counts": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "valid": 710,
+          "invalid": 0,
+          "unanswered": 0,
+          "stats": {
+            "mean": 177,
+            "median": 178,
+            "std_dev": 102.5,
+            "mode": 0,
+            "mode_count": 5
+          },
+          "insufficient": false
+        },
+        "sampled_at": "2026-05-01T00:00:00Z",
+        "account": "uid-x",
+        "sample_count": 710
+      },
+      "codely-core|tuanjie": {
+        "model": "codely-core",
+        "channel": "tuanjie",
+        "official": true,
+        "schema_version": 3,
+        "probes": [
+          {
+            "name": "tokenizer_en",
+            "value": "12",
+            "status": "ok"
+          },
+          {
+            "name": "tokenizer_cjk",
+            "value": "30",
+            "status": "ok"
+          },
+          {
+            "name": "tokenizer_code",
+            "value": "44",
+            "status": "ok"
+          },
+          {
+            "name": "tokenizer_mixed",
+            "value": "20",
+            "status": "ok"
+          },
+          {
+            "name": "error_temp2",
+            "value": "bad temp",
+            "status": "ok"
+          },
+          {
+            "name": "error_maxtok",
+            "value": "too large",
+            "status": "ok"
+          },
+          {
+            "name": "finish_stop",
+            "value": "stop",
+            "status": "ok"
+          },
+          {
+            "name": "finish_length",
+            "value": "length",
+            "status": "ok"
+          }
+        ],
+        "dist": {
+          "counts": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4,
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "valid": 710,
+          "invalid": 0,
+          "unanswered": 0,
+          "stats": {
+            "mean": 177,
+            "median": 178,
+            "std_dev": 102.5,
+            "mode": 0,
+            "mode_count": 5
+          },
+          "insufficient": false
+        },
+        "sampled_at": "2026-04-01T00:00:00Z",
+        "account": "uid-x",
+        "sample_count": 710
+      }
+    },
+    "file": "{\n  \"baselines\": {\n    \"codely-basic|tuanjie\": {\n      \"model\": \"\",\n      \"channel\": \"tuanjie\",\n      \"official\": true,\n      \"schema_version\": 3,\n      \"probes\": [\n        {\n          \"name\": \"tokenizer_en\",\n          \"value\": \"12\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"tokenizer_cjk\",\n          \"value\": \"30\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"tokenizer_code\",\n          \"value\": \"44\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"tokenizer_mixed\",\n          \"value\": \"20\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"error_temp2\",\n          \"value\": \"bad temp\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"error_maxtok\",\n          \"value\": \"too large\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"finish_stop\",\n          \"value\": \"stop\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"finish_length\",\n          \"value\": \"length\",\n          \"status\": \"ok\"\n        }\n      ],\n      \"dist\": {\n        \"counts\": [\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4\n        ],\n        \"valid\": 710,\n        \"invalid\": 0,\n        \"unanswered\": 0,\n        \"stats\": {\n          \"mean\": 177,\n          \"median\": 178,\n          \"std_dev\": 102.5,\n          \"mode\": 0,\n          \"mode_count\": 5\n        },\n        \"insufficient\": false\n      },\n      \"sampled_at\": \"2026-02-01T00:00:00Z\",\n      \"account\": \"uid-x\",\n      \"sample_count\": 710\n    },\n    \"codely-core|comate\": {\n      \"model\": \"codely-core\",\n      \"channel\": \"comate\",\n      \"official\": true,\n      \"schema_version\": 3,\n      \"probes\": [\n        {\n          \"name\": \"tokenizer_en\",\n          \"value\": \"12\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"tokenizer_cjk\",\n          \"value\": \"30\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"tokenizer_code\",\n          \"value\": \"44\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"tokenizer_mixed\",\n          \"value\": \"20\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"error_temp2\",\n          \"value\": \"bad temp\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"error_maxtok\",\n          \"value\": \"too large\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"finish_stop\",\n          \"value\": \"stop\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"finish_length\",\n          \"value\": \"length\",\n          \"status\": \"ok\"\n        }\n      ],\n      \"dist\": {\n        \"counts\": [\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4\n        ],\n        \"valid\": 710,\n        \"invalid\": 0,\n        \"unanswered\": 0,\n        \"stats\": {\n          \"mean\": 177,\n          \"median\": 178,\n          \"std_dev\": 102.5,\n          \"mode\": 0,\n          \"mode_count\": 5\n        },\n        \"insufficient\": false\n      },\n      \"sampled_at\": \"2026-05-01T00:00:00Z\",\n      \"account\": \"uid-x\",\n      \"sample_count\": 710\n    },\n    \"codely-core|tuanjie\": {\n      \"model\": \"codely-core\",\n      \"channel\": \"tuanjie\",\n      \"official\": true,\n      \"schema_version\": 3,\n      \"probes\": [\n        {\n          \"name\": \"tokenizer_en\",\n          \"value\": \"12\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"tokenizer_cjk\",\n          \"value\": \"30\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"tokenizer_code\",\n          \"value\": \"44\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"tokenizer_mixed\",\n          \"value\": \"20\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"error_temp2\",\n          \"value\": \"bad temp\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"error_maxtok\",\n          \"value\": \"too large\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"finish_stop\",\n          \"value\": \"stop\",\n          \"status\": \"ok\"\n        },\n        {\n          \"name\": \"finish_length\",\n          \"value\": \"length\",\n          \"status\": \"ok\"\n        }\n      ],\n      \"dist\": {\n        \"counts\": [\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4,\n          0,\n          1,\n          2,\n          3,\n          4\n        ],\n        \"valid\": 710,\n        \"invalid\": 0,\n        \"unanswered\": 0,\n        \"stats\": {\n          \"mean\": 177,\n          \"median\": 178,\n          \"std_dev\": 102.5,\n          \"mode\": 0,\n          \"mode_count\": 5\n        },\n        \"insufficient\": false\n      },\n      \"sampled_at\": \"2026-04-01T00:00:00Z\",\n      \"account\": \"uid-x\",\n      \"sample_count\": 710\n    }\n  }\n}",
+    "fixture": "{\"baselines\":{\"bai|codely-core\":{\"account\":\"uid-x\",\"channel\":\"bai\",\"dist\":{\"counts\":[0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4],\"insufficient\":false,\"invalid\":0,\"stats\":{\"mean\":177,\"median\":178,\"mode\":0,\"mode_count\":5,\"std_dev\":102.5},\"unanswered\":0,\"valid\":710},\"model\":\"codely-core\",\"official\":true,\"probes\":[{\"name\":\"tokenizer_en\",\"status\":\"ok\",\"value\":\"12\"},{\"name\":\"tokenizer_cjk\",\"status\":\"ok\",\"value\":\"30\"},{\"name\":\"tokenizer_code\",\"status\":\"ok\",\"value\":\"44\"},{\"name\":\"tokenizer_mixed\",\"status\":\"ok\",\"value\":\"20\"},{\"name\":\"error_temp2\",\"status\":\"ok\",\"value\":\"bad temp\"},{\"name\":\"error_maxtok\",\"status\":\"ok\",\"value\":\"too large\"},{\"name\":\"finish_stop\",\"status\":\"ok\",\"value\":\"stop\"},{\"name\":\"finish_length\",\"status\":\"ok\",\"value\":\"length\"}],\"sample_count\":710,\"sampled_at\":\"2026-03-01T00:00:00Z\",\"schema_version\":2},\"codely-basic\":{\"account\":\"uid-x\",\"channel\":\"\",\"dist\":{\"counts\":[0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4],\"insufficient\":false,\"invalid\":0,\"stats\":{\"mean\":177,\"median\":178,\"mode\":0,\"mode_count\":5,\"std_dev\":102.5},\"unanswered\":0,\"valid\":710},\"model\":\"\",\"official\":true,\"probes\":[{\"name\":\"tokenizer_en\",\"status\":\"ok\",\"value\":\"12\"},{\"name\":\"tokenizer_cjk\",\"status\":\"ok\",\"value\":\"30\"},{\"name\":\"tokenizer_code\",\"status\":\"ok\",\"value\":\"44\"},{\"name\":\"tokenizer_mixed\",\"status\":\"ok\",\"value\":\"20\"},{\"name\":\"error_temp2\",\"status\":\"ok\",\"value\":\"bad temp\"},{\"name\":\"error_maxtok\",\"status\":\"ok\",\"value\":\"too large\"},{\"name\":\"finish_stop\",\"status\":\"ok\",\"value\":\"stop\"},{\"name\":\"finish_length\",\"status\":\"ok\",\"value\":\"length\"}],\"sample_count\":710,\"sampled_at\":\"2026-02-01T00:00:00Z\",\"schema_version\":2},\"codely-core|comate\":{\"account\":\"uid-x\",\"channel\":\"comate\",\"dist\":{\"counts\":[0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4],\"insufficient\":false,\"invalid\":0,\"stats\":{\"mean\":177,\"median\":178,\"mode\":0,\"mode_count\":5,\"std_dev\":102.5},\"unanswered\":0,\"valid\":710},\"model\":\"codely-core\",\"official\":true,\"probes\":[{\"name\":\"tokenizer_en\",\"status\":\"ok\",\"value\":\"12\"},{\"name\":\"tokenizer_cjk\",\"status\":\"ok\",\"value\":\"30\"},{\"name\":\"tokenizer_code\",\"status\":\"ok\",\"value\":\"44\"},{\"name\":\"tokenizer_mixed\",\"status\":\"ok\",\"value\":\"20\"},{\"name\":\"error_temp2\",\"status\":\"ok\",\"value\":\"bad temp\"},{\"name\":\"error_maxtok\",\"status\":\"ok\",\"value\":\"too large\"},{\"name\":\"finish_stop\",\"status\":\"ok\",\"value\":\"stop\"},{\"name\":\"finish_length\",\"status\":\"ok\",\"value\":\"length\"}],\"sample_count\":710,\"sampled_at\":\"2026-05-01T00:00:00Z\",\"schema_version\":3},\"codely-core|tuanjie\":{\"account\":\"uid-x\",\"channel\":\"tuanjie\",\"dist\":{\"counts\":[0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4],\"insufficient\":false,\"invalid\":0,\"stats\":{\"mean\":177,\"median\":178,\"mode\":0,\"mode_count\":5,\"std_dev\":102.5},\"unanswered\":0,\"valid\":710},\"model\":\"codely-core\",\"official\":true,\"probes\":[{\"name\":\"tokenizer_en\",\"status\":\"ok\",\"value\":\"12\"},{\"name\":\"tokenizer_cjk\",\"status\":\"ok\",\"value\":\"30\"},{\"name\":\"tokenizer_code\",\"status\":\"ok\",\"value\":\"44\"},{\"name\":\"tokenizer_mixed\",\"status\":\"ok\",\"value\":\"20\"},{\"name\":\"error_temp2\",\"status\":\"ok\",\"value\":\"bad temp\"},{\"name\":\"error_maxtok\",\"status\":\"ok\",\"value\":\"too large\"},{\"name\":\"finish_stop\",\"status\":\"ok\",\"value\":\"stop\"},{\"name\":\"finish_length\",\"status\":\"ok\",\"value\":\"length\"}],\"sample_count\":710,\"sampled_at\":\"2026-04-01T00:00:00Z\",\"schema_version\":3},\"old-model\":{\"account\":\"uid-x\",\"channel\":\"tuanjie\",\"dist\":{\"counts\":[0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4],\"insufficient\":false,\"invalid\":0,\"stats\":{\"mean\":177,\"median\":178,\"mode\":0,\"mode_count\":5,\"std_dev\":102.5},\"unanswered\":0,\"valid\":710},\"model\":\"old-model\",\"official\":true,\"probes\":[{\"name\":\"tokenizer_en\",\"status\":\"ok\",\"value\":\"12\"},{\"name\":\"tokenizer_cjk\",\"status\":\"ok\",\"value\":\"30\"},{\"name\":\"tokenizer_code\",\"status\":\"ok\",\"value\":\"44\"},{\"name\":\"tokenizer_mixed\",\"status\":\"ok\",\"value\":\"20\"},{\"name\":\"error_temp2\",\"status\":\"ok\",\"value\":\"bad temp\"},{\"name\":\"error_maxtok\",\"status\":\"ok\",\"value\":\"too large\"},{\"name\":\"finish_stop\",\"status\":\"ok\",\"value\":\"stop\"},{\"name\":\"finish_length\",\"status\":\"ok\",\"value\":\"length\"}],\"sample_count\":710,\"sampled_at\":\"2026-01-01T00:00:00Z\",\"schema_version\":1},\"tuanjie|codely-core\":{\"account\":\"uid-x\",\"channel\":\"tuanjie\",\"dist\":{\"counts\":[0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4],\"insufficient\":false,\"invalid\":0,\"stats\":{\"mean\":177,\"median\":178,\"mode\":0,\"mode_count\":5,\"std_dev\":102.5},\"unanswered\":0,\"valid\":710},\"model\":\"codely-core\",\"official\":true,\"probes\":[{\"name\":\"tokenizer_en\",\"status\":\"ok\",\"value\":\"12\"},{\"name\":\"tokenizer_cjk\",\"status\":\"ok\",\"value\":\"30\"},{\"name\":\"tokenizer_code\",\"status\":\"ok\",\"value\":\"44\"},{\"name\":\"tokenizer_mixed\",\"status\":\"ok\",\"value\":\"20\"},{\"name\":\"error_temp2\",\"status\":\"ok\",\"value\":\"bad temp\"},{\"name\":\"error_maxtok\",\"status\":\"ok\",\"value\":\"too large\"},{\"name\":\"finish_stop\",\"status\":\"ok\",\"value\":\"stop\"},{\"name\":\"finish_length\",\"status\":\"ok\",\"value\":\"length\"}],\"sample_count\":710,\"sampled_at\":\"2026-01-01T00:00:00Z\",\"schema_version\":2},\"weak-model\":{\"account\":\"uid-x\",\"channel\":\"tuanjie\",\"model\":\"weak-model\",\"official\":true,\"probes\":[{\"name\":\"finish_stop\",\"status\":\"ok\",\"value\":\"stop\"}],\"sample_count\":0,\"sampled_at\":\"2026-01-01T00:00:00Z\",\"schema_version\":2}}}"
+  },
+  "cases": [
+    {
+      "name": "media-reroute-image-to-vision/chat-image",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"codely-vl\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/api-token/cli-api-key",
+          "auth": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1aWQtYSIsInVzZXJfaWQiOjk5OTAwMSwic2FsdCI6InA4YjUiLCJleHAiOjQxMDI0NDQ4MDB9.cDhiMy1zeW50aGV0aWMtc2lnbmF0dXJl",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": ""
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "auth": "Bearer sk-key-uid-a",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": "{\"model\":\"codely-vl\",\"messages\":[{\"content\":[{\"text\":\"看图\",\"type\":\"text\"},{\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"},\"type\":\"image_url\"}],\"role\":\"user\"}],\"metadata\":{\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########1\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\"},\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "media-no-reroute-vision-capable/chat-image-kimi",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"KIMI-K3\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/api-token/cli-api-key",
+          "auth": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1aWQtYSIsInVzZXJfaWQiOjk5OTAwMSwic2FsdCI6InA4YjUiLCJleHAiOjQxMDI0NDQ4MDB9.cDhiMy1zeW50aGV0aWMtc2lnbmF0dXJl",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": ""
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "auth": "Bearer sk-key-uid-a",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": "{\"model\":\"KIMI-K3\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"看图\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"}}]}],\"metadata\":{\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########2\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\"},\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "media-no-reroute-extra-capable/chat-image-my-vl",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"my-vl\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/api-token/cli-api-key",
+          "auth": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1aWQtYSIsInVzZXJfaWQiOjk5OTAwMSwic2FsdCI6InA4YjUiLCJleHAiOjQxMDI0NDQ4MDB9.cDhiMy1zeW50aGV0aWMtc2lnbmF0dXJl",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": ""
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "auth": "Bearer sk-key-uid-a",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": "{\"model\":\"my-vl\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"看图\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"}}]}],\"metadata\":{\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########3\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\"},\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "media-reroute-configured-vision/chat-image",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"my-vl\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/api-token/cli-api-key",
+          "auth": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1aWQtYSIsInVzZXJfaWQiOjk5OTAwMSwic2FsdCI6InA4YjUiLCJleHAiOjQxMDI0NDQ4MDB9.cDhiMy1zeW50aGV0aWMtc2lnbmF0dXJl",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": ""
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "auth": "Bearer sk-key-uid-a",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": "{\"model\":\"my-vl\",\"messages\":[{\"content\":[{\"text\":\"看图\",\"type\":\"text\"},{\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"},\"type\":\"image_url\"}],\"role\":\"user\"}],\"metadata\":{\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########4\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\"},\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "media-fetch-remote-image/chat-remote-image",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"codely-vl\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/img/fetch.png",
+          "auth": "",
+          "api_key": "",
+          "accept": "",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": ""
+        },
+        {
+          "method": "GET",
+          "path": "/api/api-token/cli-api-key",
+          "auth": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1aWQtYSIsInVzZXJfaWQiOjk5OTAwMSwic2FsdCI6InA4YjUiLCJleHAiOjQxMDI0NDQ4MDB9.cDhiMy1zeW50aGV0aWMtc2lnbmF0dXJl",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": ""
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "auth": "Bearer sk-key-uid-a",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": "{\"model\":\"codely-vl\",\"messages\":[{\"content\":[{\"text\":\"看图\",\"type\":\"text\"},{\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoBAgME\"},\"type\":\"image_url\"}],\"role\":\"user\"}],\"metadata\":{\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########5\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\"},\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "media-fetch-remote-image-sniff/chat-remote-image-sniff",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"codely-vl\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/img/jpeg.bin",
+          "auth": "",
+          "api_key": "",
+          "accept": "",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": ""
+        },
+        {
+          "method": "GET",
+          "path": "/api/api-token/cli-api-key",
+          "auth": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1aWQtYSIsInVzZXJfaWQiOjk5OTAwMSwic2FsdCI6InA4YjUiLCJleHAiOjQxMDI0NDQ4MDB9.cDhiMy1zeW50aGV0aWMtc2lnbmF0dXJl",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": ""
+        },
+        {
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "auth": "Bearer sk-key-uid-a",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "body": "{\"model\":\"codely-vl\",\"messages\":[{\"content\":[{\"text\":\"看图\",\"type\":\"text\"},{\"image_url\":{\"url\":\"data:image/jpeg;base64,/9j/4AECAwQ=\"},\"type\":\"image_url\"}],\"role\":\"user\"}],\"metadata\":{\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########6\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\"},\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-200/chat",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"agnes-chat\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/prov/v1/chat/completions",
+          "auth": "Bearer sk-prov-chat",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"metadata\":{\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\",\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########7\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"},\"model\":\"agnes-chat\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-stream/chat-stream",
+      "status": 200,
+      "content_type": "text/event-stream",
+      "body": "data: {\"choices\":[{\"delta\":{\"content\":\"你好\"}}]}\n\ndata: [DONE]\n\n",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/prov/v1/chat/completions",
+          "auth": "Bearer sk-prov-chat",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"metadata\":{\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\",\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########8\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"},\"model\":\"agnes-chat\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-400-passthrough/chat-400",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"bad request\"}}",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/prov/v1/chat/completions",
+          "auth": "Bearer sk-prov-chat",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"metadata\":{\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\",\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########9\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"},\"model\":\"agnes-chat\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-500-empty-200/chat-500",
+      "status": 200,
+      "content_type": "",
+      "body": "",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/prov/v1/chat/completions",
+          "auth": "Bearer sk-prov-chat",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"metadata\":{\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\",\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########10\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"},\"model\":\"agnes-chat\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-sanitize-toolids/chat-sanitize",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"agnes-chat\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/prov/v1/chat/completions",
+          "auth": "Bearer sk-prov-chat",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"messages\":[{\"role\":\"assistant\",\"tool_calls\":[{\"function\":{\"arguments\":\"{}\",\"name\":\"f\"},\"id\":\"call_00000000000b\",\"type\":\"function\"}]},{\"content\":\"r\",\"role\":\"tool\",\"tool_call_id\":\"call_00000000000b\"},{\"content\":\"[tool result] r2\",\"role\":\"user\"}],\"metadata\":{\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\",\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########11\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"},\"model\":\"agnes-chat\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "responses-nonstream/responses",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"choices\":[{\"finish_reason\":\"tool_calls\",\"index\":0,\"logprobs\":null,\"message\":{\"content\":\"你好，世界\",\"role\":\"assistant\",\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"tz\\\":\\\"UTC\\\"}\",\"name\":\"get_time\"},\"id\":\"call_1\",\"type\":\"function\"}]}}],\"created\":1700000000,\"id\":\"resp_1\",\"model\":\"muse-spark-1.3-contributor-free\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":5,\"prompt_tokens\":11,\"total_tokens\":16}}",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/opencode.ai/zen/v1/responses",
+          "auth": "Bearer sk-zen",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": true,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"input\":[{\"content\":[{\"text\":\"sys\",\"type\":\"input_text\"}],\"role\":\"system\",\"type\":\"message\"},{\"content\":[{\"text\":\"hello\",\"type\":\"input_text\"},{\"detail\":\"high\",\"image_url\":\"data:image/png;base64,AAAA\",\"type\":\"input_image\"},{\"image_url\":\"https://127.0.0.1:3939/img/notfound.png\",\"type\":\"input_image\"}],\"role\":\"user\",\"type\":\"message\"},{\"content\":[{\"text\":\"prev\",\"type\":\"output_text\"}],\"role\":\"assistant\",\"type\":\"message\"},{\"arguments\":\"{\\\"a\\\":1}\",\"call_id\":\"call_9\",\"name\":\"f\",\"type\":\"function_call\"},{\"call_id\":\"call_9\",\"output\":\"result\",\"type\":\"function_call_output\"}],\"max_output_tokens\":123,\"model\":\"muse-spark-1.3-contributor-free\",\"stream\":false,\"temperature\":0.5,\"tool_choice\":{\"name\":\"f\",\"type\":\"function\"},\"tools\":[{\"description\":\"d\",\"name\":\"f\",\"parameters\":{\"properties\":{\"a\":{\"type\":\"number\"}},\"type\":\"object\"},\"strict\":true,\"type\":\"function\"}],\"top_p\":0.25}"
+        }
+      ]
+    },
+    {
+      "name": "responses-stream/responses-stream",
+      "status": 200,
+      "content_type": "text/event-stream",
+      "body": "data: {\"choices\":[{\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-00000000000f\",\"model\":\"muse-spark-1.3-contributor-free\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"你好\"},\"finish_reason\":\"\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-00000000000f\",\"model\":\"muse-spark-1.3-contributor-free\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"，世界\"},\"finish_reason\":\"\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-00000000000f\",\"model\":\"muse-spark-1.3-contributor-free\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"tz\\\":\\\"UTC\\\"}\",\"name\":\"get_time\"},\"id\":\"call_1\",\"index\":0,\"type\":\"function\"}]},\"finish_reason\":\"\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-00000000000f\",\"model\":\"muse-spark-1.3-contributor-free\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-00000000000f\",\"model\":\"muse-spark-1.3-contributor-free\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":5,\"prompt_tokens\":11,\"total_tokens\":16}}\n\ndata: [DONE]\n\n",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/opencode.ai/zen/v1/responses",
+          "auth": "Bearer sk-zen",
+          "api_key": "",
+          "accept": "text/event-stream",
+          "content_type": "application/json",
+          "opencode_session": true,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"input\":[{\"content\":[{\"text\":\"sys\",\"type\":\"input_text\"}],\"role\":\"system\",\"type\":\"message\"},{\"content\":[{\"text\":\"hello\",\"type\":\"input_text\"},{\"detail\":\"high\",\"image_url\":\"data:image/png;base64,AAAA\",\"type\":\"input_image\"},{\"image_url\":\"https://127.0.0.1:3939/img/notfound.png\",\"type\":\"input_image\"}],\"role\":\"user\",\"type\":\"message\"},{\"content\":[{\"text\":\"prev\",\"type\":\"output_text\"}],\"role\":\"assistant\",\"type\":\"message\"},{\"arguments\":\"{\\\"a\\\":1}\",\"call_id\":\"call_9\",\"name\":\"f\",\"type\":\"function_call\"},{\"call_id\":\"call_9\",\"output\":\"result\",\"type\":\"function_call_output\"}],\"max_output_tokens\":123,\"model\":\"muse-spark-1.3-contributor-free\",\"stream\":true,\"temperature\":0.5,\"tool_choice\":{\"name\":\"f\",\"type\":\"function\"},\"tools\":[{\"description\":\"d\",\"name\":\"f\",\"parameters\":{\"properties\":{\"a\":{\"type\":\"number\"}},\"type\":\"object\"},\"strict\":true,\"type\":\"function\"}],\"top_p\":0.25}"
+        }
+      ]
+    },
+    {
+      "name": "responses-unexpected-shape/responses-bad",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "[1,2,3]",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/opencode.ai/zen/v1/responses",
+          "auth": "Bearer sk-zen",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": true,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"input\":[{\"content\":[{\"text\":\"hi\",\"type\":\"input_text\"}],\"role\":\"user\",\"type\":\"message\"}],\"model\":\"muse-spark-1.3-contributor-free\",\"stream\":false}"
+        }
+      ]
+    },
+    {
+      "name": "responses-400-passthrough/responses-400",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"nope\"}}",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/opencode.ai/zen/v1/responses",
+          "auth": "Bearer sk-zen",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": true,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"input\":[{\"content\":[{\"text\":\"hi\",\"type\":\"input_text\"}],\"role\":\"user\",\"type\":\"message\"}],\"model\":\"muse-spark-1.3-contributor-free\",\"stream\":false}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-unormalized-protocol/chat",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"raw-x\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/raw/v1/chat/completions",
+          "auth": "Bearer k",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"litellm_session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\",\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"metadata\":{\"cwd\":\"E:\\\\Temp\\\\go-build2513114525\\\\b001\",\"litellm_conversation_id\":\"litellm_conversation_1792190377799_vqa6mt5ew\",\"prompt_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590########16\",\"session_id\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"},\"model\":\"raw-x\",\"prompt_cache_key\":\"aa247afe-d26d-4510-ba95-4804bf6f3590\"}"
+        }
+      ]
+    },
+    {
+      "name": "anthropic-nonstream/anthropic",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"choices\":[{\"finish_reason\":\"tool_calls\",\"index\":0,\"logprobs\":null,\"message\":{\"content\":\"你好，世界\",\"role\":\"assistant\",\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"tz\\\":\\\"UTC\\\"}\",\"name\":\"get_time\"},\"id\":\"tu_1\",\"type\":\"function\"}]}}],\"created\":1792190378,\"id\":\"msg_1\",\"model\":\"claude-3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":5,\"prompt_tokens\":11,\"total_tokens\":16}}",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/img/notfound.png",
+          "auth": "",
+          "api_key": "",
+          "accept": "",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": ""
+        },
+        {
+          "method": "POST",
+          "path": "/anth/v1/messages",
+          "auth": "",
+          "api_key": "sk-anth",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"max_tokens\":77,\"messages\":[{\"content\":[{\"text\":\"hi\",\"type\":\"text\"}],\"role\":\"user\"},{\"content\":[{\"text\":\"prev\",\"type\":\"text\"},{\"id\":\"call_9\",\"input\":{\"a\":1},\"name\":\"f\",\"type\":\"tool_use\"},{\"id\":\"call_10\",\"input\":{},\"name\":\"g\",\"type\":\"tool_use\"}],\"role\":\"assistant\"},{\"content\":[{\"content\":\"result\",\"tool_use_id\":\"call_9\",\"type\":\"tool_result\"},{\"text\":\"more\",\"type\":\"text\"},{\"source\":{\"data\":\"BBBB\",\"media_type\":\"image/jpeg\",\"type\":\"base64\"},\"type\":\"image\"},{\"source\":{\"type\":\"url\",\"url\":\"https://127.0.0.1:3939/img/notfound.png\"},\"type\":\"image\"}],\"role\":\"user\"}],\"model\":\"claude-x\",\"stream\":false,\"system\":\"sys1\\n\\nsys2\",\"temperature\":0.5,\"tool_choice\":{\"type\":\"any\"},\"tools\":[{\"description\":\"d\",\"input_schema\":{\"type\":\"object\"},\"name\":\"f\"},{\"input_schema\":{\"type\":\"object\"},\"name\":\"noname\"}]}"
+        }
+      ]
+    },
+    {
+      "name": "anthropic-stream/anthropic-stream",
+      "status": 200,
+      "content_type": "text/event-stream",
+      "body": "data: {\"choices\":[{\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-000000000015\",\"model\":\"claude-x\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"你好\"},\"finish_reason\":\"\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-000000000015\",\"model\":\"claude-x\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"\",\"name\":\"get_time\"},\"id\":\"tu_1\",\"index\":0,\"type\":\"function\"}]},\"finish_reason\":\"\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-000000000015\",\"model\":\"claude-x\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"tz\\\"\"},\"index\":0}]},\"finish_reason\":\"\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-000000000015\",\"model\":\"claude-x\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\":\\\"UTC\\\"}\"},\"index\":0}]},\"finish_reason\":\"\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-000000000015\",\"model\":\"claude-x\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\",\"index\":0,\"logprobs\":null}],\"created\":1792190378,\"id\":\"chatcmpl-000000000015\",\"model\":\"claude-x\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":5,\"prompt_tokens\":11,\"total_tokens\":16}}\n\ndata: [DONE]\n\n",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/img/notfound.png",
+          "auth": "",
+          "api_key": "",
+          "accept": "",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": ""
+        },
+        {
+          "method": "POST",
+          "path": "/anth/v1/messages",
+          "auth": "",
+          "api_key": "sk-anth",
+          "accept": "text/event-stream",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"max_tokens\":77,\"messages\":[{\"content\":[{\"text\":\"hi\",\"type\":\"text\"}],\"role\":\"user\"},{\"content\":[{\"text\":\"prev\",\"type\":\"text\"},{\"id\":\"call_9\",\"input\":{\"a\":1},\"name\":\"f\",\"type\":\"tool_use\"},{\"id\":\"call_10\",\"input\":{},\"name\":\"g\",\"type\":\"tool_use\"}],\"role\":\"assistant\"},{\"content\":[{\"content\":\"result\",\"tool_use_id\":\"call_9\",\"type\":\"tool_result\"},{\"text\":\"more\",\"type\":\"text\"},{\"source\":{\"data\":\"BBBB\",\"media_type\":\"image/jpeg\",\"type\":\"base64\"},\"type\":\"image\"},{\"source\":{\"type\":\"url\",\"url\":\"https://127.0.0.1:3939/img/notfound.png\"},\"type\":\"image\"}],\"role\":\"user\"}],\"model\":\"claude-x\",\"stream\":true,\"system\":\"sys1\\n\\nsys2\",\"temperature\":0.5,\"tool_choice\":{\"type\":\"any\"},\"tools\":[{\"description\":\"d\",\"input_schema\":{\"type\":\"object\"},\"name\":\"f\"},{\"input_schema\":{\"type\":\"object\"},\"name\":\"noname\"}]}"
+        }
+      ]
+    },
+    {
+      "name": "anthropic-500-empty-200/anthropic-500",
+      "status": 200,
+      "content_type": "",
+      "body": "",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/img/notfound.png",
+          "auth": "",
+          "api_key": "",
+          "accept": "",
+          "content_type": "",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": ""
+        },
+        {
+          "method": "POST",
+          "path": "/anth/v1/messages",
+          "auth": "",
+          "api_key": "sk-anth",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"max_tokens\":77,\"messages\":[{\"content\":[{\"text\":\"hi\",\"type\":\"text\"}],\"role\":\"user\"},{\"content\":[{\"text\":\"prev\",\"type\":\"text\"},{\"id\":\"call_9\",\"input\":{\"a\":1},\"name\":\"f\",\"type\":\"tool_use\"},{\"id\":\"call_10\",\"input\":{},\"name\":\"g\",\"type\":\"tool_use\"}],\"role\":\"assistant\"},{\"content\":[{\"content\":\"result\",\"tool_use_id\":\"call_9\",\"type\":\"tool_result\"},{\"text\":\"more\",\"type\":\"text\"},{\"source\":{\"data\":\"BBBB\",\"media_type\":\"image/jpeg\",\"type\":\"base64\"},\"type\":\"image\"},{\"source\":{\"type\":\"url\",\"url\":\"https://127.0.0.1:3939/img/notfound.png\"},\"type\":\"image\"}],\"role\":\"user\"}],\"model\":\"claude-x\",\"stream\":false,\"system\":\"sys1\\n\\nsys2\",\"temperature\":0.5,\"tool_choice\":{\"type\":\"any\"},\"tools\":[{\"description\":\"d\",\"input_schema\":{\"type\":\"object\"},\"name\":\"f\"},{\"input_schema\":{\"type\":\"object\"},\"name\":\"noname\"}]}"
+        }
+      ]
+    },
+    {
+      "name": "providers-get-cold/get1",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"ok\":true,\"providers\":[]}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-get-cold/get2-cache",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"ok\":true,\"providers\":[]}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/add-dup",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"添加失败（名称/base_url/key 不能为空，或名称已存在）\",\"ok\":false}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/add-new",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"自定义服务商已添加\",\"ok\":true}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/add-bad",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"添加失败（名称/base_url/key 不能为空，或名称已存在）\",\"ok\":false}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/addmodel",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"模型已添加\",\"ok\":true}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/addmodel-dup",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"添加失败（账号不存在或模型已存在/为空）\",\"ok\":false}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/edit",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"自定义服务商已更新\",\"ok\":true}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/removemodel",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"模型已删除\",\"ok\":true}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/remove",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"自定义服务商已删除\",\"ok\":true}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/unknown",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"未知 action\",\"ok\":false}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/bad-body",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"请求体解析失败\",\"ok\":false}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/notjson-type",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"msg\":\"请求体解析失败\",\"ok\":false}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-post-actions/get-405",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "body": "method not allowed\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-models-error-shapes/get-errors",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"ok\":true,\"providers\":[]}\n",
+      "upstream": []
+    },
+    {
+      "name": "providers-models-error-shapes/get-empty-list",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"ok\":true,\"providers\":[]}\n",
+      "upstream": []
+    },
+    {
+      "name": "media-config-get-post/get",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"image\":\"agnes-image-2.0\",\"video\":\"\",\"vision\":\"codely-vl\",\"vision_fallback\":[\"fb\"]}\n",
+      "upstream": []
+    },
+    {
+      "name": "media-config-get-post/post-vision",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"image\":\"agnes-image-2.0\",\"video\":\"\",\"vision\":\"KIMI-K3\",\"vision_fallback\":[\"codely-vl\",\"fb\"]}\n",
+      "upstream": []
+    },
+    {
+      "name": "media-config-get-post/post-image-badkind",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"生图选择器需为生图类（image）模型，codely-core 是 chat 类\",\"type\":\"api_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "media-config-get-post/post-video-badkind",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"生视频选择器需为视频类（video）模型，agnes-image-2.0 是 image 类\",\"type\":\"api_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "media-config-get-post/post-empty",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"body 需为 {\\\"vision\\\"|\\\"image\\\"|\\\"video\\\"}（可只传变化项）\",\"type\":\"api_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "media-config-get-post/post-clear-image",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"image\":\"\",\"video\":\"\",\"vision\":\"KIMI-K3\",\"vision_fallback\":[\"codely-vl\",\"fb\"]}\n",
+      "upstream": []
+    },
+    {
+      "name": "media-config-get-post/get-final",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"image\":\"\",\"video\":\"\",\"vision\":\"KIMI-K3\",\"vision_fallback\":[\"codely-vl\",\"fb\"]}\n",
+      "upstream": []
+    },
+    {
+      "name": "media-config-get-post/vision-get",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"model\":\"KIMI-K3\"}\n",
+      "upstream": []
+    },
+    {
+      "name": "media-config-get-post/vision-post",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"model\":\"GLM-5.3-FLASH\"}\n",
+      "upstream": []
+    },
+    {
+      "name": "media-config-get-post/vision-post-bad",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"识图模型需为理解类（chat）模型，agnes-image-2.0 是 image 类，请走对应的选择器\",\"type\":\"api_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "images-generations/ok",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"created\":1,\"data\":[{\"url\":\"http://img/1.png\"}]}",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/imgprov/v1/images/generations",
+          "auth": "Bearer sk-img",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"model\":\"agnes-image-2.0\",\"prompt\":\"a cat\",\"n\":1}"
+        }
+      ]
+    },
+    {
+      "name": "images-generations/video-model-400",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"video 模型不支持生图端点，请走 POST /v1/videos（异步任务制，返回 task_id/video_id 后用 GET /v1/videos/{id} 取结果）\",\"type\":\"invalid_request_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "images-generations/unknown-model-404",
+      "status": 404,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"code\":\"model_not_found\",\"message\":\"unknown model for images endpoint: nope（需先在外部账号里配置该模型的 provider）\",\"type\":\"invalid_request_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "images-generations/get-405",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "body": "method not allowed\n",
+      "upstream": []
+    },
+    {
+      "name": "images-generations-rewrite-and-errors/rewrite",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"created\":2,\"data\":[]}",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/imgprov/v1/images/generations",
+          "auth": "Bearer sk-img",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"model\":\"agnes-image-2.0\",\"prompt\":\"x\"}"
+        }
+      ]
+    },
+    {
+      "name": "images-generations-rewrite-and-errors/429",
+      "status": 429,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"agnes-img 生图请求失败（HTTP 429，限流或暂时故障），请稍后重试\",\"type\":\"api_error\"}}\n",
+      "upstream": [
+        {
+          "method": "POST",
+          "path": "/imgprov/v1/images/generations",
+          "auth": "Bearer sk-img",
+          "api_key": "",
+          "accept": "application/json",
+          "content_type": "application/json",
+          "opencode_session": false,
+          "ua": "Go-http-client/1.1",
+          "body": "{\"model\":\"agnes-image-2.0\",\"prompt\":\"a cat\",\"n\":1}"
+        }
+      ]
+    },
+    {
+      "name": "videos-create-and-query/create",
+      "status": 404,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"code\":\"model_not_found\",\"message\":\"unknown model for videos endpoint: agnes-video-2.5-flash（需先在外部账号里配置该模型的 provider）\",\"type\":\"invalid_request_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "videos-create-and-query/create-badkind",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"videos 端点仅接受 video 类模型（名字含 video），当前: agnes-image-2.0；生图请走 POST /v1/images/generations\",\"type\":\"invalid_request_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "videos-create-and-query/create-unknown",
+      "status": 404,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"code\":\"model_not_found\",\"message\":\"unknown model for videos endpoint: agnes-video-zzz（需先在外部账号里配置该模型的 provider）\",\"type\":\"invalid_request_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "videos-create-and-query/get-by-path",
+      "status": 404,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"code\":\"provider_not_found\",\"message\":\"未配置外部 provider，无法查询视频任务 v1\",\"type\":\"invalid_request_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "videos-create-and-query/get-by-path-nomodel",
+      "status": 404,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"code\":\"provider_not_found\",\"message\":\"未配置外部 provider，无法查询视频任务 v1\",\"type\":\"invalid_request_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "videos-create-and-query/get-bad-path",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"路径需为 /v1/videos/{id}\",\"type\":\"api_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "videos-create-and-query/agnesapi",
+      "status": 404,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"code\":\"provider_not_found\",\"message\":\"未配置外部 provider，无法查询视频任务 v1\",\"type\":\"invalid_request_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "videos-create-and-query/no-video-id",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"需带 video_id（/v1/videos/{id} 或 ?video_id=）\",\"type\":\"api_error\"}}\n",
+      "upstream": []
+    },
+    {
+      "name": "videos-create-and-query/post-405",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "body": "method not allowed\n",
+      "upstream": []
+    }
+  ],
+  "pipeline": [
+    {
+      "name": "tokenizer_en",
+      "value": "164",
+      "status": "ok"
+    },
+    {
+      "name": "tokenizer_cjk",
+      "value": "58",
+      "status": "ok"
+    },
+    {
+      "name": "tokenizer_code",
+      "value": "187",
+      "status": "ok"
+    },
+    {
+      "name": "tokenizer_mixed",
+      "value": "75",
+      "status": "ok"
+    },
+    {
+      "name": "error_temp2",
+      "value": "",
+      "status": "unstable",
+      "note": "未返回错误文本"
+    },
+    {
+      "name": "error_maxtok",
+      "value": "\"max_tokens too large: 1000000000\"",
+      "status": "ok",
+      "http_status": 400
+    },
+    {
+      "name": "finish_stop",
+      "value": "stop",
+      "status": "ok"
+    },
+    {
+      "name": "finish_length",
+      "value": "length",
+      "status": "ok"
+    }
+  ],
+  "probes": [
+    {
+      "model": "codely-core",
+      "body": "{\"max_tokens\":96,\"messages\":[{\"content\":\"a\",\"role\":\"user\"}],\"model\":\"codely-core\",\"stream\":false}",
+      "err_text": "",
+      "prompt": 5,
+      "finish": "stop",
+      "err": "",
+      "has_sign": true,
+      "has_session": true,
+      "ua": "codely-cli/1.0.0-rc.60 (win32; x64)"
+    },
+    {
+      "model": "GLM-5.3-FLASH",
+      "body": "{\"max_tokens\":96,\"messages\":[{\"content\":\"a\",\"role\":\"user\"}],\"model\":\"GLM-5.3-FLASH\",\"stream\":false}",
+      "err_text": "",
+      "prompt": 5,
+      "finish": "stop",
+      "err": "",
+      "has_sign": true,
+      "has_session": true,
+      "ua": "codely-cli/1.0.0-rc.60 (win32; x64)"
+    },
+    {
+      "model": "glm-5.3",
+      "body": "{\"max_tokens\":96,\"messages\":[{\"content\":\"a\",\"role\":\"user\"}],\"model\":\"glm-5.3\",\"stream\":false}",
+      "err_text": "",
+      "prompt": 5,
+      "finish": "stop",
+      "err": "",
+      "has_sign": true,
+      "has_session": true,
+      "ua": "codely-cli/1.0.0-rc.60 (win32; x64)"
+    },
+    {
+      "model": "KIMI-K3",
+      "body": "{\"max_tokens\":96,\"messages\":[{\"content\":\"a\",\"role\":\"user\"}],\"model\":\"KIMI-K3\",\"stream\":false}",
+      "err_text": "",
+      "prompt": 5,
+      "finish": "stop",
+      "err": "",
+      "has_sign": true,
+      "has_session": true,
+      "ua": "codely-cli/1.0.0-rc.60 (win32; x64)"
+    },
+    {
+      "model": "deepseek-v4-flash",
+      "body": "{\"max_tokens\":96,\"messages\":[{\"content\":\"a\",\"role\":\"user\"}],\"model\":\"deepseek-v4-flash\",\"stream\":false}",
+      "err_text": "",
+      "prompt": 5,
+      "finish": "stop",
+      "err": "",
+      "has_sign": true,
+      "has_session": true,
+      "ua": "codely-cli/1.0.0-rc.60 (win32; x64)"
+    },
+    {
+      "model": "o1-mini",
+      "body": "{\"max_tokens\":96,\"messages\":[{\"content\":\"a\",\"role\":\"user\"}],\"model\":\"o1-mini\",\"stream\":false}",
+      "err_text": "",
+      "prompt": 5,
+      "finish": "stop",
+      "err": "",
+      "has_sign": true,
+      "has_session": true,
+      "ua": "codely-cli/1.0.0-rc.60 (win32; x64)"
+    },
+    {
+      "model": "o3",
+      "body": "{\"max_tokens\":96,\"messages\":[{\"content\":\"a\",\"role\":\"user\"}],\"model\":\"o3\",\"stream\":false}",
+      "err_text": "",
+      "prompt": 5,
+      "finish": "stop",
+      "err": "",
+      "has_sign": true,
+      "has_session": true,
+      "ua": "codely-cli/1.0.0-rc.60 (win32; x64)"
+    },
+    {
+      "model": "gpt-4o",
+      "body": "{\"max_tokens\":8,\"messages\":[{\"content\":\"a\",\"role\":\"user\"}],\"model\":\"gpt-4o\",\"stream\":false}",
+      "err_text": "",
+      "prompt": 5,
+      "finish": "stop",
+      "err": "",
+      "has_sign": true,
+      "has_session": true,
+      "ua": "codely-cli/1.0.0-rc.60 (win32; x64)"
+    },
+    {
+      "model": "CLAUDE-3",
+      "body": "{\"max_tokens\":8,\"messages\":[{\"content\":\"a\",\"role\":\"user\"}],\"model\":\"CLAUDE-3\",\"stream\":false}",
+      "err_text": "",
+      "prompt": 5,
+      "finish": "stop",
+      "err": "",
+      "has_sign": true,
+      "has_session": true,
+      "ua": "codely-cli/1.0.0-rc.60 (win32; x64)"
+    }
+  ],
+  "scenario": [
+    {
+      "name": "media-reroute-image-to-vision",
+      "providers": "",
+      "media": "",
+      "accounts": [
+        "uid-a"
+      ],
+      "script": {
+        "sk-key-uid-a": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"codely-vl\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat-image",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"codely-core\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"看图\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"}}]}]}"
+        }
+      ]
+    },
+    {
+      "name": "media-no-reroute-vision-capable",
+      "providers": "",
+      "media": "",
+      "accounts": [
+        "uid-a"
+      ],
+      "script": {
+        "sk-key-uid-a": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"KIMI-K3\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat-image-kimi",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"KIMI-K3\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"看图\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"}}]}]}"
+        }
+      ]
+    },
+    {
+      "name": "media-no-reroute-extra-capable",
+      "providers": "",
+      "media": "{\"vision\":\"codely-vl\",\"image\":\"\",\"video\":\"\",\"vision_capable\":[\"my-vl\"],\"vision_fallback\":[]}",
+      "accounts": [
+        "uid-a"
+      ],
+      "script": {
+        "sk-key-uid-a": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"my-vl\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat-image-my-vl",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"my-vl\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"看图\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"}}]}]}"
+        }
+      ]
+    },
+    {
+      "name": "media-reroute-configured-vision",
+      "providers": "",
+      "media": "{\"vision\":\"my-vl\",\"image\":\"\",\"video\":\"\",\"vision_capable\":[],\"vision_fallback\":[\"another-vl\"]}",
+      "accounts": [
+        "uid-a"
+      ],
+      "script": {
+        "sk-key-uid-a": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"my-vl\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat-image",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"codely-core\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"看图\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"}}]}]}"
+        }
+      ]
+    },
+    {
+      "name": "media-fetch-remote-image",
+      "providers": "",
+      "media": "",
+      "accounts": [
+        "uid-a"
+      ],
+      "script": {
+        "sk-key-uid-a": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"codely-vl\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat-remote-image",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"codely-core\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"看图\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"{UP}/img/fetch.png\"}}]}]}"
+        }
+      ]
+    },
+    {
+      "name": "media-fetch-remote-image-sniff",
+      "providers": "",
+      "media": "",
+      "accounts": [
+        "uid-a"
+      ],
+      "script": {
+        "sk-key-uid-a": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"codely-vl\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat-remote-image-sniff",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"codely-core\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"看图\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"{UP}/img/jpeg.bin\"}}]}]}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-200",
+      "providers": "{\"name\":\"agnes-chat\",\"base_url\":\"{UP}/prov\",\"api_key\":\"sk-prov-chat\",\"models\":[\"agnes-chat\"],\"protocol\":\"chat\"}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/prov/v1/chat/completions": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"agnes-chat\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"agnes-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-stream",
+      "providers": "{\"name\":\"agnes-chat\",\"base_url\":\"{UP}/prov\",\"api_key\":\"sk-prov-chat\",\"models\":[\"agnes-chat\"],\"protocol\":\"chat\"}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/prov/v1/chat/completions": [
+          {
+            "code": 200,
+            "headers": {
+              "Content-Type": "text/event-stream"
+            },
+            "body": "data: {\"choices\":[{\"delta\":{\"content\":\"你好\"}}]}\n\ndata: [DONE]\n\n"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat-stream",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"agnes-chat\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-400-passthrough",
+      "providers": "{\"name\":\"agnes-chat\",\"base_url\":\"{UP}/prov\",\"api_key\":\"sk-prov-chat\",\"models\":[\"agnes-chat\"],\"protocol\":\"chat\"}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/prov/v1/chat/completions": [
+          {
+            "code": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":{\"message\":\"bad request\"}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat-400",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"agnes-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-500-empty-200",
+      "providers": "{\"name\":\"agnes-chat\",\"base_url\":\"{UP}/prov\",\"api_key\":\"sk-prov-chat\",\"models\":[\"agnes-chat\"],\"protocol\":\"chat\"}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/prov/v1/chat/completions": [
+          {
+            "code": 500,
+            "headers": null,
+            "body": "{\"error\":{\"message\":\"boom\"}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat-500",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"agnes-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-sanitize-toolids",
+      "providers": "{\"name\":\"agnes-chat\",\"base_url\":\"{UP}/prov\",\"api_key\":\"sk-prov-chat\",\"models\":[\"agnes-chat\"],\"protocol\":\"chat\"}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/prov/v1/chat/completions": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"agnes-chat\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat-sanitize",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"agnes-chat\",\"messages\":[{\"role\":\"assistant\",\"tool_calls\":[{\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}]},{\"role\":\"tool\",\"content\":\"r\"},{\"role\":\"tool\",\"content\":[{\"type\":\"text\",\"text\":\"r2\"}]}]}"
+        }
+      ]
+    },
+    {
+      "name": "responses-nonstream",
+      "providers": "{\"name\":\"zen-legacy\",\"base_url\":\"{UP}/opencode.ai/zen\",\"api_key\":\"sk-zen\",\"models\":[\"muse-spark-1.3-contributor-free\"]}",
+      "media": "{\"vision\":\"codely-vl\",\"image\":\"\",\"video\":\"\",\"vision_capable\":[\"muse-spark-1.3-contributor-free\"],\"vision_fallback\":[]}",
+      "accounts": null,
+      "script": {
+        "/opencode.ai/zen/v1/responses": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"resp_1\",\"status\":\"completed\",\"created_at\":1700000000,\"model\":\"muse-spark-1.3-contributor-free\",\"output\":[{\"type\":\"reasoning\",\"id\":\"rs_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"你好\"},{\"type\":\"output_text\",\"text\":\"，世界\"}]},{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"get_time\",\"arguments\":\"{\\\"tz\\\":\\\"UTC\\\"}\"}],\"usage\":{\"input_tokens\":11,\"output_tokens\":5,\"total_tokens\":16}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "responses",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"muse-spark-1.3-contributor-free\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"hello\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AAAA\",\"detail\":\"high\"}},{\"type\":\"image_url\",\"image_url\":\"{UP}/img/notfound.png\"}]},{\"role\":\"assistant\",\"content\":\"prev\",\"tool_calls\":[{\"id\":\"call_9\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"a\\\":1}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_9\",\"content\":[{\"type\":\"text\",\"text\":\"result\"}]}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"f\",\"description\":\"d\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}}},\"strict\":true}},{\"type\":\"other\"}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"f\"}},\"temperature\":0.5,\"top_p\":0.25,\"max_completion_tokens\":123,\"stream\":false}"
+        }
+      ]
+    },
+    {
+      "name": "responses-stream",
+      "providers": "{\"name\":\"zen-legacy\",\"base_url\":\"{UP}/opencode.ai/zen\",\"api_key\":\"sk-zen\",\"models\":[\"muse-spark-1.3-contributor-free\"]}",
+      "media": "{\"vision\":\"codely-vl\",\"image\":\"\",\"video\":\"\",\"vision_capable\":[\"muse-spark-1.3-contributor-free\"],\"vision_fallback\":[]}",
+      "accounts": null,
+      "script": {
+        "/opencode.ai/zen/v1/responses": [
+          {
+            "code": 200,
+            "headers": {
+              "Content-Type": "text/event-stream"
+            },
+            "body": "data: {\"type\":\"response.created\"}\n\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\",\"role\":\"assistant\"}}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"你好\"}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"，世界\"}\n\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"get_time\",\"arguments\":\"{\\\"tz\\\":\\\"UTC\\\"}\"}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":11,\"output_tokens\":5,\"total_tokens\":16}}}\n\n"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "responses-stream",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"muse-spark-1.3-contributor-free\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"hello\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AAAA\",\"detail\":\"high\"}},{\"type\":\"image_url\",\"image_url\":\"{UP}/img/notfound.png\"}]},{\"role\":\"assistant\",\"content\":\"prev\",\"tool_calls\":[{\"id\":\"call_9\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"a\\\":1}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_9\",\"content\":[{\"type\":\"text\",\"text\":\"result\"}]}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"f\",\"description\":\"d\",\"parameters\":{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}}},\"strict\":true}},{\"type\":\"other\"}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"f\"}},\"temperature\":0.5,\"top_p\":0.25,\"max_completion_tokens\":123,\"stream\":true}"
+        }
+      ]
+    },
+    {
+      "name": "responses-unexpected-shape",
+      "providers": "{\"name\":\"zen-legacy\",\"base_url\":\"{UP}/opencode.ai/zen\",\"api_key\":\"sk-zen\",\"models\":[\"muse-spark-1.3-contributor-free\"]}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/opencode.ai/zen/v1/responses": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "[1,2,3]"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "responses-bad",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"muse-spark-1.3-contributor-free\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+        }
+      ]
+    },
+    {
+      "name": "responses-400-passthrough",
+      "providers": "{\"name\":\"zen-legacy\",\"base_url\":\"{UP}/opencode.ai/zen\",\"api_key\":\"sk-zen\",\"models\":[\"muse-spark-1.3-contributor-free\"]}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/opencode.ai/zen/v1/responses": [
+          {
+            "code": 400,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"error\":{\"message\":\"nope\"}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "responses-400",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"muse-spark-1.3-contributor-free\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+        }
+      ]
+    },
+    {
+      "name": "ext-chat-unormalized-protocol",
+      "providers": "{\"name\":\"raw\",\"base_url\":\"{UP}/raw\",\"api_key\":\"k\",\"models\":[\"raw-x\"],\"protocol\":\" ANTHROPIC \"}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/raw/v1/chat/completions": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"raw-x\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "chat",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"raw-x\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+        }
+      ]
+    },
+    {
+      "name": "anthropic-nonstream",
+      "providers": "{\"name\":\"claude\",\"base_url\":\"{UP}/anth\",\"api_key\":\"Bearer sk-anth\",\"models\":[\"claude-x\"],\"protocol\":\"anthropic\"}",
+      "media": "{\"vision\":\"codely-vl\",\"image\":\"\",\"video\":\"\",\"vision_capable\":[\"claude-x\"],\"vision_fallback\":[]}",
+      "accounts": null,
+      "script": {
+        "/anth/v1/messages": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-3\",\"content\":[{\"type\":\"text\",\"text\":\"你好\"},{\"type\":\"text\",\"text\":\"，世界\"},{\"type\":\"tool_use\",\"id\":\"tu_1\",\"name\":\"get_time\",\"input\":{\"tz\":\"UTC\"}}],\"stop_reason\":\"tool_use\",\"usage\":{\"input_tokens\":11,\"output_tokens\":5}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "anthropic",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"claude-x\",\"messages\":[{\"role\":\"system\",\"content\":\"sys1\"},{\"role\":\"system\",\"content\":\"sys2\"},{\"role\":\"user\",\"content\":\"hi\"},{\"role\":\"assistant\",\"content\":\"prev\",\"tool_calls\":[{\"id\":\"call_9\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"a\\\":1}\"}},{\"id\":\"call_10\",\"type\":\"function\",\"function\":{\"name\":\"g\",\"arguments\":\"not json\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_9\",\"content\":\"result\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"more\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,BBBB\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"{UP}/img/notfound.png\"}}]}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"f\",\"description\":\"d\",\"parameters\":{\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"noname\"}}],\"tool_choice\":\"required\",\"temperature\":0.5,\"max_tokens\":77,\"stream\":false}"
+        }
+      ]
+    },
+    {
+      "name": "anthropic-stream",
+      "providers": "{\"name\":\"claude\",\"base_url\":\"{UP}/anth\",\"api_key\":\"Bearer sk-anth\",\"models\":[\"claude-x\"],\"protocol\":\"anthropic\"}",
+      "media": "{\"vision\":\"codely-vl\",\"image\":\"\",\"video\":\"\",\"vision_capable\":[\"claude-x\"],\"vision_fallback\":[]}",
+      "accounts": null,
+      "script": {
+        "/anth/v1/messages": [
+          {
+            "code": 200,
+            "headers": {
+              "Content-Type": "text/event-stream"
+            },
+            "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":11,\"output_tokens\":1}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"你好\"}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"tu_1\",\"name\":\"get_time\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"tz\\\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\":\\\"UTC\\\"}\"}}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "anthropic-stream",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"claude-x\",\"messages\":[{\"role\":\"system\",\"content\":\"sys1\"},{\"role\":\"system\",\"content\":\"sys2\"},{\"role\":\"user\",\"content\":\"hi\"},{\"role\":\"assistant\",\"content\":\"prev\",\"tool_calls\":[{\"id\":\"call_9\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"a\\\":1}\"}},{\"id\":\"call_10\",\"type\":\"function\",\"function\":{\"name\":\"g\",\"arguments\":\"not json\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_9\",\"content\":\"result\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"more\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,BBBB\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"{UP}/img/notfound.png\"}}]}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"f\",\"description\":\"d\",\"parameters\":{\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"noname\"}}],\"tool_choice\":\"required\",\"temperature\":0.5,\"max_tokens\":77,\"stream\":true}"
+        }
+      ]
+    },
+    {
+      "name": "anthropic-500-empty-200",
+      "providers": "{\"name\":\"claude\",\"base_url\":\"{UP}/anth\",\"api_key\":\"Bearer sk-anth\",\"models\":[\"claude-x\"],\"protocol\":\"anthropic\"}",
+      "media": "{\"vision\":\"codely-vl\",\"image\":\"\",\"video\":\"\",\"vision_capable\":[\"claude-x\"],\"vision_fallback\":[]}",
+      "accounts": null,
+      "script": {
+        "/anth/v1/messages": [
+          {
+            "code": 500,
+            "headers": null,
+            "body": "{\"error\":{\"message\":\"boom\"}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "anthropic-500",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "body": "{\"model\":\"claude-x\",\"messages\":[{\"role\":\"system\",\"content\":\"sys1\"},{\"role\":\"system\",\"content\":\"sys2\"},{\"role\":\"user\",\"content\":\"hi\"},{\"role\":\"assistant\",\"content\":\"prev\",\"tool_calls\":[{\"id\":\"call_9\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"a\\\":1}\"}},{\"id\":\"call_10\",\"type\":\"function\",\"function\":{\"name\":\"g\",\"arguments\":\"not json\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_9\",\"content\":\"result\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"more\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,BBBB\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"{UP}/img/notfound.png\"}}]}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"f\",\"description\":\"d\",\"parameters\":{\"type\":\"object\"}}},{\"type\":\"function\",\"function\":{\"name\":\"noname\"}}],\"tool_choice\":\"required\",\"temperature\":0.5,\"max_tokens\":77,\"stream\":false}"
+        }
+      ]
+    },
+    {
+      "name": "providers-get-cold",
+      "providers": "{\"name\":\"agnes-chat\",\"base_url\":\"{UP}/prov\",\"api_key\":\"sk-prov-chat\",\"models\":[\"agnes-chat\"],\"protocol\":\"chat\"}\n{\"name\":\"claude\",\"base_url\":\"{UP}/anth\",\"api_key\":\"Bearer sk-anth\",\"models\":[\"claude-x\"],\"protocol\":\"anthropic\"}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/prov/dashboard/billing/subscription": [
+          {
+            "code": 404,
+            "headers": null,
+            "body": "nope"
+          }
+        ],
+        "/prov/dashboard/billing/usage": [
+          {
+            "code": 500,
+            "headers": null,
+            "body": "boom"
+          }
+        ],
+        "/prov/models": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"data\":[{\"id\":\"agnes-chat\"},{\"id\":\"other\"},{\"noid\":true}]}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "get1",
+          "method": "GET",
+          "path": "/providers",
+          "body": ""
+        },
+        {
+          "name": "get2-cache",
+          "method": "GET",
+          "path": "/providers",
+          "body": ""
+        }
+      ]
+    },
+    {
+      "name": "providers-post-actions",
+      "providers": "{\"name\":\"agnes-chat\",\"base_url\":\"{UP}/prov\",\"api_key\":\"sk-prov-chat\",\"models\":[\"agnes-chat\"],\"protocol\":\"chat\"}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/prov/models": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"data\":[]}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "add-dup",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{\"action\":\"add\",\"name\":\"agnes-chat\",\"base_url\":\"http://x\",\"api_key\":\"k\"}"
+        },
+        {
+          "name": "add-new",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{\"action\":\"add\",\"name\":\"  newp  \",\"base_url\":\"http://x/  \",\"api_key\":\" k1 \",\"models\":[\" m1 \",\"\",\"m2\"],\"protocol\":\" Responses \"}"
+        },
+        {
+          "name": "add-bad",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{\"action\":\"add\",\"name\":\"nokey\",\"base_url\":\"http://x\"}"
+        },
+        {
+          "name": "addmodel",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{\"action\":\"addmodel\",\"name\":\"newp\",\"model\":\"m3\"}"
+        },
+        {
+          "name": "addmodel-dup",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{\"action\":\"addmodel\",\"name\":\"newp\",\"model\":\"m3\"}"
+        },
+        {
+          "name": "edit",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{\"action\":\"edit\",\"name\":\"newp\",\"base_url\":\"http://y\",\"api_key\":\"\"}"
+        },
+        {
+          "name": "removemodel",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{\"action\":\"removemodel\",\"name\":\"newp\",\"model\":\"m1\"}"
+        },
+        {
+          "name": "remove",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{\"action\":\"remove\",\"name\":\"newp\"}"
+        },
+        {
+          "name": "unknown",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{\"action\":\"zzz\"}"
+        },
+        {
+          "name": "bad-body",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{not json"
+        },
+        {
+          "name": "notjson-type",
+          "method": "POST",
+          "path": "/providers",
+          "body": "{\"action\":123}"
+        },
+        {
+          "name": "get-405",
+          "method": "PUT",
+          "path": "/providers",
+          "body": ""
+        }
+      ]
+    },
+    {
+      "name": "providers-models-error-shapes",
+      "providers": "{\"name\":\"err404\",\"base_url\":\"{UP}/errprov\",\"api_key\":\"k\",\"models\":[\"m\"],\"protocol\":\"chat\"}\n{\"name\":\"arr\",\"base_url\":\"{UP}/arrprov\",\"api_key\":\"k\",\"models\":[\"m2\"],\"protocol\":\"chat\"}\n{\"name\":\"empty\",\"base_url\":\"{UP}/emptyprov\",\"api_key\":\"k\",\"models\":[\"m3\"],\"protocol\":\"chat\"}",
+      "media": "",
+      "accounts": null,
+      "script": {
+        "/arrprov/models": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "[1,2]"
+          }
+        ],
+        "/emptyprov/models": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": ""
+          }
+        ],
+        "/errprov/models": [
+          {
+            "code": 404,
+            "headers": null,
+            "body": "nope"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "get-errors",
+          "method": "GET",
+          "path": "/providers",
+          "body": ""
+        },
+        {
+          "name": "get-empty-list",
+          "method": "GET",
+          "path": "/providers",
+          "body": ""
+        }
+      ]
+    },
+    {
+      "name": "media-config-get-post",
+      "providers": "{\"name\":\"agnes-img\",\"base_url\":\"{UP}/imgprov\",\"api_key\":\"sk-img\",\"models\":[\"agnes-image-2.0\"],\"protocol\":\"chat\"}",
+      "media": "{\"vision\":\"codely-vl\",\"image\":\"agnes-image-2.0\",\"video\":\"\",\"vision_capable\":[\"x\"],\"vision_fallback\":[\"codely-vl\",\"fb\"]}",
+      "accounts": null,
+      "script": null,
+      "steps": [
+        {
+          "name": "get",
+          "method": "GET",
+          "path": "/media-config",
+          "body": ""
+        },
+        {
+          "name": "post-vision",
+          "method": "POST",
+          "path": "/media-config",
+          "body": "{\"vision\":\"KIMI-K3\"}"
+        },
+        {
+          "name": "post-image-badkind",
+          "method": "POST",
+          "path": "/media-config",
+          "body": "{\"image\":\"codely-core\"}"
+        },
+        {
+          "name": "post-video-badkind",
+          "method": "POST",
+          "path": "/media-config",
+          "body": "{\"video\":\"agnes-image-2.0\"}"
+        },
+        {
+          "name": "post-empty",
+          "method": "POST",
+          "path": "/media-config",
+          "body": "{}"
+        },
+        {
+          "name": "post-clear-image",
+          "method": "POST",
+          "path": "/media-config",
+          "body": "{\"image\":\"\"}"
+        },
+        {
+          "name": "get-final",
+          "method": "GET",
+          "path": "/media-config",
+          "body": ""
+        },
+        {
+          "name": "vision-get",
+          "method": "GET",
+          "path": "/vision-config",
+          "body": ""
+        },
+        {
+          "name": "vision-post",
+          "method": "POST",
+          "path": "/vision-config",
+          "body": "{\"model\":\"GLM-5.3-FLASH\"}"
+        },
+        {
+          "name": "vision-post-bad",
+          "method": "POST",
+          "path": "/vision-config",
+          "body": "{\"model\":\"agnes-image-2.0\"}"
+        }
+      ]
+    },
+    {
+      "name": "images-generations",
+      "providers": "{\"name\":\"agnes-img\",\"base_url\":\"{UP}/imgprov\",\"api_key\":\"sk-img\",\"models\":[\"agnes-image-2.0\"],\"protocol\":\"chat\"}",
+      "media": "{\"vision\":\"codely-vl\",\"image\":\"\",\"video\":\"\",\"vision_capable\":[],\"vision_fallback\":[]}",
+      "accounts": null,
+      "script": {
+        "/imgprov/v1/images/generations": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"created\":1,\"data\":[{\"url\":\"http://img/1.png\"}]}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "ok",
+          "method": "POST",
+          "path": "/v1/images/generations",
+          "body": "{\"model\":\"agnes-image-2.0\",\"prompt\":\"a cat\",\"n\":1}"
+        },
+        {
+          "name": "video-model-400",
+          "method": "POST",
+          "path": "/v1/images/generations",
+          "body": "{\"model\":\"agnes-video-2.5-flash\",\"prompt\":\"a dog\",\"mode\":\"text\"}"
+        },
+        {
+          "name": "unknown-model-404",
+          "method": "POST",
+          "path": "/v1/images/generations",
+          "body": "{\"model\":\"nope\"}"
+        },
+        {
+          "name": "get-405",
+          "method": "GET",
+          "path": "/v1/images/generations",
+          "body": ""
+        }
+      ]
+    },
+    {
+      "name": "images-generations-rewrite-and-errors",
+      "providers": "{\"name\":\"agnes-img\",\"base_url\":\"{UP}/imgprov\",\"api_key\":\"sk-img\",\"models\":[\"agnes-image-2.0\"],\"protocol\":\"chat\"}",
+      "media": "{\"vision\":\"codely-vl\",\"image\":\"agnes-image-2.0\",\"video\":\"agnes-video-2.5-flash\",\"vision_capable\":[],\"vision_fallback\":[]}",
+      "accounts": null,
+      "script": {
+        "/imgprov/v1/images/generations": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"created\":2,\"data\":[]}"
+          },
+          {
+            "code": 429,
+            "headers": null,
+            "body": "{\"error\":{\"message\":\"slow down\"}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "rewrite",
+          "method": "POST",
+          "path": "/v1/images/generations",
+          "body": "{\"model\":\"agnes-image-9.9\",\"prompt\":\"x\"}"
+        },
+        {
+          "name": "429",
+          "method": "POST",
+          "path": "/v1/images/generations",
+          "body": "{\"model\":\"agnes-image-2.0\",\"prompt\":\"a cat\",\"n\":1}"
+        }
+      ]
+    },
+    {
+      "name": "videos-create-and-query",
+      "providers": "{\"name\":\"agnes-vid\",\"base_url\":\"{UP}/vidprov\",\"api_key\":\"sk-vid\",\"models\":[\"agnes-video-2.5-flash\"],\"protocol\":\"chat\"}\n{\"name\":\"agnes-img\",\"base_url\":\"{UP}/imgprov\",\"api_key\":\"sk-img\",\"models\":[\"agnes-image-2.0\"],\"protocol\":\"chat\"}",
+      "media": "{\"vision\":\"codely-vl\",\"image\":\"\",\"video\":\"\",\"vision_capable\":[],\"vision_fallback\":[]}",
+      "accounts": null,
+      "script": {
+        "/vidprov/v1/agnesapi": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"status\":\"running\"}"
+          }
+        ],
+        "/vidprov/v1/videos": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"task_id\":\"t1\",\"video_id\":\"v1\"}"
+          }
+        ],
+        "/vidprov/v1/videos/v1": [
+          {
+            "code": 200,
+            "headers": null,
+            "body": "{\"status\":\"completed\",\"metadata\":{\"url\":\"http://v/1.mp4\"}}"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "name": "create",
+          "method": "POST",
+          "path": "/v1/videos",
+          "body": "{\"model\":\"agnes-video-2.5-flash\",\"prompt\":\"a dog\",\"mode\":\"text\"}"
+        },
+        {
+          "name": "create-badkind",
+          "method": "POST",
+          "path": "/v1/videos",
+          "body": "{\"model\":\"agnes-image-2.0\",\"prompt\":\"a cat\",\"n\":1}"
+        },
+        {
+          "name": "create-unknown",
+          "method": "POST",
+          "path": "/v1/videos",
+          "body": "{\"model\":\"agnes-video-zzz\"}"
+        },
+        {
+          "name": "get-by-path",
+          "method": "GET",
+          "path": "/v1/videos/v1",
+          "body": ""
+        },
+        {
+          "name": "get-by-path-nomodel",
+          "method": "GET",
+          "path": "/v1/videos/v1?model_name=x%20y",
+          "body": ""
+        },
+        {
+          "name": "get-bad-path",
+          "method": "GET",
+          "path": "/v1/videos/a/b",
+          "body": ""
+        },
+        {
+          "name": "agnesapi",
+          "method": "GET",
+          "path": "/agnesapi?video_id=v1",
+          "body": ""
+        },
+        {
+          "name": "no-video-id",
+          "method": "GET",
+          "path": "/agnesapi",
+          "body": ""
+        },
+        {
+          "name": "post-405",
+          "method": "POST",
+          "path": "/agnesapi",
+          "body": ""
+        }
+      ]
+    }
+  ]
+}

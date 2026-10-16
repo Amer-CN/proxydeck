@@ -226,23 +226,16 @@ async fn unimplemented_routes_say_so_instead_of_pretending() {
         );
     }
     // 未注册的端点回 404（**不**假装存在）
-    for path in [
-        "/account-models",
-        "/water-probe",
-        "/providers",
-        "/media-config",
-        "/vision-config",
-        "/v1/images/generations",
-        "/v1/videos",
-        "/agnesapi",
-    ] {
+    for path in ["/account-models", "/water-probe"] {
         let (status, _h, _b) = call(st.clone(), "GET", path).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{path} 应回 404（本片未注册）");
     }
 
-    // `/v1/chat/completions` 已在 P8b 第四片迁入（池路径 + 单账号路径）：
-    // 它不再是 404 —— GET 走 Go 同款的 `http.Error(w,"method not allowed",405)`。
-    let (status, headers, body) = call(st, "GET", "/v1/chat/completions").await;
+    // `/v1/chat/completions` 已在 P8b 第四片迁入（池路径 + 单账号路径）；
+    // `/providers`、`/media-config`、`/vision-config`、`/v1/images/generations`、
+    // `/v1/videos`、`/agnesapi` 已在 P8b 第五片迁入 —— 它们都不再是 404。
+    // GET `/v1/chat/completions` 走 Go 同款的 `http.Error(w,"method not allowed",405)`。
+    let (status, headers, body) = call(st.clone(), "GET", "/v1/chat/completions").await;
     assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED, "GET chat 应回 405");
     assert_eq!(body, "method not allowed\n");
     assert_eq!(
@@ -251,6 +244,36 @@ async fn unimplemented_routes_say_so_instead_of_pretending() {
             .and_then(|v| v.to_str().ok()),
         Some("text/plain; charset=utf-8")
     );
+    // 第五片的端点：GET 都是**本地应答**（不是 axum 的 404/405）
+    for (path, want) in [
+        ("/providers", StatusCode::OK),
+        ("/media-config", StatusCode::OK),
+        ("/vision-config", StatusCode::OK),
+        // 路径带 id 但没配 provider ⇒ 404 `provider_not_found`（Go 同）
+        ("/v1/videos/v1", StatusCode::NOT_FOUND),
+        // 缺 video_id ⇒ 400（Go 同）
+        ("/agnesapi", StatusCode::BAD_REQUEST),
+    ] {
+        let (status, _h, body) = call(st.clone(), "GET", path).await;
+        assert_eq!(status, want, "{path} 的 GET 应本地应答：{body:?}");
+        assert!(
+            !body.contains("not_implemented_in_pilot"),
+            "{path} 不该再报未迁：{body:?}"
+        );
+    }
+    // 图片/视频端子：GET 走 Go 同款 405 纯文本
+    for path in ["/v1/images/generations", "/v1/videos"] {
+        let (status, headers, body) = call(st.clone(), "GET", path).await;
+        assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED, "{path}");
+        assert_eq!(body, "method not allowed\n", "{path}");
+        assert_eq!(
+            headers
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("text/plain; charset=utf-8"),
+            "{path}"
+        );
+    }
 }
 
 /// `--port 8788` + 任一测试缝在场 → 拒绝启动（exit 2），**不监听**（P8b 审查 L7）。

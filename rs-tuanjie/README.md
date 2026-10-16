@@ -105,15 +105,15 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 | 8 | `/account-models` | ❌ 未注册 | 依赖 `cdp_browser.go` 与逐账号换 key |
 | 9 | `/inflight` | ✅ 已实现 | `{"ok":true,"requests":[…]}`，字段**声明序**（struct）|
 | 10 | `/activity` | ✅ 已实现 | `?limit` 解析（>0 且 ≤200 才采信）+ 空数组形态 |
-| 11 | `/water-probe` | ❌ 未注册 | 依赖 `probes.go`/`water.go` |
-| 12 | `/providers` | ❌ 未注册 | 依赖 `providers.go` |
-| 13 | `/vision-config` | ❌ 未注册 | 依赖 `media.go` |
-| 14 | `/media-config` | ❌ 未注册 | 同上 |
-| 15 | `/v1/chat/completions` | ✅ 已实现 | `handleChat` 本体（P8b 第四片，见下节）：池路径 + 单账号路径 |
-| 16 | `/v1/images/generations` | ❌ 未注册 | 依赖 `media.go` |
-| 17 | `/v1/videos` | ❌ 未注册 | 同上 |
-| 18 | `/v1/videos/` | ❌ 未注册 | 同上 |
-| 19 | `/agnesapi` | ❌ 未注册 | 同上 |
+| 11 | `/water-probe` | ❌ 未注册 | 依赖 `water.go` 的注水链路（P8c）；`probes.rs` 的探针集与基线内存态已迁（第五片）|
+| 12 | `/providers` | ✅ 已实现 | **P8b 第五片**：GET（SWR 缓存 + 冷启动同步拉取）/ POST 六个 action |
+| 13 | `/vision-config` | ✅ 已实现 | 同上（旧兼容层，内部走 media 机制）|
+| 14 | `/media-config` | ✅ 已实现 | 同上（三选择器 + 类型校验）|
+| 15 | `/v1/chat/completions` | ✅ 已实现 | `handleChat` 本体（P8b 第四片）：池路径 + 单账号路径；**第五片**补媒体改路由/远程图片/外部 provider 分支 |
+| 16 | `/v1/images/generations` | ✅ 已实现 | **P8b 第五片**（Agnes 合同 + 统一改写 + 错误终态）|
+| 17 | `/v1/videos` | ✅ 已实现 | 同上（生视频任务创建）|
+| 18 | `/v1/videos/` | ✅ 已实现 | 同上（任务查询；axum 侧用 `/v1/videos/` 与 `/v1/videos/{*rest}` 两条路由覆盖 Go 的前缀注册）|
+| 19 | `/agnesapi` | ✅ 已实现 | 同上（Agnes 推荐的查询形态）|
 
 **骨架自身的四处合同**（与 Go 逐条对齐，有单测 + 差分双重门禁）：
 
@@ -243,10 +243,115 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
     `go func()`；Rust 需要显式 `clone` 句柄搬进 `tokio::spawn`。池内部本就是 `Mutex<Inner>`，
     并发语义未变（不是行为差异，登记以免后人以为是重构）。
 
+**P8b 第五片新增的已知差异（登记）**：
+
+30. **`desensitizeAgentIdentity`（反竞品身份脱敏）未迁**：Go 在 `reshapeChatBody` **之前**
+    对 system 消息里的 `You are <竞品名>` 做零宽空格改写（`server.go:1970`），Rust 侧没有。
+    含该声明的请求出站体因此**不同**（Go 会多两个零宽字符）；差分金标的场景不含这类声明，
+    故未暴露。属本片范围外的既有缺口（第四片也未迁），登记备查。
+31. **网络级错误的文案**：`/providers` 的 `/models` 探测失败时，Go 写
+    `Get "http://…": dial tcp …`，Rust 写 reqwest 的 `error sending request for url (…)`。
+    只进 `error` 字段与日志，**不进差分金标**（金标只覆盖 `HTTP <code>` 与可复现的解码错文案）。
+32. **JSON 解码错的文案**：`/providers` 的 `/models` 返回非法 JSON 时，Go 是
+    `encoding/json` 的 `SyntaxError` 文案（`invalid character 'x' looking for beginning of value`），
+    Rust 是 serde_json 的措辞；**类型不符**（array/number/string/bool）与**空体**（`EOF`）
+    两侧已逐字对齐并被金标锁住。
+33. **`Accept` 头的一处平台差异**：Rust（reqwest）对未显式设 `Accept` 的请求自动补 `*/*`，
+    Go 的 `net/http` 不补——差分对「Go 空 ↔ Rust `*/*`」视为同一条（已在测试注释与本节登记）。
+34. **`fetchImgClient` 的 UA**：Go 的 `http.Client` 会带 `Go-http-client/1.1`，reqwest 带
+    `reqwest/…`；两者都不进响应字节，只在假上游观测里可见。差分比路径/认证/体，不比 UA。
+35. **PNG 嗅探分支未被差分覆盖**（见上节反向验证）：魔数字节嗅探的**JPEG 分支**有金标
+    （`/img/jpeg.bin` 无 `image/*` 头），PNG 分支只在单测里覆盖（`sniff_image_mime` 逐项对表）。
+36. **基线的 nil 切片形态**：Go 的 `probes`/`counts` 为 nil 时 marshal 成 `null`，
+    Rust 统一写 `[]`。差分 fixture 两侧都是非空切片，故未暴露；只影响空条目的文件形态。
+37. **`Baseline.rate_limited` 的 `omitempty`**：Go 是 `bool` + `omitempty`（false 不写），
+    Rust 同（`skip_serializing_if = "is_false"`），单测 `to_bytes_writes_go_marshal_indent`
+    锁住「不出现 `rate_limited`」这一行。
+38. **媒体配置是每个 `AppState` 一份**（Go 是包级全局）：Go 同一进程内连续 `NewServer()`
+    会**继承**上一次的媒体取值（`LoadMediaConfig` 只在启动读盘），Rust 每次构造都从盘上重读。
+    差分采集器为此在每个场景前显式复位 Go 的包级全局（`p8b5ResetMediaGlobals`），
+    否则比的是上一条用例的配置。
+39. **`/v1/videos/` 的路由形态**：Go 的 `ServeMux` 注册的是前缀，axum 需要 `/v1/videos/`
+    与 `/v1/videos/{*rest}` 两条；`/v1/videos/a/b` 两侧都进 handler 并由 handler 判 400。
+40. **中转路径不做请求上下文取消**：Go 用 `r.Context()` 让客户端断连时取消上游请求，
+    Rust 侧（与本 crate 其余转发路径一致）没有等价中断点。只影响断连时的上游资源占用，
+    不影响响应字节。
+41. **P8b 第五片审查后补记（边缘输入分歧族，只影响畸形上游/极端输入）**：
+    - 探针错误文本Latin-1化（`probes.rs:405`）：非 ASCII 错误文本脱敏前即 mojibake，
+      指纹值与截断点漂移；金标全 ASCII 未暴露。
+    - `decode_json_object` 全量严格解析 vs Go `Decoder` 首值语义：合法 JSON 后带尾随数据时
+      Go 成功、Rust 报错（差异 32 只登记了文案，未覆盖此条）。
+    - 转发内容块类型错时（`message_item`/`content_as_string`/`detect_media_type`）：
+      Go 的 typed 解析整事件丢弃，Rust duck-typed 照发；`anthropic_tool_input("null")`
+      Go 回 nil→`input:null`，Rust 回 `{}`。
+    - 流式事件类型错时：Go 整事件丢弃，Rust 照发空 delta；探针 200 体类型错时
+      Go 判 error，Rust 零值继续。
+
+## 已知差异（**如实登记**，不是"优化空间"）
+
+## P8b 第五片：forwards + providers + media + probes（2026-10-17）
+
+**目标（简报原话）**：补 `responses_forward.rs`（`/responses` 转发与翻回）+
+`anthropic_forward.rs`（`/v1/messages` 转发与翻回）+ `providers.rs`（三协议 + 白名单兜底）+
+`media.rs`（识图改路由 + Agnes 生图/生视频合同）+ `probes.rs`（注水探针 + max_tokens 自适应
+名单 + 基线内存态）；`handleChat` 开头的 `RerouteIfMedia`/`FetchRemoteImages` 与外部 provider
+分支随 media/providers 一起打通。
+
+### 落地对照（Go 行号 → Rust 落点）
+
+| 面 | Go | Rust | 门禁 |
+|---|---|---|---|
+| 三协议分流 | `responses_forward.go:40-59` / `providers.go:154-163` | `providers.rs::{provider_protocol, is_zen_responses_model, external_protocol_route, route_of}` | 单测 3 条 + 金标 `ext-chat-unormalized-protocol` |
+| `/responses` 转换 | `responses_forward.go:64-305` | `responses_forward.rs::{chat_to_responses_request, chat_tools_to_responses, chat_tool_choice_to_responses, message_item}` | 单测（逐字节期望串）+ 金标 `responses-nonstream` 的**出站体** |
+| Responses → chat | `responses_forward.go:318-403` | `responses_to_chat_completion` | 单测 + 金标 `responses-nonstream` 响应体 |
+| Responses 流式 | `responses_forward.go:417-546` | `ResponsesStreamTranslator`（增量状态机） | 单测（分片不变性 + 空串 finish_reason）+ 金标 `responses-stream` 下游逐字节 |
+| Anthropic 转换 | `anthropic_forward.go:43-288` | `anthropic_forward.rs::{chat_to_anthropic_request, content_blocks_to_anthropic, anthropic_image_block, anthropic_tool_input, chat_tools_to_anthropic, chat_tool_choice_to_anthropic}` | 单测 + 金标 `anthropic-nonstream` 出站体 |
+| Anthropic → chat | `anthropic_forward.go:298-375` | `anthropic_to_chat_completion` | 单测 + 金标响应体 |
+| Anthropic 流式 | `anthropic_forward.go:386-542` | `AnthropicStreamTranslator` | 单测 + 金标 `anthropic-stream` 下游逐字节 |
+| 通用外部转发 | `server.go:1450-1567` | `providers.rs::{forward_external, forward_external_chat}` | 金标 `ext-chat-200/stream/400/500/sanitize` |
+| 外部账号管理 | `providers.go` 全文 + `handlers_extra.go:228-292` | `providers.rs::{ProviderStore, handle_providers}` | 单测 + 金标 `providers-*`（12 步） |
+| 媒体配置 | `media.go:59-236` + `handlers_extra.go:294-374` | `media.rs::{MediaState, handle_vision_config, handle_media_config}` | 单测（落盘字节）+ 金标 `media-config-get-post`（10 步） |
+| 识图改路由 | `media.go:328-355` / `media.go:120-170` | `MediaState::{reroute_if_media, vision_capable, vision_fallback_chain}` | 单测 + 金标 `media-reroute-*` / `media-no-reroute-*` 四条 |
+| 远程图片预下载 | `media.go:440-530` | `media.rs::{fetch_remote_images, download_as_data_uri, sniff_image_mime}` | 金标 `media-fetch-remote-image`（PNG 头）+ `…-sniff`（无 image/* 头 ⇒ 走魔术字节） |
+| schema 修复 | `media.go:363-431` | `sanitize_for_external` | 单测 + 金标 `ext-chat-sanitize-toolids` |
+| 生图/生视频 | `server.go:1574-1763` | `media.rs::{handle_images_generations, handle_video_create, handle_video_query}` | 金标 `images-*`（4 步）+ `videos-create-and-query`（9 步） |
+| 探针集 | `probes.go:177-472` | `probes.rs::{probe_call, run_pipeline_probes, probe_max_tokens}` | 单测 + 金标 9 条出站体 + 整轮 `RunPipelineProbes` 结果列表 |
+| 基线内存态 | `baseline.go:26-233` | `probes.rs::{BaselineStore, normalize_model_name, baseline_quality_ok, migrate_legacy_keys, to_bytes}` | 单测 + 金标基线组（键集合 / 内存态条目 / 回写文件字节） |
+
+### 差分对照（真 Go 采收，60 步 HTTP + 探针 + 基线）
+
+```
+P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范化 12）+ 9 条探针体 +
+1 轮探针 + 1 组基线；失败 0 条
+```
+
+* 场景覆盖：媒体改路由 6 条（含一条无 `image/*` 头、逼出魔术字节嗅探的远程图片）、
+  外部 provider 三条路径 13 条（chat 6 / responses 4 / anthropic 3）、`/providers` 16 步、
+  媒体配置 10 步、生图生视频 15 步（合计 60 步；此前分组数字 chat 6/responses 5/anthropic 4、
+  providers 14、生图 13 加总对不上，已按金标实数更正——P8b 第五片审查 #11）。
+* **出站体 21 条逐字节**（responses/anthropic 的**转换体**、`/providers` 的上游探测、
+  探针体）；**12 条规范化**——团结域/外部 chat 的体里带 `metadata`/`litellm_session_id`/
+  `prompt_cache_key`（每请求随机 uuid、`cwd` 还是各自进程的 exe 目录），这三键先摘掉再比；
+  它们的逐字节合同由 P8a / P8b 第三片的 `go-outbound-wire` 金标覆盖。
+* 反向验证（`.work/p8b5/mut-p8b5*.ps1`，输出落 `.work/p8b5/mut.log`）：
+  **8/9 条突变 RED**（responses 的 `max_output_tokens` 改名、流式 `finish_reason` 空串→null、
+  `externalBaseURL` 不补 `/v1`、改路由不做识图能力判定、`max_tokens` 名单去掉 `codely`、
+  基线迁移跳过版本门禁、anthropic `required→any` 改 `auto`、嗅探去掉 JPEG 分支），
+  逐条还原后复绿。**1 条 GREEN 属已知覆盖边界**：嗅探的 PNG 分支——假上游在
+  `/img/fetch.png` 上带 `image/png` 头，走的是头而不是嗅探；嗅探路径由 `/img/jpeg.bin`
+  的 JPEG 分支覆盖（M5b 已 RED）。
+
 ## 已知差异（**如实登记**，不是"优化空间"）
 
 > 编号 1~6 属 P8a（凭证链），7~9 属 P8b 第一片（兜底内核），10~17 属 P8b 第二片（账号池/积分），
-> 18~21 属 P8b 第三片（server 骨架与路由），22~29 属 P8b 第四片（`handleChat`，其中 26 已收口）。
+> 18~21 属 P8b 第三片（server 骨架与路由），22~29 属 P8b 第四片（`handleChat`，其中 26 已收口），
+> 30~40 属 P8b 第五片（forwards/providers/media/probes）。
+
+**⚠ Go 侧的一条既有行为（Rust 如实复刻，非本片引入）**：外部 provider 在
+`/chat/completions` 上回 5xx/429 时，Go 的 `forwardExternal` **不写任何响应字节**就返回状态码，
+`handleChat` 也不再写 ⇒ 客户端拿到一个 **200 空响应**（`server.go:999-1007`）。
+金标 `ext-chat-500-empty-200` / `anthropic-500-empty-200` 把这条逐字节锁住（两侧同为 200 空体）。
+生图/生视频端点**没有**这个洞（那里显式 `writeErr` 终态，`server.go:1616-1624`）。
 
 10. **Dead/冷却标记是 Go 团结侧没有的**：`internal/tuanjie/accounts.go` 里
    没有任何「凭据失效/冷却」标记——它的 401 只是被注释提到（`server.go:461`）、402 走

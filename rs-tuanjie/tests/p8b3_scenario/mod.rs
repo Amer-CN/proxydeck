@@ -101,19 +101,56 @@ pub const MODELS_JSON: &str =
 // ---------------------------------------------------------------- 假上游
 
 /// 假上游记录的一次请求（只记形态，不记真实密钥）。
+///
+/// P8b 第五片补了 `api_key`/`content_type`/`opencode_session`/`user_agent`/`body`——
+/// 外部 provider 的三条转发路径要比**出站体**（协议转换的合同面），只记四件套不够。
 #[derive(Debug, Clone, PartialEq)]
 pub struct SeenReq {
     pub method: String,
     pub path: String,
     pub authorization: String,
     pub accept: String,
+    pub api_key: String,
+    pub content_type: String,
+    pub opencode_session: bool,
+    pub user_agent: String,
+    pub body: String,
 }
 
-#[derive(Default)]
+/// 一条脚本化应答（P8b 第五片：外部 provider 路径与团结路径共用同一种形状）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Reply {
+    pub code: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+}
+
+impl Reply {
+    /// JSON 应答（`Content-Type: application/json`）。
+    pub fn json(code: u16, body: &str) -> Reply {
+        Reply {
+            code,
+            headers: vec![("Content-Type".to_string(), "application/json".to_string())],
+            body: body.as_bytes().to_vec(),
+        }
+    }
+
+    /// SSE 应答。
+    pub fn sse(body: &str) -> Reply {
+        Reply {
+            code: 200,
+            headers: vec![(
+                "Content-Type".to_string(),
+                "text/event-stream".to_string(),
+            )],
+            body: body.as_bytes().to_vec(),
+        }
+    }
+}
+
 struct FakeState {
     /// `authorization` 全值 → 计费接口命中次数。
-    billing_hits: BTreeMap<String, usize>,
-    /// `authorization` 全值 → 计费接口应答（状态码, 体）。
+    billing_hits: BTreeMap<String, usize>,    /// `authorization` 全值 → 计费接口应答（状态码, 体）。
     billing_reply: BTreeMap<String, (u16, String)>,
     seen: Vec<SeenReq>,
     cli_key_hits: usize,
@@ -129,6 +166,41 @@ struct FakeState {
     chat_order: Vec<String>,
     chat_hits: usize,
     last_chat_body: Vec<u8>,
+    /// P8b 第五片：**按完整 path 脚本的应答**（外部 provider 用；越界重复最后一条）。
+    path_script: BTreeMap<String, Vec<Reply>>,
+    path_calls: BTreeMap<String, usize>,
+    /// P8b 第五片：**按 cli_api_key 脚本的应答**（团结路径的通用形态，带自定义头）。
+    unity_script: BTreeMap<String, Vec<Reply>>,
+    /// `/v1/models` 的应答体（默认 [`MODELS_JSON`]）。
+    models_body: String,
+    /// `/img/fetch.png` 的应答字节（远程图片预下载用）。
+    image_body: Vec<u8>,
+    /// P8b 第五片的探针整轮模式（按请求体算应答，见 [`pipeline_reply`]）。
+    pipeline: bool,
+}
+
+impl Default for FakeState {
+    fn default() -> Self {
+        FakeState {
+            billing_hits: BTreeMap::new(),
+            billing_reply: BTreeMap::new(),
+            seen: Vec::new(),
+            cli_key_hits: 0,
+            models_hits: 0,
+            token_keys: BTreeMap::new(),
+            chat_script: BTreeMap::new(),
+            chat_calls: BTreeMap::new(),
+            chat_order: Vec::new(),
+            chat_hits: 0,
+            last_chat_body: Vec::new(),
+            path_script: BTreeMap::new(),
+            path_calls: BTreeMap::new(),
+            unity_script: BTreeMap::new(),
+            models_body: MODELS_JSON.to_string(),
+            image_body: Vec::new(),
+            pipeline: false,
+        }
+    }
 }
 
 /// 极简假上游：一个连接一个线程，逐请求应答（`Connection: close`，避免保活复杂度）。
@@ -258,6 +330,85 @@ impl FakeUpstream {
     pub fn last_chat_body(&self) -> Vec<u8> {
         self.state.lock().unwrap().last_chat_body.clone()
     }
+
+    // ------------------------------------------------ P8b 第五片：外部 provider / 团结通用脚本
+
+    /// 登记某个**完整 path** 的逐次应答（外部 provider 路径用；越界后重复最后一条）。
+    /// 顺带把该 path 的命中计数清零（语义同 [`Self::set_chat_script`]）。
+    pub fn set_path_script(&self, path: &str, script: Vec<Reply>) {
+        let mut st = self.state.lock().unwrap();
+        st.path_calls.remove(path);
+        st.path_script.insert(path.to_string(), script);
+    }
+
+    /// 登记某个 cli_api_key 在团结路径上的逐次应答（带自定义头）。
+    pub fn set_unity_script(&self, cli_api_key: &str, script: Vec<Reply>) {
+        let mut st = self.state.lock().unwrap();
+        st.unity_script.insert(cli_api_key.to_string(), script);
+    }
+
+    /// 覆盖 `/v1/models` 的应答体。
+    pub fn set_models_body(&self, body: &str) {
+        self.state.lock().unwrap().models_body = body.to_string();
+    }
+
+    /// 覆盖 `/img/fetch.png` 的字节。
+    pub fn set_image_body(&self, body: Vec<u8>) {
+        self.state.lock().unwrap().image_body = body;
+    }
+
+    /// 清空脚本与命中计数（每个场景开头调一次）。
+    pub fn reset_scripts(&self) {
+        let mut st = self.state.lock().unwrap();
+        st.path_script.clear();
+        st.path_calls.clear();
+        st.unity_script.clear();
+        st.chat_script.clear();
+        st.chat_calls.clear();
+        st.chat_order.clear();
+        st.chat_hits = 0;
+        st.models_body = MODELS_JSON.to_string();
+        st.image_body = vec![];
+        st.seen.clear();
+        st.pipeline = false;
+    }
+
+    /// 探针整轮采集模式：`/v1/chat/completions` 按**请求体**算确定性应答
+    /// （prompt_tokens = 文本 rune 数 + 3），与 Go 采集器同一套算法。
+    pub fn set_pipeline_mode(&self, on: bool) {
+        self.state.lock().unwrap().pipeline = on;
+    }
+}
+
+/// 探针整轮模式的确定性应答 —— 与 Go 采集器的 `p8b5PipelineReply` 逐条同算法。
+fn pipeline_reply(body: &[u8]) -> Reply {
+    let v: serde_json::Value = serde_json::from_slice(body).unwrap_or(serde_json::Value::Null);
+    let text = v
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .and_then(|a| a.first())
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+    let max_tokens = v.get("max_tokens").and_then(|m| m.as_i64()).unwrap_or(0);
+    let prompt = text.chars().count() + 3;
+    if max_tokens == 1000000000 {
+        return Reply::json(400, r#"{"error":"max_tokens too large: 1000000000"}"#);
+    }
+    if max_tokens == 6 {
+        return Reply::json(
+            200,
+            &format!(
+                r#"{{"model":"codely-core","choices":[{{"finish_reason":"length","message":{{"content":"秋天"}}}}],"usage":{{"prompt_tokens":{prompt},"completion_tokens":6}}}}"#
+            ),
+        );
+    }
+    Reply::json(
+        200,
+        &format!(
+            r#"{{"model":"codely-core","choices":[{{"finish_reason":"stop","message":{{"content":"好"}}}}],"usage":{{"prompt_tokens":{prompt},"completion_tokens":2}}}}"#
+        ),
+    )
 }
 
 impl Drop for FakeUpstream {
@@ -291,6 +442,10 @@ fn serve_conn(mut stream: TcpStream, state: Arc<Mutex<FakeState>>) {
     let path = parts.next().unwrap_or("").to_string();
     let mut auth = String::new();
     let mut accept = String::new();
+    let mut api_key = String::new();
+    let mut content_type = String::new();
+    let mut user_agent = String::new();
+    let mut opencode_session = false;
     let mut content_length = 0usize;
     for line in lines {
         let Some((k, v)) = line.split_once(':') else {
@@ -299,6 +454,10 @@ fn serve_conn(mut stream: TcpStream, state: Arc<Mutex<FakeState>>) {
         match k.trim().to_ascii_lowercase().as_str() {
             "authorization" => auth = v.trim().to_string(),
             "accept" => accept = v.trim().to_string(),
+            "x-api-key" => api_key = v.trim().to_string(),
+            "content-type" => content_type = v.trim().to_string(),
+            "user-agent" => user_agent = v.trim().to_string(),
+            "x-opencode-session" => opencode_session = true,
             "content-length" => content_length = v.trim().parse().unwrap_or(0),
             _ => {}
         }
@@ -317,13 +476,18 @@ fn serve_conn(mut stream: TcpStream, state: Arc<Mutex<FakeState>>) {
             Err(_) => break,
         }
     }
-    let (code, retry_after, body) = {
+    let (code, headers, body): (u16, Vec<(String, String)>, Vec<u8>) = {
         let mut st = state.lock().unwrap();
         st.seen.push(SeenReq {
             method,
             path: path.clone(),
             authorization: auth.clone(),
             accept,
+            api_key,
+            content_type,
+            opencode_session,
+            user_agent,
+            body: String::from_utf8_lossy(&req_body).into_owned(),
         });
         let bare = path.split('?').next().unwrap_or("").to_string();
         let billing_path = "/api/user/billing/usage/summary";
@@ -337,41 +501,86 @@ fn serve_conn(mut stream: TcpStream, state: Arc<Mutex<FakeState>>) {
                 .cloned()
                 .unwrap_or_else(|| FAKE_CLI_KEY.to_string());
             let body = format!("{{\"cli_api_key\":\"{key}\"}}");
-            (200u16, None, body)
+            (200u16, vec![], body.into_bytes())
+        } else if bare == "/img/fetch.png" {
+            (
+                200u16,
+                vec![("Content-Type".to_string(), "image/png".to_string())],
+                st.image_body.clone(),
+            )
+        } else if bare == "/img/jpeg.bin" {
+            // 无 `image/*` 的 Content-Type ⇒ 必须走**魔术字节嗅探**（覆盖 `sniffImageMIME`）
+            (
+                200u16,
+                vec![(
+                    "Content-Type".to_string(),
+                    "application/octet-stream".to_string(),
+                )],
+                vec![0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 4],
+            )
+        } else if let Some(script) = st.path_script.get(&bare).cloned() {
+            // P8b 第五片：外部 provider 路径（完整 path 脚本，越界重复最后一条）
+            let n = st.path_calls.entry(bare.clone()).or_insert(0);
+            let idx = *n;
+            *n += 1;
+            let rep = script[idx.min(script.len() - 1)].clone();
+            (rep.code, rep.headers, rep.body)
         } else if bare == billing_path {
             let n = st.billing_hits.entry(auth.clone()).or_insert(0);
             *n += 1;
             match st.billing_reply.get(&auth) {
-                Some((c, b)) => (*c, None, b.clone()),
-                None => (404u16, None, String::new()),
+                Some((c, b)) => (*c, vec![], b.clone().into_bytes()),
+                None => (404u16, vec![], Vec::new()),
             }
         } else if bare == "/v1/models" {
             st.models_hits += 1;
-            (200u16, None, MODELS_JSON.to_string())
+            (200u16, vec![], st.models_body.clone().into_bytes())
         } else if bare == "/v1/chat/completions" {
             st.chat_hits += 1;
+            if st.pipeline {
+                // P8b 第五片：探针整轮模式（按请求体算应答）
+                let rep = pipeline_reply(&req_body);
+                (rep.code, rep.headers, rep.body)
+            } else {
             st.last_chat_body = req_body.clone();
             let key = auth.strip_prefix("Bearer ").unwrap_or(&auth).to_string();
             st.chat_order.push(key.clone());
             let n = st.chat_calls.entry(key.clone()).or_insert(0);
             let idx = *n;
             *n += 1;
-            match st
-                .chat_script
-                .get(&key)
-                .map(|s| s.as_slice())
-                .and_then(|s| {
-                    if s.is_empty() {
-                        None
-                    } else {
-                        Some(s[idx.min(s.len() - 1)].clone())
+            // 先看通用 unity 脚本（带自定义头），再回落第四片的 (code, retry_after, body) 形态
+            if let Some(script) = st.unity_script.get(&key).cloned() {
+                if !script.is_empty() {
+                    let rep = script[idx.min(script.len() - 1)].clone();
+                    (rep.code, rep.headers, rep.body)
+                } else {
+                    (404u16, vec![], Vec::new())
+                }
+            } else {
+                match st
+                    .chat_script
+                    .get(&key)
+                    .map(|s| s.as_slice())
+                    .and_then(|s| {
+                        if s.is_empty() {
+                            None
+                        } else {
+                            Some(s[idx.min(s.len() - 1)].clone())
+                        }
+                    }) {
+                    Some((c, ra, b)) => {
+                        let mut hs: Vec<(String, String)> = Vec::new();
+                        if !ra.is_empty() {
+                            hs.push(("Retry-After".to_string(), ra));
+                        }
+                        (c, hs, b.into_bytes())
                     }
-                }) {
-                Some((c, ra, b)) => (c, Some(ra), b),
-                None => (404u16, None, String::new()),
+                    None => (404u16, vec![], Vec::new()),
+                }
+            }
             }
         } else {
-            (404u16, None, String::new())
+            (404u16, vec![], Vec::new())
         }
     };
     let reason = match code {
@@ -380,24 +589,29 @@ fn serve_conn(mut stream: TcpStream, state: Arc<Mutex<FakeState>>) {
         401 => "Unauthorized",
         402 => "Payment Required",
         404 => "Not Found",
+        422 => "Unprocessable Entity",
         429 => "Too Many Requests",
         500 => "Internal Server Error",
         502 => "Bad Gateway",
         _ => "Status",
     };
+    let has_ct = headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("content-type"));
     let mut resp = format!(
-        "HTTP/1.1 {code} {reason}\r\nContent-Type: application/json\r\n\
+        "HTTP/1.1 {code} {reason}\r\n{}\
          Content-Length: {}\r\nConnection: close\r\n",
-        body.as_bytes().len()
+        if has_ct {
+            String::new()
+        } else {
+            "Content-Type: application/json\r\n".to_string()
+        },
+        body.len()
     );
-    if let Some(ra) = &retry_after {
-        if !ra.is_empty() {
-            resp.push_str(&format!("Retry-After: {ra}\r\n"));
-        }
+    for (k, v) in &headers {
+        resp.push_str(&format!("{k}: {v}\r\n"));
     }
     resp.push_str("\r\n");
     let _ = stream.write_all(resp.as_bytes());
-    let _ = stream.write_all(body.as_bytes());
+    let _ = stream.write_all(&body);
     let _ = stream.flush();
 }
 

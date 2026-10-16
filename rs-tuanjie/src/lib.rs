@@ -10,11 +10,15 @@
 //! 实时动态）/ `opencode_session`（`x-opencode-session`）/ `dist`（分布指纹纯函数）/
 //! `channels`（注水渠道静态表）/ `accounts`（账号池）/ `quota`（积分）/
 //! `stats`（按模型累计 + 落盘）/ `server`（服务骨架与路由表）/ `chat`（**`handleChat`
-//! 的池路径与单账号路径**，P8b 第四片）；
-//! 剩余 P8b 面（`handlers_extra.go` 的注水与媒体 / `providers.go` /
-//! 两条转发 / `media.go` / `probes.go` / `model/info` 聚合）见 `README.md` 的未覆盖清单。
+//! 的池路径与单账号路径**，P8b 第四片）/ `providers`（外部账号 + 三协议分流）/
+//! `responses_forward`（`/responses` 转发与翻回）/ `anthropic_forward`（`/v1/messages`）/
+//! `media`（识图改路由 + Agnes 生图生视频合同）/ `probes`（探针集 + 基线内存态）
+//! —— 后五个模块属 **P8b 第五片**；
+//! 剩余面（`water.go` 的注水链路、`seedcheck.go`、`cdp_browser.go`、`model/info` 聚合）
+//! 见 `README.md` 的未覆盖清单。
 
 pub mod accounts;
+pub mod anthropic_forward;
 pub mod appdir;
 pub mod channels;
 pub mod chat;
@@ -25,10 +29,14 @@ pub mod dist;
 pub mod gojson;
 pub mod headers;
 pub mod inflight;
+pub mod media;
 pub mod opencode_session;
 pub mod pacing;
+pub mod probes;
+pub mod providers;
 pub mod quota;
 pub mod reqshape;
+pub mod responses_forward;
 pub mod server;
 pub mod session;
 pub mod sign;

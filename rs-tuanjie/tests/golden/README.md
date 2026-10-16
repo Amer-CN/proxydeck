@@ -221,4 +221,51 @@ Copy-Item <repo>\.work\p8b4\golden-p8b4-go.json <repo>\rs-tuanjie\tests\golden\ 
 （`status` / `content-type` / `body` 逐字节 / `Retry-After` / `Cache-Control` /
 上游命中序与逐号命中数）。
 
+## P8b 第五片的基准（`golden-p8b5-go.json`，131 KB）
+
+覆盖 **60 步 HTTP 用例 + 9 条探针体 + 1 轮探针 + 1 组基线**：媒体改路由/远程图片预下载、
+外部 provider 的三条转发路径（OpenAI chat / `/responses` / `/v1/messages`，含流式、4xx 透传、
+5xx→空 200、异常形态）、`/providers` 的 GET/POST 全覆盖、`/media-config` 与 `/vision-config`、
+生图/生视频四个端点、`probeCall` 的 max_tokens 自适应名单、整轮 `RunPipelineProbes` 结果、
+以及基线库的加载/迁移/回写字节。
+
+**与其余基准的结构差异**：这份金标里还带一份 `scenario`（场景定义，`{UP}` 占位符保留）——
+Rust 侧**按同一份定义跑同一串请求**，不靠两套手写清单对齐。要改场景就改采集器并重采，
+不要在 Rust 侧另写。
+
+采集器留档 `.work/p8b5/zz_p8b5_collect_test.go`（一次性，跑完即从 `internal/tuanjie/` 删除）。
+
+**再生成链**：
+
+```powershell
+Copy-Item <repo>\.work\p8b5\zz_p8b5_collect_test.go <repo>\internal\tuanjie\
+$env:PROXYDECK_DATA_DIR = "<隔离临时目录>"
+$env:P8B5_GOLDEN_OUT = "<repo>\.work\p8b5\golden-p8b5-go.json"
+go test ./internal/tuanjie -run TestZZCollectP8B5 -count=1
+Remove-Item <repo>\internal\tuanjie\zz_p8b5_collect_test.go
+Copy-Item <repo>\.work\p8b5\golden-p8b5-go.json <repo>\rs-tuanjie\tests\golden\ -Force
+```
+
+**采集器的四个坑（照做才对得上）**：
+
+1. **媒体配置是 Go 的包级全局**：`LoadMediaConfig` 只在进程启动读一次盘，同进程里连续
+   `NewServer()` 会继承上一条用例的 `vision/image/video`。采集器每个场景前显式复位
+   （`p8b5ResetMediaGlobals`），否则比的是上一条用例的配置（Rust 侧 `MediaState` 是
+   per-`AppState`，天然没有这个问题）。
+2. **步骤分派要用去查询串的路径**：`/agnesapi?video_id=…` 若按带参路径判会落进 `handleChat`
+   分支（第一版就踩了：金标里那条 `agnesapi` 是 chat 的 405，而不是任务查询）。
+3. **`script` 的两类键**：`sk-key-<uid>` 是团结域的 cli_api_key（按号给应答），其余是
+   **完整 path**（外部 provider）。放错桶就等于该用例的上游没有脚本 ⇒ 404。
+4. **断言「未改动」时别只比响应体**：远程图片用例的出站体里带 `metadata`/`litellm_session_id`/
+   `prompt_cache_key`（每请求随机）与 `cwd`（各自进程的 exe 目录）——Rust 侧比对时先摘掉这三键，
+   否则全是假红（摘掉的是**会话层**，其逐字节合同在 `go-outbound-wire.txt` 里）。
+
+**时变口径**：`created`（`time.Now().Unix()`）与 `chatcmpl-<rid>` 在两侧都做**点替换**
+（`<TS>` / `<ID>`）；其余字节逐位比。上游端口不同 ⇒ `https?://127.0.0.1:<port>` 一律换成 `<UP>`。
+
+2026-10-17 实测：`cargo test --test p8b5_diff` **1/1 通过**，
+`60 步 HTTP 用例（出站体逐字节 21 / 规范化 12）+ 9 条探针体 + 1 轮探针 + 1 组基线；失败 0 条`。
+反向验证 8/9 条突变 RED（1 条 GREEN 是 PNG 嗅探分支的已知覆盖边界，见 `rs-tuanjie/README.md`）。
+
+
 

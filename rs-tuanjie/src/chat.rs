@@ -19,8 +19,12 @@
 //!    （`server.go:280-322`）。本片不写告警状态，`/health` 的 `judgment_alert` 仍恒 `false`
 //!    （第三片已登记）。
 //! 2. **`logRequestShape` 未迁**：纯诊断日志（`server.go:2212-2266`），不含响应字节。
-//! 3. **媒体改路由（`RerouteIfMedia`/`FetchRemoteImages`）与外部 provider 未迁**：属后续
-//!    小轮；含图请求本片不改路由。
+//! 3. **`desensitizeAgentIdentity`（反竞品身份脱敏）未迁**：Go 在 `reshapeChatBody` **之前**
+//!    对 system 消息里的 `You are <竞品名>` 做零宽空格改写（`server.go:1970`）。
+//!    含该声明的请求出站体因此不同（Go 多两个零宽字符）；差分金标不含这类声明。
+//!    【P8b 第五片更新】媒体改路由（`RerouteIfMedia`）/远程图片预下载（`FetchRemoteImages`）
+//!    与外部 provider 分支**已迁**（见 [`crate::media`] / [`crate::providers`]），
+//!    `handle_chat` 开头按 Go 的同一顺序调用。
 //! 4. **别名解析观测（`water.RecordResolution`）/被动注水（`water.RecordPassive`）未迁**：
 //!    注水面（P8c）。
 //! 5. **单账号路径 200 的 `defer activity.Add("ok", …)` 未迁**：Go 那条恒写（`:1379-1381`），
@@ -49,7 +53,7 @@ use futures_util::StreamExt;
 
 use crate::client::now_unix;
 use crate::pacing::{is_pacing_model, retry_wait_secs, PACING_MAX_WAIT_SECS};
-use crate::server::{go_err_text, write_err, AppState};
+use crate::server::{gobj, go_err_text, write_err, write_json, AppState, GJ};
 use crate::session::{acquire, LitellmSession};
 
 /// 池路径「上游瞬时错误」重发上限 —— `server.go:1103` 的 `attempt < 3`。
@@ -1008,9 +1012,149 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
         return write_err(StatusCode::BAD_REQUEST, INVALID_UTF8_BODY_MESSAGE);
     }
 
-    let (model, wants_stream) = parse_model_and_stream(&body);
+    let (mut model, wants_stream) = parse_model_and_stream(&body);
+    let mut body = body;
+
+    // 远程 URL 图片预下载转 base64（Agnes / 团结上游下载远程图片经常超时挂死）
+    // —— `server.go:961-965`。
+    let (nb, n) = crate::media::fetch_remote_images(&st.fetch_img_client, &body).await;
+    if n > 0 {
+        body = nb;
+        crate::logf(&format!("[tuanjie] fetched {n} remote image(s) to base64"));
+    }
+
+    // 媒体改路由：含图片/音频且目标模型不识图 → 改写为视觉模型（防上游 400）
+    // —— `server.go:966-975`。
+    let mut media_rerouted = false;
+    let (nb, note) = st.media.reroute_if_media(&body);
+    if !note.is_empty() {
+        body = nb;
+        model = st.media.vision();
+        media_rerouted = true;
+        crate::logf(&format!("[tuanjie] media-reroute {note}"));
+        st.media_reroutes.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        st.activity.add("info", &format!("媒体改路由 {note}"), &model, "", 0, 0, 0);
+    }
+
+    // 会话租借（对齐官方 CLI「一个窗口一个 session、窗口内复用」）：
+    // 串行请求恒复用同一空闲会话；并发全忙则新建（模拟再开窗口）；
+    // 闲置 30min/超 4h 自动清理。B3 traceid/parentspanid 绑在会话上。
+    // defer 归还——响应（含流式）全部写完才算窗口闲置。
     let sess = acquire();
-    let body = crate::reqshape::reshape_chat_body(&body, Some(sess.session()));
+    body = crate::reqshape::reshape_chat_body(&body, Some(sess.session()));
+
+    // 外部 provider 模型：直接转发（静态 Bearer key，不占账号池、不做团结签名）。
+    // 媒体改路由后目标命中 provider 也走这里（识图转 Agnes）；识图改路由场景失败时
+    // 沿回落链重试（vision → vision_fallback… → codely-vl 兜尾）—— `server.go:995-1046`。
+    if let Some(prov) = st.providers.match_model(&model) {
+        if !media_rerouted {
+            let out = crate::providers::forward_external(
+                &st,
+                body,
+                &model,
+                wants_stream,
+                &prov,
+                "/chat/completions",
+            )
+            .await;
+            return match out {
+                Ok(resp) => resp,
+                Err(code) => {
+                    if code == -1 {
+                        // 网络错（forwardExternal 未写响应，回落场景之外由这里写终态）
+                        write_json(&gobj(vec![(
+                            "error",
+                            gobj(vec![
+                                (
+                                    "message",
+                                    GJ::Str(format!(
+                                        "{} 请求失败（网络错误，详见实时动态）",
+                                        prov.name
+                                    )),
+                                ),
+                                ("type", GJ::Str("server_error".to_string())),
+                            ]),
+                        )]))
+                    } else {
+                        // **如实复刻 Go 的既有行为**：5xx/429 时 forwardExternal 不写任何字节，
+                        // 而 handleChat 直接 return ⇒ Go 兜底一个 **200 空响应**（不是 bug 修复点，
+                        // 见 README「Go 侧可疑项」）。Rust 侧同样回空 200，差分金标锁住它。
+                        StatusCode::OK.into_response()
+                    }
+                }
+            };
+        }
+        let chain = st.media.vision_fallback_chain();
+        let mut idx = 0usize;
+        while idx < chain.len() {
+            let target = chain[idx].clone();
+            let Some(tp) = st.providers.match_model(&target) else {
+                idx += 1;
+                continue; // 链中非 provider 模型（codely-vl 等）：跳出循环走团结路径
+            };
+            match crate::providers::forward_external(
+                &st,
+                body.clone(),
+                &target,
+                wants_stream,
+                &tp,
+                "/chat/completions",
+            )
+            .await
+            {
+                Ok(resp) => return resp, // 成功或已写客户端，不重试
+                Err(code) => {
+                    if !crate::media::should_fallback(code) {
+                        return write_err(StatusCode::BAD_GATEWAY, &format!("上游 {code}"));
+                    }
+                    // 网络错(-1)或 5xx/429：试链上下一个节点
+                    if idx + 1 < chain.len() {
+                        st.activity.add(
+                            "info",
+                            &format!(
+                                "识图回落 {target} → {}（上游 {code}）",
+                                chain[idx + 1]
+                            ),
+                            &target,
+                            "",
+                            0,
+                            0,
+                            code as i32,
+                        );
+                        crate::logf(&format!(
+                            "[tuanjie] vision fallback {target} -> {} (upstream {code})",
+                            chain[idx + 1]
+                        ));
+                    } else {
+                        st.activity.add(
+                            "info",
+                            &format!("识图回落 {target} → 团结路径（上游 {code}）"),
+                            &target,
+                            "",
+                            0,
+                            0,
+                            code as i32,
+                        );
+                        crate::logf(&format!(
+                            "[tuanjie] vision fallback {target} -> tuanjie (upstream {code})"
+                        ));
+                    }
+                }
+            }
+            idx += 1;
+        }
+        // 链尾模型：改写 model 走下方账号池/单账号路径（`server.go:1037-1045`）。
+        if let Some(last) = chain.last().cloned() {
+            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
+                if let Some(obj) = v.as_object() {
+                    let mut m = obj.clone();
+                    m.insert("model".to_string(), serde_json::Value::String(last.clone()));
+                    body = crate::gojson::marshal_go_value(&serde_json::Value::Object(m));
+                    model = last;
+                }
+            }
+        }
+    }
 
     // KIMI-K3 429 兜底：开启且 model 含 "KIMI" 才启用（`server.go:1050`）。
     let pacing = st.pacer.enabled() && is_pacing_model(&model);
@@ -1314,22 +1458,43 @@ async fn finish_pool(
 /// 流收尾守卫：流尽时由收尾逻辑显式 `done()` 配平 `Finish`；若客户端中途断开导致
 /// 响应流被提前丢弃，`Drop` 兜底配平（Go 靠 handler 返回时的 `defer Finish` 覆盖
 /// 同种情形；不兜底则 inflight 残留死条目）。
-struct StreamGuard {
+///
+/// `on_done` 供外部转发路径挂 `defer` 的第二件事（Go 里 `registry.Finish` 先注册、
+/// `activity.Add("ok")` 后注册 ⇒ 返回时**先跑 activity 再 Finish**，这里同序）。
+pub(crate) struct StreamGuard {
     inner: Option<(Arc<crate::inflight::RequestRegistry>, String)>,
+    on_done: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl StreamGuard {
     fn new(registry: Arc<crate::inflight::RequestRegistry>, rid: String) -> Self {
         StreamGuard {
             inner: Some((registry, rid)),
+            on_done: None,
         }
     }
 
-    fn rid(&self) -> &str {
+    /// 带收尾回调的构造（外部转发路径的 `ok` 事件 + `Finish`）。
+    pub(crate) fn with_callback(
+        registry: Arc<crate::inflight::RequestRegistry>,
+        rid: String,
+        cb: impl FnOnce() + Send + 'static,
+    ) -> Self {
+        StreamGuard {
+            inner: Some((registry, rid)),
+            on_done: Some(Box::new(cb)),
+        }
+    }
+
+    pub(crate) fn rid(&self) -> &str {
         self.inner.as_ref().map(|(_, r)| r.as_str()).unwrap_or("")
     }
 
-    fn done(&mut self) {
+    pub(crate) fn done(&mut self) {
+        // Go 的 defer 是 LIFO：后注册的 activity 先跑，先注册的 Finish 后跑
+        if let Some(cb) = self.on_done.take() {
+            cb();
+        }
         if let Some((reg, rid)) = self.inner.take() {
             reg.finish(&rid);
         }
@@ -1617,7 +1782,7 @@ fn record_usage(st: &AppState, model: &str, pool_uid: &str, body: &[u8], elapsed
 }
 
 /// `copyHeader`（`server.go:2195-2205`）：逐条复制，跳过 `Content-Length` / `Transfer-Encoding`。
-fn copy_header(dst: &mut HeaderMap, src: &reqwest::header::HeaderMap) {
+pub(crate) fn copy_header(dst: &mut HeaderMap, src: &reqwest::header::HeaderMap) {
     for (name, value) in src.iter() {
         let name_str = name.as_str();
         if name_str.eq_ignore_ascii_case("content-length")
