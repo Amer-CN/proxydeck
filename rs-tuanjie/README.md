@@ -84,9 +84,86 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
   覆盖 live → cache → force → 503 → 负缓存 → 失败回退旧值 → 坏 JSON → 视图层文案；
   纯函数段直接比缓存键、TTL 常量与请求形态（路径/Accept/UA/Host）。
 
+## P8b 第三片：server 骨架与路由（2026-10-17）
+
+**目标（简报原话）**：把「能起服务、路由可达、契约同形」打通；`handleChat` 本体（池路径兜底）
+属下一片。本片**不注册**任何未实现的端点（未注册即 404），已注册而**故意未实现**的三条
+（`/model/info`、`/v1/models?full=true`、`/accounts` 的 `add`/`auto`）显式回
+**501 `not_implemented_in_pilot…`** —— 不假装已通、也不静默降级成假 200。
+
+### 路由表对照（Go `server.go:119-138` 的 19 条注册）
+
+| # | Go 注册路径 | Rust 本片 | 说明 |
+|---|---|---|---|
+| 1 | `/health` | ✅ 已实现 | `status/service/uptimeSec/cli_api_key/backend` + judge/seed 四个告警字段（无告警形态）|
+| 2 | `/v1/models` | ⚠ 部分 | 上游 200 透传与 502 已迁；`modelsCache` 回退、`mergeProviderModels`、`staticModels` 兜底未迁；`?full=true` 显式 501 |
+| 3 | `/model/info` | ❌ 显式 501 | 别名×部署元数据聚合属后续小轮 |
+| 4 | `/v1/stats` | ✅ 已实现 | `{"models":{…},"uptimeSec":N}` + `tuanjie-stats.json` 落盘/读回（`src/stats.rs`）|
+| 5 | `/quota` | ✅ 已实现 | 三条分支（无 uid / 不在池中 / 取 token 失败）+ 缓存口径（详见下）|
+| 6 | `/kimi-pacing` | ✅ 已实现 | GET `{"enabled","pending"}`；POST `{"enabled":bool}`，非法体 400 + `writeErr` |
+| 7 | `/accounts` | ⚠ 部分 | GET 全量已迁；POST `remove`/`toggle`/`setglm`/`setmodels`/未知 action 已迁；`add`/`auto` 显式 501 |
+| 8 | `/account-models` | ❌ 未注册 | 依赖 `cdp_browser.go` 与逐账号换 key |
+| 9 | `/inflight` | ✅ 已实现 | `{"ok":true,"requests":[…]}`，字段**声明序**（struct）|
+| 10 | `/activity` | ✅ 已实现 | `?limit` 解析（>0 且 ≤200 才采信）+ 空数组形态 |
+| 11 | `/water-probe` | ❌ 未注册 | 依赖 `probes.go`/`water.go` |
+| 12 | `/providers` | ❌ 未注册 | 依赖 `providers.go` |
+| 13 | `/vision-config` | ❌ 未注册 | 依赖 `media.go` |
+| 14 | `/media-config` | ❌ 未注册 | 同上 |
+| 15 | `/v1/chat/completions` | ❌ 未注册 | `handleChat` 本体 = 下一片 |
+| 16 | `/v1/images/generations` | ❌ 未注册 | 依赖 `media.go` |
+| 17 | `/v1/videos` | ❌ 未注册 | 同上 |
+| 18 | `/v1/videos/` | ❌ 未注册 | 同上 |
+| 19 | `/agnesapi` | ❌ 未注册 | 同上 |
+
+**骨架自身的四处合同**（与 Go 逐条对齐，有单测 + 差分双重门禁）：
+
+1. **CORS**（`corsWith`，`server.go:104-115`）：所有响应带 `Access-Control-Allow-Origin: *` /
+   `…-Methods: GET, POST, OPTIONS` / `…-Headers: Content-Type, Authorization`；
+   `OPTIONS` 直接 **204 空体**、不进 handler（`/nope` 的 OPTIONS 也是 204）。
+2. **`writeJSON`**（`server.go:2207-2210`）：`Content-Type: application/json`（**无 charset**）+
+   `json.Encoder` 的**末尾换行** + 键序按 Go 口径（map ⇒ 字节序、struct ⇒ 声明序）+
+   浮点走 Go 的 `strconv` 口径。
+3. **`writeErr`**（`server.go:2268-2274`）：`{"error":{"message":…,"type":"api_error"}}` + 指定状态码。
+4. **405 与 404**：都是 Go `http.Error` 形态——纯文本体 + `text/plain; charset=utf-8` +
+   `X-Content-Type-Options: nosniff`（Go 1.26.5 `net/http/server.go:2315-2316` 无条件带；
+   旧版此处曾误写 404 不带，已更正）。
+
+### `/quota` 的三条与参数名口径（**与简报字面不一致，以 Go 为准**）
+
+简报写的是 `?uid=`，但 **Go 现行实现读的是 `?user_id=`**（`server.go:1870`：
+`r.URL.Query().Get("user_id")`）。本片**照 Go 实现**（差分对照里 `?uid=…` 与 `?user_id=…`
+两条用例都锁着：前者两侧同样落到"本地账号"分支）。三条分支文案逐字同源：
+`账号不在池中` / `读取 token 失败: <err>` / 正常拉取（`Quota` 的 JSON 由 `quota.rs` 的
+逐字节写出器给出）。`?refresh=1` 旁路缓存。
+
+**门禁实测（差分）**：`.work/p8b3/run-diff.ps1` 一把跑完 Rust 侧 + Go 侧 + 逐条 diff：
+
+```
+==== cases: 50, matched: 49, skipped: 1, mismatched: 0 ====
+==== 逐字节严格要求: 25 条（/quota 与 /accounts 全量 + inflight 1 条）====
+  SKIP [model-info-501] SKIP（登记豁免）rust=501 go=502
+两侧逐条一致（status / content-type / body / 上游观测量全部相同；豁免项见上）
+```
+
+* **逐字节严格 25 条** = `/accounts` 全量（GET ×4 + POST ×10，含 `remove-local` 本地守卫与
+  `remove-nonstrid` 结构校验）+ `/quota` 全量（10 条）+ `inflight-with-one` 1 条。
+  `pacing-post-trailing` 只走普通比对（`pending` 计数器随序列位置变，与 post-true/false 同理）。
+* **比较面声明（P8b 审查后补记）**：差分比 `{status, content-type, body}` + 上游观测量，
+  **不比其它响应头**——R2 的 404 nosniff 缺失就是从这个缝里漏过去的（由
+  `p8b3_http_contract` 的 `Some("nosniff")` 断言另锁）。加新端点时若涉及其它头，
+  要么进严格表、要么在合同测试里单锁，不得假设"差分绿 = 头一致"。
+* **唯一豁免** `model-info-501`：Rust 回 501 `not_implemented_in_pilot…`、Go 会真打上游回 502 ——
+  这是"未迁端点不假装已通"，不是实现分歧；脚本把它列为 SKIP 并打印两侧取值。
+* 归一化只有两处**点替换**：`/health` 的 `uptimeSec`（跨秒）与 `/inflight` 的
+  `elapsed`/`idle`（真实时延）；两者都替换成**数字字面量**，字段存在性/类型形态/键序照比。
+* 反向验证 `.work/p8b3/mutate.mjs`：5 条突变（backend 常量 / 404 体 / `/quota` 参数名 /
+  `elapsed` 数字→字符串 / `token_remaining_hours` 数字→字符串）**5/5 全部 RED**，逐条还原后复绿。
+
 ## 已知差异（**如实登记**，不是"优化空间"）
 
-> 编号 1~6 属 P8a（凭证链），7~9 属 P8b 第一片（兜底内核），10 起属 P8b 第二片（账号池/积分）。
+
+> 编号 1~6 属 P8a（凭证链），7~9 属 P8b 第一片（兜底内核），10~17 属 P8b 第二片（账号池/积分），
+> 18 起属 P8b 第三片（server 骨架与路由）。
 
 10. **Dead/冷却标记是 Go 团结侧没有的**：`internal/tuanjie/accounts.go` 里
    没有任何「凭据失效/冷却」标记——它的 401 只是被注释提到（`server.go:461`）、402 走
@@ -120,6 +197,35 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 17. **（未覆盖）`/quota` 的 HTTP 端点装配**：`handleQuota` 的 `?uid`/`?refresh=1` 解析、
    `writeJSON` 的形状与 CORS 属 server 骨架（下一小轮），本轮只把**分支文案**
    （`QuotaView::not_in_pool` / `token_error`）与缓存/拉取语义做齐。
+   **【P8b 第三片已迁】** 见上节「P8b 第三片」：端点已装配，参数名以 Go 为准（`user_id`）。
+
+**P8b 第三片新增的已知差异（登记）**：
+
+18. **`/health` 的错误文案由各自错误类型给**：Go 是 `fmt.Errorf` 链（如
+   `换取 cli_api_key 网络失败: <net/http 的 err>`），Rust 是 `thiserror` 的 `Display`
+   （如 `换取 cli_api_key 网络失败: <reqwest 的 err>`）——**前缀逐字同源**，网络库的
+   措辞不同（与差异 12 同族）。`status=error` + `message` 的形状一致。
+19. **`/health` 的 `cli_api_key` 前缀按字符取**：Go 是 `key[:10]`（**字节**切片，
+   少于 10 字节会 panic）；Rust 取前 10 个 `char` 且不 panic。线上 key 恒长于 10
+   且是 ASCII，两条路径同值。
+20. **未迁的三条端点是显式 501（不是静默降级）**：`/model/info`、`/v1/models?full=true`、
+   `/accounts` 的 `action=add|auto`。差分脚本把 `model-info-501` 列为 SKIP 豁免并打印
+   两侧取值；`add`/`auto` 的 501 **不在**差分序列里（Go 侧会真打上游/开浏览器，
+   不放进自动化对照），由 `tests/p8b3_http_contract.rs` 的
+   `unimplemented_routes_say_so_instead_of_pretending` 锁住。
+21. **`/v1/models` 只迁了"上游 200 透传"与 502**：`modelsCache`（1 小时回退）、
+   `mergeProviderModels`（外部账号模型条目）、`staticModels`（静态候选池兜底）未迁——
+   上游非 200 时 Rust 直接 502，而 Go 会先回退缓存、再退静态池。**属后续小轮**。
+
+### P8b 第三片的测试缝（生产不带这几条环境变量）
+
+| 环境变量 | 作用 | 生产是否可能触发 |
+|---|---|---|
+| `RS_TUANJIE_TEST_BASES` | `"<codey_base> <litellm_base>"`：把两个域指到本机假上游 | 否（不带即两个官方常量）；`--port 8788` 时**拒绝生效并退出** |
+| `RS_TUANJIE_TEST_INFLIGHT` | 一个**触发器文件路径**：存在时 `/inflight` 预置一条合成记录 | 否（同上，`--port 8788` 时拒绝）|
+
+两条都只服务差分对照（`tests/p8b3_scenario/` + `.work/p8b3/run-diff.ps1`）；
+签名/UA/头集合/字段序一律走生产实现——**红线八项未被测试缝绕过**。
 
 
 1. **TLS 指纹（用户终裁：永久接受差异，不换栈）**：用 rustls；差的是 JA4 载荷哈希、
@@ -173,6 +279,10 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
    `ensureNonEmpty`、`concurrentPick`、14018 耗尽换号、非法 UTF-8 本地 400、
    `stream_options` 补齐、`noteUpstreamError/OK` 告警）、`/v1/stats`、`/quota`、`/kimi-pacing`、
    `/accounts`、`/inflight`、`/activity`、`/v1/images/generations`、`/v1/videos`、`/agnesapi`。
+   **【P8b 第三片已迁一部分】** 路由表/CORS/`writeJSON`/`writeErr`、`/health`、`/v1/stats`、
+   `/quota`、`/kimi-pacing`、`/accounts`（GET + 五个 POST 分支）、`/inflight`、`/activity`、
+   `/v1/models`（上游 200 透传与 502）已迁；`/model/info`、`?full=true`、`add`/`auto` 显式 501；
+   `handleChat` 与其余端点属后续小轮——见下节「P8b 第三片」。
 2. `handlers_extra.go`：账号池 HTTP 面与其余 handler。
 3. ~~`accounts.go`：账号池全量（401 标死换活号、rescan 复位、`ResumeBudgetLoop`）。~~
    **【P8b 第二片已迁】** 见下节「P8b 第二片」（`src/accounts.rs`）。
@@ -210,20 +320,37 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 13. **等分并列次序**：Go 侧 map 迭代次序本身不确定，Rust 用 label 排序兜底 = 确定输出。
 14. **`AccountStatus` 经 serde 写出时 f64 写 `2.0` 而 Go 写 `2`**：server 片装配
     `/accounts` 端点时必须走 gojson 口径（Go 浮点最短表示），不得直接 `serde_json::to_string`。
+    **【P8b 第三片已收口】** `/accounts` 走 `server::status_to_gj`（`GJ::Float`），
+    差分对照里该端点 12 条用例**逐字节**一致；单测
+    `account_status_float_is_written_without_trailing_zero` 锁住 `2` 而非 `2.0`。
+15. **路由层四处体量/形态差异（P8b 审查后补记，均只影响极端输入）**：
+    `DefaultBodyLimit 32MB`（Go 无全局上限，超大 POST 体 Rust 413）；`serveModels` 无 Go
+    的 2MB `LimitReader` 截断（Rust 全量读）；`stats.load` 对 value 类型不匹配逐条容忍
+    （Go `Unmarshal` 整体失败清空）；`stats.json` 为 `null` 时 Rust 按空表处理
+    （Go 解成 nil map、下次 `addStat` panic——Go 既有缺陷，Rust 不复制）。
+16. **路径清洗**：Go `ServeMux` 对 `//x`/尾斜杠回 301/307，axum 回 404（`server.rs:120`
+    旧注释曾称"登记在 README"，实无此条——以本条为准）。
 
 ## 门禁与复跑
 
 ```powershell
 # Rust 侧（P8a 门禁：33 单测 + 12 集成；P8b 第一片：+14 单测 + 5 集成；
-#           P8b 第二片：+13 单测 + 13 池行为 + 3 quota 差分）
+#           P8b 第二片：+13 单测 + 13 池行为 + 3 quota 差分；
+#           P8b 第三片：+13 单测 + 6 HTTP 合同）
 cd rs-tuanjie
 $env:CARGO_TARGET_DIR="E:\cargo-target\rs-tuanjie"   # F: 盘空间紧张，构建产物放 E:
-cargo test                                           # 60 单测 + 12 + 5 + 13(+1 ignored) + 3 = 93 项
+cargo test                                           # 73 单测 + 12 + 5 + 6 + 15(+1 ignored) + 3 = 114 项
 cargo build --all-targets                            # 0 warning
 cargo test --test golden_p8a -- --nocapture          # 看逐条对照证据与两侧线上实抓
 cargo test --test golden_p8b -- --nocapture          # P8b 第一片逐条对照
 cargo test --test p8b_pool_behavior -- --nocapture   # 第二片：401 标死/换号/rescan/冷却
 cargo test --test p8b_quota_diff -- --nocapture      # 第二片：quota 差分（含假上游请求记录）
+cargo test --test p8b3_http_contract -- --nocapture  # 第三片：CORS/OPTIONS/405/404/writeJSON/writeErr
+
+# 第三片的**差分对照**（跑真 Go Server 在测试端口，一键复跑；**不碰 8788**）
+cd ..
+pwsh -File .work/p8b3/run-diff.ps1                   # Rust 侧 → Go 侧 → 逐条 diff → 清临时采集器
+node .work/p8b3/mutate.mjs                           # 反向验证：5 条突变逐条变红、逐条还原复绿
 
 # Go 侧零改动核对
 cd ..

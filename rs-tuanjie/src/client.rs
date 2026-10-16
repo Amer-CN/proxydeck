@@ -10,7 +10,7 @@
 //! 本轮的 reqwest 客户端按默认口径走环境变量代理（与 Go 的第一步一致）。
 //! Go `ForwardWithSession` 的 `contentType` 形参全程未被使用（死参数），这里不带。
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::headers::{key_fetch_headers, litellm_headers};
@@ -19,6 +19,30 @@ use crate::transport::build_http_client;
 use crate::{
     credentials, Error, Result, CODEY_API_BASE, KEY_CACHE_TTL, KEY_FETCH_TIMEOUT, LITELLM_API_BASE,
 };
+
+/// **测试缝**（`main.rs` 只在 `RS_TUANJIE_TEST_BASES` 显式存在、且端口不是 8788 时写入）：
+/// 把两个域一起指向本机假上游，供 P8b 第三片的差分对照用。
+/// 进程启动后不可改（`OnceLock`）；生产不带该变量 ⇒ 恒为两个官方常量。
+static TEST_BASES: OnceLock<(String, String)> = OnceLock::new();
+
+/// 设置测试缝的两个 base（重复调用只第一次生效）。
+pub fn set_test_bases(codey_api_base: String, litellm_api_base: String) {
+    let _ = TEST_BASES.set((codey_api_base, litellm_api_base));
+}
+
+fn default_codey_base() -> String {
+    TEST_BASES
+        .get()
+        .map(|(c, _)| c.clone())
+        .unwrap_or_else(|| CODEY_API_BASE.to_string())
+}
+
+fn default_litellm_base() -> String {
+    TEST_BASES
+        .get()
+        .map(|(_, l)| l.clone())
+        .unwrap_or_else(|| LITELLM_API_BASE.to_string())
+}
 
 /// access_token 来源（默认读本机登录态文件；测试缝见 [`Client::with_token_loader`]）。
 pub type TokenLoader = Arc<dyn Fn() -> Result<String> + Send + Sync>;
@@ -48,8 +72,8 @@ impl Client {
     pub fn new() -> Result<Self> {
         Ok(Self {
             http: build_http_client()?,
-            codey_api_base: CODEY_API_BASE.to_string(),
-            litellm_api_base: LITELLM_API_BASE.to_string(),
+            codey_api_base: default_codey_base(),
+            litellm_api_base: default_litellm_base(),
             user_agent: crate::ua::process_cli_user_agent().to_string(),
             state: Mutex::new(KeyState::default()),
             token_loader: Arc::new(credentials::load_access_token),
@@ -93,6 +117,47 @@ impl Client {
     /// 换 key 端点（默认 = [`CLI_API_KEY_URL`]）。
     pub fn cli_api_key_url(&self) -> String {
         format!("{}/api/api-token/cli-api-key", self.codey_api_base)
+    }
+
+    /// 账号域 base（生产 = [`crate::CODEY_API_BASE`]）——`/health`、积分端点的形态用。
+    pub fn codey_base(&self) -> &str {
+        &self.codey_api_base
+    }
+
+    /// 推理域 base（生产 = [`crate::LITELLM_API_BASE`]）——`/health` 的 `backend` 字段用。
+    pub fn litellm_base(&self) -> &str {
+        &self.litellm_api_base
+    }
+
+    /// 出站 HTTP 客户端（积分拉取 `fetch_quota_cached` 与转发共用同一个栈）。
+    pub fn http(&self) -> &reqwest::Client {
+        &self.http
+    }
+
+    /// 转发一次 GET（对应 Go 的 `Forward(ctx, http.MethodGet, path, nil, "")`）——
+    /// `/v1/models`、`/model/info` 这类读路径用。上游 401 清缓存重换一次。
+    ///
+    /// 会话 id 走 [`crate::session::new_uuid_v4`]——Go 的 `Forward(…, sess=nil)` 经
+    /// `litellmHeaders` 内部 `newLitellmSession()` 现生成一次性 UUID，口径相同。
+    pub async fn forward_get(&self, path: &str) -> Result<reqwest::Response> {
+        let resp = self.forward_get_once(path).await?;
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            drop(resp);
+            self.invalidate_key();
+            return self.forward_get_once(path).await;
+        }
+        Ok(resp)
+    }
+
+    async fn forward_get_once(&self, path: &str) -> Result<reqwest::Response> {
+        let key = self.api_key_cached().await?;
+        let url = format!("{}{}", self.litellm_api_base, path);
+        let mut req = self.http.get(url);
+        let sess = crate::session::new_uuid_v4();
+        for (k, v) in litellm_headers(path, &key, &sess, now_unix(), &self.user_agent) {
+            req = req.header(k, v);
+        }
+        req.send().await.map_err(Error::Forward)
     }
 
     /// 用 access_token 换 cli_api_key（对应 `fetchKey`，`client.go:227-265`）。

@@ -114,6 +114,28 @@ impl RequestRegistry {
         }
     }
 
+    /// 测试缝：塞一条**指定 rid** 的进行中请求（`register` 用进程级计数器，多测试并行
+    /// 时 rid 不可预期）。生产路径不用它；本片用它让 `/inflight` 的 `elapsed`/`idle`
+    /// 两个 float64 字段在对照里有非空取值（否则字段形状差异看不出来）。
+    #[doc(hidden)]
+    pub fn insert_for_test(&self, rid: &str, model: &str, user_id: &str, stream: bool, bytes: i64) {
+        let now = Instant::now();
+        let mut g = self.inner.lock().unwrap();
+        g.reqs.insert(
+            rid.to_string(),
+            RegistryEntry {
+                rid: rid.to_string(),
+                model: model.to_string(),
+                user_id: user_id.to_string(),
+                stream,
+                started: now,
+                last_chunk: now,
+                bytes,
+            },
+        );
+        g.order.push(rid.to_string());
+    }
+
     /// 移除一条请求 —— `Finish`（`inflight.go:73-85`）。
     pub fn finish(&self, rid: &str) {
         let mut g = self.inner.lock().unwrap();

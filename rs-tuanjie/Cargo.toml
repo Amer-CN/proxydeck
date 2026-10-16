@@ -8,9 +8,25 @@ description = "ProxyDeck 团结插件 Rust 重写（绞杀者路线 P8a：凭证
 name = "rs_tuanjie"
 path = "src/lib.rs"
 
+[[bin]]
+name = "rs-tuanjie"
+path = "src/main.rs"
+
+# P8b 第三片的**差分对照 runner**：跑同一串固定请求，把每次响应的
+# `{status, content_type, body}` 与假上游观测量写成 JSON，供与 Go 侧对照 diff。
+# 不是生产产物（不上 GUI、不发版），只是把「两侧同输入」这件事固化成可复跑的脚本。
+[[bin]]
+name = "p8b3-diff-run"
+path = "src/bin/p8b3_diff_run.rs"
+
 [dependencies]
+# 本地 HTTP 服务（P8b 第三片：服务骨架与路由表）。
+# 与 rs-bai / rs-comate / rs-codebuddy 同款 0.8 —— 405 补体中间件在本 crate 内自带。
+axum = "0.8"
 # base64url 无填充（Go `base64.RawURLEncoding`）——签名第三段。
 base64 = "0.23"
+# 命令行（`--plugin-tuanjie --port`）——与其余 Rust crate 同款。
+clap = { version = "4", features = ["derive"] }
 # 随机源：Go 用 `crypto/rand`（操作系统 CSPRNG），这里直接用 getrandom 保持同一语义
 # （uuid v4、rand36、会话 TTL 随机都要它；不用 `rand` 的用户态 PRNG）。
 getrandom = "0.3"
@@ -34,7 +50,12 @@ uuid = { version = "1", features = ["v4"] }
 # `gzip`：Go `net/http` 在调用方没显式设 Accept-Encoding 时会**自动补 `Accept-Encoding: gzip`
 # 并透明解压**；reqwest 只有开这个特性才有同样行为。出站头集合对齐（P8 验收 2）需要它。
 reqwest = { version = "0.13", features = ["default-tls", "http2", "gzip"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
 
 [profile.release]
 opt-level = 2
+
+[dev-dependencies]
+# 集成测试里直接驱动 axum 路由（`router(state).oneshot(req)`）——`tower` 的 `ServiceExt`。
+# 只在测试目标里用，不进生产依赖。
+tower = { version = "0.5", features = ["util"] }

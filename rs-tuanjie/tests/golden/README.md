@@ -143,3 +143,41 @@ Copy-Item <repo>\.work\p8b\golden-p8b-quota-go.json <repo>\rs-tuanjie\tests\gold
 两份副本同哈希 `D2F94AF3C6D0C3AE34F2DEA30FAA7120F3132517D5B5FDA170A5CB81AAC92F85`。
 **采集器绝不出网、不碰 8788、不读真实登录态**：数据目录走 `t.TempDir()` +
 `PROXYDECK_DATA_DIR`，账号池文件是合成账号，`USERPROFILE` 指向空目录。
+
+## P8b 第三片：**没有新的入库基准**（对照方式不同，别照 P8a/P8b 去找）
+
+第三片（server 骨架与路由）的对照**不落 golden JSON**，而是**两侧同跑一圈固定请求**、
+把每次响应的 `{status, content_type, body}` 写成报告再逐条 diff：
+
+```powershell
+# 一键复跑（Rust 侧起服务子进程 + Go 侧起真 Server + 逐条 diff + 清临时采集器）
+pwsh -File <repo>\.work\p8b3\run-diff.ps1
+
+# 反向验证：5 条突变逐条让门禁变红、逐条还原复绿
+node <repo>\.work\p8b3\mutate.mjs
+```
+
+**为什么不用 golden JSON**：这一片的被测面是**整个 HTTP 服务**（路由匹配、方法判定、
+CORS 头、状态码、Content-Type、`writeJSON` 的末尾换行），用静态基准只能锁住"响应体"，
+锁不住"路由/头/方法"这些骨架行为；两侧同输入并排跑才覆盖得到。
+
+**两侧同输入的三个关键**（少一个就采不出可比的对照）：
+
+1. **同一份用例表**：`rs-tuanjie/tests/p8b3_scenario/mod.rs` 的 `cases()` 是唯一来源，
+   Go 侧采集器（`.work/p8b3/zz_p8b3_collect_test.go` 留档）逐条照抄（含 `setup` 前置动作）。
+2. **同一份合成登录态**：合成 JWT（`sub=uid-p8b3-synthetic`、`exp` 远期）写进两侧各自的
+   临时 `USERPROFILE/.codely-cli/oauth_creds.json`；两侧 `PROXYDECK_DATA_DIR` 都指临时目录，
+   每轮**从干净状态起**（上一轮的 POST 会改落盘文件 —— 踩过一次，`accounts-get` 因此对不上）。
+3. **同一个假上游**：三条路径（换 key / 计费 / 模型清单）都回固定合成报文。Go 侧不改源码，
+   靠把 `http.DefaultTransport` 换成「改写出口 Host」的 RoundTripper；Rust 侧走
+   `RS_TUANJIE_TEST_BASES` 测试缝 —— 两侧的 URL/头/UA/签名/超时全部走各自**生产实现**。
+
+**两个采集坑（照做才对得上）**：
+
+1. **采集器自己的 HTTP 客户端必须显式带 transport**：Go 侧把 `http.DefaultTransport` 换成了
+   出口改写器，`http.DefaultClient` 会把「打本机被测服务」的请求**一起改写走假上游** ——
+   症状是探针打 `/health` 收到假上游的 404，查了半天才发现打错了对象。
+2. **假上游要关连接（`Connection: close`）**：逐请求应答的假上游不关连接时，客户端会复用
+   已被关掉的 socket，症状是随机的 `转发请求网络失败`（`models-get-final` 变 502）、
+   两侧上游命中数凭空差一条。
+
