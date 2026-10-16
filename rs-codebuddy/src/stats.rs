@@ -12,10 +12,14 @@
 //! * 读盘时字段按 Go 的 `int64` 字面量规则解（`strconv.ParseInt`：拒绝 `1e2`/`1.0`/溢出，
 //!   `null` 是 no-op），见 `load_from_disk` 与 `int64_literals_follow_go_parse_int`。
 //!
-//! **与 Go 的一处差异（登记在 README）**：文件内容为 JSON `null` 时，Go 的
-//! `loadStats` 会把 `s.stats` 换成 nil map，随后第一次 `addStat` 直接
-//! `panic: assignment to entry in nil map`（与 bai/P1 发现的同一族缺陷）。Rust 侧一律按
-//! 「非法形态 → 空表」处理、不 panic。
+//! **与 Go 的对齐情况（登记在 README 差异 35）**：
+//! 1. 文件内容是 JSON `null`（或顶层数组/字符串/坏 JSON）时，Go 的 `3d4627f` 让
+//!    `loadStats` **保持初始空表**（不再把 `s.stats` 换成 nil map）⇒ 统计表不会是 nil map，
+//!    第一发 `addStat` 照常累计。Rust 同为「非法形态 → 空表」——**两侧一致、都不 panic**。
+//!    （P5c-c 实测更正：生产构造路径下 11/11 形态无 panic；P5c-b 记的「Go 写入侧仍 panic」
+//!    出自零值 `Server{}` 的探针构造，见 `tests/p5c_golden.rs` 的 `go_panics` 表说明。）
+//! 2. 条目级 `null`（`{"m":null}`）：Go 装载时**剔除**该条目（`delete`），Rust 照做；
+//!    真实上游/历史文件里出现该形态时 `/v1/stats` 两侧都不显示它。
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -84,8 +88,9 @@ impl Stats {
         let Ok(b) = std::fs::read(&self.path) else {
             return;
         };
-        // 顶层不是对象（含 `null`）→ Go 会把它解成 nil map（随后 addStat panic），
-        // 本实现按「非法形态 → 空表」处理、不 panic（差异登记在 README）。
+        // 顶层不是对象（含 `null`）→ 一律按「保持空表」处理：
+        // Go 侧 `json.Unmarshal` 失败（数组/字符串/坏 JSON）或成功但得到 nil map（`null`）
+        // 时都不会把 `s.stats` 换成 nil map（`3d4627f` 的守卫），装载后就是初始空表。
         let Ok(Value::Object(root)) = serde_json::from_slice::<Value>(&b) else {
             return;
         };
@@ -93,8 +98,9 @@ impl Stats {
         for (k, v) in &root {
             let mut st = ModelStat::default();
             match v {
-                // Go 的 `map[string]*modelStat` 允许 null 条目（指针为 nil）。
-                Value::Null => {}
+                // 条目级 `null`：`map[string]*modelStat` 里的 nil 指针——Go 在装载时**剔除**
+                // 该条目（`3d4627f`），所以 `/v1/stats` 里不会出现零值条目。照做。
+                Value::Null => continue,
                 Value::Object(entry) => {
                     for (fk, fv) in entry {
                         let field = match fk.to_ascii_lowercase().as_str() {
@@ -114,7 +120,15 @@ impl Stats {
                         if fv.is_null() {
                             continue; // Go：`null` 对非指针标量是 no-op（字段保持零值）
                         }
-                        let Some(val) = fv.as_i64() else { return };
+                        // `as_i64()` 拒收 > i64::MAX 的字面量，但 serde_json 把它们保留成 `u64`
+                        //（Go 的 `ParseInt(…, 10, 64)` 用的是无符号词法解析再折回 i64，这类字面量
+                        // 在 Go 侧是**正常装载**的），故补一条 u64 回退；再超 u64 的按 Go 的
+                        // 溢出语义处理——Go 会折成负数、本实现按失败处理（登记在 README 差异 41）。
+                        let Some(val) = fv.as_i64().or_else(|| {
+                            fv.as_u64().and_then(|u| i64::try_from(u).ok())
+                        }) else {
+                            return;
+                        };
                         match field {
                             0 => st.calls = val,
                             1 => st.input_tokens = val,

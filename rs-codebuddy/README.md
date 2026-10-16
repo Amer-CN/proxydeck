@@ -72,7 +72,7 @@
 | 6 | `sseFieldCleaner`：逐行剔空字符串 `content`/`reasoning_content` 与空数组 `tool_calls`；不可解析行/[DONE]/非 data 行原样；跨块缓冲 + flush 冲尾；重写按 `json.Marshal` 形态 | `server.go:1544-1628` | `src/sse.rs` `SseFieldCleaner` |
 | 7 | `usageScanner`：`data:` 行的 `usage` 提取入账（int64 语义、`[DONE]` 跳过） | `server.go:1503-1537` | `src/sse.rs` `UsageScanner` |
 | 8 | `collectStream` 非流式聚合（content 拼接、tool_calls 按 index 合并、`arguments` 累加、`finish_reason` 缺省规则、`usage` 透传或补零、`chatcmpl-<6 字节 hex>`） | `server.go:1635-1756` | `src/collect.rs` `collect_stream` |
-| 9 | 200 体 14018 判定窗口 = Go `bufio.NewReader` + `Peek(64KB)` 的**真实消费语义**（默认缓冲 4096 字节，且被丢弃——见差异 33） | `server.go:1261-1301` | `src/chat.rs` `ChunkReader::take` |
+| 9 | 200 体 14018 判定窗口 = Go `bufio.NewReader` + `Peek(64KB)`；**不命中时 peek 到的字节一字不丢**（Go `3d4627f` 把 `br` 接回 `resp.Body`） | `server.go:1282-1332` | `src/chat.rs` `ChunkReader::peek`（`PEEK_WINDOW`） |
 | 10 | `codebuddy-stats(-intl).json` 按模型累计 + **每笔立即原子落盘**（Go 无节流）+ `/v1/stats`（不看方法） | `server.go:249-317` | `src/stats.rs`、`src/lib.rs` `handle_stats` |
 | 11 | `ServeMux` 路径清洗与 **307** 重定向（`//v1/models`、点段；`Location`/`Content-Type`/体逐字节） | Go 1.26.5 `net/http/server.go:2671-2696`、`func Redirect` | `src/pathclean.rs`、`src/lib.rs` `path_clean_mw` |
 | 12 | 11133 退避期间的**客户端断开**（Go `r.Context().Done()` → 499，且不再打上游） | `server.go:1333-1339` | `src/conn.rs`（自定义 `Listener` + `ConnectInfo`）、`src/chat.rs` `wait_or_cancelled` |
@@ -83,7 +83,7 @@
 ```powershell
 cd rs-codebuddy
 $env:CARGO_TARGET_DIR="E:\cargo-target\rs-codebuddy"   # F: 盘紧张时的外置目标目录
-cargo test                                            # 57 单测 + 3 P5a 黄金 + 8 合同 + 5 P5b 门禁 + 2 hy4 + 3 刷新 + 1 P5c 黄金 + 3 P5c 接线 = 82
+cargo test                                            # 58 单测 + 3 P5a 黄金 + 8 合同 + 5 P5b 门禁 + 2 hy4 + 3 刷新 + 2 P5c 黄金 + 3 P5c 接线 = 84
 cargo test -- --nocapture                             # 看「跳过/allowance」汇总行
 
 # 起一个测试实例（**别用 8787/8789**）
@@ -130,6 +130,9 @@ cargo run -- --port 18786 --region INTL --desensitize
   INTL）、SSE 逐行清洗、非流式聚合、统计入账与落盘、路径清洗、积分失败措辞。比的是
   状态码 + 响应头白名单 + 响应体 + **上游看到的请求体与头**（脱敏后逐字节） + 统计文件。
   其中 **3 步是脱敏硬门禁**（`desensitize=true` 的生产装配下出站体逐字节比）。
+  另有 `stats_malformed_shapes_match_go`（P5c-b 补、P5c-c 更正判据）：把 11 例畸形/边界 `codebuddy-stats.json`
+  形态喂给生产装配的 HTTP 栈，与真 Go（**生产构造路径**）采收的期望值比
+  `/v1/stats` 与落盘内容（差异 35 的依据），实测**11 例全部逐字节一致、panic 0 例**。
 * **P5c 行为级接线** `tests/p5c_wiring.rs`：
   * chat 路径的 `Inc/DecLoad` —— 请求进行中读 `/v1/accounts` 断言 `inflight=1`、结束后断言
     `=0`；换号（401→活号）后断言**两个号的 inflight 都归零**。**这条测试当场抓出真 bug**：
@@ -303,29 +306,51 @@ pub trait CredSource {                              // src/cred.rs
 
 ### P5c 新增登记（2026-10-16）
 
-33. **【Go 侧缺陷，已复刻，未改 Go】** 非流式 + 有池时的 14018 判定**吃掉上游体头部**：
-    `server.go:1269` 写的是 `br := bufio.NewReader(resp.Body); br.Peek(64*1024)`，但
+33. **【Go 侧缺陷：已由 Go 修复，Rust 已对齐】** 非流式 + 有池时的 14018 判定**曾吃掉上游体头部**：
+    修复前 `server.go` 写的是 `br := bufio.NewReader(resp.Body); br.Peek(64*1024)`，但
     `bufio.NewReader` 的默认缓冲是 **4096** ⇒ `Peek` 返回 `ErrBufferFull`、**最多消费 4096 字节**；
-    而 `br` 之后**没有回填** `resp.Body`（没有 `resp.Body = br`），那 4096 字节被丢弃，
-    随后的 `collectStream(resp.Body)` 读到的是**从第 4097 字节开始**的流。
-    黄金里的直接证据：`chat-request-edges` / `chat-request-intl` / `chat-badjson:数字下溢` /
-    `chat-14018-200` 这四个**非流式 + 有池**的步骤，上游回的是 358 字节、带 `content:"hi"` 与
-    `usage{7,2,9}` 的干净 SSE，而 Go 的下游是 `"content":null` + usage 全 0
-    （即 `collectStream` 读到了**空流**）。
-    ⇒ 影响面：**非流式请求在账号池可用时会丢内容**（真上游流较大时是丢头 4096 字节）。
-    Rust 侧 `ChunkReader::take(BUFIO_DEFAULT_BUF)` **逐字节复刻**了这套消费语义（含 4096 这个
-    数字与「丢弃」这件事），所以两侧在黄金上是等的。
-    **修 Go 只需在 `break` 前补一句 `resp.Body = br`**（顺带把 `NewReaderSize(..., 64KB)` 用上），
-    但那要改 Go 生产源码 ⇒ **登记待用户授权**；授权后重采黄金、Rust 同步改。
+    而 `br` 之后**没有回填** `resp.Body`，那 4096 字节被丢弃，随后的 `collectStream(resp.Body)`
+    读到的是**从第 4097 字节开始**的流 ⇒ 下游 `"content":null` + usage 全 0。
+    **修复点（`3d4627f`，用户授权）**：`break` 前补
+    `resp.Body = struct{ io.Reader; io.Closer }{br, resp.Body}`（缓冲与未读部分一起被读到）；
+    `handleStats`/`loadStats` 无关联动见差异 35。
+    **Rust 侧已对齐**：`src/chat.rs` 的 14018 判定改成 `ChunkReader::peek(PEEK_WINDOW)`——
+    peek 到的字节**留在 `pending` 里一字不丢**，后续聚合照读（此前的 `take(4096)` + 丢弃那套
+    是复刻缺陷的，已删）。门禁锁在 `p5c-nonstream-peek-large #0`（6.3KB 上游体 → 下游必须是
+    真实 content 6000 字节，而非 `content:null`）与 `chat::tests::peek_keeps_every_byte_for_the_aggregation`
+    （peek 之后下游字节逐字节等于上游；**改回丢弃式实现本用例判红**，实测 `left: []`）。
+    黄金一侧的具体形状见下面「P5c-b」那节。
 34. **`codebuddy-stats.json` 每笔都落盘（**没有节流**）**：简报与本 README 早前写的「节流落盘」
     在本仓 Go 里**不存在**（`addStat` → `saveStats` 直落，`internal/proxy/stats.go` 的 ≥2s 节流
     属主代理）。本实现如实对齐 Go 现状，**不额外加节流**（同 rs-bai/P1 的口径）。
-35. **【Go 侧缺陷，Rust 不 panic】** 统计文件内容为 JSON `null`（或顶层非对象）时，Go 的
-    `loadStats` 会把 `s.stats` 换成 **nil map**，随后第一次 `addStat` 直接
-    `panic: assignment to entry in nil map`（与 rs-bai/P1 差异 5、差异 32③ 同一族）。
-    Rust 一律按「非法形态 → 空表」处理、**不 panic**（`Stats::load_from_disk`）。
-    另：Go 的 `map[string]*modelStat` 允许 `{"m":null}`，此时 `handleStats` 解引用 nil 指针会 panic
-    ——Rust 按零值条目处理。
+35. **【Go 侧缺陷：已随 `3d4627f` 一并修好，Rust 已对齐；无残留分歧】** 统计文件内容为 JSON `null`
+    （或顶层数组/字符串/坏 JSON/文件缺失）时的两段行为：
+    * **装载段（`loadStats` + `handleStats`）：Go 已修、Rust 已对齐。**
+      修复前 Go 会把 `s.stats` 换成 **nil map**（`null`）或保持 nil，写 nil map / 解 nil 指针
+      都会 panic；`3d4627f` 的修法是「解析失败保持初始空表、`null` 时 `m == nil` 不赋值、
+      条目级 `{"m":null}` 装载时 `delete` 剔除、`handleStats` 遍历时跳过 nil 条目」。
+      Rust 侧逐条对齐：非法形态一律**保持空表**（不 panic）、条目级 `null` **跳过不插入**
+      （此前按零值条目插进去，是真实分歧，本轮改正）。
+    * **写出段（第一发 `addStat`）：Go 同样不再 panic —— 已随 `3d4627f` 一并修好**（更正 2026-10-16，P5c-c）。
+      生产构造路径（`NewServerForRegion`，`server.go:131` 的 `stats: map[string]*modelStat{}`）下，
+      上述任一形态都让 `s.stats` 保持那张**非 nil 空表**、`addStat` 照常累计并落盘；
+      Rust 侧同（「非法形态 → 空表」），两侧 11 例逐字节一致。
+    * **⚠ P5c-b 曾把写出段记成「Go 仍 panic」（5/11 例），那条判据是错的，根因是探针构造**：
+      当时的采集器写的是 `s := &Server{statsPath: p}`——**零值构造**，`stats` 字段没初始化 = nil map；
+      而 `loadStats` 在「`null` / 解析失败 / 读失败」三条路径上**都不赋值**，于是 nil 被保留、一写就 panic。
+      生产装配里 `stats` 一开始就是空表，同样的路径保留的是空表 ⇒ 不 panic。
+      **实测（P5c-c）**：把两种构造并列跑同一份修复后的 Go 源码——
+      production 变体 **11/11 无 panic**；零值构造变体 **5/11 panic**（`null` / `top-array` /
+      `top-string` / `bad-json` / `missing-file`），且与 P5c-b 的旧基准**逐字段一致**
+      ⇒ 那 5 例纯粹是探针构造造成的假象，**不是 Go 的残留缺陷，也不是跑了旧二进制**
+      （`3d4627f` 提交于 12:50，P5c-b 采集器 13:50 才跑，工作树里就是修复后的源码）。
+    * **期望值来源**：真 Go 采收 `.work/rust-rewrite/_p5cc-stats-go.json`（探针
+      `internal/codebuddy/zz_p5cc_stats_probe_test.go`，跑完已删、原样留档 `.work/rust-rewrite/`），
+      其中的 `production` 变体；P5c-b 的旧基准 `.work/rust-rewrite/_p5cb-stats-go.json`（零值构造）
+      保留作物证，两份经 `_p5cc-cmp.mjs` 逐字段比过：**11 例全部 0 处差异**（旧基准可被零值构造原样复现）。
+      门禁 `tests/p5c_golden.rs::stats_malformed_shapes_match_go`（11 例全部精确比对，`go_panics` 表全 `false`）。
+      另：`big-int-2p53` / `int64-max-minus-1` 两例的**写出侧**受差异 41 末尾那条影响
+      （统计写出走 f64，>2^53 落的字节与 Go 的 int64 编码不同），期望值按 Rust 现状锁定并在用例注释里写明。
 36. **脱敏的两处微差（构造输入下才可见）**：
     ① 大小写折叠：Go 的 `(?i)` 是 **Unicode 简单折叠**（全角 `ｄｏｓ` 也能命中 `DoS`），
     Rust 用 `eq_ignore_ascii_case`（**ASCII 折叠**）；
@@ -458,3 +483,43 @@ pub trait CredSource {                              // src/cred.rs
 顺手加固了 `_cbtest.ps1` 与 `_p5c-mutations.ps1`：**构建失败、或链接产物已被火绒删掉时直接报错**，
 不再回退到按 mtime 挑出的旧二进制——旧版会把「编译失败」静默变成「跑旧产物」，本轮实测踩到过
 （一次 lib 编译错被伪装成 `55 passed`）。
+
+## 九、P5c-b：Go 修了「非流式 Peek 丢头」之后的 Rust 重对齐（2026-10-16）
+
+Go 侧两条真缺陷由主智能体在 `3d4627f`（用户授权）修掉：非流式 + 有池时的 14018 Peek 丢头、
+`codebuddy-stats.json` 的 nil 形态。此前 Rust 是**如实复刻缺陷**，本轮改为对齐修复后的 Go。
+
+| # | 改了什么 | 位置 |
+|---|---|---|
+| 1 | **删掉 4096 丢头复刻**：`BUFIO_DEFAULT_BUF`（4096）常量删掉，换成 `PEEK_WINDOW = 64*1024`（Go 的 `Peek(64*1024)`）；14018 判定改调 `ChunkReader::peek`，**peek 到的字节留在 `pending` 里**、后续聚合照读——对齐 Go `resp.Body = struct{io.Reader; io.Closer}{br, resp.Body}` | `src/chat.rs`（`PEEK_WINDOW`、`handle_chat` 的 200 分支、`ChunkReader::peek`/`read_source`） |
+| 2 | **`ChunkReader` 分成 `next_chunk`（drain，先发 `pending`）与 `read_source`（直读上游）**：`peek` 必须走 `read_source`——走 `next_chunk` 会把同一个 `pending` 反复读回来，**空转死循环**（开发中实测踩到，`pending` 恒为 40 字节、CPU 打满）。`next_chunk` 里留了显式警告注释 | `src/chat.rs` |
+| 3 | **条目级 `null` 由「按零值条目插入」改为「跳过不插入」**：对齐 Go `loadStats` 的 `delete(m, k)`——`{"m":null}` 装载后 `/v1/stats` 两侧都不显示该条目（此前 Rust 会多出一条全 0） | `src/stats.rs::load_from_disk` |
+| 4 | **i64 字段解码补 u64 回退**：serde_json 把 `> i64::MAX` 的整数字面量保留成 `u64`，而 Go 的 `ParseInt(…, 10, 64)` 在**无符号词法**下接受 2^64-1 以内的字面量 ⇒ 补 `as_u64()` 回退 | `src/stats.rs::load_from_disk` |
+| 5 | **黄金重采（按路径并入）**：10 处 `resp_body` 实质变化 + 1 处整条头部消失（另有 6 处只随采集变的 `created`/`id`，按纪律**不写回**） | `tests/golden/golden-codebuddy-go.json`（311,546 B，与 `.work` 副本同哈希 `1BACB424…`） |
+| 6 | 新增门禁与单测：`stats_malformed_shapes_match_go`（11 例畸形/边界形态）、`chat::tests::peek_keeps_every_byte_for_the_aggregation` | `tests/p5c_golden.rs`、`src/chat.rs` |
+
+### 重采后的新旧差异（逐条，真 Go 采收）
+
+上游输入一字未动，只重跑采集器（A2 / P5b / P5c 三个一次性采集器，跑完已删、原样留档
+`.work/rust-rewrite/`）：
+
+| 场景 / 步骤 | 旧（复刻缺陷） | 新（修复后的 Go，Rust 已对齐） |
+|---|---|---|
+| `chat-request-edges` #0~#3 | `content:null` + usage 全 0 | `content:"hi"` + `usage{7,2,9}` |
+| `chat-request-intl` #0/#1 | 同上 | 同上 |
+| `chat-badjson` #16（数字下溢） | 同上 | 同上 |
+| `chat-14018-200` #0（换号后） | 同上 | 同上 |
+| `p5c-desensitize-cn` #1（非流式，脱敏硬门禁那一步） | 同上 | 同上（**脱敏硬门禁的 3 步计数不变**） |
+| `p5c-nonstream-peek-large` #0 | `content:null`（丢头 4096 的形状）+ `content-length: 287` | **真实 content 6000 字节**（6288B 响应体）+ usage{5,6,11}，`content-length` 头部**整条消失**（体超过 Go 的缓冲阈值后不再补该头） |
+| `p5c-nonstream-collect` #1~#4、`p5c-stats` #2/#3 | — | **无实质变化**（只有 `created` / `chatcmpl-<hex>` 两个易变字段，门禁本就归一，故**不写回黄金**） |
+| 其余 29 个场景 | — | 完全未动（逐路径 diff 零差异） |
+
+**反向验证（门禁非空转）**：把 `peek` 改回「读进 `out` 且清空 `pending`」的旧实现 ⇒
+`chat::tests::peek_keeps_every_byte_for_the_aggregation` 立即判红（`left: []`——下游一个字节都收不到）。
+`p5c-nonstream-peek-large` 是这条修复的**形状门禁**：上游 6.3KB 的 SSE，丢头实现必然聚不出 content。
+耗时提示：`lib` / `p5c_golden` 的旧二进制副本不能复用——**改 `src/` 后必须重链**（`_cbtest.ps1` 会因
+`cargo` 非零退出直接报错，不会退回旧产物）。
+
+**本轮未做**：`sse.rs::parse_usage` 的字面量对齐（差异 41 前半，同前一轮的登记）；
+统计**写出**侧 `> 2^53` 的 f64 变形（差异 41 末尾，本轮只在 `stats_malformed_shapes_match_go`
+的期望值里如实锁定）。

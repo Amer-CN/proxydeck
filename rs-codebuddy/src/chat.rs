@@ -5,7 +5,8 @@
 //! `stream_options` 缺省、`tool_choice` 归一、`$ref` 内联、`developer`→`system`、
 //! **全角色脱敏**（P5c；生产 CN/INTL 都开）、INTL 自动补首条 system、出站体**逐字节重建**、
 //! **账号池换号三条分支**（401/403 标死换活号、429 冷却换号、14018 额度耗尽换号）、
-//! **200 体 14018 Peek**（含 Go `bufio` 默认 4096 缓冲的消费语义）、CN 缺省
+//! **200 体 14018 Peek**（判定窗口 64KB；不命中时 peek 到的字节**一字不丢**地交给下游聚合，
+//! 对齐 Go `3d4627f` 之后的行为，见 `PEEK_WINDOW`）、CN 缺省
 //! `reasoning_effort` 注入、hy4 限流兜底改写与 trip、11133 退避重试（上限 2 次，
 //! 800ms/1600ms，退避期间客户端断开 → 499）与失败现场落盘、上游非 200 的 `writeErr` 形状。
 //!
@@ -36,15 +37,19 @@ pub const MAX_BODY_BYTES: usize = 64 << 20;
 pub const MAX_ERR_BODY: usize = 1 << 20;
 /// Go `transientMaxRetry`：11133 原地重试次数上限。
 pub const TRANSIENT_MAX_RETRY: usize = 2;
-/// Go `bufio.NewReader` 的**默认缓冲**（`defaultBufSize = 4096`）。
+/// Go `br.Peek(64 * 1024)` 的**判定窗口**。
 ///
-/// 关键：Go 的 14018 判定写的是 `bufio.NewReader(resp.Body)` + `Peek(64*1024)`，
-/// 而 `bufio.Reader` 的缓冲是 4096 —— `Peek` 在缓冲满时返回 `ErrBufferFull`，**最多只
-/// 消费 4096 字节**，而这 4096 字节被丢弃在 `br` 里（`br` 未回填 `resp.Body`），
-/// 后续 `collectStream(resp.Body)` 读到的是**从第 4097 字节开始**的流。
-/// 这是 Go 侧的真实行为（黄金里非流式 + 有池的步骤就此复现），本轮**如实复刻**：
-/// 差异与根因登记在 README，修 Go 需用户授权。
-pub const BUFIO_DEFAULT_BUF: usize = 4096;
+/// Go 写的 `bufio.NewReader(resp.Body)` 默认缓冲只有 4096，`Peek(64KB)` 实到 4096 字节就
+/// 返回 `ErrBufferFull`；**原先 `br` 没回填 `resp.Body`**，那 4096 字节被丢弃，下游
+/// `collectStream` 读到的是从第 4097 字节开始的流（表现为 `content:null` + usage 全 0）。
+/// **Go 已于 `3d4627f` 修复**：不命中时 `resp.Body = struct{ io.Reader; io.Closer }{br, resp.Body}`，
+/// 缓冲与未读部分一起被读到 ⇒ 下游拿到**完整**上游体。本实现据此改为「peek 多少都留下」，
+/// 不再复刻丢头（差异 33 已改写为「Go 已修、Rust 已对齐」）。
+///
+/// 另：`ChunkReader::peek` 按 64KB 窗口读、Go 的 `bufio.Reader` 只读到 4096 —— 这只影响
+/// 「一次从上游拉多少字节」，两边的判定都是对「已缓冲字节」做 `body != "" && contains("14018")`
+/// 子串判，聚合又是逐行的（`feed_line` 与 Go `bufio.Scanner` 同语义），故下游字节完全一致。
+pub const PEEK_WINDOW: usize = 64 * 1024;
 /// Go `passthroughBodyKeys`（顺序即 Go 的切片顺序；写出时按键排序）。
 pub const PASSTHROUGH_KEYS: &[&str] = &[
     "model",
@@ -344,8 +349,8 @@ pub async fn handle_chat(
     // 起点取 `usize::MAX` 让它首轮回绕成 0——与 Go 逐轮自增的取值序列完全一致。
     let mut attempt = usize::MAX;
 
-    // 200 响应体（非流式 + 有池）在 loop 里就地把 Peek 的消费做完：14018 判定窗口与
-    // 交给聚合的字节同源（`ok_reader` 是本轮新建的读取器，见上面的 Peek 注释）。
+    // 200 响应体（非流式 + 有池）在 loop 里就地把 Peek 做完：判定窗口与交给聚合的字节
+    // **同源且不丢**（`ok_reader` 是本轮新建的读取器，peek 到的字节留在它里面，见 PEEK_WINDOW）。
     let mut ok_reader: Option<ChunkReader> = None;
     let (status, resp) = loop {
         // Go `for attempt := 0; ; attempt++`：attempt 是**轮次**，每轮自增（含 11133 退避重试、
@@ -367,12 +372,14 @@ pub async fn handle_chat(
         };
         if resp.status().as_u16() == 200 {
             // 200 体里的 14018（腾讯 chat 系额度耗尽常以 200 业务错体回来）：判定窗口是
-            // Go 的 `br := bufio.NewReader(resp.Body); br.Peek(64*1024)`——**bufio 默认缓冲
-            // 4096**，所以实际只消费 4096 字节且被丢弃（`br` 没回填 `resp.Body`）。
+            // Go 的 `br := bufio.NewReader(resp.Body); br.Peek(64*1024)`。
+            // **不命中时 peek 到的字节必须一字不丢**——Go `3d4627f` 把 `br` 接回了
+            // `resp.Body`（此前 4096 字节被丢弃，表现为下游 `content:null` + usage 全 0）。
+            // 本实现的 `peek` 天然把已读字节留在 `ChunkReader::pending` 里，后续聚合照读。
             // 流式路径不做此检查（headers 一旦发出中途换号会撕裂客户端流）。
             if !client_wants_stream && st.pool.is_some() && !acc_uid.is_empty() {
                 let mut reader = ChunkReader::new(resp);
-                let peeked = reader.take(BUFIO_DEFAULT_BUF).await;
+                let peeked = reader.peek(PEEK_WINDOW).await;
                 if crate::failover::is_exhausted_body(&String::from_utf8_lossy(&peeked)) {
                     let p = st.pool.as_ref().expect("上面已判 Some");
                     p.mark_exhausted(&acc_uid);
@@ -685,18 +692,35 @@ pub struct ChunkReader {
 
 impl ChunkReader {
     pub fn new(resp: reqwest::Response) -> ChunkReader {
+        ChunkReader::from_stream(Box::pin(resp.bytes_stream().map_err(std::io::Error::other)))
+    }
+
+    /// 从任意字节流构造（reqwest 之外只给单测用：用来复查 `peek` 不丢字节）。
+    pub fn from_stream(
+        stream: std::pin::Pin<
+            Box<dyn futures_util::Stream<Item = Result<Bytes, std::io::Error>> + Send>,
+        >,
+    ) -> ChunkReader {
         ChunkReader {
-            stream: Box::pin(resp.bytes_stream().map_err(std::io::Error::other)),
+            stream,
             pending: Bytes::new(),
             eof: false,
         }
     }
 
-    /// 取下一个上游分块（`pending` 优先）。
+    /// 取下一个上游分块：`pending` 里的缓冲优先，空了才读上游。
+    ///
+    /// ⚠ **只在 `pending` 为空时才真正读源**（drain 语义）——`peek` 必须走
+    /// `read_source`，否则会把同一个 `pending` 反复读回来（空转，实测过）。
     pub async fn next_chunk(&mut self) -> Option<Result<Bytes, std::io::Error>> {
         if !self.pending.is_empty() {
             return Some(Ok(std::mem::take(&mut self.pending)));
         }
+        self.read_source().await
+    }
+
+    /// 直接向上游读一个分块（不看 `pending`）。`eof` 后恒 `None`。
+    async fn read_source(&mut self) -> Option<Result<Bytes, std::io::Error>> {
         if self.eof {
             return None;
         }
@@ -713,26 +737,23 @@ impl ChunkReader {
         }
     }
 
-    /// **至多**消费 `max` 字节并返回（Go `bufio.Reader.Peek` 的消费语义：多余部分留在
-    /// 缓冲里，不会越读）。
-    pub async fn take(&mut self, max: usize) -> Vec<u8> {
-        let mut out: Vec<u8> = Vec::new();
-        while out.len() < max {
-            if self.pending.is_empty() {
-                match self.next_chunk().await {
-                    Some(Ok(b)) => self.pending = b,
-                    Some(Err(_)) | None => break,
+    /// 把上游**读进缓冲**至多 `max` 字节并返回缓冲里的这部分（Go `bufio.Reader.Peek` 的语义）：
+    /// 字节**留在 `pending` 里**，后续 `next_chunk` / `into_rest_stream` 会照发，一个都不丢
+    /// （Go `3d4627f` 之后 `br` 回填 `resp.Body` 与此等价）。返回值只用于 14018 判定，
+    /// **不是**消费。注意：这里**直接读源**（不经 `next_chunk`，否则 `pending` 会被自读空转）。
+    pub async fn peek(&mut self, max: usize) -> Vec<u8> {
+        while self.pending.len() < max {
+            match self.read_source().await {
+                Some(Ok(b)) => {
+                    let mut merged = Vec::with_capacity(self.pending.len() + b.len());
+                    merged.extend_from_slice(&self.pending);
+                    merged.extend_from_slice(&b);
+                    self.pending = Bytes::from(merged);
                 }
-            }
-            let want = max - out.len();
-            if self.pending.len() <= want {
-                out.extend_from_slice(&self.pending);
-                self.pending = Bytes::new();
-            } else {
-                out.extend_from_slice(&self.pending.split_to(want));
+                Some(Err(_)) | None => break,
             }
         }
-        out
+        self.pending[..self.pending.len().min(max)].to_vec()
     }
 
     /// 把「剩下的全部」包成聚合用的流（`pending` 先发，然后透传上游）。
@@ -873,6 +894,38 @@ pub fn truncate(s: &str, n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `3d4627f` 的 Rust 侧等价物：peek 到的字节**一个都不能丢**，必须原样交给下游聚合。
+    /// 反向验证：把 `peek` 改回「读进 out 且清空 `pending`」⇒ 本用例判红（下游只收到 40 字节）。
+    #[tokio::test]
+    async fn peek_keeps_every_byte_for_the_aggregation() {
+        let parts: Vec<&[u8]> = vec![b"data: {\"choices\"", b":[]}\n\ndata: [DONE]\n\n"];
+        let stream = futures_util::stream::iter(
+            parts
+                .iter()
+                .map(|p| Ok::<Bytes, std::io::Error>(Bytes::copy_from_slice(p)))
+                .collect::<Vec<_>>(),
+        );
+        let mut reader = ChunkReader::from_stream(Box::pin(stream));
+        let peeked = reader.peek(64 * 1024).await;
+        assert_eq!(
+            peeked,
+            parts.concat(),
+            "peek 窗口应看到上游全量（{} 字节）",
+            parts.concat().len()
+        );
+        assert!(!crate::failover::is_exhausted_body(&String::from_utf8_lossy(&peeked)));
+        // peek 之后下游必须仍能读回**完整**上游体
+        let mut got: Vec<u8> = Vec::new();
+        while let Some(chunk) = reader.next_chunk().await {
+            got.extend_from_slice(&chunk.expect("上游流不该报错"));
+        }
+        assert_eq!(
+            got,
+            parts.concat(),
+            "peek 之后的字节必须与上游逐字节相同（丢头就是 Go 修复前那个缺陷）"
+        );
+    }
 
     #[test]
     fn transient_reject_matches_go_regex() {

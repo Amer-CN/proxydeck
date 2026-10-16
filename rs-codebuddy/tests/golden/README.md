@@ -4,7 +4,7 @@
 
 | 文件 | 体积 | 内容 |
 |---|---|---|
-| `golden-codebuddy-go.json` | 298 KB（305,562 B） | **35 个 HTTP 场景 / 149 步**（P5a 12/56 + P5b 15/66 + P5c 8/27）+ 纯函数五段（tool_choice 15 / tool_refs 17 / fingerprint 4 / summarize_tool 6 / collect_eof 5） |
+| `golden-codebuddy-go.json` | 304 KB（311,546 B） | **35 个 HTTP 场景 / 149 步**（P5a 12/56 + P5b 15/66 + P5c 8/27）+ 纯函数五段（tool_choice 15 / tool_refs 17 / fingerprint 4 / summarize_tool 6 / collect_eof 5） |
 
 `scenarios[].scope` 分三段：
 
@@ -66,6 +66,23 @@ node .work\rust-rewrite\_unskip-downstream.mjs # 摘掉 P5a/P5b 里 8 处 outbou
 * 服务经生产 `s.Start()` 起在 `127.0.0.1:0`，走的就是生产的 `corsWith`+`ServeMux` 路由表。
 * **429 报文里的重置时点写成远期固定值** `2099-01-01 00:00:00 UTC+8`（两个采集器各一处/两处）——
   这条不是风格问题，写错就是「门禁在采集日之后永久变红」，见下面「时钟纪律」节。
+
+**P5c-b（2026-10-16，Go 修了「非流式 Peek 丢头」`3d4627f` 之后的重对齐）**：只重采受该修复影响的
+场景，并把**确实变化**的字段按路径并入（`.work/rust-rewrite/_p5cb-golden-merge.mjs`）：
+
+* **按路径并入（本次用的就是它）**——`node .work/rust-rewrite/_p5cb-golden-merge.mjs [--write]`：
+  先给「旧采集 vs 新采集」逐路径 diff，只替换**实质变化**的 `steps[].resp_body` 与**整条消失**的响应头
+  （`p5c-nonstream-peek-large #0` 的 `content-length`：体从 287B 变 6288B 后 Go 不再补该头）；
+  只随采集变动的 `created` / `chatcmpl-<hex>` **不写回**（门禁本就归一这两个字段，写回只会让黄金
+  多出一批与本次修复无关的字节）。默认 **dry-run**，加 `--write` 才落盘；落盘前断言
+  「实际改动处数 == 逐路径 diff 出的处数」，不符即抛错不写。
+* **整份替换某段**——`node .work/rust-rewrite/_p5b-merge.mjs`（P5a+P5b 全量重建）、
+  `node .work/rust-rewrite/_p5c-merge.mjs`（只替换 P5c 段）。**加/删场景时走这两个**；
+  注意它们会顺带把该段的 `created` / `id` 换成本次采集的值。
+* 两条路都要复跑一次 `node .work/rust-rewrite/_p5cb-verify.mjs`（逐行 diff 手术前后的黄金，
+  断言只有预期行变化）与 `node .work/rust-rewrite/_p5cb-paths.mjs <旧采集> <新采集>`（逐字段列差异）。
+* **重采必须复核时钟纪律**（下一节）：本次重采的 4 处重置时点仍是 `2099-01-01 00:00:00 UTC+8`，
+  `p5b_golden` 的自检实测「重置时点 4 处、派生期望 3 处，全部在允许窗口内」。
 
 ## 门禁怎么用这份基准（四条口径）
 
