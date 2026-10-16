@@ -2,7 +2,10 @@
 // 也当"外部占位进程"）。Go 采集器与 Rust 测试共用这一份，保证两侧驱动的是同一个进程行为。
 //
 // 它按 Go `pluginStart` 的原生分支形态被调用：`--plugin-<id> --port <n> [插件附加参数]`。
-// 模式由环境变量 `RS_GUI_FAKE_MODE` 决定：
+// 模式由环境变量 `RS_GUI_FAKE_MODE` 决定（**也可由 `--fake-mode=<mode>` 显式覆盖**：
+// 换血门禁（shell_tests）的 spawn 走托管器，拿不到 spawn 时的 env 注入，
+// 而 `RS_GUI_FAKE_MODE` 是进程级变量、会被同二进制里并行跑的 exit 场景改掉——
+// 显式参数是那条路径唯一稳定的表述方式）：
 //   serve —— 监听 --port，任何请求回 200 {"ok":true}（= 健康实例）；常驻
 //   raw   —— 监听 --port 但不实现 HTTP（回一行垃圾）= 非健康占位者；常驻
 //   idle  —— **不监听端口**、只保持进程活着（= "起了但没上线" 的僵尸子进程，
@@ -15,7 +18,9 @@ const fs = require('fs');
 const net = require('net');
 
 const argv = process.argv.slice(2);
-const mode = process.env.RS_GUI_FAKE_MODE || 'exit';
+const explicitMode = argv.find(function (a) { return a.startsWith('--fake-mode='); });
+const mode = explicitMode ? explicitMode.slice('--fake-mode='.length)
+                          : (process.env.RS_GUI_FAKE_MODE || 'exit');
 const portIdx = argv.indexOf('--port');
 const port = portIdx >= 0 ? argv[portIdx + 1] : (process.env.RS_GUI_FAKE_PORT || '0');
 

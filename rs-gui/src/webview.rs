@@ -1,15 +1,17 @@
 //! webview.rs —— GUI 外壳（wry + tao）。Windows 上 wry 底层就是 WebView2，与 Go 版
 //! `webview_go` 同一个渲染器。
 //!
-//! P7a 只做**能让桥接层跑起来的最小外壳**：
-//!   * 窗口（540×760，标题同 Go `appTitle`）
+//! 形态（P7c 补全宿主外壳后）：
+//!   * 窗口（540×760，标题同 Go `appTitle`）+ **无边框** + **窗口图标** + **DPI 感知**
 //!   * 界面经 `127.0.0.1:随机端口` 的进程内 HTTP 服务提供（**与 Go 同款**：
 //!     `http://localhost` 属安全上下文，ui.html 的 `navigator.clipboard` 等 API 才可用）
-//!   * 26 个桥函数 + 4 个插件托管绑定注入 + IPC 派发到 [`Bridge::dispatch`]
+//!   * 33 个桥函数（26 + 4 插件托管 + 3 传真）注入 + IPC 派发到 [`Bridge::dispatch`]
+//!   * **托盘常驻**（起窗即挂图标）+ **600ms 可见性自愈**（一键更新重启后旧窗仍持前台时
+//!     新窗会停在不可见——Go 第 47 轮那条自愈）
 //!
-//! 属 P7c 的（本文件刻意没做，见 README 接手清单）：无边框（`setFrameless`）、窗口图标、
-//! DPI 感知、单实例、托盘（`trayStartup`/`trayHide`/`trayQuit`）、`showWindowIfHidden`
-//! 的 600ms 自愈、`rollStaleBackends` 换血、`--fax` 浮窗。
+//! 与 Go `main()` 的对应次序：`setDPIAware`（flag.Parse 之前）→ 起界面服务 → 建窗 →
+//! `setFrameless`/`setWindowIcon` → `trayStartup` → 等 600ms → `showWindowIfHidden`
+//! → `bindAll` → Navigate → Run。
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -21,10 +23,11 @@ use tao::window::WindowBuilder;
 use wry::http::Request;
 use wry::{WebView, WebViewBuilder};
 
-use crate::bridge::{Bridge, BINDINGS, PLUGIN_BINDINGS};
+use crate::bridge::{Bridge, BINDINGS, FAX_BINDINGS, PLUGIN_BINDINGS};
 use crate::host::{Host, NoWindowHost, WindowHost};
 use crate::state::App;
 use crate::uihtml::UI_HTML;
+use crate::win32;
 
 /// 起 GUI 并进入消息循环（无参启动）。返回 `Err` 表示窗口/WebView 建不起来。
 pub fn run_gui(app: Arc<App>) -> Result<(), String> {
@@ -39,6 +42,11 @@ pub fn run_gui(app: Arc<App>) -> Result<(), String> {
         .map_err(|e| format!("创建窗口失败: {e}"))?;
 
     let hwnd = window_hwnd(&window);
+    // 自绘无边框 + 窗口图标（Go `main.go:277-286`：同步一次）
+    if let Some(h) = hwnd {
+        win32::set_frameless(h);
+        win32::set_window_icon(h);
+    }
     let host: Arc<dyn Host> = match hwnd {
         Some(h) => Arc::new(WindowHost::new(h, move || post_wm_close(h))),
         None => Arc::new(NoWindowHost),
@@ -66,6 +74,17 @@ pub fn run_gui(app: Arc<App>) -> Result<(), String> {
     *slot.borrow_mut() = Some(webview);
     window.set_visible(true);
 
+    // 托盘常驻：图标从进程起来就挂着（Go `main.go:299` 之前那处 `trayStartup`）。
+    // 起不来只写日志，界面照常可用。
+    crate::host::startup_tray(hwnd);
+
+    // 一键更新重启的自愈（Go `main.go:287-297`）：新进程起窗时旧窗可能仍持前台
+    // （前台锁定规则让新窗创建后停在不可见），延迟 600ms 检查并带出。
+    std::thread::sleep(std::time::Duration::from_millis(600));
+    if let Some(h) = hwnd {
+        win32::show_window_if_hidden(h);
+    }
+
     // 后台刷新循环（等价 Go `bindAll` 里起的两个常驻 goroutine：更新检查 + 官网用量）
     app.start_background();
 
@@ -77,7 +96,7 @@ pub fn run_gui(app: Arc<App>) -> Result<(), String> {
 }
 
 /// 解析一条 IPC 消息并派发：`{"id":N,"name":"ccX","args":[...]}` → `(id, JSON 串字面量)`。
-fn handle_ipc(bridge: &Bridge, body: &str) -> Option<(u64, String)> {
+pub fn handle_ipc(bridge: &Bridge, body: &str) -> Option<(u64, String)> {
     let v: serde_json::Value = serde_json::from_str(body).ok()?;
     let id = v.get("id")?.as_u64()?;
     let name = v.get("name")?.as_str()?.to_string();
@@ -92,12 +111,13 @@ fn handle_ipc(bridge: &Bridge, body: &str) -> Option<(u64, String)> {
     Some((id, serde_json::to_string(&out).ok()?))
 }
 
-/// 注入的 JS 桥：把 30 个绑定名（26 个 bridge.go + 4 个插件托管）定义成全局函数，
+/// 注入的 JS 桥：把 33 个绑定名（26 个 bridge.go + 4 个插件托管 + 3 个传真）定义成全局函数，
 /// 返回 Promise（ui.html 用 `Promise.resolve(window['cc'+fn](...))`，串与 Promise 都吃）。
 pub fn bridge_shim() -> String {
     let names: Vec<String> = BINDINGS
         .iter()
         .chain(PLUGIN_BINDINGS.iter())
+        .chain(FAX_BINDINGS.iter())
         .map(|n| format!("\"{n}\""))
         .collect();
     format!(
@@ -126,7 +146,7 @@ pub fn bridge_shim() -> String {
 
 /// 进程内最小 HTTP 服务：只伺候 ui.html 一个响应（对齐 Go `main.go:248-259` 的
 /// `http.ServeMux` + `http.Serve`，含 `Cache-Control: no-store`）。
-fn serve_ui_html() -> Result<String, String> {
+pub fn serve_ui_html() -> Result<String, String> {
     use std::io::{Read, Write};
     use std::net::TcpListener;
 
@@ -154,7 +174,7 @@ fn serve_ui_html() -> Result<String, String> {
 
 /// 取窗口的 Win32 句柄（拿不到就退回「无窗口宿主」，桥按 Go 的句柄不可用路径如实报错）。
 #[cfg(windows)]
-fn window_hwnd<W: tao::rwh_06::HasWindowHandle>(w: &W) -> Option<usize> {
+pub fn window_hwnd<W: tao::rwh_06::HasWindowHandle>(w: &W) -> Option<usize> {
     match w.window_handle().ok()?.as_raw() {
         tao::rwh_06::RawWindowHandle::Win32(h) => Some(h.hwnd.get() as usize),
         _ => None,
@@ -162,7 +182,7 @@ fn window_hwnd<W: tao::rwh_06::HasWindowHandle>(w: &W) -> Option<usize> {
 }
 
 #[cfg(not(windows))]
-fn window_hwnd<W: tao::rwh_06::HasWindowHandle>(_w: &W) -> Option<usize> {
+pub fn window_hwnd<W: tao::rwh_06::HasWindowHandle>(_w: &W) -> Option<usize> {
     None
 }
 
@@ -170,16 +190,7 @@ fn window_hwnd<W: tao::rwh_06::HasWindowHandle>(_w: &W) -> Option<usize> {
 /// 消息循环干净返回 → 正常退出，不整窗销毁）。
 #[cfg(windows)]
 pub fn post_wm_close(hwnd: usize) {
-    use std::ffi::c_void;
-    const WM_CLOSE: u32 = 0x0010;
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn PostMessageW(hwnd: *mut c_void, msg: u32, w_param: usize, l_param: isize) -> i32;
-    }
-    unsafe {
-        PostMessageW(hwnd as *mut c_void, WM_CLOSE, 0, 0);
-    }
+    crate::win32::window_cmd(hwnd, "close");
 }
 
 #[cfg(not(windows))]
@@ -190,13 +201,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shim_defines_all_30_bindings() {
+    fn shim_defines_all_33_bindings() {
         let js = bridge_shim();
         for n in BINDINGS {
             assert!(js.contains(&format!("\"{n}\"")), "注入脚本缺少 {n}");
         }
         for n in PLUGIN_BINDINGS {
             assert!(js.contains(&format!("\"{n}\"")), "注入脚本缺少插件托管绑定 {n}");
+        }
+        for n in FAX_BINDINGS {
+            assert!(js.contains(&format!("\"{n}\"")), "注入脚本缺少传真绑定 {n}");
         }
         assert!(js.contains("window.ipc.postMessage"), "必须走 wry 的 IPC 通道");
         assert!(js.contains("Array.prototype.slice.call(arguments)"), "实参按位置透传");

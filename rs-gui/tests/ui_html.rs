@@ -73,21 +73,30 @@ fn ui_html_bridge_surface_is_covered_by_our_bindings() {
         "抽取到的桥面太少（{used:?}）：抽取规则或界面结构变了"
     );
 
-    // 26 个 bridge.go 绑定 + 4 个插件托管绑定（P7b 已落地）都是我方提供的；
-    // 只剩注水浮窗 3 个仍由 Go 宿主提供（P7c 接手，登记在 README 的接手清单里）。
-    let later: [&str; 3] = ["ccOpenFax", "ccFaxWin", "ccFaxClose"];
+    // 26 个 bridge.go 绑定 + 4 个插件托管绑定（P7b）+ 3 个注水浮窗绑定（P7c）
+    // —— 界面的调用面至此**全部**由本 crate 提供，`later` 清空。
+    let later: [&str; 0] = [];
     let mut missing: Vec<&String> = Vec::new();
     for name in &used {
         let provided = rs_gui::bridge::BINDINGS.contains(&name.as_str())
-            || rs_gui::bridge::PLUGIN_BINDINGS.contains(&name.as_str());
+            || rs_gui::bridge::PLUGIN_BINDINGS.contains(&name.as_str())
+            || rs_gui::bridge::FAX_BINDINGS.contains(&name.as_str());
         if !provided && !later.contains(&name.as_str()) {
             missing.push(name);
         }
     }
     assert!(
         missing.is_empty(),
-        "界面调用了我们没有提供的绑定：{missing:?}（26 个 bridge.go + 4 个插件托管 + P7c 待接的 3 个之外不该有别的）"
+        "界面调用了我们没有提供的绑定：{missing:?}（26 个 bridge.go + 4 个插件托管 + 3 个传真之外不该有别的）"
     );
+
+    // 三个传真绑定确实被界面用到（否则「已提供」这件事就没被测到）
+    for n in ["ccOpenFax", "ccFaxWin", "ccFaxClose"] {
+        assert!(
+            used.contains(n),
+            "界面调用面里应当有 {n}（浮窗三灯/关窗/拉起浮窗都走它）"
+        );
+    }
 
     // 桥存在性判据的锚点（合同锚点变了要重新对齐）
     assert!(html.contains("HAS_BRIDGE"));

@@ -15,6 +15,7 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 
 use crate::appdir;
+use crate::faxtool::FaxLauncher;
 use crate::host::Host;
 use crate::httpc;
 use crate::jsons;
@@ -63,6 +64,11 @@ pub const PLUGIN_BINDINGS: [&str; 4] = [
     "ccPluginStop",
 ];
 
+/// 注水专线浮窗的 3 个绑定（Go `app/main.go` 的 `bindFaxLauncher` + `runFaxWindow`；
+/// P7c 落地）。**顺序即 Go 侧的定义次序**：`ccOpenFax`（主窗与浮窗都绑）在
+/// `bindFaxLauncher` 里，`ccFaxWin`/`ccFaxClose` 在 `runFaxWindow` 里按序绑。
+pub const FAX_BINDINGS: [&str; 3] = ["ccOpenFax", "ccFaxWin", "ccFaxClose"];
+
 /// 剪贴板缝（Go 用 `atotto/clipboard`；测试用空实现，避免动真人剪贴板）。
 pub trait Clipboard: Send + Sync {
     fn write_all(&self, text: &str) -> Result<(), String>;
@@ -86,22 +92,29 @@ impl Clipboard for NullClipboard {
     }
 }
 
-/// 桥接器：控制器 + 宿主动作（窗口/托盘）+ 剪贴板 + 插件托管。
+/// 桥接器：控制器 + 宿主动作（窗口/托盘）+ 剪贴板 + 插件托管 + 注水浮窗启动器。
 pub struct Bridge {
     pub app: Arc<App>,
     pub host: Arc<dyn Host>,
     pub clipboard: Arc<dyn Clipboard>,
     /// 插件托管（探活接管 / 拉杆启停 / 退出监视；门禁可用假注册表替换）
     pub plugins: Arc<PluginHost>,
+    /// 注水专线浮窗启动器（`ccOpenFax` 的落地处；门禁可注入假 spawn 目标）
+    pub fax: Arc<FaxLauncher>,
 }
 
 impl Bridge {
     pub fn new(app: Arc<App>, host: Arc<dyn Host>) -> Self {
+        // 默认与 `App` **共用同一个** PluginHost：Go 侧 `pluginList`/`pluginStart` 与
+        // 换血流程（`rollStaleBackends`）读的是同一份 `app.plugins` 状态表——两套实例
+        // 会让「界面已 running」与「换血认不认它是活人」对不上。
+        let plugins = Arc::clone(app.plugins());
         Self {
             app,
             host,
             clipboard: Arc::new(SystemClipboard),
-            plugins: Arc::new(PluginHost::production()),
+            plugins,
+            fax: Arc::new(FaxLauncher::production()),
         }
     }
 
@@ -114,6 +127,12 @@ impl Bridge {
     /// 换掉插件托管器（门禁用测试注册表 + 假后端，绝不碰现行服务端口）。
     pub fn with_plugins(mut self, plugins: Arc<PluginHost>) -> Self {
         self.plugins = plugins;
+        self
+    }
+
+    /// 换掉注水浮窗启动器（门禁用假 spawn 目标，绝不真拉起浮窗）。
+    pub fn with_fax(mut self, fax: Arc<FaxLauncher>) -> Self {
+        self.fax = fax;
         self
     }
 
@@ -399,6 +418,18 @@ impl Bridge {
                 Ok(()) => Ok(jsons::json_ok("已停止")),
                 Err(e) => Ok(jsons::json_err(&e)),
             },
+
+            /* ---------------- 注水专线浮窗 3 绑定（Go `app/main.go`） ---------------- */
+
+            // 拉起独立 --fax 子进程；已有浮窗则只置前（Go `bindFaxLauncher` 的闭包体）
+            "ccOpenFax" => Ok(self.fax.open_fax()),
+
+            // 浮窗三灯直绑桥：Go 侧只在浮窗里绑，主窗调用时照样能落到 windowCmd
+            // （`ccWindowCmd` 走的是同一段），不会"未实现"
+            "ccFaxWin" => Ok(self.fax.fax_win(self.host.window_handle(), &str_arg(args, 0)?)),
+
+            // 红圆点关窗（PostMessage WM_CLOSE；原 `w.Dispatch(w.Destroy)` 是崩溃源）
+            "ccFaxClose" => Ok(self.fax.fax_close(self.host.window_handle())),
 
             other => Err(format!("未知绑定: {other}")),
         }

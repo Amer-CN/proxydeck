@@ -150,7 +150,11 @@ pub fn remove(path: &Path) -> Result<(), String> {
     }
 }
 
-/// 文件是否存在（Go `fileExists`：`os.Stat` 成功即算，目录也算）。
+/// 文件是否存在（Go `bridge.go` 的 `fileExists`：`os.Stat` 成功即算——**目录也算**）。
+///
+/// 注意这与 `migrate.rs` 的私有 `file_exists` **不是同一个语义**：后者对齐的是 Go
+/// `migrate.go` 的版本（目录不算，`!fi.IsDir()`）。Go 同名函数在两个文件里语义不同，
+/// 此处各对各的；`migrate.rs` 从不调用本函数（P7b 审查曾指出旧注释把这层关系写反，已更正）。
 pub fn file_exists(path: &Path) -> bool {
     std::fs::metadata(path).is_ok()
 }

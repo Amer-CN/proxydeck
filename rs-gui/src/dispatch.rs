@@ -36,7 +36,7 @@ pub enum Mode {
     Proxy,
     /// `--plugin-<id>`：对应插件 crate
     Plugin(&'static str),
-    /// `--fax`：注水专线独立浮窗（P7c，尚未落地）
+    /// `--fax`：注水专线独立浮窗（P7c 已落地：`faxwindow.rs` + `faxtool.rs`）
     Fax,
     /// `-version`：打印版本退出（Go `main.go:216-219`）
     Version,
@@ -168,6 +168,24 @@ pub fn flag_value(argv: &[String], name: &str) -> Option<String> {
     None
 }
 
+/// 启动早期的一次性收口（对应 Go `main.go` 的 `runDataDirInit`，位置也相同：
+/// `flag.Parse()` 之后、任何状态文件读写之前）：
+///   1. 把 exe 同目录的历史状态文件搬进数据目录（搬不走的改名 `*.migrated`，不留两份分叉状态）
+///   2. 数据目录里仍是明文的凭据文件升级为 DPAPI 密文
+///   3. **有话说才写日志**（常态什么都不做、不写日志）
+fn run_data_dir_init() {
+    if appdir::portable() {
+        return; // 便携模式：数据就在 exe 同目录，无迁移
+    }
+    let mut notes = crate::migrate::migrate(&appdir::data_dir(), &appdir::exe_dir());
+    notes.extend(crate::migrate::upgrade_plaintext());
+    if notes.is_empty() {
+        return;
+    }
+    let log = appdir::path("headless-error.log");
+    let _ = appdir::append_log(&log, &format!("[state] {}", notes.join("；")));
+}
+
 fn block_on<F: Future<Output = Result<(), String>>>(f: F) -> Result<(), String> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -184,9 +202,14 @@ pub fn run(argv: Vec<String>) -> i32 {
         .unwrap_or_else(|| "rs-gui".to_string());
     let args: Vec<String> = argv.iter().skip(1).cloned().collect();
 
+    // DPI 感知必须最早：建窗之前（Go `main()` 的第一句 `setDPIAware()`）
+    crate::win32::set_dpi_aware();
+
     let mode = plan(&args);
     // 便携模式必须在任何状态文件读写之前定下来（Go `runDataDirInit` 同位置）
     appdir::init(args.iter().any(|a| a == "-portable" || a == "--portable"));
+    let _ = &prog;
+    run_data_dir_init();
 
     match mode {
         Mode::Version => {
@@ -248,26 +271,62 @@ pub fn run(argv: Vec<String>) -> i32 {
             0
         }
 
+        // 无窗口后台模式（Go `runCoreHeadless`，`main.go:156-181` + 该分支的失败收尾）
         Mode::Proxy => {
+            let port = flag_value(&args, "port").unwrap_or_else(|| "55990".to_string());
+            // 端口被非健康进程占用（僵死/残留）→ 先清理再听（Go：portBusy → killByPort → 300ms）
+            if crate::proc::port_busy(&port) {
+                let _ = crate::proc::kill_by_port(&port);
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+            // 启动失败的自写日志（与 Go `main.go:236-240` 同源：**子进程自己**写，
+            // GUI 只是 spawn 方、看不到子进程的 stderr）。参数解析失败与 run 失败
+            // 走**同一个收尾**——两者都是"headless 起不来"。
+            let write_fail_log = |e: &str| {
+                let _ = appdir::append_log(
+                    &appdir::path("headless-error.log"),
+                    &format!("headless 启动失败：{e}"),
+                );
+            };
             let sub = proxy_argv(&prog, &args);
-            match rs_proxy::Args::try_parse_from(&sub) {
-                Ok(a) => match block_on(rs_proxy::run(a)) {
-                    Ok(()) => 0,
-                    Err(e) => {
-                        eprintln!("Server failed: {e}");
-                        1
-                    }
-                },
+            let parsed = match rs_proxy::Args::try_parse_from(&sub) {
+                Ok(a) => a,
                 Err(e) => {
+                    write_fail_log(&e.to_string());
                     eprintln!("{e}");
+                    return 1;
+                }
+            };
+            match block_on(rs_proxy::run(parsed)) {
+                Ok(()) => 0,
+                Err(e) => {
+                    write_fail_log(&e);
+                    eprintln!("Server failed: {e}");
                     1
                 }
             }
         }
 
         Mode::Fax => {
-            eprintln!("rs-gui: --fax（注水专线独立浮窗）尚未实现（P7c）");
-            1
+            // 子进程侧单实例保险（Go `faxPopupMutexGuard`）：已有浮窗 → 置前 + 本进程自退。
+            // 守卫必须活到进程退出，故绑在 `guard` 上（一关句柄单实例就没了）。
+            let Some(_guard) = crate::faxtool::fax_popup_mutex_guard() else {
+                return 0;
+            };
+            let host = flag_value(&args, "host").unwrap_or_else(|| "127.0.0.1".to_string());
+            let port = flag_value(&args, "port").unwrap_or_else(|| "55990".to_string());
+            let key = flag_value(&args, "api-key").unwrap_or_default();
+            if appdir::portable() {
+                std::env::set_var(appdir::DATA_DIR_ENV, appdir::data_dir());
+            }
+            let app = std::sync::Arc::new(crate::state::App::new(&host, &port, &key));
+            match crate::faxwindow::run_fax_window(app) {
+                Ok(()) => 0,
+                Err(e) => {
+                    eprintln!("rs-gui: {e}");
+                    1
+                }
+            }
         }
 
         Mode::Gui => {
@@ -279,6 +338,15 @@ pub fn run(argv: Vec<String>) -> i32 {
             // GUI 启动前先解析数据目录（Go `runDataDirInit` 的位置）
             if appdir::portable() {
                 std::env::set_var(appdir::DATA_DIR_ENV, appdir::data_dir());
+            }
+            // 更新后零残留：把还跑在旧包（*.old*）上的插件后端逐个换血。
+            // **只在 GUI 分支做**——`newApp` 在插件子进程/headless/浮窗里都会跑，
+            // 那几处绝不能碰别的后端（Go `main.go:244-247` 同款）。异步跑，不阻塞界面。
+            {
+                let host = std::sync::Arc::clone(app.plugins());
+                std::thread::spawn(move || {
+                    crate::rollover::roll_stale_backends(&host);
+                });
             }
             match crate::webview::run_gui(app) {
                 Ok(()) => 0,

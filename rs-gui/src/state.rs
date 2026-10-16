@@ -6,7 +6,7 @@
 //! 少一个键或改名都会让界面静默失灵，故本文件是 P7a 的对齐重点。
 
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -71,6 +71,8 @@ pub struct App {
     pub key_probe: Mutex<KeyProbe>,
     /// 官网用量缓存（Go 的 `usageCache`）
     pub usage: Mutex<String>,
+    /// 插件托管器（Go `app` 上的 `plugins` 状态表；换血流程要复用同一个实例）
+    plugins: Arc<crate::plugins::PluginHost>,
 
     usage_tx: SyncSender<()>,
     usage_rx: Mutex<Option<Receiver<()>>>,
@@ -103,6 +105,7 @@ impl App {
             upd_flow: Mutex::new(UpdFlow::default()),
             key_probe: Mutex::new(KeyProbe::default()),
             usage: Mutex::new(String::new()),
+            plugins: std::sync::Arc::new(crate::plugins::PluginHost::production()),
             usage_tx,
             usage_rx: Mutex::new(Some(usage_rx)),
             update_tx,
@@ -111,6 +114,12 @@ impl App {
     }
 
     /* ---------------- 状态文件路径（Go bridge.go:49-54） ---------------- */
+
+    /// 插件托管器（与 `Bridge` 用的是同一个实例——Go 侧也是 `app` 上的同一份状态表）。
+    /// 换血流程（`rollover`）从 GUI 启动路径进来，拿的就是它。
+    pub fn plugins(&self) -> &std::sync::Arc<crate::plugins::PluginHost> {
+        &self.plugins
+    }
 
     pub fn key_file() -> std::path::PathBuf {
         appdir::path("api-key.txt")

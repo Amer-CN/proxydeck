@@ -574,10 +574,7 @@ pub fn run_one_key_update_flow(
     }
     set_phase("replaced", 100, "已替换，正在重启…");
     // 关窗路径：PostMessage WM_CLOSE → 消息循环干净返回 → 正常退出（拿不到句柄才直接退）
-    match host.window_handle() {
-        Some(h) => host.window_cmd(h, "close"),
-        None => std::process::exit(0),
-    }
+    crate::host::close_after_update(host.as_ref());
 }
 
 #[cfg(test)]

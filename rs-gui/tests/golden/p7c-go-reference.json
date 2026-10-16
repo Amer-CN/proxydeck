@@ -1,0 +1,85 @@
+{
+  "app_version": "v3.20.10",
+  "bindings26": [
+    "ccGetState",
+    "ccLiveSnapshot",
+    "ccStart",
+    "ccStop",
+    "ccStats",
+    "ccUsage",
+    "ccUsageRefresh",
+    "ccSaveKey",
+    "ccProbeKey",
+    "ccCheckUpdate",
+    "ccCheckUpdateForce",
+    "ccOneKeyUpdate",
+    "ccCalib",
+    "ccModels",
+    "ccAutostart",
+    "ccOpen",
+    "ccCopy",
+    "ccDismiss",
+    "ccDismissCloseHint",
+    "ccWindowCmd",
+    "ccRequestClose",
+    "ccCloseChoice",
+    "ccCloseModeGet",
+    "ccCloseModeSet",
+    "ccKeyMapGet",
+    "ccKeyMapSet"
+  ],
+  "bindings_fax": [
+    "ccOpenFax",
+    "ccFaxWin",
+    "ccFaxClose"
+  ],
+  "bindings_plugin": [
+    "ccPluginList",
+    "ccPluginLog",
+    "ccPluginStart",
+    "ccPluginStop"
+  ],
+  "core_version": "v1.2.0",
+  "fax_mutex_guard_with_popup": true,
+  "fax_mutex_guard_without_popup": false,
+  "fax_mutex_name": "Local\\ProxyDeck-FaxWindow",
+  "fax_open_cases": [
+    {
+      "name": "open-fax-existing-popup",
+      "detail": "消息窗冒充浮窗：应走「已在前台」分支并置前，不 spawn 任何子进程",
+      "out": "{\"msg\":\"注水专线浮窗已在前台\",\"ok\":true}"
+    }
+  ],
+  "fax_popup_handle_before": 0,
+  "fax_window_size": [
+    580,
+    784
+  ],
+  "fax_window_title": "注水专线 · WATER PROBE FX-01",
+  "find_fax_popup_after_destroy": 0,
+  "find_fax_popup_with_message_window_nonzero": true,
+  "migrate": {
+    "existing_dst_content": "{\"new\":2}",
+    "existing_migrated_exists": true,
+    "existing_notes": "stats.json 目标已存在，旧文件改名保留为 stats.json.migrated",
+    "existing_src_gone": true,
+    "moves_dst_content": "{\"accounts\":[{\"user_id\":\"u1\",\"access_token\":\"tok-abc\",\"enabled\":true}]}",
+    "moves_exe_untouched": true,
+    "moves_keymap": "[[\"cmd\"]]",
+    "moves_no_migrating_tmp": true,
+    "moves_notes": "keymap.json 已搬入数据目录；tuanjie-accounts.json 已搬入数据目录",
+    "moves_src_gone": true,
+    "no_files_notes_len": 0,
+    "same_dir_file_kept": "[[\"tj\"]]",
+    "same_dir_notes_len": 0
+  },
+  "upgrade_plaintext": {
+    "is_ciphertext": true,
+    "no_plaintext_tok": true,
+    "noncredential_untouched": "{\"x\":1}",
+    "notes": "tuanjie-accounts.json 已升级为 DPAPI 密文",
+    "prefix": "PDAPI1\nAQAAAN",
+    "roundtrip_equal": true,
+    "second_run_notes": ""
+  }
+}
