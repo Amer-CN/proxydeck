@@ -109,7 +109,7 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 | 12 | `/providers` | ❌ 未注册 | 依赖 `providers.go` |
 | 13 | `/vision-config` | ❌ 未注册 | 依赖 `media.go` |
 | 14 | `/media-config` | ❌ 未注册 | 同上 |
-| 15 | `/v1/chat/completions` | ❌ 未注册 | `handleChat` 本体 = 下一片 |
+| 15 | `/v1/chat/completions` | ✅ 已实现 | `handleChat` 本体（P8b 第四片，见下节）：池路径 + 单账号路径 |
 | 16 | `/v1/images/generations` | ❌ 未注册 | 依赖 `media.go` |
 | 17 | `/v1/videos` | ❌ 未注册 | 同上 |
 | 18 | `/v1/videos/` | ❌ 未注册 | 同上 |
@@ -159,11 +159,94 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 * 反向验证 `.work/p8b3/mutate.mjs`：5 条突变（backend 常量 / 404 体 / `/quota` 参数名 /
   `elapsed` 数字→字符串 / `token_remaining_hours` 数字→字符串）**5/5 全部 RED**，逐条还原后复绿。
 
+## P8b 第四片：`handleChat`（池路径 + 单账号路径，2026-10-17）
+
+**目标（简报原话）**：`handleChat` 本体——池路径 429 即时换号（≤3 次，换前 1s 退避）+
+全池撞墙按 `Retry-After` 排队重发（单请求 30 分钟总预算）+ `ensureNonEmpty` +
+「额度耗尽换号」+ 200 空响应重试 + 非法 UTF-8 本地 400；单账号路径（直发 + 失败形态）一并打通。
+
+### 落地对照（Go 行号 → Rust 落点）
+
+| 行为 | Go | Rust | 门禁 |
+|---|---|---|---|
+| 方法闸门 / 64MB 限读 | `server.go:939-944` | `chat.rs` `handle_chat` 开头 | `p8b3_http_contract`（GET → 405）|
+| **非法 UTF-8 本地 400**（文案逐字）| `server.go:909-932` | `chat.rs::is_valid_utf8` + `INVALID_UTF8_BODY_MESSAGE` | `p8b4_chat_behavior::invalid_utf8_body_…`（并且断言**零上游命中**）|
+| `model`/`stream` 解析（整串严格）| `server.go:948-958` | `chat.rs::parse_model_and_stream` | 单测 `parse_model_and_stream_…`（含尾随垃圾）|
+| 会话租借 + 体重排 | `server.go:981-992` | `session::acquire` + `reqshape::reshape_chat_body` | 池 200 用例断言出站体三处 session 同值 |
+| 池路径直发（按号换 key）| `handlers_extra.go:211-226` | `chat.rs::forward_direct` + `client::fetch_key_with_token` | 池 200 用例（每号一把 key）|
+| 402 禁用该号 + 异步查 5h 窗口 | `server.go:1072-1098` | `chat.rs::pool_path` 402 段 + `parse_quota_5h` | `pool_402_swaps_account_and_marks_budget_exceeded` |
+| 瞬时错误重发（≤3，800ms）| `server.go:1099-1120` | `pool_path` 的重发循环 | `transient_5xx_…`（4 次上游 + ≥2.4s）|
+| **429 即时换号（≤3，换前 1s 退避）** | `server.go:1132-1160` | `pool_path` 第一层 + `ChatTiming::switch_backoff` | `pool_429_switches_…`、`switch_budget_is_bounded_…`、`pool_429_switch_budget_stops_at_three_…` |
+| **全池撞墙按 Retry-After 排队重发** | `server.go:1161-1183` | `pool_path` 第二层 + `pacing_max_wait` 预算 | `pool_429_waits_retry_after_then_recovers_with_200`（真等 1s）|
+| 非 200 透传（含 402 文案）| `server.go:1184-1196` / `:1320-1363` | `finish_pool` / `finish_non_200` | 差分 5 场景逐字节 |
+| 200 转发（`X-Accel-Buffering`/`Cache-Control`）| `server.go:1202-1204` / `:1383-1385` | `base_out_headers` | 差分（含 `Cache-Control` 断言）|
+| **200 空响应嗅探重放**（仅单账号路径）| `server.go:2077-2130`、调用点 `:1370-1375` | `ensure_non_empty` | `single_account_empty_200_is_replayed_once`、`…_always_empty_returns_502_…`（3 次上游）|
+| 单账号 429 **只有等待层** | `server.go:1262-1298` | `handle_chat` 单账号段 | `single_account_429_only_waits_…`（断言**无**换号事件）|
+| 未知 `model` 兜底 `"?"` | `server.go:953` | `parse_model_and_stream` | 单测 |
+
+### ⚠ 简报写的「14018 耗尽换号」在本仓**不存在**（以 Go 为准）
+
+简报把 codebuddy 的 `14018 Credits exhausted` 写进了团结片。**Go 团结侧全文没有 `14018`
+这个业务码**（`grep -rn 14018 internal/tuanjie` 零命中），它的「额度耗尽」分支是 **HTTP 402
+`budget_exceeded`**：池路径禁用该号并换下一个（`server.go:1071-1097`），单账号路径标记本地
+账号并给可读中文（`server.go:1332-1359`）。本片照 Go 实现 402 两条，**没有**伪造 14018 分支；
+「全池耗尽」的有界性由 `all_accounts_402_passes_the_error_through_without_looping` 锁住
+（两个号最多两次上游访问，随后如实透传 402）。
+
+### 差分对照（真 Go 采收，7 场景）
+
+`tests/golden/golden-p8b4-go.json` 由 `.work/p8b4/zz_p8b4_collect_test.go`
+（一次性采集器，跑完即从 `internal/tuanjie/` 删除）采收，**直接驱动真 Go `handleChat`**，
+假上游按 `cli_api_key` 逐次给确定性应答。`tests/p8b4_diff.rs` 用同一份场景驱动 Rust，
+逐条比：`status` / `content-type` / **`body` 逐字节** / `Retry-After` / `Cache-Control` /
+**上游命中序与逐号命中数**。7 场景：`chat-200`、`chat-429-switch-then-200`、
+`chat-402-swap`、`chat-retry-5xx`、`chat-noretry-400`、`chat-empty-then-200`、
+`chat-stream-1`（池路径流式：入站 `"stream":true`，上游 SSE 多块，下游重组字节逐字节一致；
+块边界不比——TCP 分段两侧天然不同，真在流由行为用例的**首字节时延**锁死，见下）。
+
+**两条由门禁逼出来的事实（都改了实现/门禁，不是猜的）**：
+
+* **`oneshot` 会吃掉 `Cache-Control`**：差分最初用 `router(st).oneshot(req)` 在进程内打路由，
+  响应头里的 `Cache-Control` 到不了调用方（`cors` 中间件出来时还在、`oneshot` 的返回值里没了），
+  于是「响应头对齐」这条门禁形同虚设（一次突变实验暴露：去掉 `Cache-Control` 仍然全绿）。
+  现在差分**起真 TCP 服务 + 真 HTTP 客户端**，Go 侧也是真 handler，两侧才可比。
+* **池路径不做空响应嗅探**：`chat-empty-then-200` 里 Go 把首份「200 空体」**原样透传**
+  （`ensureNonEmpty` 只在单账号路径调）。Rust 侧同行为，差分锁住；「重放」由单账号路径的
+  两条行为用例单独覆盖。
+
+### P8b 第四片新增的已知差异（登记）
+
+22. **`noteUpstreamError`/`noteUpstreamOK`（判定告警计数）未迁**：Go 在非 200/200 时更新
+    `judgeAlert`（连续 401 三次置警、含「请升级」/`x-codely-signature` 立即置警）。属 P8c
+    的种子/判定告警面；Rust 侧 `/health` 的 `judgment_alert` 仍恒 `false`（第三片已登记）。
+23. **`logRequestShape` 未迁**：Go 每请求打印入站/出站请求结构指纹（`server.go:2212-2266`）。
+    纯诊断日志，不含响应字节。
+24. **媒体改路由（`RerouteIfMedia`/`FetchRemoteImages`）与外部 provider 未迁**：
+    `handleChat` 开头那两段本片不含 ⇒ 含图请求不会改路由、也不会预下载远程图片。
+    属后续小轮（`media.go` / `providers.go`）。
+25. **别名解析观测 / 被动注水未迁**：`water.RecordPassive`/`RecordResolution` 属注水面（P8c）。
+26. **流式 usage 入账（`usageScanner`）已迁**：`UsageScanner::{new,feed,finish}` 逐块解析
+    `data:` 行（usage 段入账、流内错误记一次），随池路径流式分支逐块驱动；
+    别名解析观测（`water.RecordResolution`）未迁（属 P8c），响应字节与入账行为不受影响。
+    **【P8b 第四片审查 P1 后收口】**此前此处写"未迁"是错的——实现时漏了注释更新，
+    连带 `chat.rs` 模块头一起更正；单测 `usage_scanner_feeds_across_chunk_boundaries_like_go`
+    锁跨块断行，差分 `chat-stream-1` 锁重组字节，行为用例
+    `pool_streaming_forwards_chunk_by_chunk` 锁首字节时延（600ms 间隙下首块 <400ms）。
+27. **单账号路径 200 的 `defer activity.Add("ok", …)` 未迁**：Go 那条恒写
+    （`server.go:1379-1381`），池路径只在非流式含 usage 时写（`:1249-1250`）。
+    少的是**仅用于 GUI 展示**的一条事件，不影响响应与计费。
+28. **429 兜底总预算有个测试缝（Go 没有）**：Go 靠**取消请求 ctx** 让第二层 `select` 立刻
+    退出（`pacing_pool_test.go:122-137`）；Rust 的 `handle_chat` 是本进程内直接 await，
+    没有等价中断点，故加 `ChatTiming::set_pacing_max_wait_for_test` 让「预算耗尽 ⇒ 循环退出」
+    在秒级门禁里可走到。**生产构造恒 30 分钟**（`ChatTiming::default`），换号退避生产恒 1s。
+29. **`AccountPool` 在 `AppState` 里是 `Arc`**：Go 的 402 分支把 `s.pool` 直接闭包进
+    `go func()`；Rust 需要显式 `clone` 句柄搬进 `tokio::spawn`。池内部本就是 `Mutex<Inner>`，
+    并发语义未变（不是行为差异，登记以免后人以为是重构）。
+
 ## 已知差异（**如实登记**，不是"优化空间"）
 
-
 > 编号 1~6 属 P8a（凭证链），7~9 属 P8b 第一片（兜底内核），10~17 属 P8b 第二片（账号池/积分），
-> 18 起属 P8b 第三片（server 骨架与路由）。
+> 18~21 属 P8b 第三片（server 骨架与路由），22~29 属 P8b 第四片（`handleChat`，其中 26 已收口）。
 
 10. **Dead/冷却标记是 Go 团结侧没有的**：`internal/tuanjie/accounts.go` 里
    没有任何「凭据失效/冷却」标记——它的 401 只是被注释提到（`server.go:461`）、402 走
@@ -330,6 +413,17 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
     （Go 解成 nil map、下次 `addStat` panic——Go 既有缺陷，Rust 不复制）。
 16. **路径清洗**：Go `ServeMux` 对 `//x`/尾斜杠回 301/307，axum 回 404（`server.rs:120`
     旧注释曾称"登记在 README"，实无此条——以本条为准）。
+17. **P8b 第四片审查后补记（均已逐条核实去向）**：
+    - P9（非 200 `Retry-After` 透传）：**不成立，无需改动**——单账号路径两侧都无条件透传
+      （Rust `finish_non_200` 非 429 也写回）；池路径两侧都不透传（Go 池非 200 走 `writeErr`
+      无头，Rust `write_err` 同）。审查误报，主智能体已亲读两侧源码定谳。
+    - P10（>64MB 体）：Go `LimitReader` 截断转发，Rust `to_bytes(64MB)` 报错→空体转发。
+      只影响病态输入，暂登记不修。
+    - P13（429 预算耗尽后）：Go 每轮仍调 `PickWithToken`（有 `use_count` 自增与落盘副作用），
+      Rust 跳过。只影响计数器，不影响响应字节；暂登记不修。
+    - 合成 JWT 默认形状**无 salt**（`{sub,user_id,exp}`，与 Go 同形）：`Authorization` 全值
+      进计费命中比对，形状一变就红——P8b 第四片脚手架曾把默认改成带 salt 致差分红，
+      已回退；要区分 token 请用 `synthetic_jwt_for` 显式盐。
 
 ## 门禁与复跑
 

@@ -9,13 +9,15 @@
 //! **P8b 切片（本轮）**已迁入 `pacing`（KIMI-K3 429 兜底）/ `inflight`（进行中注册表 +
 //! 实时动态）/ `opencode_session`（`x-opencode-session`）/ `dist`（分布指纹纯函数）/
 //! `channels`（注水渠道静态表）/ `accounts`（账号池）/ `quota`（积分）/
-//! `stats`（按模型累计 + 落盘）/ `server`（**服务骨架与路由表**，本片新增）；
-//! 剩余 P8b 面（`handleChat` 池路径 / `handlers_extra.go` 的注水与媒体 / `providers.go` /
+//! `stats`（按模型累计 + 落盘）/ `server`（服务骨架与路由表）/ `chat`（**`handleChat`
+//! 的池路径与单账号路径**，P8b 第四片）；
+//! 剩余 P8b 面（`handlers_extra.go` 的注水与媒体 / `providers.go` /
 //! 两条转发 / `media.go` / `probes.go` / `model/info` 聚合）见 `README.md` 的未覆盖清单。
 
 pub mod accounts;
 pub mod appdir;
 pub mod channels;
+pub mod chat;
 pub mod client;
 pub mod credentials;
 pub mod crypto;

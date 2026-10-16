@@ -181,3 +181,44 @@ CORS 头、状态码、Content-Type、`writeJSON` 的末尾换行），用静态
    已被关掉的 socket，症状是随机的 `转发请求网络失败`（`models-get-final` 变 502）、
    两侧上游命中数凭空差一条。
 
+## P8b 第四片的基准（`golden-p8b4-go.json`）
+
+覆盖 `handleChat` 的池路径 + 单账号路径的**六个确定性场景**（假上游按 `cli_api_key` 逐次给
+应答）：`chat-200`、`chat-429-switch-then-200`（429 即时换号两跳后恢复）、`chat-402-swap`
+（402 禁用该号并换号）、`chat-retry-5xx`（502 可重试：首发 + 3 次重发）、`chat-noretry-400`
+（`invalid model name` 确定性错误：**不重发**）、`chat-empty-then-200`（池路径**不**嗅探：
+首份 200 空体原样透传）。每条记 `{status, content_type, body, retry_after, cache_control,
+chat_order, chat_calls}`。
+
+采集器留档 `.work/p8b4/zz_p8b4_collect_test.go`（一次性，跑完即从 `internal/tuanjie/` 删除）。
+
+**再生成链**：
+
+```powershell
+Copy-Item <repo>\.work\p8b4\zz_p8b4_collect_test.go <repo>\internal\tuanjie\
+$env:PROXYDECK_DATA_DIR = "<隔离临时目录>"      # 必须给（采集器内部还会 t.Setenv，双保险）
+$env:P8B4_GOLDEN_OUT = "<repo>\.work\p8b4\golden-p8b4-go.json"
+go test ./internal/tuanjie -run TestZZCollectP8B4 -count=1 -v
+Remove-Item <repo>\internal\tuanjie\zz_p8b4_collect_test.go
+Copy-Item <repo>\.work\p8b4\golden-p8b4-go.json <repo>\rs-tuanjie\tests\golden\ -Force
+```
+
+**采集器的两个坑（照做才对得上）**：
+
+1. **头要从 `rec.Header()` 取，不要 `rec.Result().Header`**：`httptest.ResponseRecorder`
+   的 `Result()` 会把某些头搬进 `http.Response` 的结构化字段，第一版用它取 `Cache-Control`
+   拿到的是空串 —— 于是 Rust 侧那条 `Cache-Control` 断言**形同虚设**（去掉实现里的 insert
+   仍然全绿）。改取 `rec.Header()` 后 `cache_control` 才真的是 `no-cache`，突变实验随之变红。
+2. **换了脚本必须同时清命中计数**：Rust 侧假上游（`tests/p8b3_scenario/mod.rs`）
+   多个场景共用一个 `FakeUpstream`，`set_chat_script` 若只换脚本不重置 `chat_calls`，
+   新场景会从脚本中间取应答（`chat-empty-then-200` 因此取到第二条，把「池路径不嗅探」
+   误读成「嗅探了」）。
+
+**时变口径**：全部无墙钟依赖 —— `Retry-After`/换号退避由测试注入固定值，假上游应答是常量，
+`handleChat` 的 `dur`/`elapsed` 不进基准。
+
+2026-10-17 实测：`cargo test --test p8b4_diff` **2/2 通过**，6 场景逐条一致
+（`status` / `content-type` / `body` 逐字节 / `Retry-After` / `Cache-Control` /
+上游命中序与逐号命中数）。
+
+

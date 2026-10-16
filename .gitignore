@@ -1,4 +1,4 @@
-bin/
+/bin/
 *.log
 checkin-bot/
 .author-keys/

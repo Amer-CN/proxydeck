@@ -1,0 +1,118 @@
+{
+  "scenarios": [
+    {
+      "name": "chat-200",
+      "request": "{\"model\":\"KIMI-K3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"KIMI-K3\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "retry_after": "",
+      "cache_control": "no-cache",
+      "chat_order": [
+        "sk-key-uid-a"
+      ],
+      "chat_calls": {
+        "sk-key-uid-a": 1
+      }
+    },
+    {
+      "name": "chat-429-switch-then-200",
+      "request": "{\"model\":\"KIMI-K3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"KIMI-K3\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "retry_after": "",
+      "cache_control": "no-cache",
+      "chat_order": [
+        "sk-key-uid-a",
+        "sk-key-uid-b",
+        "sk-key-uid-c"
+      ],
+      "chat_calls": {
+        "sk-key-uid-a": 1,
+        "sk-key-uid-b": 1,
+        "sk-key-uid-c": 1
+      }
+    },
+    {
+      "name": "chat-402-swap",
+      "request": "{\"model\":\"KIMI-K3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"model\":\"KIMI-K3\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "retry_after": "",
+      "cache_control": "no-cache",
+      "chat_order": [
+        "sk-key-uid-a",
+        "sk-key-uid-b"
+      ],
+      "chat_calls": {
+        "sk-key-uid-a": 1,
+        "sk-key-uid-b": 1
+      }
+    },
+    {
+      "name": "chat-retry-5xx",
+      "request": "{\"model\":\"KIMI-K3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "status": 502,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"{\\\"error\\\":{\\\"message\\\":\\\"bad gateway\\\"}}\",\"type\":\"api_error\"}}\n",
+      "retry_after": "",
+      "cache_control": "",
+      "chat_order": [
+        "sk-key-uid-a",
+        "sk-key-uid-a",
+        "sk-key-uid-a",
+        "sk-key-uid-a"
+      ],
+      "chat_calls": {
+        "sk-key-uid-a": 4
+      }
+    },
+    {
+      "name": "chat-noretry-400",
+      "request": "{\"model\":\"KIMI-K3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "status": 400,
+      "content_type": "application/json",
+      "body": "{\"error\":{\"message\":\"{\\\"error\\\":{\\\"message\\\":\\\"Invalid model name passed in model=None\\\"}}\",\"type\":\"api_error\"}}\n",
+      "retry_after": "",
+      "cache_control": "",
+      "chat_order": [
+        "sk-key-uid-a"
+      ],
+      "chat_calls": {
+        "sk-key-uid-a": 1
+      }
+    },
+    {
+      "name": "chat-empty-then-200",
+      "request": "{\"model\":\"KIMI-K3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"id\":\"x\",\"object\":\"chat.completion\",\"model\":\"KIMI-K3\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"stop\"}]}",
+      "retry_after": "",
+      "cache_control": "no-cache",
+      "chat_order": [
+        "sk-key-uid-a"
+      ],
+      "chat_calls": {
+        "sk-key-uid-a": 1
+      }
+    },
+    {
+      "name": "chat-stream-1",
+      "request": "{\"model\":\"KIMI-K3\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "data: {\"choices\":[{\"delta\":{\"content\":\"你好\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"，世界\"}}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":6,\"total_tokens\":18}}\n\ndata: [DONE]\n\n",
+      "retry_after": "",
+      "cache_control": "no-cache",
+      "chat_order": [
+        "sk-key-uid-a"
+      ],
+      "chat_calls": {
+        "sk-key-uid-a": 1
+      }
+    }
+  ]
+}

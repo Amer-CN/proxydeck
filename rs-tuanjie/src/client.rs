@@ -10,7 +10,7 @@
 //! 本轮的 reqwest 客户端按默认口径走环境变量代理（与 Go 的第一步一致）。
 //! Go `ForwardWithSession` 的 `contentType` 形参全程未被使用（死参数），这里不带。
 
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::headers::{key_fetch_headers, litellm_headers};
@@ -22,25 +22,31 @@ use crate::{
 
 /// **测试缝**（`main.rs` 只在 `RS_TUANJIE_TEST_BASES` 显式存在、且端口不是 8788 时写入）：
 /// 把两个域一起指向本机假上游，供 P8b 第三片的差分对照用。
-/// 进程启动后不可改（`OnceLock`）；生产不带该变量 ⇒ 恒为两个官方常量。
-static TEST_BASES: OnceLock<(String, String)> = OnceLock::new();
+/// 可重复覆写（`Mutex`）：门禁全程串行（`env_lock`），各用例按需重定向；
+/// 生产只在启动时写一次，行为与 `OnceLock` 无异；生产不带该变量 ⇒ 恒为两个官方常量。
+static TEST_BASES: Mutex<Option<(String, String)>> = Mutex::new(None);
 
-/// 设置测试缝的两个 base（重复调用只第一次生效）。
+/// 设置测试缝的两个 base（可重复覆写；调用方须持串行锁，见各门禁的 `env_lock` 惯例）。
 pub fn set_test_bases(codey_api_base: String, litellm_api_base: String) {
-    let _ = TEST_BASES.set((codey_api_base, litellm_api_base));
+    *TEST_BASES.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((codey_api_base, litellm_api_base));
 }
 
 fn default_codey_base() -> String {
     TEST_BASES
-        .get()
-        .map(|(c, _)| c.clone())
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .map(|(c, _)| c)
         .unwrap_or_else(|| CODEY_API_BASE.to_string())
 }
 
 fn default_litellm_base() -> String {
     TEST_BASES
-        .get()
-        .map(|(_, l)| l.clone())
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .map(|(_, l)| l)
         .unwrap_or_else(|| LITELLM_API_BASE.to_string())
 }
 
@@ -198,6 +204,37 @@ impl Client {
         }
     }
 
+    /// 用指定 access_token 换 cli_api_key —— `fetchKeyWithToken`（`handlers_extra.go` 里
+    /// `ForwardDirect` 调的那个包级函数）。与 [`Client::fetch_key`] 的差别只有 token 来源：
+    /// 池路径**按账号**换 key，**不共享**单账号的 key 缓存。
+    pub async fn fetch_key_with_token(&self, access_token: &str) -> Result<String> {
+        let mut req = self
+            .http
+            .get(self.cli_api_key_url())
+            .timeout(KEY_FETCH_TIMEOUT);
+        for (k, v) in key_fetch_headers(access_token, &self.user_agent) {
+            req = req.header(k, v);
+        }
+        let resp = req.send().await.map_err(Error::Forward)?;
+        let status = resp.status();
+        let body = read_body_limited(resp, 1 << 20).await;
+        if status != reqwest::StatusCode::OK {
+            return Err(Error::FetchKeyStatus {
+                status: status.as_u16(),
+                body: truncate_bytes(&body, 200),
+            });
+        }
+        #[derive(serde::Deserialize)]
+        struct Out {
+            #[serde(default)]
+            cli_api_key: String,
+        }
+        match serde_json::from_slice::<Out>(&body) {
+            Ok(out) if !out.cli_api_key.is_empty() => Ok(out.cli_api_key),
+            _ => Err(Error::FetchKeyBody(truncate_bytes(&body, 200))),
+        }
+    }
+
     /// 返回有效的 cli_api_key（过期/换号自动换取）——对应 `apiKeyCached`，`client.go:268-294`。
     pub async fn api_key_cached(&self) -> Result<String> {
         {
@@ -294,7 +331,7 @@ async fn read_body_limited(resp: reqwest::Response, limit: usize) -> Vec<u8> {
 }
 
 /// 错误文案里的截断（对应 Go `truncate`，`client.go:557-562`：按**字节**截，超长加 `...`）。
-fn truncate_bytes(b: &[u8], n: usize) -> String {
+pub fn truncate_bytes(b: &[u8], n: usize) -> String {
     if b.len() <= n {
         return String::from_utf8_lossy(b).into_owned();
     }

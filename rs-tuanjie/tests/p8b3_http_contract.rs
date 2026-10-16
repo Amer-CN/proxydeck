@@ -227,7 +227,6 @@ async fn unimplemented_routes_say_so_instead_of_pretending() {
     }
     // 未注册的端点回 404（**不**假装存在）
     for path in [
-        "/v1/chat/completions",
         "/account-models",
         "/water-probe",
         "/providers",
@@ -240,6 +239,18 @@ async fn unimplemented_routes_say_so_instead_of_pretending() {
         let (status, _h, _b) = call(st.clone(), "GET", path).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{path} 应回 404（本片未注册）");
     }
+
+    // `/v1/chat/completions` 已在 P8b 第四片迁入（池路径 + 单账号路径）：
+    // 它不再是 404 —— GET 走 Go 同款的 `http.Error(w,"method not allowed",405)`。
+    let (status, headers, body) = call(st, "GET", "/v1/chat/completions").await;
+    assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED, "GET chat 应回 405");
+    assert_eq!(body, "method not allowed\n");
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("text/plain; charset=utf-8")
+    );
 }
 
 /// `--port 8788` + 任一测试缝在场 → 拒绝启动（exit 2），**不监听**（P8b 审查 L7）。

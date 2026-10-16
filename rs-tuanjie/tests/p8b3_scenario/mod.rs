@@ -30,6 +30,10 @@ pub const FAKE_UID: &str = "uid-p8b3-synthetic";
 
 /// 合成 JWT（三段、base64url 无填充、`exp` 在远期）——
 /// **不是**任何真实凭据：只用来让 `jwtSub`/`jwtExpiry` 走出可比的确定值。
+///
+/// 注意：默认形状**无 salt**（`{sub,user_id,exp}`）——Go 侧的合成 JWT 同形，
+/// 差分门禁按 `Authorization` 全值比对计费命中，形状一变就红。
+/// 要按用例区分 token 请用 [`synthetic_jwt_for`]（显式盐），别改这里。
 pub fn synthetic_jwt() -> String {
     let header = b64url(br#"{"alg":"none","typ":"JWT"}"#);
     let payload = b64url(
@@ -37,6 +41,25 @@ pub fn synthetic_jwt() -> String {
             r#"{{"sub":"{FAKE_UID}","user_id":999001,"exp":4102444800}}"#
         )
         .as_bytes(),
+    );
+    let sig = b64url(b"p8b3-synthetic-signature");
+    format!("{header}.{payload}.{sig}")
+}
+
+/// 同上，`sub` 由调用方给（P8b 第四片的合成账号池要多个不同身份的号）。
+pub fn synthetic_jwt_with_sub(sub: &str) -> String {
+    synthetic_jwt_for(sub, sub)
+}
+
+/// `sub` 与「盐」分开给：同一个 `sub`（= 池里的 `user_id`）在不同用例里必须得到
+/// **不同的 token 字符串** —— 否则池号的 access_token 会跨用例撞成同一个值，
+/// 而假上游是按 token 分辨账号的（P8b 第四片踩过：两个用例的 `uid-a` 拿到同一把 token，
+/// 于是互相打对方的脚本）。
+pub fn synthetic_jwt_for(sub: &str, salt: &str) -> String {
+    let header = b64url(br#"{"alg":"none","typ":"JWT"}"#);
+    let payload = b64url(
+        format!(r#"{{"sub":"{sub}","user_id":999001,"salt":"{salt}","exp":4102444800}}"#)
+            .as_bytes(),
     );
     let sig = b64url(b"p8b3-synthetic-signature");
     format!("{header}.{payload}.{sig}")
@@ -95,6 +118,17 @@ struct FakeState {
     seen: Vec<SeenReq>,
     cli_key_hits: usize,
     models_hits: usize,
+    /// P8b 第四片：**chat 路径的确定性应答**
+    /// * `token_keys`：换 key 请求里 `Authorization: Bearer <access_token>` → 下发的 cli_api_key
+    ///   （每个合成账号一把，便于按号区分 chat 命中）；
+    /// * `chat_script`：`cli_api_key → 逐次的（状态码, Retry-After, 体）`，越界后重复最后一条；
+    ///   未登记的 key 回 404。
+    token_keys: BTreeMap<String, String>,
+    chat_script: BTreeMap<String, Vec<(u16, String, String)>>,
+    chat_calls: BTreeMap<String, usize>,
+    chat_order: Vec<String>,
+    chat_hits: usize,
+    last_chat_body: Vec<u8>,
 }
 
 /// 极简假上游：一个连接一个线程，逐请求应答（`Connection: close`，避免保活复杂度）。
@@ -168,6 +202,62 @@ impl FakeUpstream {
     pub fn seen(&self) -> Vec<SeenReq> {
         self.state.lock().unwrap().seen.clone()
     }
+
+    // ------------------------------------------------ P8b 第四片：chat 确定性应答
+
+    /// 登记「account access_token → 下发的 cli_api_key」（换 key 端点按 Bearer 区分）。
+    pub fn set_token_key(&self, access_token: &str, cli_api_key: &str) {
+        self.state.lock().unwrap().token_keys.insert(
+            format!("Bearer {access_token}"),
+            cli_api_key.to_string(),
+        );
+    }
+
+    /// 登记某个 cli_api_key 在 chat 路径上的**逐次应答**（越界后重复最后一条）。
+    /// `Retry-After` 为空串表示不下发该头。
+    ///
+    /// **顺带把该 key 的命中计数与命中序清零**：多个用例共用同一个假上游时，
+    /// 只换脚本不重置计数会让新用例从脚本中间取应答（P8b 第四片差分对照踩过一次：
+    /// `chat-empty-then-200` 取到了第二条，与服务端「没嗅探」的行为混在一起误导排查）。
+    /// 语义上等价于「每个场景起一个全新的假上游」。
+    pub fn set_chat_script(&self, cli_api_key: &str, script: Vec<(u16, &str, &str)>) {
+        let mut st = self.state.lock().unwrap();
+        st.chat_calls.remove(cli_api_key);
+        st.chat_order.retain(|k| k != cli_api_key);
+        st.chat_script.insert(
+            cli_api_key.to_string(),
+            script
+                .into_iter()
+                .map(|(c, ra, b)| (c, ra.to_string(), b.to_string()))
+                .collect(),
+        );
+    }
+
+    /// chat 路径被访问的 key 序（按到达顺序）。
+    pub fn chat_order(&self) -> Vec<String> {
+        self.state.lock().unwrap().chat_order.clone()
+    }
+
+    /// 某个 key 在 chat 路径上的命中次数。
+    pub fn chat_calls(&self, cli_api_key: &str) -> usize {
+        *self
+            .state
+            .lock()
+            .unwrap()
+            .chat_calls
+            .get(cli_api_key)
+            .unwrap_or(&0)
+    }
+
+    /// chat 路径总命中次数。
+    pub fn chat_hits(&self) -> usize {
+        self.state.lock().unwrap().chat_hits
+    }
+
+    /// chat 路径收到的最后一个请求体（原始字节）。
+    pub fn last_chat_body(&self) -> Vec<u8> {
+        self.state.lock().unwrap().last_chat_body.clone()
+    }
 }
 
 impl Drop for FakeUpstream {
@@ -179,7 +269,7 @@ impl Drop for FakeUpstream {
 fn serve_conn(mut stream: TcpStream, state: Arc<Mutex<FakeState>>) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let mut buf = [0u8; 4096];
-    // 读头（本场景全是 GET/POST 小请求，头读满即够）
+    // 读头（本场景全是 GET/POST 小请求）
     let mut head = Vec::new();
     loop {
         match stream.read(&mut buf) {
@@ -201,6 +291,7 @@ fn serve_conn(mut stream: TcpStream, state: Arc<Mutex<FakeState>>) {
     let path = parts.next().unwrap_or("").to_string();
     let mut auth = String::new();
     let mut accept = String::new();
+    let mut content_length = 0usize;
     for line in lines {
         let Some((k, v)) = line.split_once(':') else {
             continue;
@@ -208,10 +299,25 @@ fn serve_conn(mut stream: TcpStream, state: Arc<Mutex<FakeState>>) {
         match k.trim().to_ascii_lowercase().as_str() {
             "authorization" => auth = v.trim().to_string(),
             "accept" => accept = v.trim().to_string(),
+            "content-length" => content_length = v.trim().parse().unwrap_or(0),
             _ => {}
         }
     }
-    let (code, body) = {
+    // 请求体：`\r\n\r\n` 之后的字节（可能已在同一批 read 里到齐，也可能还要再读）。
+    let body_at = head
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .map(|i| i + 4)
+        .unwrap_or(head.len());
+    let mut req_body: Vec<u8> = head[body_at..].to_vec();
+    while req_body.len() < content_length {
+        match stream.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => req_body.extend_from_slice(&buf[..n]),
+            Err(_) => break,
+        }
+    }
+    let (code, retry_after, body) = {
         let mut st = state.lock().unwrap();
         st.seen.push(SeenReq {
             method,
@@ -223,33 +329,74 @@ fn serve_conn(mut stream: TcpStream, state: Arc<Mutex<FakeState>>) {
         let billing_path = "/api/user/billing/usage/summary";
         if bare == "/api/api-token/cli-api-key" {
             st.cli_key_hits += 1;
-            let body = format!("{{\"cli_api_key\":\"{FAKE_CLI_KEY}\"}}");
-            (200u16, body)
+            // P8b 第四片：按 Bearer 下发**每个合成账号自己的** key；未登记时回默认常量
+            // （P8b 第三片的既有用例仍走这条）。
+            let key = st
+                .token_keys
+                .get(&auth)
+                .cloned()
+                .unwrap_or_else(|| FAKE_CLI_KEY.to_string());
+            let body = format!("{{\"cli_api_key\":\"{key}\"}}");
+            (200u16, None, body)
         } else if bare == billing_path {
             let n = st.billing_hits.entry(auth.clone()).or_insert(0);
             *n += 1;
             match st.billing_reply.get(&auth) {
-                Some((c, b)) => (*c, b.clone()),
-                None => (404u16, String::new()),
+                Some((c, b)) => (*c, None, b.clone()),
+                None => (404u16, None, String::new()),
             }
         } else if bare == "/v1/models" {
             st.models_hits += 1;
-            (200u16, MODELS_JSON.to_string())
+            (200u16, None, MODELS_JSON.to_string())
+        } else if bare == "/v1/chat/completions" {
+            st.chat_hits += 1;
+            st.last_chat_body = req_body.clone();
+            let key = auth.strip_prefix("Bearer ").unwrap_or(&auth).to_string();
+            st.chat_order.push(key.clone());
+            let n = st.chat_calls.entry(key.clone()).or_insert(0);
+            let idx = *n;
+            *n += 1;
+            match st
+                .chat_script
+                .get(&key)
+                .map(|s| s.as_slice())
+                .and_then(|s| {
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s[idx.min(s.len() - 1)].clone())
+                    }
+                }) {
+                Some((c, ra, b)) => (c, Some(ra), b),
+                None => (404u16, None, String::new()),
+            }
         } else {
-            (404u16, String::new())
+            (404u16, None, String::new())
         }
     };
     let reason = match code {
         200 => "OK",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        402 => "Payment Required",
         404 => "Not Found",
+        429 => "Too Many Requests",
         500 => "Internal Server Error",
+        502 => "Bad Gateway",
         _ => "Status",
     };
-    let resp = format!(
+    let mut resp = format!(
         "HTTP/1.1 {code} {reason}\r\nContent-Type: application/json\r\n\
-         Content-Length: {}\r\nConnection: close\r\n\r\n",
+         Content-Length: {}\r\nConnection: close\r\n",
         body.as_bytes().len()
-    );    let _ = stream.write_all(resp.as_bytes());
+    );
+    if let Some(ra) = &retry_after {
+        if !ra.is_empty() {
+            resp.push_str(&format!("Retry-After: {ra}\r\n"));
+        }
+    }
+    resp.push_str("\r\n");
+    let _ = stream.write_all(resp.as_bytes());
     let _ = stream.write_all(body.as_bytes());
     let _ = stream.flush();
 }
@@ -550,6 +697,8 @@ pub struct Env {
 }
 
 impl Env {
+    /// 默认隔离环境：登录态 JWT 用无 salt 的 [`synthetic_jwt`]（与 Go 侧同形，
+    /// 差分门禁按头全值比对——理由同上，别在这里加盐）。
     pub fn create(root: &Path) -> Env {
         let home = root.join("home");
         let data = root.join("data");
@@ -565,10 +714,41 @@ impl Env {
         Env { home, data }
     }
 
+    /// 同上，但合成 JWT 的 `sub` 由调用方给 —— P8b 第四片的账号池用例要它
+    /// （本地号在池里的 `user_id` 就是登录态 JWT 的 `sub`，必须与 `tuanjie-accounts.json`
+    /// 里那一条对得上，池里才不会多出一个身份不明的号）。`salt` 见 [`synthetic_jwt_for`]。
+    pub fn create_with_sub(root: &Path, sub: &str) -> Env {
+        Env::create_with_salt(root, sub, sub)
+    }
+
+    /// 带盐版本：同一 `sub` 在不同用例里拿到不同 token（假上游按 token 分辨账号）。
+    pub fn create_with_salt(root: &Path, sub: &str, salt: &str) -> Env {
+        let home = root.join("home");
+        let data = root.join("data");
+        let cli_dir = home.join(".codely-cli");
+        std::fs::create_dir_all(&cli_dir).expect("建合成 HOME");
+        std::fs::create_dir_all(&data).expect("建临时数据目录");
+        let token = synthetic_jwt_for(sub, salt);
+        std::fs::write(
+            cli_dir.join("oauth_creds.json"),
+            format!("{{\"access_token\":\"{token}\",\"user_id\":999001}}"),
+        )
+        .expect("写合成登录态");
+        Env { home, data }
+    }
+
     /// 把隔离环境装进子进程/本进程的环境变量（`USERPROFILE` + `PROXYDECK_DATA_DIR`）。
     pub fn apply(&self) {
         std::env::set_var("USERPROFILE", &self.home);
         std::env::set_var("PROXYDECK_DATA_DIR", &self.data);
+    }
+
+    /// 本环境里的合成 access_token（登录态那份）——P8b 第四片的取 key 登记要用。
+    pub fn access_token(&self) -> String {
+        let p = self.home.join(".codely-cli").join("oauth_creds.json");
+        let text = std::fs::read_to_string(p).expect("读合成登录态");
+        let v: Value = serde_json::from_str(&text).expect("合成登录态是合法 JSON");
+        v["access_token"].as_str().expect("有 access_token").to_string()
     }
 }
 
@@ -629,3 +809,4 @@ fn mask_number(body: &str, key: &str) -> String {
     }
     format!("{}0.5{}", &body[..start], &body[end..])
 }
+

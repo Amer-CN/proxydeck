@@ -53,7 +53,10 @@ fn load_golden() -> Value {
 
 #[derive(Default)]
 struct FakeState {
-    /// 合成 token（Authorization 全值）→ 应答体序列
+    /// 合成 token（Authorization **头全值**，如 `"Bearer sk-..."`）→ 应答体序列。
+    /// 按全值分键是故意的：差分门禁比的就是两侧送出的头全值逐字节一致；
+    /// 若上游只认 token 段，两侧同错会一起绿——但出站头集合对照（P8a 门禁）已独立锁住
+    /// 头全值，故此处无叠加风险。
     seq: BTreeMap<String, Vec<String>>,
     /// 同上 → 状态码序列
     status: BTreeMap<String, Vec<i32>>,

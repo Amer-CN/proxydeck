@@ -1,19 +1,20 @@
 //! server.rs —— 团结服务的**骨架**：路由表 / CORS / `writeJSON` / `writeErr` 形态，
-//! 以及本小轮（P8b 第三片）可完整对照的本地端点
+//! 以及各小轮已迁的本地端点
 //! （`internal/tuanjie/server.go` + `handlers_extra.go` + `inflight.go` 的读出口）。
 //!
-//! ## 本片交付什么
+//! ## 交付到哪一步了
 //!
-//! Go 侧路由表（`server.go:119-138`）共 19 条注册；本片把它们分成三类，逐条登记在
+//! Go 侧路由表（`server.go:119-138`）共 19 条注册；逐条状态登记在
 //! `README.md` 的「P8b 第三片路由表对照」里：
 //!
 //! * **已注册且已实现（每条有真 Go 对照门禁）**：`/health`、`/v1/models`（上游 200 透传
 //!   与 502 两条）、`/v1/stats`、`/quota`、`/kimi-pacing`、`/accounts`（GET + `remove`/
-//!   `toggle`/`setglm`/`setmodels`/未知 action 五条 POST 分支）、`/activity`、`/inflight`。
+//!   `toggle`/`setglm`/`setmodels`/未知 action 五条 POST 分支）、`/activity`、`/inflight`、
+//!   **`/v1/chat/completions`**（P8b 第四片：池路径 + 单账号路径，见 [`crate::chat`]）。
 //! * **已注册但显式 501**（属后续小轮，**不假装已通**）：`/model/info`、
 //!   `/v1/models?full=true`、`/accounts` 的 `action=add|auto`。
-//! * **未注册**（依赖 `providers.go`/`media.go`/`probes.go`/`cdp_browser.go` 与池路径）：
-//!   `/v1/chat/completions`、`/account-models`、`/water-probe`、`/providers`、
+//! * **未注册**（依赖 `providers.go`/`media.go`/`probes.go`/`cdp_browser.go`）：
+//!   `/account-models`、`/water-probe`、`/providers`、
 //!   `/vision-config`、`/media-config`、`/v1/images/generations`、`/v1/videos*`、
 //!   `/agnesapi`——未注册即 404，不会让下游误以为端点已就绪。
 //!
@@ -72,7 +73,10 @@ pub const HEALTH_KEY_PREFIX: usize = 10;
 pub struct AppState {
     pub started_at: Instant,
     pub client: Arc<crate::client::Client>,
-    pub pool: AccountPool,
+    /// 账号池：`Arc` 是因为 `handleChat` 的 402 分支要把它移进异步任务去查官网额度
+    /// （对应 Go `go func(){ … s.pool.MarkBudgetExceededAt(…) }()`）。池内部本就是
+    /// `Mutex<Inner>`，多持有一份句柄不改变并发语义。
+    pub pool: Arc<AccountPool>,
     pub stats: Stats,
     pub pacer: Pacer,
     pub registry: Arc<RequestRegistry>,
@@ -80,6 +84,8 @@ pub struct AppState {
     pub quota_cache: Arc<QuotaCache>,
     /// 媒体改路由累计次数（`server.go:48` 的 `mediaReroutes`）——media 未迁，本片恒 0。
     pub media_reroutes: AtomicI64,
+    /// chat 路径的可注入时序（池路径 429 兜底的换号退避）。
+    pub chat_timing: crate::chat::ChatTiming,
 }
 
 impl AppState {
@@ -88,13 +94,14 @@ impl AppState {
         Ok(AppState {
             started_at: Instant::now(),
             client: Arc::new(crate::client::Client::new()?),
-            pool: AccountPool::new(),
+            pool: Arc::new(AccountPool::new()),
             stats: Stats::new(),
             pacer: Pacer::new(),
             registry: Arc::new(RequestRegistry::new()),
             activity: Arc::new(ActivityLog::new()),
             quota_cache: Arc::new(QuotaCache::new()),
             media_reroutes: AtomicI64::new(0),
+            chat_timing: crate::chat::ChatTiming::default(),
         })
     }
 }
@@ -108,6 +115,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         // 挂成 `get(...)` 会让 POST 变 axum 的 405（体为空、无 nosniff），与 Go 分歧。
         .route("/health", any(handle_health))
         .route("/v1/models", any(handle_models))
+        // chat 转发（P8b 第四片）：池路径 + 单账号路径。
+        .route("/v1/chat/completions", any(crate::chat::handle_chat))
         .route("/model/info", any(handle_model_info))
         .route("/v1/stats", any(handle_stats))
         .route("/quota", any(handle_quota))
@@ -320,7 +329,11 @@ pub fn write_err(status: StatusCode, msg: &str) -> Response {
 }
 
 /// `http.Error(w,"method not allowed",405)`。
-pub fn method_not_allowed() -> Response {
+///
+/// `allow`：Go 的 `handleChat` 在 405 前设 `Allow: POST`（`server.go:940`），
+/// `handleAccounts` 不设（`handlers_extra.go:31-33`）——故按调用方区分，
+/// 不得写死在共用函数里。
+pub fn method_not_allowed(allow: Option<&str>) -> Response {
     let mut resp = (
         StatusCode::METHOD_NOT_ALLOWED,
         [(header::CONTENT_TYPE, TEXT_CONTENT_TYPE)],
@@ -329,6 +342,11 @@ pub fn method_not_allowed() -> Response {
         .into_response();
     resp.headers_mut()
         .insert("X-Content-Type-Options", HeaderValue::from_static("nosniff"));
+    if let Some(a) = allow {
+        if let Ok(v) = HeaderValue::from_str(a) {
+            resp.headers_mut().insert(header::ALLOW, v);
+        }
+    }
     resp
 }
 
@@ -592,7 +610,7 @@ async fn handle_accounts(State(st): State<Arc<AppState>>, req: axum::extract::Re
         ]));
     }
     if method != Method::POST {
-        return method_not_allowed();
+        return method_not_allowed(None);
     }
     let body = axum::body::to_bytes(req.into_body(), MAX_BODY_BYTES)
         .await
