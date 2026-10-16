@@ -250,6 +250,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	s.statsMu.Lock()
 	out := make(map[string]*modelStat, len(s.stats))
 	for k, v := range s.stats {
+		if v == nil {
+			continue
+		}
 		cp := *v
 		out[k] = &cp
 	}
@@ -294,7 +297,18 @@ func (s *Server) loadStats() {
 		return
 	}
 	var m map[string]*modelStat
-	if json.Unmarshal(b, &m) == nil {
+	if json.Unmarshal(b, &m) != nil {
+		return
+	}
+	// 文件内容是 JSON `null` 时 Unmarshal 成功但 m 为 nil：绝不能塞进 s.stats，
+	// 否则 addStat 写 nil map、handleStats 解 nil 指针都会 panic。同族的
+	// 条目级 null（`{"m":null}`）也在装载时剔除。
+	for k, v := range m {
+		if v == nil {
+			delete(m, k)
+		}
+	}
+	if m != nil {
 		s.stats = m
 	}
 }
@@ -1297,6 +1311,13 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 					writeErr(w, 200, `{"code":14018,"msg":"Credits exhausted (all accounts in pool)"}`)
 					return
 				}
+				// Peek 会把头部字节读进 br 的缓冲（默认 4096）；不命中时若直接把
+				// resp.Body 交给下方聚合，前 4096 字节就被丢掉了（content 变 null、
+				// usage 全 0）。把 br 接回 resp.Body，让缓冲与未读部分一起被读到。
+				resp.Body = struct {
+					io.Reader
+					io.Closer
+				}{br, resp.Body}
 			}
 			break
 		}
