@@ -1,0 +1,36 @@
+[package]
+name = "rs-tuanjie"
+version = "0.1.0"
+edition = "2021"
+description = "ProxyDeck 团结插件 Rust 重写（绞杀者路线 P8a：凭证链与请求整形；测试端口用，未接入 GUI）"
+
+[lib]
+name = "rs_tuanjie"
+path = "src/lib.rs"
+
+[dependencies]
+# base64url 无填充（Go `base64.RawURLEncoding`）——签名第三段。
+base64 = "0.23"
+# 随机源：Go 用 `crypto/rand`（操作系统 CSPRNG），这里直接用 getrandom 保持同一语义
+# （uuid v4、rand36、会话 TTL 随机都要它；不用 `rand` 的用户态 PRNG）。
+getrandom = "0.3"
+# HMAC-SHA256：两层密钥派生与签名体。与 rs-codebuddy 已用的 `sha2` 同族（**不自己手搓密码学**）。
+hmac = "0.12"
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+# raw_value：请求体重排要把客户端的字段值**原样字节**搬过去（对应 Go 的 json.RawMessage）。
+# 不开 preserve_order：Go 的 json.Marshal 对 map[string]any 按 key 排序，
+# serde_json 默认的 BTreeMap 同样是排序 —— 键序逐字节对齐靠的就是这个默认值。
+serde_json = { version = "1", features = ["raw_value"] }
+thiserror = "2"
+# 会话 id = Go `uuid.New()`（RFC 4122 v4，随机位来自 CSPRNG）。
+uuid = { version = "1", features = ["v4"] }
+# 出站 HTTP。TLS 栈显式声明（TLS 指纹差异是圆桌点名的风险项）：
+# **P8a 用 rustls**（纯 Rust、与其余 crate 同栈）；BoringSSL/wreq 的取舍见 README「uTLS 路线」。
+# `gzip`：Go `net/http` 在调用方没显式设 Accept-Encoding 时会**自动补 `Accept-Encoding: gzip`
+# 并透明解压**；reqwest 只有开这个特性才有同样行为。出站头集合对齐（P8 验收 2）需要它。
+reqwest = { version = "0.13", features = ["default-tls", "http2", "gzip"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[profile.release]
+opt-level = 2

@@ -1,0 +1,12 @@
+POST /v1/chat/completions HTTP/1.1
+Host: 127.0.0.1:5068
+User-Agent: codely-cli/1.0.0-rc.60 (win32; x64)
+Content-Length: 424
+Accept: application/json
+Authorization: Bearer sk-test-key-1234567890
+Content-Type: application/json
+X-Codely-Signature: v1.1792162280.Cj-51QJ9E8Ggpn7blCqADgWlFdYQQgWpDkqYrDdobIc
+X-Litellm-Session-Id: 11111111-2222-4333-8444-555555555555
+Accept-Encoding: gzip
+
+{"model":"codely-flash","messages":[{"role":"user","content":"OK"}],"metadata":{"prompt_id":"11111111-2222-4333-8444-555555555555########3","session_id":"11111111-2222-4333-8444-555555555555","cwd":"E:\\Temp\\go-build2757689516\\b001","litellm_conversation_id":"litellm_conversation_1700000000000_abc123"},"litellm_session_id":"11111111-2222-4333-8444-555555555555","prompt_cache_key":"11111111-2222-4333-8444-555555555555"}
