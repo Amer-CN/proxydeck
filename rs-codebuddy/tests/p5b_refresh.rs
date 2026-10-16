@@ -11,6 +11,8 @@
 //! 3. `reqwest::blocking` 在 async handler 内首调会不会 panic（实测：**会**，
 //!    tokio 1.53.3 的 debug 断言在调用线程上建/拆嵌套 runtime）——该失败形态与修复后的
 //!    「一次性 OS 线程 + async 客户端」对照，是这次换掉 blocking 客户端的直接证据。
+//! 4. 刷新响应的「无数据」两形态（显式 `data:null` 与**缺 `data` 键**）的逐字错误文案——
+//!    Go 侧 `data:null` 原先会在后续赋值处 panic，`462d377` 修好后与本分支合并成同一条错误。
 
 mod common;
 
@@ -560,6 +562,111 @@ async fn refresh_http_path_runs_inside_async_handler() {
     );
     let hits = srv.hits.lock().unwrap().clone();
     assert_eq!(hits.len(), 1, "应恰好一发刷新请求");
+    drop(env);
+}
+
+/// 固定应答体的假刷新端点（只服务下面那条用例；`hits` 记「打了几发」）。
+struct StaticRefresh {
+    base: String,
+    hits: Arc<std::sync::atomic::AtomicUsize>,
+    handle: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for StaticRefresh {
+    fn drop(&mut self) {
+        self.handle.abort();
+    }
+}
+
+async fn start_static_refresh(body: &'static str) -> StaticRefresh {
+    let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let h = hits.clone();
+    let app = Router::new().fallback(axum::routing::any(move |_req: Request| {
+        let h = h.clone();
+        async move {
+            h.fetch_add(1, Ordering::SeqCst);
+            Response::builder()
+                .status(200)
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap()
+        }
+    }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("假刷新端点起监听");
+    let addr = listener.local_addr().unwrap();
+    let handle = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    StaticRefresh {
+        base: format!("http://{addr}"),
+        hits,
+        handle,
+    }
+}
+
+/// 刷新响应的**「无数据」两种形态**必须报同一条错，且文案逐字同 Go。
+///
+/// * `{"code":0,"data":null}`（显式 `null`）：Go 修复前 `len(out.Data)==4` 逃过校验、
+///   `json.Unmarshal("null", &map)` 得 nil map，紧接着 `newAuth["lastRefreshTime"] = …`
+///   **panic**（进程级崩溃）。`462d377` 把判定补成
+///   `… || len(out.Data) == 0 || string(out.Data) == "null"`，与本分支已有的「无数据」
+///   合并成同一条错误；Rust 侧据此对齐（`credential.rs` 的 `data_present` 区分
+///   「缺键」与「显式 null」，后者尾巴是 `null`）。
+/// * `{"code":0}`（**缺 `data` 键**）：对照组。Go `len(out.Data)==0` ⇒ 尾巴为空。
+///
+/// 文案是逐字合同：`刷新 token 失败(code=%d): %s`，尾巴过 `truncate(…, 200)`。
+/// 另断言两件事：每例只打一发刷新请求；**报错路径不得改写登录文件**（错误在回写之前返回）。
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn refresh_data_null_and_missing_data_report_like_go() {
+    let env = EnvGuard::set(&[]);
+    // (文件名用 slug, 用例名, 假刷新端点应答体, Go 侧逐字错误文案)
+    let cases: [(&str, &str, &'static str, &str); 2] = [
+        (
+            "null",
+            "data:null",
+            r#"{"code":0,"data":null}"#,
+            "刷新 token 失败(code=0): null",
+        ),
+        (
+            "absent",
+            "data 键缺失",
+            r#"{"code":0}"#,
+            "刷新 token 失败(code=0): ",
+        ),
+    ];
+    for (slug, tag, resp, want) in cases {
+        let dir = TestDir::new(&format!("p5b-refresh-nodata-{slug}"));
+        let dir_s = dir.path().to_string_lossy().to_string();
+        env.set_locked(&[
+            ("CODEBUDDY_AUTH_DIR", Some(dir_s.as_str())),
+            ("WORKBUDDY_AT_REST_SECRET", Some(SECRET)),
+            ("USERPROFILE", Some(dir_s.as_str())),
+            ("LOCALAPPDATA", Some("")),
+            ("XDG_DATA_HOME", Some("")),
+        ]);
+        atrest::reset_key_cache();
+
+        let fx = fixtures();
+        let before = write_auth(dir.path(), &fx[0], false, 1_792_036_800_000);
+        let srv = start_static_refresh(resp).await;
+        let cred = RealCredential::with_base_url("", Region::Cn, &srv.base);
+        let path = dir.path().join(file_name(&fx[0])).to_string_lossy().to_string();
+
+        let err = cred
+            .headers_for(&path)
+            .expect_err(&format!("[{tag}] 该形态应报错，不该成功"));
+        assert_eq!(err, want, "[{tag}] 错误文案与 Go 不一致");
+        assert_eq!(
+            srv.hits.load(Ordering::SeqCst),
+            1,
+            "[{tag}] 应恰好一发刷新请求"
+        );
+        let after = std::fs::read_to_string(&path).expect("读回 auth 文件");
+        assert_eq!(after, before, "[{tag}] 报错路径改写了登录文件");
+        println!("[{tag}] 文案逐字同 Go：{err}");
+    }
     drop(env);
 }
 

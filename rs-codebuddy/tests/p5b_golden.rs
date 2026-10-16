@@ -441,3 +441,131 @@ fn golden_helpers_still_work() {
     let m = godecode::unmarshal_map(br#"{"a":1}"#).unwrap();
     assert_eq!(gjson::to_go(&Value::Object(m)), r#"{"a":1}"#);
 }
+
+/// **时钟纪律自检**：黄金里凡是**驱动行为**的绝对时点，不得落在「会随时间翻转」的窗口里。
+///
+/// 背景（2026-10-16 实测的永久红）：`chat-pool-429` / `chat-hy4-trip` 的假上游 429 报文里
+/// 内嵌的是**采集当天**的重置时点（`Quota exceeded, will reset at <采集日+1 天> UTC+8`），
+/// 这个字面量驱动 `MarkLimited` → `cooling` / `limited_until` / hy4 窗口 —— 时点一过期，
+/// 黄金期望的 `cooling:true` 就再也无法复现（代码一个字都没改，门禁照样红）。
+///
+/// 允许的两种写法（本基准统一用前者）：
+/// * **远期固定值**：年份 ≥ 2090（现用 `2099-01-01 00:00:00 UTC+8`）——「恒在将来」；
+/// * **恒定过去的固定值**：年份 ≤ 2000——「恒在过去」（真需要「已过期」形态时用）。
+///
+/// 禁止 `2001..2090` 这段：它随墙钟流逝会从「将来」翻成「过去」，正是上面那条永久红的机理。
+/// 纪律原文见 `rs-codebuddy/tests/golden/README.md`「时钟纪律」节。
+#[test]
+fn golden_absolute_times_are_not_clock_dependent() {
+    let p = golden_path(GOLDEN_FILE);
+    let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("读黄金 {}: {e}", p.display()));
+
+    // ① 输入侧：假上游报文里内嵌的重置时点（`will reset at <YYYY-MM-DD HH:MM:SS>`）
+    let mut checked = 0usize;
+    let mut rest = text.as_str();
+    while let Some(i) = rest.find("will reset at ") {
+        let after = &rest[i + "will reset at ".len()..];
+        let stamp: String = after.chars().take(19).collect();
+        let year = parse_stamp_year(&stamp).unwrap_or_else(|| {
+            panic!("[时钟纪律] `will reset at` 后面不是 `YYYY-MM-DD HH:MM:SS`：{stamp:?}")
+        });
+        assert!(
+            allowed_year(year),
+            "[时钟纪律] 黄金里内嵌的重置时点落在会翻转的窗口里：{stamp}（年份 {year}）。\
+             改用远期固定值（年份 ≥ 2090）或恒定过去的固定值（≤ 2000）——见 tests/golden/README.md"
+        );
+        checked += 1;
+        rest = after;
+    }
+    assert!(
+        checked > 0,
+        "[时钟纪律] 一个 `will reset at` 都没扫到——扫描逻辑失效或基准被换掉了（本自检不能空转）"
+    );
+
+    // ② 期望侧：由该时点派生出来的字段（池快照的 `limited_until`、hy4 窗口的 `hy4_limit.until`）
+    let g = load_golden();
+    let mut derived = 0usize;
+    let empty: Vec<Value> = Vec::new();
+    for sc in field(&g, "scenarios").as_array().expect("scenarios 段") {
+        for step in field(sc, "steps").as_array().unwrap_or(&empty) {
+            let body = field(step, "resp_body").as_str().unwrap_or("");
+            let Ok(v) = serde_json::from_str::<Value>(body) else {
+                continue;
+            };
+            for (label, s) in derived_times(&v) {
+                let year = parse_rfc3339_year(&s).unwrap_or_else(|| {
+                    panic!("[时钟纪律] {label} 不是可解析的绝对时点：{s:?}")
+                });
+                assert!(
+                    allowed_year(year),
+                    "[时钟纪律] 期望字段 {label} 落在会翻转的窗口里：{s}（年份 {year}）——\
+                     它派生自假上游的重置时点，必须用远期固定值"
+                );
+                derived += 1;
+            }
+        }
+    }
+    assert!(
+        derived > 0,
+        "[时钟纪律] 没扫到任何由重置时点派生的期望字段（本自检不能空转）"
+    );
+
+    println!(
+        "时钟纪律自检：假上游重置时点 {checked} 处、派生期望字段 {derived} 处，全部在允许窗口内（年份 ≥2090 或 ≤2000）"
+    );
+}
+
+/// 年份允许窗口：远期固定值（≥ 2090）或恒定过去的固定值（≤ 2000）。
+fn allowed_year(y: i32) -> bool {
+    y >= 2090 || y <= 2000
+}
+
+/// `YYYY-MM-DD HH:MM:SS` → 年份。
+fn parse_stamp_year(s: &str) -> Option<i32> {
+    let b = s.as_bytes();
+    if b.len() < 10 || b[4] != b'-' || b[7] != b'-' {
+        return None;
+    }
+    if !b[..10].iter().enumerate().all(|(i, c)| {
+        if i == 4 || i == 7 {
+            true
+        } else {
+            c.is_ascii_digit()
+        }
+    }) {
+        return None;
+    }
+    s[..4].parse().ok()
+}
+
+/// `YYYY-MM-DDTHH:MM:SS±hh:mm` / `YYYY-MM-DD HH:MM:SS` → 年份。
+fn parse_rfc3339_year(s: &str) -> Option<i32> {
+    parse_stamp_year(&s.replace('T', " "))
+}
+
+/// 从一份响应体里挑出「由重置时点派生」的期望字段：池快照的 `limited_until`、
+/// `/v1/failover` 与 `/health` 的 `hy4_limit.until`。零时（`0001-01-01T00:00:00Z`）是
+/// 「未限流」的常量占位，**不算绝对时点**，跳过。
+fn derived_times(v: &Value) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    let is_zero = |s: &str| s.starts_with("0001-01-01");
+    if let Some(accs) = v.get("accounts").and_then(|a| a.as_array()) {
+        for (i, a) in accs.iter().enumerate() {
+            if let Some(s) = a.get("limited_until").and_then(|x| x.as_str()) {
+                if !s.is_empty() && !is_zero(s) {
+                    out.push((format!("accounts[{i}].limited_until"), s.to_string()));
+                }
+            }
+        }
+    }
+    if let Some(s) = v
+        .get("hy4_limit")
+        .and_then(|h| h.get("until"))
+        .and_then(|x| x.as_str())
+    {
+        if !s.is_empty() && !is_zero(s) {
+            out.push(("hy4_limit.until".to_string(), s.to_string()));
+        }
+    }
+    out
+}

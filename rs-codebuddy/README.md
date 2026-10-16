@@ -245,13 +245,16 @@ pub trait CredSource {                              // src/cred.rs
     ② **`data` 字段**：Go 用 `json.RawMessage` ⇒ 报错文案里夹的是**上游原字节**；Rust 把
     `data` 解析成 `Value` 后再序列化 ⇒ 文案里是**按键序重排**的形态。两者只在
     「刷新失败且 `data` 是对象」时可见。
-    ③ **`data:null`（如 `{"code":0,"data":null}`）**：Go 侧 `len(out.Data)==4` 不进错误分支，
+    ③ **`data:null`（如 `{"code":0,"data":null}`）**：Go 侧 `len(out.Data)==4` 曾逃过校验，
     随后把 `"null"` 解进 `map[string]any` 得到 **nil map**，`credential.go:448` 的
-    `newAuth["lastRefreshTime"] = …` 对 nil map 赋值 **panic**（进程级致命）；
-    Rust 见 `data.is_null()` 直接报 `刷新 token 失败(code=0): `、释放锁、继续服务。
-    **这是 Go 侧的缺陷（与 P4 的 D1 同类：Rust 无对应形态可"干净"复刻）**——按纪律 Go 源码只读、
-    缺陷只登记；若要修 Go（赋值前补 `if newAuth == nil { newAuth = map[string]any{} }`），
-    须先经用户授权。
+    `newAuth["lastRefreshTime"] = …` 对 nil map 赋值 **panic**（进程级致命）。
+    **【已修复】Go 于 `462d377`（`fix(codebuddy): 刷新响应 data:null 不再 panic`）把判定补成
+    `… || len(out.Data) == 0 || string(out.Data) == "null"`**，与该分支已有的「无数据」形态
+    合并为同一条错误 ⇒ 静态报 `刷新 token 失败(code=0): null`。**Rust 已对齐该修复后的行为**
+    （`credential.rs` 用 `data_present` 区分「缺键」与「显式 null」：缺键尾巴为空、显式 null
+    尾巴是 `null`；两条分支都在回写之前返回，不改登录文件）。
+    行为级证据：`tests/p5b_refresh.rs::refresh_data_null_and_missing_data_report_like_go`
+    —— 显式 `null` 与「缺 `data` 键」两例的文案逐字同 Go，且各只打一发刷新请求、报错路径不改写文件。
 
 ## 六、P5c 必须接手的清单
 

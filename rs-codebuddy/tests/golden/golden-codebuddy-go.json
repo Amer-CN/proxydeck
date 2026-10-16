@@ -28,7 +28,7 @@
       "deepseek-v4-flash",
       "deepseek-v4-pro"
     ],
-    "collected_at": "2026-10-15T06:33:25+08:00",
+    "collected_at": "2026-10-16T10:55:10+08:00",
     "diag_cap": 10,
     "generator": "internal/codebuddy/zz_codebuddy_golden_collect_test.go",
     "go_version": "go1.26.5",
@@ -61,7 +61,7 @@
     "source": "internal/codebuddy",
     "transient_max": 2,
     "p5b": {
-      "collected_at": "2026-10-14T22:33:32.752Z",
+      "collected_at": "2026-10-16T02:55:40.567Z",
       "generator": "internal/codebuddy/zz_codebuddy_p5b_collect_test.go",
       "atrest_secret_env": "WORKBUDDY_AT_REST_SECRET",
       "atrest_secret_fixture": "c2VjcmV0LWdvbGRlbi1zZWNyZXQ=",
@@ -329,7 +329,7 @@
         {
           "name": "workbuddy-desktop.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017205088
+          "mtime_unix_ms": 1792119310067
         }
       ],
       "steps": [
@@ -511,7 +511,7 @@
           }
         },
         {
-          "seq": 6,
+          "seq": 5,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-flash\",\"stream\":true}",
@@ -527,7 +527,7 @@
           }
         },
         {
-          "seq": 5,
+          "seq": 13,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-pro\",\"stream\":true}",
@@ -543,7 +543,7 @@
           }
         },
         {
-          "seq": 7,
+          "seq": 4,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4.1-flash\",\"stream\":true}",
@@ -559,7 +559,7 @@
           }
         },
         {
-          "seq": 9,
+          "seq": 15,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.1\",\"stream\":true}",
@@ -575,7 +575,7 @@
           }
         },
         {
-          "seq": 15,
+          "seq": 10,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"stream\":true}",
@@ -607,7 +607,7 @@
           }
         },
         {
-          "seq": 2,
+          "seq": 9,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\",\"stream\":true}",
@@ -623,7 +623,7 @@
           }
         },
         {
-          "seq": 13,
+          "seq": 12,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5v-turbo\",\"stream\":true}",
@@ -639,7 +639,7 @@
           }
         },
         {
-          "seq": 10,
+          "seq": 7,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy3\",\"stream\":true}",
@@ -655,7 +655,7 @@
           }
         },
         {
-          "seq": 3,
+          "seq": 2,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy4-preview\",\"stream\":true}",
@@ -671,7 +671,7 @@
           }
         },
         {
-          "seq": 4,
+          "seq": 3,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.6\",\"stream\":true}",
@@ -687,7 +687,7 @@
           }
         },
         {
-          "seq": 12,
+          "seq": 11,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.7\",\"stream\":true}",
@@ -703,7 +703,7 @@
           }
         },
         {
-          "seq": 14,
+          "seq": 6,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true}",
@@ -719,7 +719,7 @@
           }
         },
         {
-          "seq": 11,
+          "seq": 14,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"minimax-m3\",\"stream\":true}",
@@ -763,7 +763,7 @@
         {
           "name": "workbuddy-desktop.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017205099
+          "mtime_unix_ms": 1792119310077
         }
       ],
       "steps": [
@@ -812,7 +812,7 @@
       ],
       "upstream_seen": [
         {
-          "seq": 12,
+          "seq": 5,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"stream\":true}",
@@ -828,7 +828,7 @@
           }
         },
         {
-          "seq": 14,
+          "seq": 9,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-flash\",\"stream\":true}",
@@ -844,7 +844,7 @@
           }
         },
         {
-          "seq": 1,
+          "seq": 7,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4-pro\",\"stream\":true}",
@@ -860,7 +860,7 @@
           }
         },
         {
-          "seq": 10,
+          "seq": 4,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"deepseek-v4.1-flash\",\"stream\":true}",
@@ -892,7 +892,7 @@
           }
         },
         {
-          "seq": 13,
+          "seq": 10,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"stream\":true}",
@@ -908,7 +908,7 @@
           }
         },
         {
-          "seq": 9,
+          "seq": 6,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3\",\"stream\":true}",
@@ -924,7 +924,7 @@
           }
         },
         {
-          "seq": 15,
+          "seq": 2,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.3-flash\",\"stream\":true}",
@@ -940,7 +940,7 @@
           }
         },
         {
-          "seq": 2,
+          "seq": 12,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5v-turbo\",\"stream\":true}",
@@ -956,7 +956,7 @@
           }
         },
         {
-          "seq": 11,
+          "seq": 8,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy3\",\"stream\":true}",
@@ -972,7 +972,7 @@
           }
         },
         {
-          "seq": 5,
+          "seq": 1,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"hy4-preview\",\"stream\":true}",
@@ -988,7 +988,7 @@
           }
         },
         {
-          "seq": 8,
+          "seq": 11,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.6\",\"stream\":true}",
@@ -1004,7 +1004,7 @@
           }
         },
         {
-          "seq": 4,
+          "seq": 15,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k2.7\",\"stream\":true}",
@@ -1020,7 +1020,7 @@
           }
         },
         {
-          "seq": 6,
+          "seq": 14,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"stream\":true}",
@@ -1036,7 +1036,7 @@
           }
         },
         {
-          "seq": 7,
+          "seq": 13,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/chat/completions",
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"minimax-m3\",\"stream\":true}",
@@ -1084,7 +1084,7 @@
         {
           "name": "workbuddy-desktop-intl.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-intl-golden\"},\"auth\":{\"accessToken\":\"tok-u-intl-golden\",\"domain\":\"workbuddy.ai\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017205108
+          "mtime_unix_ms": 1792119310086
         }
       ],
       "steps": [
@@ -1152,7 +1152,7 @@
         {
           "name": "workbuddy-desktop.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017205116
+          "mtime_unix_ms": 1792119310095
         }
       ],
       "steps": [
@@ -1212,7 +1212,7 @@
         {
           "name": "workbuddy-desktop.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017205125
+          "mtime_unix_ms": 1792119310104
         }
       ],
       "steps": [
@@ -1229,7 +1229,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-544c166518f6\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-6e832e7902ab\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1245,7 +1245,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-027404b46d4d\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-70027b4b34ca\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1261,7 +1261,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-35822156d891\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-2601da144aa4\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1277,7 +1277,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-1c17f3ba87b6\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-c54b2b72f77e\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1400,7 +1400,7 @@
         {
           "name": "workbuddy-desktop-intl.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-intl-golden\"},\"auth\":{\"accessToken\":\"tok-u-intl-golden\",\"domain\":\"workbuddy.ai\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017205135
+          "mtime_unix_ms": 1792119310114
         }
       ],
       "steps": [
@@ -1417,7 +1417,7 @@
             "content-length": "282",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-c602be55e2c4\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-9cc336b070b1\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1433,7 +1433,7 @@
             "content-length": "282",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-407b7c15a4a5\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-9e7cb2debbf4\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         }
       ],
@@ -1492,7 +1492,7 @@
         {
           "name": "workbuddy-desktop.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017205143
+          "mtime_unix_ms": 1792119310122
         }
       ],
       "steps": [
@@ -1748,7 +1748,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017205,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-091e7c9d5061\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-7f79db87ce95\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {
@@ -1907,7 +1907,7 @@
           {
             "kind": "",
             "status": 429,
-            "body": "{\"code\":6004,\"msg\":\"Quota exceeded, will reset at 2026-10-15 06:20:02 UTC+8\"}",
+            "body": "{\"code\":6004,\"msg\":\"Quota exceeded, will reset at 2099-01-01 00:00:00 UTC+8\"}",
             "headers": {
               "Content-Type": "application/json"
             }
@@ -1927,7 +1927,7 @@
         {
           "name": "workbuddy-desktop.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017205154
+          "mtime_unix_ms": 1792119310134
         }
       ],
       "steps": [
@@ -1966,15 +1966,15 @@
           "method": "POST",
           "path": "/v1/chat/completions",
           "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
-          "resp_status": 403,
+          "resp_status": 429,
           "resp_headers": {
             "access-control-allow-headers": "Content-Type, Authorization",
             "access-control-allow-methods": "GET, POST, OPTIONS",
             "access-control-allow-origin": "*",
-            "content-length": "127",
+            "content-length": "132",
             "content-type": "application/json"
           },
-          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":11128,\\\"msg\\\":\\\"Illegal API invocation from an unapproved channel\\\"}\",\"type\":\"upstream_error\"}}\n"
+          "resp_body": "{\"error\":{\"message\":\"{\\\"code\\\":6004,\\\"msg\\\":\\\"Quota exceeded, will reset at 2099-01-01 00:00:00 UTC+8\\\"}\",\"type\":\"upstream_error\"}}\n"
         },
         {
           "desc": "上游 403 11128",
@@ -2056,22 +2056,6 @@
             "X-Tenant-Id": "ent",
             "X-User-Id": "u-golden"
           }
-        },
-        {
-          "seq": 5,
-          "method": "POST",
-          "url": "https://copilot.tencent.com/v2/chat/completions",
-          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
-          "headers": {
-            "Accept": "application/json",
-            "Authorization": "Bearer tok-u-golden",
-            "Content-Type": "application/json",
-            "User-Agent": "codebuddy2openai-go/1.0",
-            "X-Domain": "codebuddy.cn",
-            "X-Enterprise-Id": "ent",
-            "X-Tenant-Id": "ent",
-            "X-User-Id": "u-golden"
-          }
         }
       ],
       "scope": "P5a"
@@ -2116,7 +2100,7 @@
         {
           "name": "workbuddy-desktop.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017205162
+          "mtime_unix_ms": 1792119310143
         }
       ],
       "steps": [
@@ -2189,12 +2173,12 @@
       ],
       "diag_files": [
         {
-          "name": "diag-11133-1792017205169750400.json",
+          "name": "diag-11133-1792119310150832900.json",
           "size": 142,
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
         },
         {
-          "name": "diag-11133-1792017205970747100.json",
+          "name": "diag-11133-1792119310951683100.json",
           "size": 142,
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
         }
@@ -2221,7 +2205,7 @@
         {
           "name": "workbuddy-desktop.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017207574
+          "mtime_unix_ms": 1792119312555
         }
       ],
       "steps": [
@@ -2293,17 +2277,17 @@
       ],
       "diag_files": [
         {
-          "name": "diag-11133-1792017207581877600.json",
+          "name": "diag-11133-1792119312562648700.json",
           "size": 142,
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
         },
         {
-          "name": "diag-11133-1792017208382740500.json",
+          "name": "diag-11133-1792119313363339300.json",
           "size": 142,
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
         },
         {
-          "name": "diag-11133-1792017209983855300.json",
+          "name": "diag-11133-1792119314964024500.json",
           "size": 142,
           "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
         }
@@ -2329,7 +2313,7 @@
         {
           "name": "workbuddy-desktop.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017209985
+          "mtime_unix_ms": 1792119314966
         }
       ],
       "steps": [
@@ -2481,7 +2465,7 @@
         {
           "name": "workbuddy-desktop.info",
           "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-golden\"},\"auth\":{\"accessToken\":\"tok-u-golden\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000}}",
-          "mtime_unix_ms": 1792017212400
+          "mtime_unix_ms": 1792119317380
         }
       ],
       "auth_files_after": [
@@ -2528,7 +2512,7 @@
         {
           "name": "broken.info",
           "body": "{\"auth\":",
-          "mtime_unix_ms": 1792017212432
+          "mtime_unix_ms": 1792119317405
         },
         {
           "name": "workbuddy-desktop-ai.info",
@@ -2537,7 +2521,7 @@
         },
         {
           "name": "workbuddy-desktop-enc.info",
-          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"encuser\",\n    \"uid\": \"u-enc\"\n  },\n  \"auth\": {\n    \"accessToken\": {\n      \"$wbEncrypted\": 1,\n      \"envelope\": \"eyJhdXRoVGFnIjoidGJqTjNlTXZmVHZYWDVuVHAwNDhwdz09IiwiY2lwaGVydGV4dCI6IjFaWjVXZlZlQnB2NSIsImtleUlkIjoiZDA5NDRlOGZmYjlkMjBlZCIsIm5vbmNlIjoicWtjbHp1dUFxZjNjZS9UTCIsInN1aXRlIjoxfQ==\"\n    },\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": {\n      \"$wbEncrypted\": 1,\n      \"envelope\": \"eyJhdXRoVGFnIjoiTG5GU2ZCVU1mR1Ria2tHMlVEcFNNUT09IiwiY2lwaGVydGV4dCI6IjNiMEVGZHJxeWdtNmNmY00rVjJ4amFrPSIsImtleUlkIjoiZDA5NDRlOGZmYjlkMjBlZCIsIm5vbmNlIjoiTG1HS1A2ckMrL1NlcnE1cyIsInN1aXRlIjoxfQ==\"\n    }\n  }\n}",
+          "body": "{\n  \"account\": {\n    \"enterpriseId\": \"ent\",\n    \"enterpriseName\": \"golden-ent\",\n    \"nickname\": \"encuser\",\n    \"uid\": \"u-enc\"\n  },\n  \"auth\": {\n    \"accessToken\": {\n      \"$wbEncrypted\": 1,\n      \"envelope\": \"eyJhdXRoVGFnIjoiWkpRZmdzREMwWXhEc1BZVm54RytCZz09IiwiY2lwaGVydGV4dCI6ImRlRlZrd1pIVDdNOCIsImtleUlkIjoiZDA5NDRlOGZmYjlkMjBlZCIsIm5vbmNlIjoiWTE5VURKeGpRZy90cnN5ZCIsInN1aXRlIjoxfQ==\"\n    },\n    \"domain\": \"workbuddy.cn\",\n    \"expiresAt\": 4102416000000,\n    \"refreshExpiresAt\": 4102416000000,\n    \"refreshToken\": {\n      \"$wbEncrypted\": 1,\n      \"envelope\": \"eyJhdXRoVGFnIjoiSzdvK1VjVW96WlEzbnNPOUpXZUc5Zz09IiwiY2lwaGVydGV4dCI6Imd1V0F0WlpPUk5JekQ3L0tJOVl4aGVJPSIsImtleUlkIjoiZDA5NDRlOGZmYjlkMjBlZCIsIm5vbmNlIjoiOGpPUGZZQmQ3TDRvenVpUiIsInN1aXRlIjoxfQ==\"\n    }\n  }\n}",
           "mtime_unix_ms": 1792033200000
         },
         {
@@ -3090,7 +3074,7 @@
           "u-golden": [
             {
               "status": 429,
-              "body": "{\"code\":6004,\"msg\":\"Quota exceeded, will reset at 2026-10-16 06:20:02 UTC+8\"}",
+              "body": "{\"code\":6004,\"msg\":\"Quota exceeded, will reset at 2099-01-01 00:00:00 UTC+8\"}",
               "headers": {
                 "Content-Type": "application/json"
               }
@@ -3156,7 +3140,7 @@
             "content-length": "585",
             "content-type": "application/json"
           },
-          "resp_body": "{\"accounts\":[{\"cooling\":true,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"2026-10-16T06:20:02+08:00\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":1},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":1}],\"ok\":true,\"region\":\"CN\"}\n"
+          "resp_body": "{\"accounts\":[{\"cooling\":true,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"2099-01-01T00:00:00+08:00\",\"nickname\":\"goldenuser\",\"removed\":false,\"uid\":\"u-golden\",\"uid_short\":\"u-golden\",\"use_count\":1},{\"cooling\":false,\"dead\":false,\"enabled\":true,\"exhausted\":false,\"file\":\"workbuddy-desktop-b.info\",\"inflight\":0,\"last_used\":\"__LAST_USED__\",\"limited_until\":\"0001-01-01T00:00:00Z\",\"nickname\":\"seconduser\",\"removed\":false,\"uid\":\"u-second\",\"uid_short\":\"u-second\",\"use_count\":1}],\"ok\":true,\"region\":\"CN\"}\n"
         },
         {
           "desc": "clear_cool 提前恢复",
@@ -3239,7 +3223,7 @@
           "u-golden": [
             {
               "status": 429,
-              "body": "{\"code\":6004,\"msg\":\"Quota exceeded, will reset at 2026-10-16 06:20:02 UTC+8\"}",
+              "body": "{\"code\":6004,\"msg\":\"Quota exceeded, will reset at 2099-01-01 00:00:00 UTC+8\"}",
               "headers": {
                 "Content-Type": "application/json"
               }
@@ -3291,7 +3275,7 @@
             "content-length": "470",
             "content-type": "application/json"
           },
-          "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://copilot.tencent.com\",\"credential\":{\"auth_file\":\"__AUTHDIR__\\\\workbuddy-desktop.info\",\"enterpriseName\":\"golden-ent\",\"nickname\":\"goldenuser\",\"token_expired\":false,\"token_expires_at\":4102416000000,\"uid\":\"u-golden\"},\"hy4_limit\":{\"active\":true,\"fallback\":\"deepseek-v4-pro\",\"until\":\"2026-10-16 06:20:02\"},\"mode\":\"direct-proxy (native function calling)\",\"region\":\"CN\",\"service\":\"codebuddy-go\",\"status\":\"ok\",\"uptimeSec\":0}\n"
+          "resp_body": "{\"auth_search_dirs\":[\"__AUTHDIR__\"],\"backend\":\"https://copilot.tencent.com\",\"credential\":{\"auth_file\":\"__AUTHDIR__\\\\workbuddy-desktop.info\",\"enterpriseName\":\"golden-ent\",\"nickname\":\"goldenuser\",\"token_expired\":false,\"token_expires_at\":4102416000000,\"uid\":\"u-golden\"},\"hy4_limit\":{\"active\":true,\"fallback\":\"deepseek-v4-pro\",\"until\":\"2099-01-01 00:00:00\"},\"mode\":\"direct-proxy (native function calling)\",\"region\":\"CN\",\"service\":\"codebuddy-go\",\"status\":\"ok\",\"uptimeSec\":0}\n"
         },
         {
           "desc": "failover GET（带 hy4_limit）",
@@ -3305,7 +3289,7 @@
             "content-length": "133",
             "content-type": "application/json"
           },
-          "resp_body": "{\"enabled\":true,\"fallback\":\"deepseek-v4-pro\",\"hy4_limit\":{\"active\":true,\"fallback\":\"deepseek-v4-pro\",\"until\":\"2026-10-16 06:20:02\"}}\n"
+          "resp_body": "{\"enabled\":true,\"fallback\":\"deepseek-v4-pro\",\"hy4_limit\":{\"active\":true,\"fallback\":\"deepseek-v4-pro\",\"until\":\"2099-01-01 00:00:00\"}}\n"
         },
         {
           "desc": "窗口内第二个 hy4 请求 → 直接改写 fallback",
@@ -4034,7 +4018,7 @@
           "seq": 1,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
-          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-15 06:33:32\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-16 10:55:17\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -4050,7 +4034,7 @@
           "seq": 2,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
-          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-15 06:33:32\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-16 10:55:17\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-second",
@@ -4066,7 +4050,7 @@
           "seq": 3,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
-          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-15 06:33:32\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-16 10:55:17\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-third",
@@ -4082,7 +4066,7 @@
           "seq": 4,
           "method": "POST",
           "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
-          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-15 06:33:32\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-16 10:55:17\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
           "headers": {
             "Accept": "application/json",
             "Authorization": "Bearer tok-u-golden",
@@ -4157,7 +4141,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792017212,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-78b82fc26712\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119317,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-72fc9c468896\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
           "body_compare": "outbound-only"
         },
         {

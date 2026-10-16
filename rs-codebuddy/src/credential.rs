@@ -519,15 +519,24 @@ impl RealCredential {
         })?;
         let code = out.get("code").and_then(|x| x.as_i64()).unwrap_or(0);
         let data = out.get("data").cloned().unwrap_or(Value::Null);
+        let data_present = out.get("data").is_some();
         // 与 Go 的**已知差异**（登记在 README 差异 22 一族，本轮未对齐）：Go 的 `out.Data`
         // 是 `json.RawMessage` ⇒ 报错文案里夹的是**上游原字节**；这里把 `data` 解析成了
         // `Value`，文案里的 `data_text` 是按键序重排后的形态。两者只在「刷新失败且
         // `data` 是对象」时可见（真实上游对象键序偶然一致，故门禁没抓到）。
-        let data_text = match &data {
-            Value::Null => String::new(),
-            v => crate::gjson::to_go(v),
+        let data_text = if !data_present {
+            // Go：缺 `data` 键 ⇒ `json.RawMessage` 为 nil（len 0）⇒ 尾巴为空
+            String::new()
+        } else {
+            match &data {
+                // Go：显式 `"null"` ⇒ RawMessage 是 4 字节，尾巴就是 `null`。
+                // （Go 侧原本会在此之后的 map 赋值处 panic，已随 `fix(codebuddy)` 修为
+                // 与本分支同一条错误；Rust 侧据此对齐。）
+                Value::Null => "null".to_string(),
+                v => crate::gjson::to_go(v),
+            }
         };
-        if code != 0 || data.is_null() {
+        if code != 0 || !data_present || data.is_null() {
             return Err(format!(
                 "刷新 token 失败(code={}): {}",
                 code,

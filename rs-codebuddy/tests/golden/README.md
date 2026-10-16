@@ -4,7 +4,7 @@
 
 | 文件 | 体积 | 内容 |
 |---|---|---|
-| `golden-codebuddy-go.json` | 222 KB | **27 个 HTTP 场景 / 122 步** + 纯函数四段（tool_choice 15 / tool_refs 17 / fingerprint 4 / summarize_tool 6） |
+| `golden-codebuddy-go.json` | 231 KB（230,643 B） | **27 个 HTTP 场景 / 122 步** + 纯函数四段（tool_choice 15 / tool_refs 17 / fingerprint 4 / summarize_tool 6） |
 
 `scenarios[].scope` 分两段：
 
@@ -49,6 +49,8 @@ node .work\rust-rewrite\_p5b-merge.mjs   # 打 scope、合并、写入库副本�
   每个夹具都记 `mtime_unix_ms`——池内排序按 mtime 新→旧，回放侧要落回同一时刻。
 * 数据目录（池状态 / failover 配置 / `diag-11133-*.json`）由 `PROXYDECK_DATA_DIR` 指向临时目录。
 * 服务经生产 `s.Start()` 起在 `127.0.0.1:0`，走的就是生产的 `corsWith`+`ServeMux` 路由表。
+* **429 报文里的重置时点写成远期固定值** `2099-01-01 00:00:00 UTC+8`（两个采集器各一处/两处）——
+  这条不是风格问题，写错就是「门禁在采集日之后永久变红」，见下面「时钟纪律」节。
 
 ## 门禁怎么用这份基准（四条口径）
 
@@ -65,9 +67,10 @@ node .work\rust-rewrite\_p5b-merge.mjs   # 打 scope、合并、写入库副本�
    要看带 `-- --nocapture`。汇总行形如：
 
    ```
-   HTTP 场景黄金对比：12 个场景 / 56 步逐字节一致；显式跳过 4 步（downstream-only，P5c）+ 15 个 P5b 场景…；已登记 allowance 9 处（content-length）
+   HTTP 场景黄金对比：12 个场景 / 56 步逐字节一致；显式跳过 7 步（downstream-only，P5c）+ 15 个 P5b 场景（由 p5b_golden.rs 的生产装配门禁接管）；已登记 allowance 44 处（content-length）
    P5b 黄金对比：15 个场景 / 66 步键序无关一致（Go 结构体声明序 vs Rust 键序见 crate README 差异 22）；显式跳过下游聚合 1 步（P5c）+ 55 处 content-length（派生头部，体已逐字节比过）
    ```
+   （上面两份数字是 2026-10-16 实测的原文；旧文档里那份「4 步 / 9 处」是 P5a 时代的陈旧值，已更正。）
 
 3. **JSON 体的键序无关**：Go 侧序列化**结构体**的地方（`poolState` / `failoverCfg` /
    `AccountView` / `Quota`）是字段声明序，Rust 侧一律键序（等价 `map[string]any`）。
@@ -75,7 +78,48 @@ node .work\rust-rewrite\_p5b-merge.mjs   # 打 scope、合并、写入库副本�
    **字段集合 + 取值 + 数组顺序**，不是结构体声明序。
 4. **墙钟字段归一**（逐条登记在 crate README 差异 17~19）：`last_used`、`inflight`、
    `PackageStartTimeRangeEnd` 的**取值**归一成标记（字段存在性与格式照比）；
-   `limited_until` **照比**（它是上游给的绝对时点，两侧可复现）。
+   `limited_until` **照比**（它是上游给的绝对时点，两侧可复现——前提见下节「时钟纪律」）。
+
+## 🔴 时钟纪律：黄金不得内嵌「采集当天的绝对时点」
+
+**2026-10-16 实测的永久红（教训原文）**：`chat-pool-429` / `chat-hy4-trip` 的假上游 429 报文里
+内嵌的是**采集当天**的重置时点（`Quota exceeded, will reset at 2026-10-16 06:20:02 UTC+8`）。
+这个字面量不是装饰——它**驱动行为**：`MarkLimited` 记冷却窗口 → 池快照的 `cooling` /
+`limited_until`、hy4 兜底的 `hy4_limit.active` / `until`、以及「换号重发还是 hy4 trip」的分支选择。
+采集时（10-15）该时点在将来 ⇒ Go 记 `cooling:true`；等墙钟走过那一刻，同一个字面量就变成
+**过去** ⇒ 任何实现（含一个字都没改的原实现）都只会算出 `cooling:false`。
+**门禁自采集日 +1 天的 06:20 起永久变红，且与代码无关**（stash 掉工作区改动仍必红）。
+P5a 时代的 `chat-upstream-errors` 也带同一个字面量（那里它不直接进响应体，但决定
+「429 后能否换号重发」这条路径，同属这一类）。
+
+**纪律（再生基准时逐条遵守）**：
+
+1. **驱动行为的绝对时点一律用远期固定值**：本基准统一 `2099-01-01 00:00:00 UTC+8`
+   （`will reset at 2099-01-01 00:00:00 UTC+8`）。这样 `cooling` 恒为 true、
+   `limited_until` / `hy4_limit.until` 都是稳定值。
+2. 真需要「**已过期**」形态时，用**恒定过去**的固定值（年份 ≤ 2000），不要用「采集日前后几天」。
+3. **禁止**把时点放在 `2001..2090` 这段：它随墙钟流逝会从「将来」翻成「过去」——
+   正是上面那条永久红的机理。
+4. `PackageStartTimeRangeEnd`（积分请求体里的 `time.Now()`）属**测量值**，由门禁的
+   `norm_upstream_body` 归一成 `__NOW__`，不在此列；但它的**格式**仍被锁住。
+5. 夹具里的 token 过期时间（`expiresAt` / `refreshExpiresAt` / `token_expires_at`）
+   一律 `4102416000000`（2100 年），别改成「采集时刻 + N 天」。
+
+**自动自检**（不是靠人记）：`tests/p5b_golden.rs::golden_absolute_times_are_not_clock_dependent`
+扫**整份**黄金（含 P5a 段）并断言——
+
+* 输入侧：每个 `will reset at <YYYY-MM-DD HH:MM:SS>` 的年份 ∈ `{≥2090} ∪ {≤2000}`；
+* 期望侧：由它派生的 `accounts[].limited_until`、`hy4_limit.until` 同样落在该窗口内
+  （`0001-01-01…` 是「未限流」常量占位，跳过但仍在门禁里照比）；
+* 两处都断言「扫到的条数 > 0」，**自检不会因为基准被换掉而空转**。
+
+违反纪律时的失败长这样（把 2099 改回 2026 复现）：
+
+```
+[时钟纪律] 黄金里内嵌的重置时点落在会翻转的窗口里：2026-10-16 06:20:02（年份 2026）。
+改用远期固定值（年份 ≥ 2090）或恒定过去的固定值（≤ 2000）——见 tests/golden/README.md
+```
+
 
 ## 反向验证（门禁非空转）
 
