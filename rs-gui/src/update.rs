@@ -119,12 +119,33 @@ pub fn write_update_marker(to: &str) -> Result<(), String> {
 }
 
 /// 读走换血标记（读到即删，保证只换一轮；解析失败也删）——Go `consumeUpdateMarker`。
-pub fn consume_update_marker() -> Option<String> {
+///
+/// 返回 `(to, ok)`：`ok = true` = 刚发生过更新，调用方**必须**对全部插件后端换血。
+/// 与 Go 逐条同源的三处边界（P7b 对齐，见 `tests/bridge_contract.rs` 的 marker 用例）：
+///   * 文件读不到 → `("", false)`，不删（本来就没有）
+///   * 能读到但**不是 JSON 对象**（含非法 JSON）→ `("", false)`，但文件照样删掉
+///     （Go 的 `json.Unmarshal` 解不进去；根为 `null` 时 Go 视为空 map → `("", true)`）
+///   * 是 JSON 对象 → 恒 `ok = true`，`to` 非字符串/缺键时取空串
+pub fn consume_update_marker() -> (String, bool) {
     let path = update_marker_path();
-    let b = std::fs::read(&path).ok()?;
+    let Ok(b) = std::fs::read(&path) else {
+        return (String::new(), false);
+    };
     let _ = std::fs::remove_file(&path);
-    let v: serde_json::Value = serde_json::from_slice(&b).ok()?;
-    v.get("to").and_then(|t| t.as_str()).map(|s| s.to_string())
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&b) else {
+        return (String::new(), false);
+    };
+    match v {
+        serde_json::Value::Null => (String::new(), true),
+        serde_json::Value::Object(m) => (
+            m.get("to")
+                .and_then(|t| t.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            true,
+        ),
+        _ => (String::new(), false),
+    }
 }
 
 /// 给 GitHub 下载直链加镜像前缀（Go `applyMirror`：非 GitHub 直链/空镜像原样返回）。

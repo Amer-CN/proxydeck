@@ -73,26 +73,20 @@ fn ui_html_bridge_surface_is_covered_by_our_bindings() {
         "抽取到的桥面太少（{used:?}）：抽取规则或界面结构变了"
     );
 
-    // 本阶段实现 26 个；其余 7 个属 P7b/P7c（插件托管 4 个 + 注水浮窗 3 个），
-    // 它们仍是 Go 宿主提供的，Rust 侧接手前如实登记在 README 的接手清单里。
-    let later: [&str; 7] = [
-        "ccPluginList",
-        "ccPluginLog",
-        "ccPluginStart",
-        "ccPluginStop",
-        "ccOpenFax",
-        "ccFaxWin",
-        "ccFaxClose",
-    ];
+    // 26 个 bridge.go 绑定 + 4 个插件托管绑定（P7b 已落地）都是我方提供的；
+    // 只剩注水浮窗 3 个仍由 Go 宿主提供（P7c 接手，登记在 README 的接手清单里）。
+    let later: [&str; 3] = ["ccOpenFax", "ccFaxWin", "ccFaxClose"];
     let mut missing: Vec<&String> = Vec::new();
     for name in &used {
-        if !rs_gui::bridge::BINDINGS.contains(&name.as_str()) && !later.contains(&name.as_str()) {
+        let provided = rs_gui::bridge::BINDINGS.contains(&name.as_str())
+            || rs_gui::bridge::PLUGIN_BINDINGS.contains(&name.as_str());
+        if !provided && !later.contains(&name.as_str()) {
             missing.push(name);
         }
     }
     assert!(
         missing.is_empty(),
-        "界面调用了我们没有提供的绑定：{missing:?}（P7a 的 26 个 + P7b/P7c 的 7 个之外不该有别的）"
+        "界面调用了我们没有提供的绑定：{missing:?}（26 个 bridge.go + 4 个插件托管 + P7c 待接的 3 个之外不该有别的）"
     );
 
     // 桥存在性判据的锚点（合同锚点变了要重新对齐）

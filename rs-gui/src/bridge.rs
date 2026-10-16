@@ -19,7 +19,7 @@ use crate::host::Host;
 use crate::httpc;
 use crate::jsons;
 use crate::keyprobe;
-use crate::plugins::{self, PLUGIN_DEFS};
+use crate::plugins::{self, PluginHost};
 use crate::state::App;
 use crate::update;
 
@@ -54,6 +54,15 @@ pub const BINDINGS: [&str; 26] = [
     "ccKeyMapSet",
 ];
 
+/// 插件托管的 4 个绑定（Go `app/plugin_bindings.go`；P7b 落地）。
+/// ui.html 的实际调用面 = 这 4 个 + `BINDINGS`，由 `tests/ui_html.rs` 反向锁定。
+pub const PLUGIN_BINDINGS: [&str; 4] = [
+    "ccPluginList",
+    "ccPluginLog",
+    "ccPluginStart",
+    "ccPluginStop",
+];
+
 /// 剪贴板缝（Go 用 `atotto/clipboard`；测试用空实现，避免动真人剪贴板）。
 pub trait Clipboard: Send + Sync {
     fn write_all(&self, text: &str) -> Result<(), String>;
@@ -77,11 +86,13 @@ impl Clipboard for NullClipboard {
     }
 }
 
-/// 桥接器：控制器 + 宿主动作（窗口/托盘）+ 剪贴板。
+/// 桥接器：控制器 + 宿主动作（窗口/托盘）+ 剪贴板 + 插件托管。
 pub struct Bridge {
     pub app: Arc<App>,
     pub host: Arc<dyn Host>,
     pub clipboard: Arc<dyn Clipboard>,
+    /// 插件托管（探活接管 / 拉杆启停 / 退出监视；门禁可用假注册表替换）
+    pub plugins: Arc<PluginHost>,
 }
 
 impl Bridge {
@@ -90,12 +101,19 @@ impl Bridge {
             app,
             host,
             clipboard: Arc::new(SystemClipboard),
+            plugins: Arc::new(PluginHost::production()),
         }
     }
 
     /// 换掉剪贴板实现（门禁用 `NullClipboard`，不碰真人剪贴板）。
     pub fn with_clipboard(mut self, clipboard: Arc<dyn Clipboard>) -> Self {
         self.clipboard = clipboard;
+        self
+    }
+
+    /// 换掉插件托管器（门禁用测试注册表 + 假后端，绝不碰现行服务端口）。
+    pub fn with_plugins(mut self, plugins: Arc<PluginHost>) -> Self {
+        self.plugins = plugins;
         self
     }
 
@@ -109,8 +127,8 @@ impl Bridge {
             "ccLiveSnapshot" => {
                 let mut targets: Vec<(String, String)> =
                     vec![("core".to_string(), self.app.health_url())];
-                for d in PLUGIN_DEFS {
-                    targets.push((d.id.to_string(), plugins::plugin_health_url(d)));
+                for d in self.plugins.defs() {
+                    targets.push((d.id.clone(), plugins::plugin_health_url(d)));
                 }
                 let mut handles = Vec::with_capacity(targets.len());
                 for (name, url) in targets {
@@ -358,6 +376,30 @@ impl Bridge {
                 Err(e) => Ok(jsons::json_err(&e)),
             },
 
+            /* ---------------- 插件托管 4 绑定（Go `plugin_bindings.go`） ---------------- */
+
+            // 插件列表（含状态）：Go 是 `json.Marshal(a.pluginList())`
+            "ccPluginList" => Ok(jsons::marshal(&Value::Array(self.plugins.list()))),
+
+            // 读插件日志尾部（插件视图的实时日志面板用）
+            "ccPluginLog" => {
+                let id = str_arg(args, 0)?;
+                let lines = int_arg(args, 1);
+                Ok(self.plugins.log_lines(&id, lines))
+            }
+
+            // 启动插件（tuanjie / codebuddy / bai …）：go 侧 id 先 TrimSpace
+            "ccPluginStart" => match self.plugins.start(str_arg(args, 0)?.trim()) {
+                Ok(()) => Ok(jsons::json_ok("已启动")),
+                Err(e) => Ok(jsons::json_err(&e)),
+            },
+
+            // 停止插件
+            "ccPluginStop" => match self.plugins.stop(str_arg(args, 0)?.trim()) {
+                Ok(()) => Ok(jsons::json_ok("已停止")),
+                Err(e) => Ok(jsons::json_err(&e)),
+            },
+
             other => Err(format!("未知绑定: {other}")),
         }
     }
@@ -402,6 +444,16 @@ pub fn bool_arg(args: &[Value], i: usize) -> Result<bool, String> {
         Some(Value::String(s)) => Ok(s == "true"),
         Some(Value::Number(n)) => Ok(n.as_i64().unwrap_or(0) != 0),
         Some(_) => Err(format!("第 {} 个实参不是布尔", i + 1)),
+    }
+}
+
+/// 取第 i 个实参当 Go `int`（`ccPluginLog` 的 `lines`；数字以外的形态落 0，
+/// 与 Go 侧「webview_go 解不出 int」的实参形态差异登记在 README）。
+pub fn int_arg(args: &[Value], i: usize) -> i64 {
+    match args.get(i) {
+        Some(Value::Number(n)) => n.as_i64().unwrap_or(0),
+        Some(Value::String(s)) => s.trim().parse::<i64>().unwrap_or(0),
+        _ => 0,
     }
 }
 

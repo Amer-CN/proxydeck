@@ -4,9 +4,10 @@
 //! GUI 与各插件子模式，`-headless` 走主代理；六个 Rust crate 作为**库依赖**接入，
 //! 由 [`dispatch`] 按 flag 分发。
 //!
-//! 阶段边界（P7a）：桥接层（26 个 `w.Bind`，见 [`bridge`]）+ 状态聚合（[`state`]）+
-//! 分发骨架（[`dispatch`]）。插件托管（[`plugins`] 的启停/换血）、窗口外壳（托盘/无边框/
-//! 单实例）、打包属 P7b/P7c/P7d，清单见 `rs-gui/README.md`。
+//! 阶段边界：P7a 桥接层（26 个 `w.Bind`，见 [`bridge`]）+ 状态聚合（[`state`]）+
+//! 分发骨架（[`dispatch`]）；P7b 插件托管（[`plugins`]：注册表 / 探活接管 / 拉杆启停 /
+//! 退出监视 / 停堆复验 + `ccPlugin*` 四绑定）。窗口外壳（托盘/无边框/单实例/换血）、
+//! 打包属 P7c/P7d，清单见 `rs-gui/README.md`。
 
 pub mod appdir;
 pub mod bridge;
@@ -22,6 +23,10 @@ pub mod state;
 pub mod uihtml;
 pub mod update;
 pub mod webview;
+
+/// 插件托管层的真实行为测试（起假后端进程 / 占测试端口；只在测试构建里编）。
+#[cfg(test)]
+mod plugin_hosting_tests;
 
 /// 应用版本（与 Go `app/main.go` 的 `appVersion` 同值；ui.html 的 `UI_CUR` 也认它）。
 /// ⚠ 发版时的 8 处版本串清单里，Rust 侧对应这一处（P7d 打包时要补进清单）。

@@ -18,6 +18,14 @@ use std::future::Future;
 use clap::Parser;
 
 use crate::appdir;
+use crate::plugins;
+
+/// 插件启动失败诊断（Go `plugin_modes.go` 的 `pluginFailLog`）：带时间戳、追加写、
+/// 按 1 MB × 3 轮转，落数据目录 `<id>-plugin-error.log`——GUI 的退出监视就是靠
+/// 读这个文件给出「启动失败：…」的可读原因。
+fn plugin_fail_log(id: &str, msg: &str) {
+    let _ = appdir::append_log(&plugins::err_log_path_for_id(id), &format!("启动失败：{msg}"));
+}
 
 /// 分发目标。
 #[derive(Debug, PartialEq, Eq)]
@@ -188,9 +196,13 @@ pub fn run(argv: Vec<String>) -> i32 {
 
         Mode::Plugin(id) => {
             let Some(krate) = plugin_crate(id) else {
-                eprintln!(
+                let msg = format!(
                     "rs-gui: --plugin-{id} 尚无 Rust 实现（该插件仍由 Go 侧 internal/{id} 承载），本 exe 无法提供该子模式"
                 );
+                // 与 Go 侧同源：子模式起不来就把原因写进诊断文件，GUI 的退出监视读它，
+                // 界面显示「启动失败：…」而不是停在「启动中」。
+                plugin_fail_log(id, &msg);
+                eprintln!("{msg}");
                 return 1;
             };
             // 便携模式下强制把数据目录钉给子模式进程内的各 crate（它们多数没有 --portable）
@@ -229,6 +241,7 @@ pub fn run(argv: Vec<String>) -> i32 {
                 other => Err(format!("未接入的 crate: {other}")),
             };
             if let Err(e) = r {
+                plugin_fail_log(id, &e);
                 eprintln!("{krate}: 启动失败: {e}");
                 return 1;
             }

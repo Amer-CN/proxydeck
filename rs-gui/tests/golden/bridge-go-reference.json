@@ -1,5 +1,6 @@
 {
   "app_version": "v3.20.10",
+  "fake_backend_sha256": "016e1ff048a7c837392479c4937fbf75d86b39cfee4e80b780ada420fd81a8f0",
   "bindings26": [
     "ccGetState",
     "ccLiveSnapshot",
@@ -60,24 +61,418 @@
     "ccKeyMapGet",
     "ccKeyMapSet"
   ],
+  "bindings_plugin": [
+    "ccPluginList",
+    "ccPluginLog",
+    "ccPluginStart",
+    "ccPluginStop"
+  ],
   "comparison_exemptions": [
     "ccKeyMapSet 的 JSON 解析错误文案（Go encoding/json 与 serde_json 的报错文本不可能逐字相同）：仅该步的 msg 归一为 $JSONERR",
     "appdir.log（ACL 收紧失败时的诊断日志）：带时间戳且内容取决于 icacls 是否在 PATH 上，不作黄金",
-    "PDAPI1 密文文件的字节：DPAPI 每次调用产出不同，按「能否解回同一明文」比较（见 files 的 protected 语义）",
-    "ccLiveSnapshot 的取值：随本机各插件端口实时状态变化，只比键集与 ok 形状"
+    "PDAPI1 密文文件的字节：DPAPI 每次调用产出不同，按「能否解回同一明文」比较",
+    "ccLiveSnapshot 的取值：随本机各插件端口实时状态变化，只比键集与 ok 形状",
+    "PL3 的 plugins/zz-beta.log：两边被 spawn 的子进程不同（Go=测试二进制、Rust=假后端），日志正文必然不同；退出原因本身由 ccPluginList 的 lastErr 逐字锁",
+    "exit_reason_cases / marker_cases / stamped_writer_cases 的期望值：含非法 UTF-8 时 Go 的 json 编码器写 \\ufffd 转义而 Rust 侧是同值字符，故这三组按「JSON 解码后的值」比较，不逐字节比"
   ],
   "core_version": "v1.2.0",
+  "exit_reason_cases": [
+    {
+      "name": "missing-no-wait",
+      "err_log": null,
+      "wait_err": "",
+      "want": "Zz Alpha 启动后退出（无诊断信息）"
+    },
+    {
+      "name": "missing-with-wait",
+      "err_log": null,
+      "wait_err": "exit status 7",
+      "want": "Zz Alpha 启动后退出：exit status 7"
+    },
+    {
+      "name": "empty-file-with-wait",
+      "err_log": "",
+      "wait_err": "exit status 7",
+      "want": "Zz Alpha 启动后退出：exit status 7"
+    },
+    {
+      "name": "whitespace-only",
+      "err_log": "  \n\t\n",
+      "wait_err": "",
+      "want": "Zz Alpha 启动后退出（无诊断信息）"
+    },
+    {
+      "name": "diagnostic-line",
+      "err_log": "2026-10-16 18:00:00 启动失败：端口 19788 被占用\n",
+      "wait_err": "",
+      "want": "启动失败：2026-10-16 18:00:00 启动失败：端口 19788 被占用"
+    },
+    {
+      "name": "over-300-ascii",
+      "err_log": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "wait_err": "",
+      "want": "启动失败：AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA…"
+    },
+    {
+      "name": "over-300-multibyte",
+      "err_log": "AB中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中",
+      "wait_err": "",
+      "want": "启动失败：AB中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中\ufffd…"
+    },
+    {
+      "name": "over-4k-tail",
+      "err_log": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nTAIL-LINE\n",
+      "wait_err": "",
+      "want": "启动失败：TAIL-LINE"
+    }
+  ],
+  "marker_cases": [
+    {
+      "name": "missing",
+      "pre": null,
+      "want_to": "",
+      "want_ok": false,
+      "want_file_gone": true
+    },
+    {
+      "name": "valid",
+      "pre": "{\"to\":\"v9\",\"at\":1}",
+      "want_to": "v9",
+      "want_ok": true,
+      "want_file_gone": true
+    },
+    {
+      "name": "no-to-key",
+      "pre": "{\"at\":1}",
+      "want_to": "",
+      "want_ok": true,
+      "want_file_gone": true
+    },
+    {
+      "name": "to-not-string",
+      "pre": "{\"to\":123}",
+      "want_to": "",
+      "want_ok": true,
+      "want_file_gone": true
+    },
+    {
+      "name": "root-string",
+      "pre": "\"str\"",
+      "want_to": "",
+      "want_ok": false,
+      "want_file_gone": true
+    },
+    {
+      "name": "root-array",
+      "pre": "[1,2]",
+      "want_to": "",
+      "want_ok": false,
+      "want_file_gone": true
+    },
+    {
+      "name": "root-null",
+      "pre": "null",
+      "want_to": "",
+      "want_ok": true,
+      "want_file_gone": true
+    },
+    {
+      "name": "not-json",
+      "pre": "{not json",
+      "want_to": "",
+      "want_ok": false,
+      "want_file_gone": true
+    },
+    {
+      "name": "empty-json",
+      "pre": "{\"to\":\"\",\"at\":0}",
+      "want_to": "",
+      "want_ok": true,
+      "want_file_gone": true
+    },
+    {
+      "name": "empty-file",
+      "pre": "",
+      "want_to": "",
+      "want_ok": false,
+      "want_file_gone": true
+    }
+  ],
   "normalization": [
     "\u003cexe 路径\u003e → $EXE",
+    "\u003cexe 所在目录\u003e → $EXEDIR（插件目录缺失等文案里带 exeDir）",
     "\u003cPROXYDECK_DATA_DIR 临时目录\u003e → $DATA",
     "\u003cAPPDATA 临时目录\u003e → $APPDATA",
     "127.0.0.1:\u003c测试端口\u003e → 127.0.0.1:$PORT",
     "\"port\":\"\u003cn\u003e\" → \"port\":\"$PORT\"",
     "-port \u003cn\u003e → -port $PORT（自启 VBS 的命令行）",
     "\"pid\":\u003cn\u003e → \"pid\":0",
-    "\"uptime\":\u003cn\u003e → \"uptime\":0"
+    "\"uptime\":\u003cn\u003e → \"uptime\":0",
+    "YYYY-MM-DD HH:MM:SS → $TS（StampedWriter 用例）",
+    "JSON 字符串转义形态 → 采集器与门禁同规则先统一（反斜杠翻倍等），再逐字节比"
+  ],
+  "plugin_test_defs": [
+    {
+      "args": [
+        "--desensitize"
+      ],
+      "dir": "",
+      "health": "/health",
+      "id": "zz-alpha",
+      "name": "Zz Alpha",
+      "native": "zz-alpha",
+      "port": 19788,
+      "script": ""
+    },
+    {
+      "args": [],
+      "dir": "",
+      "health": "/health",
+      "id": "zz-beta",
+      "name": "Zz Beta",
+      "native": "zz-beta",
+      "port": 19789,
+      "script": ""
+    },
+    {
+      "args": [],
+      "dir": "zz-no-such-dir-p7b",
+      "health": "/health",
+      "id": "zz-gamma",
+      "name": "Zz Gamma",
+      "native": "",
+      "port": 19790,
+      "script": "main.py"
+    }
   ],
   "scenarios": {
+    "PL1_plugins_idle": {
+      "steps": [
+        {
+          "cmd": "ccPluginList",
+          "args": null,
+          "out": "[{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-alpha\",\"lastErr\":\"\",\"log\":\"zz-alpha.log\",\"name\":\"Zz Alpha\",\"native\":true,\"port\":19788,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19788/v1\"},{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-beta\",\"lastErr\":\"\",\"log\":\"zz-beta.log\",\"name\":\"Zz Beta\",\"native\":true,\"port\":19789,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19789/v1\"},{\"dir\":\"plugins\\\\zz-no-such-dir-p7b\",\"healthy\":false,\"id\":\"zz-gamma\",\"lastErr\":\"\",\"log\":\"zz-gamma.log\",\"name\":\"Zz Gamma\",\"native\":false,\"port\":19790,\"present\":false,\"running\":false,\"url\":\"http://127.0.0.1:19790/v1\"}]"
+        },
+        {
+          "cmd": "ccPluginLog",
+          "args": [
+            "zz-nope",
+            200
+          ],
+          "out": "{\"ok\":false,\"msg\":\"未知插件\"}"
+        },
+        {
+          "cmd": "ccPluginLog",
+          "args": [
+            "zz-gamma",
+            200
+          ],
+          "out": "{\"ok\":false,\"msg\":\"暂无日志\"}"
+        },
+        {
+          "cmd": "ccPluginLog",
+          "args": [
+            "zz-alpha",
+            2
+          ],
+          "out": "{\"lines\":[\"2026-10-16 18:00:00 line3\",\"2026-10-16 18:00:00 line4\"],\"ok\":true}"
+        },
+        {
+          "cmd": "ccPluginLog",
+          "args": [
+            "zz-alpha",
+            0
+          ],
+          "out": "{\"lines\":[\"2026-10-16 18:00:00 line1\",\"2026-10-16 18:00:00 line2\",\"2026-10-16 18:00:00 line3\",\"2026-10-16 18:00:00 line4\"],\"ok\":true}"
+        },
+        {
+          "cmd": "ccPluginLog",
+          "args": [
+            "zz-alpha",
+            -3
+          ],
+          "out": "{\"lines\":[\"2026-10-16 18:00:00 line1\",\"2026-10-16 18:00:00 line2\",\"2026-10-16 18:00:00 line3\",\"2026-10-16 18:00:00 line4\"],\"ok\":true}"
+        },
+        {
+          "cmd": "ccPluginLog",
+          "args": [
+            "zz-alpha",
+            501
+          ],
+          "out": "{\"lines\":[\"2026-10-16 18:00:00 line1\",\"2026-10-16 18:00:00 line2\",\"2026-10-16 18:00:00 line3\",\"2026-10-16 18:00:00 line4\"],\"ok\":true}"
+        },
+        {
+          "cmd": "ccPluginStart",
+          "args": [
+            "zz-nope"
+          ],
+          "out": "{\"msg\":\"未知插件: zz-nope\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccPluginStop",
+          "args": [
+            "zz-nope"
+          ],
+          "out": "{\"msg\":\"未知插件: zz-nope\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccPluginStart",
+          "args": [
+            "  zz-gamma  "
+          ],
+          "out": "{\"msg\":\"插件目录缺失：$EXEDIR\\\\plugins\\\\zz-no-such-dir-p7b\\n请确认 plugins/zz-no-such-dir-p7b 已随程序放置\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccPluginStop",
+          "args": [
+            "zz-gamma"
+          ],
+          "out": "{\"msg\":\"已停止\",\"ok\":true}"
+        }
+      ],
+      "pre_files": {
+        "plugins/zz-alpha.log": "2026-10-16 18:00:00 line1\n2026-10-16 18:00:00 line2\n2026-10-16 18:00:00 line3\n2026-10-16 18:00:00 line4\n\n"
+      },
+      "pre_hooks": null,
+      "files": {
+        "plugins/zz-alpha.log": "2026-10-16 18:00:00 line1\n2026-10-16 18:00:00 line2\n2026-10-16 18:00:00 line3\n2026-10-16 18:00:00 line4\n\n"
+      },
+      "files_exclude": null,
+      "absent": null,
+      "uses_plugin_test_defs": true,
+      "note": "测试注册表（zz-alpha/beta/gamma，端口 19788~19790）全空：锁 ccPluginList 字段与键序、ccPluginLog 的三条分支与行窗口、未知 id 文案、非原生插件缺脚本的「插件目录缺失」文案（含 $EXEDIR）"
+    },
+    "PL2_plugins_stop_kills": {
+      "steps": [
+        {
+          "cmd": "ccPluginList",
+          "args": null,
+          "out": "[{\"dir\":\"plugins\",\"healthy\":true,\"id\":\"zz-alpha\",\"lastErr\":\"\",\"log\":\"zz-alpha.log\",\"name\":\"Zz Alpha\",\"native\":true,\"port\":19788,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19788/v1\"},{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-beta\",\"lastErr\":\"\",\"log\":\"zz-beta.log\",\"name\":\"Zz Beta\",\"native\":true,\"port\":19789,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19789/v1\"},{\"dir\":\"plugins\\\\zz-no-such-dir-p7b\",\"healthy\":false,\"id\":\"zz-gamma\",\"lastErr\":\"\",\"log\":\"zz-gamma.log\",\"name\":\"Zz Gamma\",\"native\":false,\"port\":19790,\"present\":false,\"running\":false,\"url\":\"http://127.0.0.1:19790/v1\"}]"
+        },
+        {
+          "cmd": "ccPluginStart",
+          "args": [
+            "zz-alpha"
+          ],
+          "out": "{\"msg\":\"已启动\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccPluginStop",
+          "args": [
+            "zz-alpha"
+          ],
+          "out": "{\"msg\":\"已停止\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccPluginList",
+          "args": null,
+          "out": "[{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-alpha\",\"lastErr\":\"\",\"log\":\"zz-alpha.log\",\"name\":\"Zz Alpha\",\"native\":true,\"port\":19788,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19788/v1\"},{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-beta\",\"lastErr\":\"\",\"log\":\"zz-beta.log\",\"name\":\"Zz Beta\",\"native\":true,\"port\":19789,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19789/v1\"},{\"dir\":\"plugins\\\\zz-no-such-dir-p7b\",\"healthy\":false,\"id\":\"zz-gamma\",\"lastErr\":\"\",\"log\":\"zz-gamma.log\",\"name\":\"Zz Gamma\",\"native\":false,\"port\":19790,\"present\":false,\"running\":false,\"url\":\"http://127.0.0.1:19790/v1\"}]"
+        }
+      ],
+      "pre_files": {},
+      "pre_hooks": [
+        "node:serve:19788"
+      ],
+      "files": {},
+      "files_exclude": null,
+      "absent": null,
+      "uses_plugin_test_defs": true,
+      "note": "node 假后端（serve）占住 19788：start 走探活接管，stop 按端口把它杀掉，杀后复验端口空出 → Ok「已停止」（这一条同时证明 killByPort 真能收掉外部进程）"
+    },
+    "PL3_plugins_spawn_exit": {
+      "steps": [
+        {
+          "cmd": "ccPluginList",
+          "args": null,
+          "out": "[{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-alpha\",\"lastErr\":\"\",\"log\":\"zz-alpha.log\",\"name\":\"Zz Alpha\",\"native\":true,\"port\":19788,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19788/v1\"},{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-beta\",\"lastErr\":\"\",\"log\":\"zz-beta.log\",\"name\":\"Zz Beta\",\"native\":true,\"port\":19789,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19789/v1\"},{\"dir\":\"plugins\\\\zz-no-such-dir-p7b\",\"healthy\":false,\"id\":\"zz-gamma\",\"lastErr\":\"\",\"log\":\"zz-gamma.log\",\"name\":\"Zz Gamma\",\"native\":false,\"port\":19790,\"present\":false,\"running\":false,\"url\":\"http://127.0.0.1:19790/v1\"}]"
+        },
+        {
+          "cmd": "ccPluginStart",
+          "args": [
+            "zz-beta"
+          ],
+          "out": "{\"msg\":\"已启动\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccPluginList",
+          "args": null,
+          "out": "[{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-alpha\",\"lastErr\":\"\",\"log\":\"zz-alpha.log\",\"name\":\"Zz Alpha\",\"native\":true,\"port\":19788,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19788/v1\"},{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-beta\",\"lastErr\":\"Zz Beta 启动后退出：exit status 2\",\"log\":\"zz-beta.log\",\"name\":\"Zz Beta\",\"native\":true,\"port\":19789,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19789/v1\"},{\"dir\":\"plugins\\\\zz-no-such-dir-p7b\",\"healthy\":false,\"id\":\"zz-gamma\",\"lastErr\":\"\",\"log\":\"zz-gamma.log\",\"name\":\"Zz Gamma\",\"native\":false,\"port\":19790,\"present\":false,\"running\":false,\"url\":\"http://127.0.0.1:19790/v1\"}]",
+          "wait_plugin_idle": "zz-beta"
+        },
+        {
+          "cmd": "ccPluginStop",
+          "args": [
+            "zz-beta"
+          ],
+          "out": "{\"msg\":\"已停止\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccPluginList",
+          "args": null,
+          "out": "[{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-alpha\",\"lastErr\":\"\",\"log\":\"zz-alpha.log\",\"name\":\"Zz Alpha\",\"native\":true,\"port\":19788,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19788/v1\"},{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-beta\",\"lastErr\":\"\",\"log\":\"zz-beta.log\",\"name\":\"Zz Beta\",\"native\":true,\"port\":19789,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19789/v1\"},{\"dir\":\"plugins\\\\zz-no-such-dir-p7b\",\"healthy\":false,\"id\":\"zz-gamma\",\"lastErr\":\"\",\"log\":\"zz-gamma.log\",\"name\":\"Zz Gamma\",\"native\":false,\"port\":19790,\"present\":false,\"running\":false,\"url\":\"http://127.0.0.1:19790/v1\"}]"
+        }
+      ],
+      "pre_files": {},
+      "pre_hooks": [
+        "node:raw:19789"
+      ],
+      "files": {},
+      "files_exclude": [
+        "plugins/zz-beta.log"
+      ],
+      "absent": null,
+      "uses_plugin_test_defs": true,
+      "note": "node 假后端（raw，非健康）占住 19789：start 先清理占位者，再 spawn 本 exe 的 --plugin-zz-beta（测试二进制 → 未定义 flag → 退出码 2）→ 退出监视给出「启动后退出：exit status 2」。plugins/zz-beta.log 被排除：两边子进程不同，日志正文必然不同（退出原因取自诊断文件/退出码，不受影响）"
+    },
+    "PL4_plugins_takeover_busy": {
+      "steps": [
+        {
+          "cmd": "ccPluginList",
+          "args": null,
+          "out": "[{\"dir\":\"plugins\",\"healthy\":true,\"id\":\"zz-alpha\",\"lastErr\":\"\",\"log\":\"zz-alpha.log\",\"name\":\"Zz Alpha\",\"native\":true,\"port\":19788,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19788/v1\"},{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-beta\",\"lastErr\":\"\",\"log\":\"zz-beta.log\",\"name\":\"Zz Beta\",\"native\":true,\"port\":19789,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19789/v1\"},{\"dir\":\"plugins\\\\zz-no-such-dir-p7b\",\"healthy\":false,\"id\":\"zz-gamma\",\"lastErr\":\"\",\"log\":\"zz-gamma.log\",\"name\":\"Zz Gamma\",\"native\":false,\"port\":19790,\"present\":false,\"running\":false,\"url\":\"http://127.0.0.1:19790/v1\"}]"
+        },
+        {
+          "cmd": "ccPluginStart",
+          "args": [
+            "zz-alpha"
+          ],
+          "out": "{\"msg\":\"已启动\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccPluginList",
+          "args": null,
+          "out": "[{\"dir\":\"plugins\",\"healthy\":true,\"id\":\"zz-alpha\",\"lastErr\":\"\",\"log\":\"zz-alpha.log\",\"name\":\"Zz Alpha\",\"native\":true,\"port\":19788,\"present\":true,\"running\":true,\"url\":\"http://127.0.0.1:19788/v1\"},{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-beta\",\"lastErr\":\"\",\"log\":\"zz-beta.log\",\"name\":\"Zz Beta\",\"native\":true,\"port\":19789,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19789/v1\"},{\"dir\":\"plugins\\\\zz-no-such-dir-p7b\",\"healthy\":false,\"id\":\"zz-gamma\",\"lastErr\":\"\",\"log\":\"zz-gamma.log\",\"name\":\"Zz Gamma\",\"native\":false,\"port\":19790,\"present\":false,\"running\":false,\"url\":\"http://127.0.0.1:19790/v1\"}]"
+        },
+        {
+          "cmd": "ccPluginStart",
+          "args": [
+            "zz-alpha"
+          ],
+          "out": "{\"msg\":\"Zz Alpha 已在运行\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccPluginStop",
+          "args": [
+            "zz-alpha"
+          ],
+          "out": "{\"msg\":\"旧进程杀不掉（端口 19788 仍被占）：对方可能以管理员身份在运行，请右键以管理员身份运行本程序后重试，或从任务管理器结束该进程\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccPluginList",
+          "args": null,
+          "out": "[{\"dir\":\"plugins\",\"healthy\":true,\"id\":\"zz-alpha\",\"lastErr\":\"\",\"log\":\"zz-alpha.log\",\"name\":\"Zz Alpha\",\"native\":true,\"port\":19788,\"present\":true,\"running\":true,\"url\":\"http://127.0.0.1:19788/v1\"},{\"dir\":\"plugins\",\"healthy\":false,\"id\":\"zz-beta\",\"lastErr\":\"\",\"log\":\"zz-beta.log\",\"name\":\"Zz Beta\",\"native\":true,\"port\":19789,\"present\":true,\"running\":false,\"url\":\"http://127.0.0.1:19789/v1\"},{\"dir\":\"plugins\\\\zz-no-such-dir-p7b\",\"healthy\":false,\"id\":\"zz-gamma\",\"lastErr\":\"\",\"log\":\"zz-gamma.log\",\"name\":\"Zz Gamma\",\"native\":false,\"port\":19790,\"present\":false,\"running\":false,\"url\":\"http://127.0.0.1:19790/v1\"}]"
+        }
+      ],
+      "pre_files": {},
+      "pre_hooks": [
+        "inproc_healthy:19788"
+      ],
+      "files": {},
+      "files_exclude": null,
+      "absent": null,
+      "uses_plugin_test_defs": true,
+      "note": "本进程占住 19788 且 /health 回 200（killByPort 排除自己）：start 走探活接管、再 start 报「已在运行」、stop 因端口占着杀不掉而如实报错并恢复跟踪（running 仍为 true）"
+    },
     "S1_fresh": {
       "steps": [
         {
@@ -284,15 +679,18 @@
           "out": "{\"map\":[[\"cmd\"],[\"tj\"]],\"ok\":true}"
         }
       ],
+      "pre_files": {},
+      "pre_hooks": null,
       "files": {
-        "api-key.txt": "PDAPI1\nAQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAm9KQmDt4iE63kAYnWkl3qgAAAAACAAAAAAAQZgAAAAEAACAAAACc8Um1DlVGWJuWGUljFoPoAx0FuVWaae+wwri+b054UQAAAAAOgAAAAAIAACAAAAABeCE8P/Gu+i4A5//MgO1u4WOkobVu/1xSDov8nhTRcRAAAACHq3rBJJfm83lUFlEVw/CjQAAAAN+l6sncc9bE681IngWG+OMRahesNb3RnA4efk76m2gel7wpi7GrHzeicZLUxdVJT0D73gQHeSSRJASNelXFE2g=\n",
-        "appdir.log": "2026-10-16 17:32:45 ACL 收紧失败（文件仍为密文）：notice_dismissed.flag: icacls 失败: exec: \"icacls\": executable file not found in %PATH% ()\n2026-10-16 17:32:45 ACL 收紧失败（文件仍为密文）：close_hint_dismissed.flag: icacls 失败: exec: \"icacls\": executable file not found in %PATH% ()\n2026-10-16 17:32:45 ACL 收紧失败（文件仍为密文）：api-key.txt: icacls 失败: exec: \"icacls\": executable file not found in %PATH% ()\n",
-        "close_hint_dismissed.flag": "PDAPI1\nAQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAm9KQmDt4iE63kAYnWkl3qgAAAAACAAAAAAAQZgAAAAEAACAAAABS9j0Zv9ANDRTc4FEt0Rd932L4Vg2tKDyYPtft7dq5gAAAAAAOgAAAAAIAACAAAACQLDu7SZ3eV1mAOJ/NE68jMLdR4pySOACEC7dXCccOFBAAAAA3Y0eCAsOrKSoHiVxOEeL6QAAAAH0ThWKTbXpR1Qb8MUq0dvIG1XkFEgI3CUDxeav9vt7A2OvpMYUaL3T8oCpMnIlVJwr/jFhO14IK4lCMEcRKgcc=\n",
+        "api-key.txt": "PDAPI1\nAQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAm9KQmDt4iE63kAYnWkl3qgAAAAACAAAAAAAQZgAAAAEAACAAAABlQ1e0CKHq9RiJM8mE8UEA2vhepxBk9mw0hp4GNGQTwAAAAAAOgAAAAAIAACAAAAB+CVgqNk76DrcTKmX7SZztTyiD3J12e1cks3kZ5ns83hAAAABxd4LmpSYx1KZF5ujmwaSqQAAAAOAqfUWvITkwen6PX83z/Hv/5fEIRg+GoVRbK1EsQG+rMJ5X0o98v7UnB+B8L70IBkM1bXbshgTkCukEkyxf+Dk=\n",
+        "close_hint_dismissed.flag": "PDAPI1\nAQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAm9KQmDt4iE63kAYnWkl3qgAAAAACAAAAAAAQZgAAAAEAACAAAAD/OzZGdLlJbiP0fBe4MhmAePXRWLyge2lCrDhfgPUlvwAAAAAOgAAAAAIAACAAAAAubUaUwPa93QoC5+uvUnnKkZiUN1a1cIu327BCNvdeVRAAAAAizGTrGuyAlfEPEuCpLU6AQAAAAEMWYCwcHbXShCgSUiZDqGif0L/rOTG0HttQa6fTYL7uPLV37qsYateUmmozQr1ypA0vr7509Unk/pf8OkpO65Y=\n",
         "close_mode.txt": "quit",
         "keymap.json": "[[\"cmd\"],[\"tj\"]]",
-        "notice_dismissed.flag": "PDAPI1\nAQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAm9KQmDt4iE63kAYnWkl3qgAAAAACAAAAAAAQZgAAAAEAACAAAAB1wH55v1Z4IJr6leHRjzthNym57s4rWvuYLf/FWCFcoAAAAAAOgAAAAAIAACAAAAAlBQyqSi6dOmgZ+1zGqiCW2vSdbfwHjzy25f8dsUGDmRAAAAB673gQ+jpeNFCQPqQR2G22QAAAAHVpKJjNxtiRSkji/CLU0YoCxYgvl2uWlaVNlC3LrXFkuAc/MqG66C+8Gar93c2ISoVNUzSTWxZPPtp+cJWzrL0=\n"
+        "notice_dismissed.flag": "PDAPI1\nAQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAm9KQmDt4iE63kAYnWkl3qgAAAAACAAAAAAAQZgAAAAEAACAAAADSxOAcplOxaV3ZMxZhlDwLK7Rn8ND0t9b2F01UQ0LAywAAAAAOgAAAAAIAACAAAAC6pFPms6yPZ2nrIvQd4uh5rXsKX45uPaLGZEk7ZYiJCRAAAAAXguD5DvOHc92/jQuiqtXxQAAAAEG9vENTAs4XwUfY7XMgfHXPfOEvKW/XKuDZYAO0IqlZAjNOOT7HtP/fOJDWw9yOVSZxT7aSeCkBJDaKAIt6sws=\n"
       },
+      "files_exclude": null,
       "absent": null,
+      "uses_plugin_test_defs": false,
       "note": "全空数据目录 + 无监听端口；ccCheckUpdate 前把 updateLastFetch 置为 now（等价 GUI 刚启动拉过一轮，不触发后台拉取）"
     },
     "S2_healthy_core": {
@@ -342,8 +740,12 @@
           "out": "{\"ok\":true}"
         }
       ],
+      "pre_files": {},
+      "pre_hooks": null,
       "files": {},
+      "files_exclude": null,
       "absent": null,
+      "uses_plugin_test_defs": false,
       "note": "本机假核心监听测试端口：ccStart 走「探活接管」分支（不 spawn 子进程）"
     },
     "S3_files_present": {
@@ -408,6 +810,15 @@
           "out": "{\"map\":[[\"cmd\"],[\"tj\",\"comate\"],[\"cb\",\"qoder\"],[\"ext\"]],\"ok\":true}"
         }
       ],
+      "pre_files": {
+        "api-key.txt": "SAVED-KEY",
+        "close_hint_dismissed.flag": "1",
+        "close_mode.txt": "tray",
+        "keymap.json": "[[\"cmd\"],[\"tj\",\"comate\"],[\"cb\",\"qoder\"],[\"ext\"]]",
+        "notice_dismissed.flag": "1",
+        "stats.json": "{\"started\":42,\"total\":9}"
+      },
+      "pre_hooks": null,
       "files": {
         "api-key.txt": "SAVED-KEY",
         "close_hint_dismissed.flag": "1",
@@ -416,7 +827,9 @@
         "notice_dismissed.flag": "1",
         "stats.json": "{\"started\":42,\"total\":9}"
       },
+      "files_exclude": null,
       "absent": null,
+      "uses_plugin_test_defs": false,
       "note": "预置状态文件：验证读取分支与写盘口径（tray→quit 落盘、keymap 校验）"
     },
     "S4_autostart": {
@@ -436,10 +849,14 @@
           "out": "{\"msg\":\"开机自启已设置 · 登录 Windows 后将以无窗口模式自动点火\",\"ok\":true}"
         }
       ],
+      "pre_files": {},
+      "pre_hooks": null,
       "files": {
         "$APPDATA/Microsoft/Windows/Start Menu/Programs/Startup/command-code-proxy-autostart.vbs": "Set sh = CreateObject(\"WScript.Shell\")\r\nsh.Run \"\"\"$EXE\"\" -headless -port $PORT\", 0, False\r\n"
       },
+      "files_exclude": null,
       "absent": null,
+      "uses_plugin_test_defs": false,
       "note": "APPDATA 指向临时目录（并预建启动目录）：VBS 只落临时启动文件夹，不碰用户真实开机项"
     },
     "S5_keymap_bad_file": {
@@ -450,11 +867,66 @@
           "out": "{\"ok\":false,\"msg\":\"no saved keymap\"}"
         }
       ],
+      "pre_files": {
+        "keymap.json": "[[\"cmd\"],[\"nope\"]]"
+      },
+      "pre_hooks": null,
       "files": {
         "keymap.json": "[[\"cmd\"],[\"nope\"]]"
       },
+      "files_exclude": null,
       "absent": null,
+      "uses_plugin_test_defs": false,
       "note": "非法映射文件：读盘必须回落默认值且 ok:false（前端据此保持快路值、不回写）"
     }
-  }
+  },
+  "stamped_writer_cases": [
+    {
+      "name": "split-and-tail",
+      "writes": [
+        "a\nb",
+        "\nc\n",
+        "",
+        "\n\n",
+        "d"
+      ],
+      "want": "$TS a\n$TS b\n$TS c\n$TS d\n"
+    },
+    {
+      "name": "multibyte-partial",
+      "writes": [
+        "中",
+        "文\n"
+      ],
+      "want": "$TS 中\n$TS 文\n"
+    },
+    {
+      "name": "single-no-newline",
+      "writes": [
+        "x"
+      ],
+      "want": "$TS x\n"
+    },
+    {
+      "name": "only-newline",
+      "writes": [
+        "\n"
+      ],
+      "want": ""
+    },
+    {
+      "name": "crlf-keeps-cr",
+      "writes": [
+        "a\r\nb\n"
+      ],
+      "want": "$TS a\r\n$TS b\n"
+    },
+    {
+      "name": "many-lines",
+      "writes": [
+        "l1\nl2\nl3\nl4\nl5\nl6\n"
+      ],
+      "want": "$TS l1\n$TS l2\n$TS l3\n$TS l4\n$TS l5\n$TS l6\n"
+    }
+  ]
 }

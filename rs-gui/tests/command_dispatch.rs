@@ -1,8 +1,8 @@
 //! command_dispatch.rs —— 分发骨架的**真实进程**门禁（P7a 形态：单 exe 多子模式）。
 //!
 //! 只跑不产生副作用的那几条：`-version`、没有 Rust 实现的 `--plugin-tuanjie`、
-//! 未落地的 `--fax`。**不跑** GUI 分支（会弹窗）、也**不跑**任何真插件子模式
-//!（会占端口起服务）——那两类交给 P7c 的人工验收清单。
+//! 未落地的 `--fax`、以及失败子模式的诊断落盘（P7b）。**不跑** GUI 分支（会弹窗）、
+//! 也**不跑**任何真插件子模式（会占端口起服务）——那两类交给 P7c 的人工验收清单。
 
 use std::process::Command;
 
@@ -50,4 +50,36 @@ fn fax_submode_reports_not_implemented() {
         stderr.contains("尚未实现"),
         "--fax 属 P7c，必须如实报未实现：{stderr}"
     );
+}
+
+/// 子模式失败必须写 `<id>-plugin-error.log`（Go `plugin_modes.go` 的 `pluginFailLog`）：
+/// GUI 的退出监视就是读这个文件给「启动失败：…」的，缺了它界面只会停在「启动中」。
+#[test]
+fn plugin_submode_failure_writes_the_diagnostic_log() {
+    let dir = std::env::temp_dir().join(format!("rs-gui-p7b-faillog-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let out = Command::new(bin())
+        .args(["--plugin-tuanjie", "--port", "18788"])
+        .env(rs_gui::appdir::DATA_DIR_ENV, &dir)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1), "失败子模式必须非零退出");
+
+    let log = dir.join("tuanjie-plugin-error.log");
+    let body = std::fs::read_to_string(&log)
+        .expect("子模式失败必须写 <id>-plugin-error.log（GUI 的退出监视读它）");
+    assert!(
+        body.contains(" 启动失败："),
+        "AppendLog 的行头是 `YYYY-MM-DD HH:MM:SS `，正文以「启动失败：」开头：{body:?}"
+    );
+    assert!(body.contains("尚无 Rust 实现"), "诊断里要带上真实原因：{body:?}");
+    assert!(body.ends_with('\n'), "AppendLog 每行一个换行：{body:?}");
+    // AppendLog 的行头形态（Go 同款 2006-01-02 15:04:05）
+    assert_eq!(&body[4..5], "-");
+    assert_eq!(&body[7..8], "-");
+    assert_eq!(&body[10..11], " ");
+    assert_eq!(&body[13..14], ":");
+    let _ = std::fs::remove_dir_all(&dir);
 }

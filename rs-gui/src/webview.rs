@@ -5,7 +5,7 @@
 //!   * 窗口（540×760，标题同 Go `appTitle`）
 //!   * 界面经 `127.0.0.1:随机端口` 的进程内 HTTP 服务提供（**与 Go 同款**：
 //!     `http://localhost` 属安全上下文，ui.html 的 `navigator.clipboard` 等 API 才可用）
-//!   * 26 个桥函数注入 + IPC 派发到 [`Bridge::dispatch`]
+//!   * 26 个桥函数 + 4 个插件托管绑定注入 + IPC 派发到 [`Bridge::dispatch`]
 //!
 //! 属 P7c 的（本文件刻意没做，见 README 接手清单）：无边框（`setFrameless`）、窗口图标、
 //! DPI 感知、单实例、托盘（`trayStartup`/`trayHide`/`trayQuit`）、`showWindowIfHidden`
@@ -21,7 +21,7 @@ use tao::window::WindowBuilder;
 use wry::http::Request;
 use wry::{WebView, WebViewBuilder};
 
-use crate::bridge::{Bridge, BINDINGS};
+use crate::bridge::{Bridge, BINDINGS, PLUGIN_BINDINGS};
 use crate::host::{Host, NoWindowHost, WindowHost};
 use crate::state::App;
 use crate::uihtml::UI_HTML;
@@ -92,10 +92,14 @@ fn handle_ipc(bridge: &Bridge, body: &str) -> Option<(u64, String)> {
     Some((id, serde_json::to_string(&out).ok()?))
 }
 
-/// 注入的 JS 桥：把 26 个绑定名定义成全局函数，返回 Promise（ui.html 用
-/// `Promise.resolve(window['cc'+fn](...))`，串与 Promise 都吃）。
+/// 注入的 JS 桥：把 30 个绑定名（26 个 bridge.go + 4 个插件托管）定义成全局函数，
+/// 返回 Promise（ui.html 用 `Promise.resolve(window['cc'+fn](...))`，串与 Promise 都吃）。
 pub fn bridge_shim() -> String {
-    let names: Vec<String> = BINDINGS.iter().map(|n| format!("\"{n}\"")).collect();
+    let names: Vec<String> = BINDINGS
+        .iter()
+        .chain(PLUGIN_BINDINGS.iter())
+        .map(|n| format!("\"{n}\""))
+        .collect();
     format!(
         r#"(function(){{
   var pending = {{}}, seq = 0;
@@ -186,10 +190,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shim_defines_all_26_bindings() {
+    fn shim_defines_all_30_bindings() {
         let js = bridge_shim();
         for n in BINDINGS {
             assert!(js.contains(&format!("\"{n}\"")), "注入脚本缺少 {n}");
+        }
+        for n in PLUGIN_BINDINGS {
+            assert!(js.contains(&format!("\"{n}\"")), "注入脚本缺少插件托管绑定 {n}");
         }
         assert!(js.contains("window.ipc.postMessage"), "必须走 wry 的 IPC 通道");
         assert!(js.contains("Array.prototype.slice.call(arguments)"), "实参按位置透传");

@@ -11,8 +11,8 @@
 //! 顺手用 `icacls` 给当前用户补一条显式授权（失败只留痕、不阻断）。
 //!
 //! 未实现（登记在 README，属 P7c 的 `main.go` 启动收口）：`Migrate`（exe 同目录历史状态
-//! 文件搬进数据目录）与 `UpgradePlaintext`（存量明文凭据升级为密文），以及插件子进程日志用的
-//! `OpenLog` / `StampedWriter`（P7b）。
+//! 文件搬进数据目录）与 `UpgradePlaintext`（存量明文凭据升级为密文）。插件子进程日志用的
+//! `OpenLog` / `StampedWriter` 已在本文件实现（P7b 落地，6 条黄金用例锁定）。
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -204,6 +204,102 @@ pub fn rotate_log(path: &Path) {
         let _ = std::fs::rename(with_suffix(i), with_suffix(i + 1));
     }
     let _ = std::fs::rename(path, with_suffix(1));
+}
+
+/// 写完后按大小轮转（长驻日志用；Go `rotateIfBig`）。
+pub fn rotate_if_big(path: &Path) {
+    if let Ok(md) = std::fs::metadata(path) {
+        if md.len() > LOG_MAX_BYTES {
+            rotate_log(path);
+        }
+    }
+}
+
+/// 打开（不存在则创建）追加写日志文件，写失败不阻断主流程（Go `OpenLog`：
+/// 建目录失败/打开失败一律返回 `None`，调用方按「无日志」继续）。
+pub fn open_log(path: &Path) -> Option<std::fs::File> {
+    if let Some(dir) = path.parent() {
+        if !dir.as_os_str().is_empty() && std::fs::create_dir_all(dir).is_err() {
+            return None;
+        }
+    }
+    rotate_log(path);
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .write(true)
+        .open(path)
+        .ok()
+}
+
+/// 在每行前加时间戳（子进程 stdout/stderr 落盘用）——Go `appdir.StampedWriter`。
+///
+/// 逐字对齐 Go 的分行口径：按 `\n` 切；**无换行的尾巴也立刻打戳写出**；
+/// 空行跳过；`f` 为 `None` 时丢弃全部输出并返回 `len(p)`。
+pub struct StampedWriter {
+    f: Option<std::fs::File>,
+    path: PathBuf,
+    buf: Vec<u8>,
+}
+
+impl StampedWriter {
+    /// 包装一个已打开的日志文件（Go `NewStampedWriter(f)`）。
+    pub fn new(path: PathBuf, f: Option<std::fs::File>) -> Self {
+        Self {
+            f,
+            path,
+            buf: Vec::new(),
+        }
+    }
+
+    /// 直接按路径打开并包装（打不开就丢弃输出，等价 Go `OpenLog` 返回 nil 的分支）。
+    pub fn open(path: PathBuf) -> Self {
+        let f = open_log(&path);
+        Self::new(path, f)
+    }
+
+    /// 是否真的挂着日志文件（`false` = 输出被丢弃）。
+    pub fn is_open(&self) -> bool {
+        self.f.is_some()
+    }
+}
+
+impl std::io::Write for StampedWriter {
+    fn write(&mut self, p: &[u8]) -> std::io::Result<usize> {
+        let Some(f) = self.f.as_mut() else {
+            return Ok(p.len());
+        };
+        self.buf.extend_from_slice(p);
+        let mut out: Vec<u8> = Vec::with_capacity(p.len() + 24);
+        while !self.buf.is_empty() {
+            let line: Vec<u8> = match self.buf.iter().position(|&b| b == b'\n') {
+                Some(i) => {
+                    let line = self.buf[..i].to_vec();
+                    self.buf.drain(..=i);
+                    line
+                }
+                // 无换行的尾巴：本行已带时间戳，直接写出
+                None => std::mem::take(&mut self.buf),
+            };
+            if line.is_empty() {
+                continue;
+            }
+            out.extend_from_slice(crate::proc::now_local_str().as_bytes());
+            out.push(b' ');
+            out.extend_from_slice(&line);
+            out.push(b'\n');
+        }
+        f.write_all(&out)?;
+        rotate_if_big(&self.path);
+        Ok(p.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self.f.as_mut() {
+            Some(f) => f.flush(),
+            None => Ok(()),
+        }
+    }
 }
 
 /// 给文件补一条「仅当前用户」的显式授权（Go `aclUserOnly`）：
