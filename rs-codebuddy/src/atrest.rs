@@ -413,7 +413,7 @@ fn sha256(b: &[u8]) -> [u8; 32] {
 }
 
 /// 系统 CSPRNG（Go `crypto/rand.Read` 的对等物）。Windows 上取 `RtlGenRandom`。
-fn getrandom_fill(buf: &mut [u8]) -> Result<(), String> {
+pub(crate) fn getrandom_fill(buf: &mut [u8]) -> Result<(), String> {
     #[cfg(windows)]
     {
         // SystemFunction036 = RtlGenRandom（advapi32），Go 在 Windows 上走的就是它。
@@ -658,6 +658,7 @@ mod tests {
 
     #[test]
     fn encrypt_decrypt_roundtrip_with_injected_secret() {
+        let _env = crate::test_env::lock();
         std::env::set_var("WORKBUDDY_AT_REST_SECRET", "c2VjcmV0LWdvbGRlbi1zZWNyZXQ=");
         reset_key_cache();
         let env = encrypt_like(b"", "tok-roundtrip", Region::Cn).unwrap();

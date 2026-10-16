@@ -2,7 +2,7 @@
 //!
 //! 两部分：
 //! 1. **纯函数段**（`pure`）：`normalizeToolChoice` / `sanitizeToolRefs` / `requestFingerprint` /
-//!    `summarizeToolsForDiag` 的输入输出全部由真 Go 采收；
+//!    `summarizeToolsForDiag` / `collectStream` 的 EOF 残行合同的输入输出全部由真 Go 采收；
 //! 2. **HTTP 场景段**（`scenarios`，只取 `scope == "P5a"`）：每个场景按黄金里的 `upstream_spec`
 //!    起假上游、按 `auth_files` 在临时目录重建合成登录态，用**生产装配**（真凭据层 + 真池 +
 //!    真 failover）起服务，然后逐步回放请求，比 **状态码 + 响应头（白名单）+ 响应体 +
@@ -20,6 +20,7 @@
 
 mod common;
 
+use bytes::Bytes;
 use common::*;
 use serde_json::{json, Value};
 
@@ -33,8 +34,8 @@ fn field<'a>(v: &'a Value, k: &str) -> &'a Value {
 
 // ---------- 纯函数段 ----------
 
-#[test]
-fn pure_sections_match_go_golden() {
+#[tokio::test]
+async fn pure_sections_match_go_golden() {
     let g = load_golden();
     let pure = field(&g, "pure");
 
@@ -96,7 +97,34 @@ fn pure_sections_match_go_golden() {
         s += 1;
     }
 
-    println!("纯函数黄金对比：tool_choice {n} 条 / tool_refs {m} 条 / fingerprint {f} 条 / summarize_tool {s} 条，全部逐字节一致");
+    // collect_eof（P5c 审查后补修新增）：`collectStream` 的**「EOF 残行」合同**——末条
+    // **没有换行**的残行在流结束时同样要交给聚合（`bufio.ScanLines` 的 `if atEOF` 分支，
+    // 读错误也走它），只有 `[DONE]` 触发的提前 `break` 才让它作废。
+    // 基准是真 Go `collectStream` 采收的；`id`（随机 hex）与 `created`（墙钟）是易变字段，
+    // 采收侧已剔除，这里同样剔除后再逐字节比。
+    let mut e = 0;
+    for c in field(pure, "collect_eof").as_array().expect("collect_eof 段") {
+        let body = Bytes::from(field(c, "in").as_str().unwrap().as_bytes().to_vec());
+        let mut v = rs_codebuddy::collect::collect_stream(
+            futures_util::stream::iter(vec![Ok::<Bytes, std::io::Error>(body)]),
+            "fallback-model",
+        )
+        .await;
+        {
+            let obj = v.as_object_mut().expect("聚合结果是对象");
+            obj.remove("id");
+            obj.remove("created");
+        }
+        assert_eq!(
+            gjson::to_go(&v),
+            field(c, "out").as_str().unwrap(),
+            "[{}] collectStream 与 Go 不一致",
+            field(c, "desc")
+        );
+        e += 1;
+    }
+
+    println!("纯函数黄金对比：tool_choice {n} 条 / tool_refs {m} 条 / fingerprint {f} 条 / summarize_tool {s} 条 / collect_eof {e} 条，全部逐字节一致");
 }
 
 // ---------- HTTP 场景段 ----------
@@ -155,14 +183,16 @@ async fn http_scenarios_match_go_golden() {
                 steps_skipped += 1;
                 println!("SKIP(downstream-p5c): [{name}] {desc}（只比出站请求与状态码）");
             } else {
-                let want_body = normalize_uptime(
+                // P5c 起非流式 200 步的响应体也逐字节比：聚合体里的 `created` /
+                // `chatcmpl-<hex>` 是墙钟/随机字段，归一成标记（其余字节照比）。
+                let want_body = normalize_volatile_json(&normalize_uptime(
                     &rp.normalize_json_lib_error(&rp.normalize_body(
                         field(step, "resp_body").as_str().unwrap_or(""),
                     )),
-                );
-                let got_body = normalize_uptime(
+                ));
+                let got_body = normalize_volatile_json(&normalize_uptime(
                     &rp.normalize_json_lib_error(&rp.normalize_body(&r.text())),
-                );
+                ));
                 assert_eq!(got_body, want_body, "[{name} / {desc}] 响应体与 Go 不一致");
                 // 响应头（白名单，大小写不敏感：Go 采集的是规范化名，超文本头名大小写不敏感）
                 if let Some(want) = field(step, "resp_headers").as_object() {

@@ -1,5 +1,47 @@
 {
   "meta": {
+    "p5c": {
+      "generator": "zz_codebuddy_p5c_collect_test.go",
+      "scope_note": "P5c（2026-10-16）：脱敏（生产 --desensitize 口径）/ SSE 清理 / 非流式聚合 / 统计 / 路径清洗 / 积分失败措辞"
+    },
+    "p5c_cancel": {
+      "hits_with_cancel": 1,
+      "hits_without_cancel": 3,
+      "cancel_after_ms": 250,
+      "backoff_ms": [
+        800,
+        1600
+      ],
+      "note": "11133 恒定拒绝：客户端在第一次退避期间断开 ⇒ Go 回 499 且不再打上游（1 次命中）；不断开 ⇒ 重试 2 次共 3 次命中"
+    },
+    "p5c": {
+      "generator": "zz_codebuddy_p5c_collect_test.go",
+      "scope_note": "P5c（2026-10-16）：脱敏（生产 --desensitize 口径）/ SSE 清理 / 非流式聚合 / 统计 / 路径清洗 / 积分失败措辞"
+    },
+    "p5c_cancel": {
+      "hits_with_cancel": 1,
+      "hits_without_cancel": 3,
+      "cancel_after_ms": 250,
+      "backoff_ms": [
+        800,
+        1600
+      ],
+      "note": "11133 恒定拒绝：客户端在第一次退避期间断开 ⇒ Go 回 499 且不再打上游（1 次命中）；不断开 ⇒ 重试 2 次共 3 次命中"
+    },
+    "p5c": {
+      "generator": "zz_codebuddy_p5c_collect_test.go",
+      "scope_note": "P5c（2026-10-16）：脱敏（生产 --desensitize 口径）/ SSE 清理 / 非流式聚合 / 统计 / 路径清洗 / 积分失败措辞"
+    },
+    "p5c_cancel": {
+      "hits_with_cancel": 1,
+      "hits_without_cancel": 3,
+      "cancel_after_ms": 250,
+      "backoff_ms": [
+        800,
+        1600
+      ],
+      "note": "11133 恒定拒绝：客户端在第一次退避期间断开 ⇒ Go 回 499 且不再打上游（1 次命中）；不断开 ⇒ 重试 2 次共 3 次命中"
+    },
     "auth_fixture": {
       "domain_cn": "codebuddy.cn",
       "domain_intl": "workbuddy.ai",
@@ -73,6 +115,33 @@
     "scope_note": "scenarios[].scope：P5a = 合同与请求侧（含 chat-badjson / 11133 重试等）；P5b = 账号池 / 凭据 / 额度 / failover。两侧都走 cred_mode=real（Rust 侧按 auth_files 在临时 auth 目录重建合成 .info，含 $wbEncrypted 加密态）。"
   },
   "pure": {
+    "collect_eof": [
+      {
+        "desc": "末帧无换行：EOF 残行必须被聚合（内容 + finish_reason + usage 都来自残行）",
+        "in": "data: {\"model\":\"m-eof\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"he\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"llo\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"!\"},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":4,\"total_tokens\":7}}",
+        "out": "{\"choices\":[{\"finish_reason\":\"length\",\"index\":0,\"message\":{\"content\":\"hello!\",\"role\":\"assistant\"}}],\"finish_reason_debug\":\"length\",\"model\":\"m-eof\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":4,\"prompt_tokens\":3,\"total_tokens\":7}}"
+      },
+      {
+        "desc": "末帧带换行（对照：同一批帧的完整形态，聚合结果应与上一条相同）",
+        "in": "data: {\"model\":\"m-eof\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"he\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"llo\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"!\"},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":4,\"total_tokens\":7}}\n",
+        "out": "{\"choices\":[{\"finish_reason\":\"length\",\"index\":0,\"message\":{\"content\":\"hello!\",\"role\":\"assistant\"}}],\"finish_reason_debug\":\"length\",\"model\":\"m-eof\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":4,\"prompt_tokens\":3,\"total_tokens\":7}}"
+      },
+      {
+        "desc": "[DONE] 之后的残行不得被聚合（Go 在 [DONE] 处 break，残行作废）",
+        "in": "data: {\"model\":\"m-eof\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"he\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"llo\"}}]}\n\ndata: [DONE]\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"AFTER\"}}],\"usage\":{\"prompt_tokens\":999,\"completion_tokens\":999,\"total_tokens\":999}}",
+        "out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hello\",\"role\":\"assistant\"}}],\"finish_reason_debug\":\"stop\",\"model\":\"m-eof\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}"
+      },
+      {
+        "desc": "残行本身就是 [DONE]（无换行）：只作收尾，不改变已有聚合",
+        "in": "data: {\"model\":\"m-eof\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"he\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"llo\"}}]}\n\ndata: [DONE]",
+        "out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hello\",\"role\":\"assistant\"}}],\"finish_reason_debug\":\"stop\",\"model\":\"m-eof\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}"
+      },
+      {
+        "desc": "残行是坏 JSON：按行规则跳过，不影响已有聚合",
+        "in": "data: {\"model\":\"m-eof\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"he\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"llo\"}}]}\n\ndata: {broken",
+        "out": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hello\",\"role\":\"assistant\"}}],\"finish_reason_debug\":\"stop\",\"model\":\"m-eof\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}"
+      }
+    ],
     "fingerprint": [
       {
         "desc": "最小请求",
@@ -1229,8 +1298,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-6e832e7902ab\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
-          "body_compare": "outbound-only"
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-6e832e7902ab\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
         },
         {
           "desc": "messages 含非对象项",
@@ -1245,8 +1313,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-70027b4b34ca\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
-          "body_compare": "outbound-only"
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-70027b4b34ca\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
         },
         {
           "desc": "tool_choice 无 tools → 删除",
@@ -1261,8 +1328,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-2601da144aa4\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
-          "body_compare": "outbound-only"
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-2601da144aa4\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
         },
         {
           "desc": "非流式（下游聚合 = P5c）",
@@ -1277,8 +1343,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-c54b2b72f77e\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
-          "body_compare": "outbound-only"
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-c54b2b72f77e\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
         },
         {
           "desc": "已带 stream_options 不覆盖",
@@ -1417,8 +1482,7 @@
             "content-length": "282",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-9cc336b070b1\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
-          "body_compare": "outbound-only"
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-9cc336b070b1\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
         },
         {
           "desc": "已有 system → 不动",
@@ -1433,8 +1497,7 @@
             "content-length": "282",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-9e7cb2debbf4\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
-          "body_compare": "outbound-only"
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-9e7cb2debbf4\",\"model\":\"hy3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
         }
       ],
       "upstream_seen": [
@@ -1748,8 +1811,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-7f79db87ce95\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
-          "body_compare": "outbound-only"
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119310,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-7f79db87ce95\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
         },
         {
           "desc": "重复键后者生效",
@@ -4141,8 +4203,7 @@
             "content-length": "283",
             "content-type": "application/json"
           },
-          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119317,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-72fc9c468896\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n",
-          "body_compare": "outbound-only"
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792119317,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-72fc9c468896\",\"model\":\"auto\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
         },
         {
           "desc": "快照（第一个号 exhausted）",
@@ -4478,6 +4539,935 @@
       "per_user_hits": {
         "u-golden": 2
       }
+    },
+    {
+      "name": "p5c-desensitize-cn",
+      "desc": "脱敏全角色（生产 --desensitize）：指纹删除 + 零宽插入 + harness 压缩 + 工具元数据（description/title 删除、properties/$defs 名保留、const/default/enum/examples 原样）",
+      "region": "CN",
+      "scope": "P5c",
+      "desensitize": true,
+      "upstream_desc": "恒 200 干净 SSE",
+      "upstream_spec": {
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-p5c\"},\"auth\":{\"accessToken\":\"tok-u-p5c\",\"domain\":\"workbuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792152000000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "脱敏载荷（流式）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"developer\",\"content\":\"You are Anthropic; avoid malware and backdoor code.\"},{\"role\":\"system\",\"content\":\"You are a coding agent running in the Codex CLI. Within this context, Codex refers to the CLI. # How you work\"},{\"role\":\"system\",\"content\":\"You are Claude Code, Anthropic's official CLI. Options: Claude Opus, Claude Sonnet, Claude Haiku, Claude Fable.\"},{\"role\":\"system\",\"content\":\"Preamble. <permissions instructions> Filesystem sandboxing defines which files can be read or written. ## How to request escalation\"},{\"role\":\"system\",\"content\":\"<skills_instructions> ### Available skills ### How to use skills\"},{\"role\":\"system\",\"content\":\"Neutral system line: sidebar and drugstore are not denied.\"},{\"role\":\"user\",\"content\":\"Fix the SQL injection in Main branch (you will usually use this for PRs) please; also run main branch (you will usually use this for prs) checks; keep MAIN BRANCH (YOU WILL USUALLY USE THIS FOR PRS) casing. Near-misses: attacker exploits sandboxes drugstore bombardments API errors killers.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Check XSS, CSRF, phishing and brute-force.\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.invalid/x.png\"}}]},{\"role\":\"user\",\"content\":\"# AGENTS.md instructions for repo <environment_context>big</environment_context>\"},{\"role\":\"user\",\"content\":\"<system-reminder>be careful</system-reminder>\"},{\"role\":\"assistant\",\"content\":\"I used privilege escalation and a reverse shell; also Co-Authored-By: noreply@anthropic.com.\"},{\"role\":\"tool\",\"content\":\"{\\\"output\\\":\\\"remote code execution blocked; C2 frameworks detected; zero-day 0day; red-teaming; detection evasion; command and control\\\"}\"},{\"role\":\"assistant\",\"content\":\"Attack, attacks, cybersecurity review, security review, penetration testing, penetration test, weaponize, weaponized, harmful, dangerous, abuse, abusive, illegal, terrorist, terrorism, bomb, weapon, weapons, drug, drugs, narcotic, suicide, self-harm, murder, kill, violence, violent, escalated privileges, escalated, escalation, destructive action, destructive command, destructive, supply chain compromise, supply-chain compromise, credential testing, credential stuffing, mass targeting, malicious purposes, malicious intent, botnet, rootkit, keylogger, ransomware, vulnerability, vulnerabilities, unsandboxed, sandboxing, DoS, DDoS, exploit, exploit development, hacking, injection, OpenAI Codex, Illegal API invocation, unapproved channel, Error: API error.\"},{\"role\":\"assistant\",\"content\":null},{\"role\":\"assistant\",\"content\":42},1,\"junk\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"description\":\"Use for XSS checks\",\"title\":\"Title with malware\",\"parameters\":{\"type\":\"object\",\"properties\":{\"credential testing\":{\"type\":\"object\",\"description\":\"name-preserved\",\"title\":\"name title\"},\"plain\":{\"type\":\"string\",\"description\":\"zero-day exploit\",\"title\":\"p title\"},\"deep\":{\"description\":\"kept desc\",\"const\":{\"description\":\"inside const\"},\"default\":\"backdoor\",\"enum\":[\"ransomware\"],\"examples\":[{\"title\":\"kept\"}],\"dependentRequired\":{\"a\":[\"b\"]}},\"any\":{\"anyOf\":[{\"description\":\"inner one\"},{\"title\":\"inner title\"}]},\"arr\":[{\"description\":\"in array\"}],\"refd\":{\"$ref\":\"#/$defs/A\"}},\"required\":[\"plain\"],\"$defs\":{\"A\":{\"type\":\"object\",\"description\":\"def desc\",\"title\":\"def title\",\"properties\":{\"n\":{\"$ref\":\"#/$defs/A\"}}}},\"definitions\":{\"D2\":{\"description\":\"d2\"}},\"patternProperties\":{\"^x\":{\"description\":\"pp\"}},\"dependentSchemas\":{\"a\":{\"description\":\"ds\"}},\"dependencies\":{\"b\":{\"description\":\"dep\"}}},\"strict\":true}},\"not-a-tool\",42,{\"type\":\"function\",\"function\":{\"name\":\"n\",\"parameters\":\"nope\",\"description\":123}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"t\"}},\"temperature\":0.2,\"stream\":true,\"unknown\":\"dropped\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        },
+        {
+          "desc": "脱敏载荷（非流式）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"developer\",\"content\":\"You are Anthropic; avoid malware and backdoor code.\"},{\"role\":\"system\",\"content\":\"You are a coding agent running in the Codex CLI. Within this context, Codex refers to the CLI. # How you work\"},{\"role\":\"system\",\"content\":\"You are Claude Code, Anthropic's official CLI. Options: Claude Opus, Claude Sonnet, Claude Haiku, Claude Fable.\"},{\"role\":\"system\",\"content\":\"Preamble. <permissions instructions> Filesystem sandboxing defines which files can be read or written. ## How to request escalation\"},{\"role\":\"system\",\"content\":\"<skills_instructions> ### Available skills ### How to use skills\"},{\"role\":\"system\",\"content\":\"Neutral system line: sidebar and drugstore are not denied.\"},{\"role\":\"user\",\"content\":\"Fix the SQL injection in Main branch (you will usually use this for PRs) please; also run main branch (you will usually use this for prs) checks; keep MAIN BRANCH (YOU WILL USUALLY USE THIS FOR PRS) casing. Near-misses: attacker exploits sandboxes drugstore bombardments API errors killers.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Check XSS, CSRF, phishing and brute-force.\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.invalid/x.png\"}}]},{\"role\":\"user\",\"content\":\"# AGENTS.md instructions for repo <environment_context>big</environment_context>\"},{\"role\":\"user\",\"content\":\"<system-reminder>be careful</system-reminder>\"},{\"role\":\"assistant\",\"content\":\"I used privilege escalation and a reverse shell; also Co-Authored-By: noreply@anthropic.com.\"},{\"role\":\"tool\",\"content\":\"{\\\"output\\\":\\\"remote code execution blocked; C2 frameworks detected; zero-day 0day; red-teaming; detection evasion; command and control\\\"}\"},{\"role\":\"assistant\",\"content\":\"Attack, attacks, cybersecurity review, security review, penetration testing, penetration test, weaponize, weaponized, harmful, dangerous, abuse, abusive, illegal, terrorist, terrorism, bomb, weapon, weapons, drug, drugs, narcotic, suicide, self-harm, murder, kill, violence, violent, escalated privileges, escalated, escalation, destructive action, destructive command, destructive, supply chain compromise, supply-chain compromise, credential testing, credential stuffing, mass targeting, malicious purposes, malicious intent, botnet, rootkit, keylogger, ransomware, vulnerability, vulnerabilities, unsandboxed, sandboxing, DoS, DDoS, exploit, exploit development, hacking, injection, OpenAI Codex, Illegal API invocation, unapproved channel, Error: API error.\"},{\"role\":\"assistant\",\"content\":null},{\"role\":\"assistant\",\"content\":42},1,\"junk\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"t\",\"description\":\"Use for XSS checks\",\"title\":\"Title with malware\",\"parameters\":{\"type\":\"object\",\"properties\":{\"credential testing\":{\"type\":\"object\",\"description\":\"name-preserved\",\"title\":\"name title\"},\"plain\":{\"type\":\"string\",\"description\":\"zero-day exploit\",\"title\":\"p title\"},\"deep\":{\"description\":\"kept desc\",\"const\":{\"description\":\"inside const\"},\"default\":\"backdoor\",\"enum\":[\"ransomware\"],\"examples\":[{\"title\":\"kept\"}],\"dependentRequired\":{\"a\":[\"b\"]}},\"any\":{\"anyOf\":[{\"description\":\"inner one\"},{\"title\":\"inner title\"}]},\"arr\":[{\"description\":\"in array\"}],\"refd\":{\"$ref\":\"#/$defs/A\"}},\"required\":[\"plain\"],\"$defs\":{\"A\":{\"type\":\"object\",\"description\":\"def desc\",\"title\":\"def title\",\"properties\":{\"n\":{\"$ref\":\"#/$defs/A\"}}}},\"definitions\":{\"D2\":{\"description\":\"d2\"}},\"patternProperties\":{\"^x\":{\"description\":\"pp\"}},\"dependentSchemas\":{\"a\":{\"description\":\"ds\"}},\"dependencies\":{\"b\":{\"description\":\"dep\"}}},\"strict\":true}},\"not-a-tool\",42,{\"type\":\"function\",\"function\":{\"name\":\"n\",\"parameters\":\"nope\",\"description\":123}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"t\"}},\"temperature\":0.2,\"stream\":false,\"unknown\":\"dropped\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "286",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792121962,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-3dbea43a69fe\",\"model\":\"kimi-k3\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"You are A​nthropic; avoid m​alware and b​ackdoor code.\",\"role\":\"system\"},{\"content\":\"You are a coding assistant in C​odex CLI. Be precise, helpful, concise, and safe. Use available tools when needed, follow repository instructions, and keep the user informed.\",\"role\":\"system\"},{\"content\":\"You are a coding assistant. Be precise, helpful, concise, and safe. Use available tools when needed, follow repository instructions, and keep the user informed.\",\"role\":\"system\"},{\"content\":\"Runtime permissions apply: filesystem access may be s​andboxed, network may be restricted, and some commands may require user approval.\",\"role\":\"system\"},{\"content\":\"Runtime skill metadata is available. Use relevant skills only when explicitly requested or clearly applicable.\",\"role\":\"system\"},{\"content\":\"Neutral system line: sidebar and drugstore are not denied.\",\"role\":\"system\"},{\"content\":\"Fix the S​QL injection in Main branch please; also run main branch checks; keep MAIN BRANCH casing. Near-misses: attacker exploits sandboxes drugstore bombardments API errors killers.\",\"role\":\"user\"},{\"content\":[{\"text\":\"Check X​SS, C​SRF, p​hishing and b​rute-force.\",\"type\":\"text\"},{\"image_url\":{\"url\":\"https://example.invalid/x.png\"},\"type\":\"image_url\"}],\"role\":\"user\"},{\"content\":\"Repository instructions and environment context are provided. Follow repository guidance while answering the user's actual request.\",\"role\":\"user\"},{\"content\":\"Repository instructions and environment context are provided. Follow repository guidance while answering the user's actual request.\",\"role\":\"user\"},{\"content\":\"I used p​rivilege escalation and a r​everse shell; also C​o-Authored-By: n​oreply@anthropic.com.\",\"role\":\"assistant\"},{\"content\":\"{\\\"output\\\":\\\"r​emote code execution blocked; C​2 frameworks detected; z​ero-day 0​day; r​ed-teaming; d​etection evasion; c​ommand and control\\\"}\",\"role\":\"tool\"},{\"content\":\"A​ttack, a​ttacks, c​ybersecurity review, s​ecurity review, p​enetration testing, p​enetration test, w​eaponize, w​eaponized, h​armful, d​angerous, a​buse, a​busive, i​llegal, t​errorist, t​errorism, b​omb, w​eapon, w​eapons, d​rug, d​rugs, n​arcotic, s​uicide, s​elf-harm, m​urder, k​ill, v​iolence, v​iolent, e​scalated privileges, e​scalated, e​scalation, d​estructive action, d​estructive command, d​estructive, s​upply chain compromise, s​upply-chain compromise, c​redential testing, c​redential stuffing, m​ass targeting, m​alicious purposes, m​alicious intent, b​otnet, r​ootkit, k​eylogger, r​ansomware, v​ulnerability, v​ulnerabilities, u​nsandboxed, s​andboxing, D​oS, D​DoS, e​xploit, e​xploit development, h​acking, i​njection, O​penAI C​odex, I​llegal API invocation, u​napproved channel, E​rror: API error.\",\"role\":\"assistant\"},{\"content\":null,\"role\":\"assistant\"},{\"content\":42,\"role\":\"assistant\"},1,\"junk\"],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.2,\"tool_choice\":\"required\",\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"definitions\":{\"D2\":{}},\"dependencies\":{\"b\":{}},\"dependentSchemas\":{\"a\":{}},\"patternProperties\":{\"^x\":{}},\"properties\":{\"any\":{\"anyOf\":[{},{}]},\"arr\":[{}],\"credential testing\":{\"type\":\"object\"},\"deep\":{\"const\":{\"description\":\"inside const\"},\"default\":\"backdoor\",\"dependentRequired\":{\"a\":[\"b\"]},\"enum\":[\"ransomware\"],\"examples\":[{\"title\":\"kept\"}]},\"plain\":{\"type\":\"string\"},\"refd\":{\"properties\":{\"n\":{\"type\":\"object\"}},\"type\":\"object\"}},\"required\":[\"plain\"],\"type\":\"object\"},\"strict\":true},\"type\":\"function\"},\"not-a-tool\",42,{\"function\":{\"description\":123,\"name\":\"n\",\"parameters\":\"nope\"},\"type\":\"function\"}]}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"You are A​nthropic; avoid m​alware and b​ackdoor code.\",\"role\":\"system\"},{\"content\":\"You are a coding assistant in C​odex CLI. Be precise, helpful, concise, and safe. Use available tools when needed, follow repository instructions, and keep the user informed.\",\"role\":\"system\"},{\"content\":\"You are a coding assistant. Be precise, helpful, concise, and safe. Use available tools when needed, follow repository instructions, and keep the user informed.\",\"role\":\"system\"},{\"content\":\"Runtime permissions apply: filesystem access may be s​andboxed, network may be restricted, and some commands may require user approval.\",\"role\":\"system\"},{\"content\":\"Runtime skill metadata is available. Use relevant skills only when explicitly requested or clearly applicable.\",\"role\":\"system\"},{\"content\":\"Neutral system line: sidebar and drugstore are not denied.\",\"role\":\"system\"},{\"content\":\"Fix the S​QL injection in Main branch please; also run main branch checks; keep MAIN BRANCH casing. Near-misses: attacker exploits sandboxes drugstore bombardments API errors killers.\",\"role\":\"user\"},{\"content\":[{\"text\":\"Check X​SS, C​SRF, p​hishing and b​rute-force.\",\"type\":\"text\"},{\"image_url\":{\"url\":\"https://example.invalid/x.png\"},\"type\":\"image_url\"}],\"role\":\"user\"},{\"content\":\"Repository instructions and environment context are provided. Follow repository guidance while answering the user's actual request.\",\"role\":\"user\"},{\"content\":\"Repository instructions and environment context are provided. Follow repository guidance while answering the user's actual request.\",\"role\":\"user\"},{\"content\":\"I used p​rivilege escalation and a r​everse shell; also C​o-Authored-By: n​oreply@anthropic.com.\",\"role\":\"assistant\"},{\"content\":\"{\\\"output\\\":\\\"r​emote code execution blocked; C​2 frameworks detected; z​ero-day 0​day; r​ed-teaming; d​etection evasion; c​ommand and control\\\"}\",\"role\":\"tool\"},{\"content\":\"A​ttack, a​ttacks, c​ybersecurity review, s​ecurity review, p​enetration testing, p​enetration test, w​eaponize, w​eaponized, h​armful, d​angerous, a​buse, a​busive, i​llegal, t​errorist, t​errorism, b​omb, w​eapon, w​eapons, d​rug, d​rugs, n​arcotic, s​uicide, s​elf-harm, m​urder, k​ill, v​iolence, v​iolent, e​scalated privileges, e​scalated, e​scalation, d​estructive action, d​estructive command, d​estructive, s​upply chain compromise, s​upply-chain compromise, c​redential testing, c​redential stuffing, m​ass targeting, m​alicious purposes, m​alicious intent, b​otnet, r​ootkit, k​eylogger, r​ansomware, v​ulnerability, v​ulnerabilities, u​nsandboxed, s​andboxing, D​oS, D​DoS, e​xploit, e​xploit development, h​acking, i​njection, O​penAI C​odex, I​llegal API invocation, u​napproved channel, E​rror: API error.\",\"role\":\"assistant\"},{\"content\":null,\"role\":\"assistant\"},{\"content\":42,\"role\":\"assistant\"},1,\"junk\"],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"temperature\":0.2,\"tool_choice\":\"required\",\"tools\":[{\"function\":{\"name\":\"t\",\"parameters\":{\"definitions\":{\"D2\":{}},\"dependencies\":{\"b\":{}},\"dependentSchemas\":{\"a\":{}},\"patternProperties\":{\"^x\":{}},\"properties\":{\"any\":{\"anyOf\":[{},{}]},\"arr\":[{}],\"credential testing\":{\"type\":\"object\"},\"deep\":{\"const\":{\"description\":\"inside const\"},\"default\":\"backdoor\",\"dependentRequired\":{\"a\":[\"b\"]},\"enum\":[\"ransomware\"],\"examples\":[{\"title\":\"kept\"}]},\"plain\":{\"type\":\"string\"},\"refd\":{\"properties\":{\"n\":{\"type\":\"object\"}},\"type\":\"object\"}},\"required\":[\"plain\"],\"type\":\"object\"},\"strict\":true},\"type\":\"function\"},\"not-a-tool\",42,{\"function\":{\"description\":123,\"name\":\"n\",\"parameters\":\"nope\"},\"type\":\"function\"}]}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        }
+      ]
+    },
+    {
+      "name": "p5c-desensitize-intl",
+      "desc": "INTL 脱敏 + ForceSystem：补的 system 是 INTL 常量（在脱敏之后追加，不参与脱敏）",
+      "region": "INTL",
+      "scope": "P5c",
+      "desensitize": true,
+      "upstream_desc": "恒 200 干净 SSE",
+      "upstream_spec": {
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop-intl.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-p5c-intl\"},\"auth\":{\"accessToken\":\"tok-u-p5c-intl\",\"domain\":\"workbuddy.ai\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792152000000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "INTL 脱敏（流式）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"hy3\",\"messages\":[{\"role\":\"user\",\"content\":\"Run a security review of the sandbox and XSS handling.\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://www.codebuddy.ai/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"You are a helpful assistant.\",\"role\":\"system\"},{\"content\":\"Run a s​ecurity review of the s​andbox and X​SS handling.\",\"role\":\"user\"}],\"model\":\"hy3\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c-intl",
+            "Content-Type": "application/json",
+            "User-Agent": "CLI/2.63.2 CodeBuddy/2.63.2",
+            "X-Domain": "workbuddy.ai",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c-intl"
+          }
+        }
+      ]
+    },
+    {
+      "name": "p5c-stream-clean",
+      "desc": "流式 SSE 逐行清洗：剔空字符串 content/reasoning_content 与空数组 tool_calls；非 data 行/[DONE]/坏 JSON/choices 非数组/缺 delta 一律原样；CRLF 行尾；末尾残行走 flush",
+      "region": "CN",
+      "scope": "P5c",
+      "desensitize": false,
+      "upstream_desc": "恒 200 脏 SSE（每帧三个空键 + 各种不可改行，末行无换行）",
+      "upstream_spec": {
+        "status": 200,
+        "body": "data: {\"id\":\"c1\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":\"\",\"tool_calls\":[]},\"finish_reason\":null}]}\ndata: {\"id\":\"c2\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"reasoning_content\":\"think\",\"tool_calls\":[]},\"finish_reason\":null}]}\ndata: {\"id\":\"c3\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\",\"reasoning_content\":\"\"},\"finish_reason\":null}]}\n: comment line\nevent: ping\ndata: {\"id\":\"c4\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"content\":\"\"},\"finish_reason\":null}]}\ndata: not-json\ndata: {\"id\":\"c5\",\"choices\":\"nope\"}\ndata: {\"id\":\"c6\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\"}]}\ndata: {\"id\":\"c7\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"\",\"content\":\"\"},\"finish_reason\":\"stop\"}]}\r\ndata: {\"id\":\"c8\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"z\",\"reasoning_content\":\"\",\"tool_calls\":[]},\"finish_reason\":null}]}\ndata: [DONE]\ndata: {\"id\":\"c9\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"reasoning_content\":\"\"},\"finish_reason\":null}]}",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-p5c\"},\"auth\":{\"accessToken\":\"tok-u-p5c\",\"domain\":\"workbuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792152000000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "脏载荷（流式）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"auto\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"id\":\"c1\"}\ndata: {\"choices\":[{\"delta\":{\"reasoning_content\":\"think\"},\"finish_reason\":null,\"index\":0}],\"id\":\"c2\"}\ndata: {\"choices\":[{\"delta\":{\"content\":\"hello\"},\"finish_reason\":null,\"index\":0}],\"id\":\"c3\"}\n: comment line\nevent: ping\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"{}\",\"name\":\"f\"},\"id\":\"call_1\",\"index\":0,\"type\":\"function\"}]},\"finish_reason\":null,\"index\":0}],\"id\":\"c4\"}\ndata: not-json\ndata: {\"id\":\"c5\",\"choices\":\"nope\"}\ndata: {\"id\":\"c6\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\"}]}\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"id\":\"c7\"}\ndata: {\"choices\":[{\"delta\":{\"content\":\"z\"},\"finish_reason\":null,\"index\":0}],\"id\":\"c8\"}\ndata: [DONE]\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":null,\"index\":0}],\"id\":\"c9\"}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"auto\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        }
+      ]
+    },
+    {
+      "name": "p5c-nonstream-collect",
+      "desc": "非流式聚合 collectStream：content 拼接 / tool_calls 按 index 合并 + 分片 arguments / finish_reason 缺省规则 / usage 透传 / model 覆写 / [DONE] 之后不再消费 / 无 data 行与空体",
+      "region": "CN",
+      "scope": "P5c",
+      "desensitize": false,
+      "upstream_desc": "sequence：富样本 → 无 usage 无 finish_reason → 无 data 行 → 空体",
+      "upstream_spec": {
+        "items": [
+          {
+            "status": 200,
+            "body": "data: {\"id\":\"c\",\"model\":\"kimi-k3-upstream\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"he\"},\"finish_reason\":null}]}\n\njunk line\ndata: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"llo\"},\"finish_reason\":null}]}\n\ndata: {broken\n\ndata: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" world\",\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"f\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"a\\\"\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\":1}\"}},{\"index\":1,\"id\":\"call_2\",\"function\":{\"name\":\"g\",\"arguments\":\"{}\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"c\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":22,\"total_tokens\":33}}\n\ndata: [DONE]\n\ndata: {\"id\":\"c-after-done\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"AFTER\"},\"finish_reason\":null}]}\n\n",
+            "headers": {
+              "Content-Type": "text/event-stream"
+            }
+          },
+          {
+            "status": 200,
+            "body": "\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"only\"},\"finish_reason\":null}]}\n\ndata: [DONE]\n\n",
+            "headers": {
+              "Content-Type": "text/event-stream"
+            }
+          },
+          {
+            "status": 200,
+            "body": "garbage without data lines\nanother line\n",
+            "headers": {
+              "Content-Type": "text/event-stream"
+            }
+          },
+          {
+            "status": 200,
+            "headers": {
+              "Content-Type": "text/event-stream"
+            }
+          }
+        ]
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-p5c\"},\"auth\":{\"accessToken\":\"tok-u-p5c\",\"domain\":\"workbuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792152000000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "移除唯一账号（让非流式走完整聚合）",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"remove\",\"uid\":\"u-p5c\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "12",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":true}\n"
+        },
+        {
+          "desc": "富样本聚合",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"glm-5.2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "491",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"tool_calls\",\"index\":0,\"message\":{\"content\":\"hello world\",\"role\":\"assistant\",\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"a\\\":1}\",\"name\":\"f\"},\"id\":\"call_1\",\"type\":\"function\"},{\"function\":{\"arguments\":\"{}\",\"name\":\"g\"},\"id\":\"call_2\",\"type\":\"function\"}]}}],\"created\":1792121962,\"finish_reason_debug\":\"tool_calls\",\"id\":\"chatcmpl-cd0fd848a068\",\"model\":\"kimi-k3-upstream\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":22,\"prompt_tokens\":11,\"total_tokens\":33}}\n"
+        },
+        {
+          "desc": "无 usage 无 finish_reason",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"glm-5.2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "288",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"only\",\"role\":\"assistant\"}}],\"created\":1792121962,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-13b30f22d1fe\",\"model\":\"glm-5.2\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
+        },
+        {
+          "desc": "无 data 行",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"glm-5.2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "286",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792121962,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-35fe8848025d\",\"model\":\"glm-5.2\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
+        },
+        {
+          "desc": "空体",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"glm-5.2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "286",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792121962,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-b249c78bde7e\",\"model\":\"glm-5.2\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        },
+        {
+          "seq": 4,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        }
+      ]
+    },
+    {
+      "name": "p5c-stats",
+      "desc": "统计：流式 usageScanner 入账 / 非流式 collectStream 入账 / 全 0 不入账 / codebuddy-stats.json 每次 addStat 立即落盘（Go 无节流）/ /v1/stats 不看方法",
+      "region": "CN",
+      "scope": "P5c",
+      "desensitize": false,
+      "upstream_desc": "sequence：带 usage 的 SSE ×2 → 无 usage 的 SSE",
+      "upstream_spec": {
+        "items": [
+          {
+            "status": 200,
+            "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+            "headers": {
+              "Content-Type": "text/event-stream"
+            }
+          },
+          {
+            "status": 200,
+            "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+            "headers": {
+              "Content-Type": "text/event-stream"
+            }
+          },
+          {
+            "status": 200,
+            "body": "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"x\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+            "headers": {
+              "Content-Type": "text/event-stream"
+            }
+          }
+        ]
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-p5c\"},\"auth\":{\"accessToken\":\"tok-u-p5c\",\"domain\":\"workbuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792152000000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "流式入账（kimi-k3）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"kimi-k3\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "cache-control": "no-cache",
+            "content-type": "text/event-stream",
+            "x-accel-buffering": "no"
+          },
+          "resp_body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+        },
+        {
+          "desc": "移除唯一账号",
+          "method": "POST",
+          "path": "/v1/accounts",
+          "req_body": "{\"action\":\"remove\",\"uid\":\"u-p5c\"}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "12",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"ok\":true}\n"
+        },
+        {
+          "desc": "非流式入账（glm-5.2，usage 来自聚合）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"glm-5.2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "286",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"hi\",\"role\":\"assistant\"}}],\"created\":1792121962,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-3decbcd692ad\",\"model\":\"glm-5.2\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":7,\"total_tokens\":9}}\n"
+        },
+        {
+          "desc": "非流式无 usage → 不入账",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"glm-5.2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "285",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"x\",\"role\":\"assistant\"}}],\"created\":1792121962,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-c9c92019537f\",\"model\":\"glm-5.2\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":0,\"prompt_tokens\":0,\"total_tokens\":0}}\n"
+        },
+        {
+          "desc": "GET /v1/stats",
+          "method": "GET",
+          "path": "/v1/stats",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "169",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"models\":{\"glm-5.2\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":2,\"totalTokens\":9},\"kimi-k3\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":2,\"totalTokens\":9}},\"uptimeSec\":0}\n"
+        },
+        {
+          "desc": "POST /v1/stats（不看方法）",
+          "method": "POST",
+          "path": "/v1/stats",
+          "req_body": "{\"x\":1}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "169",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"models\":{\"glm-5.2\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":2,\"totalTokens\":9},\"kimi-k3\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":2,\"totalTokens\":9}},\"uptimeSec\":0}\n"
+        },
+        {
+          "desc": "再取一次（幂等）",
+          "method": "GET",
+          "path": "/v1/stats",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "169",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"models\":{\"glm-5.2\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":2,\"totalTokens\":9},\"kimi-k3\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":2,\"totalTokens\":9}},\"uptimeSec\":0}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"kimi-k3\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        }
+      ],
+      "stats_file": "{\"glm-5.2\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":2,\"totalTokens\":9},\"kimi-k3\":{\"calls\":1,\"inputTokens\":7,\"outputTokens\":2,\"totalTokens\":9}}",
+      "stats_file_exists": true
+    },
+    {
+      "name": "p5c-paths",
+      "desc": "ServeMux 路径清洗（双斜杠 / 点段 → 重定向）+ /v1/stats 的路由边界（不看方法；双斜杠路径先清洗）",
+      "region": "CN",
+      "scope": "P5c",
+      "desensitize": false,
+      "upstream_desc": "不触发上游（全部是路由层应答）",
+      "upstream_spec": {
+        "status": 200,
+        "body": "data: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-golden\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-p5c\"},\"auth\":{\"accessToken\":\"tok-u-p5c\",\"domain\":\"workbuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792152000000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "GET //v1/models（原始应答）",
+          "method": "GET",
+          "path": "//v1/models",
+          "resp_status": 307,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "46",
+            "content-type": "text/html; charset=utf-8",
+            "location": "/v1/models"
+          },
+          "resp_body": "<a href=\"/v1/models\">Temporary Redirect</a>.\n\n",
+          "no_follow": true
+        },
+        {
+          "desc": "POST //v1/models（原始应答）",
+          "method": "POST",
+          "path": "//v1/models",
+          "resp_status": 307,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "0",
+            "location": "/v1/models"
+          },
+          "resp_body": "",
+          "no_follow": true
+        },
+        {
+          "desc": "GET /v1/../v1/models（原始路径，裸 socket）",
+          "method": "GET",
+          "path": "/v1/../v1/models",
+          "resp_status": 307,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "46",
+            "content-type": "text/html; charset=utf-8",
+            "location": "/v1/models"
+          },
+          "resp_body": "<a href=\"/v1/models\">Temporary Redirect</a>.\n\n",
+          "no_follow": true,
+          "raw_request": true
+        },
+        {
+          "desc": "GET //v1/stats?a=1（原始应答，带查询串）",
+          "method": "GET",
+          "path": "//v1/stats?a=1",
+          "resp_status": 307,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "49",
+            "content-type": "text/html; charset=utf-8",
+            "location": "/v1/stats?a=1"
+          },
+          "resp_body": "<a href=\"/v1/stats?a=1\">Temporary Redirect</a>.\n\n",
+          "no_follow": true
+        },
+        {
+          "desc": "GET /v1/stats",
+          "method": "GET",
+          "path": "/v1/stats",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "28",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"models\":{},\"uptimeSec\":0}\n"
+        },
+        {
+          "desc": "GET /v1/models/?x=1 → 404",
+          "method": "GET",
+          "path": "/v1/models/?x=1",
+          "resp_status": 404,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "19",
+            "content-type": "text/plain; charset=utf-8",
+            "x-content-type-options": "nosniff"
+          },
+          "resp_body": "404 page not found\n"
+        }
+      ]
+    },
+    {
+      "name": "p5c-quota-errors",
+      "desc": "积分响应失败措辞：非 JSON 体（解析失败）/ code!=0 / 非 200（typed error）三态",
+      "region": "CN",
+      "scope": "P5c",
+      "desensitize": false,
+      "upstream_desc": "sequence：HTML → code=500 → 正常包 → 502",
+      "upstream_spec": {
+        "items": [
+          {
+            "status": 200,
+            "body": "<html>gateway</html>",
+            "headers": {
+              "Content-Type": "text/html"
+            }
+          },
+          {
+            "status": 200,
+            "body": "{\"code\":500,\"msg\":\"boom\"}",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          {
+            "status": 200,
+            "body": "{\"code\":0,\"data\":{\"resources\":[]}}",
+            "headers": {
+              "Content-Type": "application/json"
+            }
+          },
+          {
+            "status": 502,
+            "body": "bad gateway",
+            "headers": {
+              "Content-Type": "text/plain"
+            }
+          }
+        ]
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-p5c\"},\"auth\":{\"accessToken\":\"tok-u-p5c\",\"domain\":\"workbuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792152000000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "非 JSON 体",
+          "method": "GET",
+          "path": "/quota",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "259",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":0,\"packs\":0,\"active\":{\"name\":\"\",\"used\":0,\"size\":0,\"end\":\"\"},\"nearestEnd\":{\"name\":\"\",\"date\":\"\",\"remain\":0},\"uid\":\"\",\"nickname\":\"\",\"source\":\"none\",\"err\":\"官方积分接口响应解析失败: invalid character '\\u003c' looking for beginning of value\"}\n"
+        },
+        {
+          "desc": "code!=0",
+          "method": "GET",
+          "path": "/quota",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "197",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":0,\"packs\":0,\"active\":{\"name\":\"\",\"used\":0,\"size\":0,\"end\":\"\"},\"nearestEnd\":{\"name\":\"\",\"date\":\"\",\"remain\":0},\"uid\":\"\",\"nickname\":\"\",\"source\":\"none\",\"err\":\"官方积分接口 code=500: boom\"}\n"
+        },
+        {
+          "desc": "正常包",
+          "method": "GET",
+          "path": "/quota",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "170",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":0,\"packs\":0,\"active\":{\"name\":\"\",\"used\":0,\"size\":0,\"end\":\"\"},\"nearestEnd\":{\"name\":\"\",\"date\":\"\",\"remain\":0},\"uid\":\"u-p5c\",\"nickname\":\"goldenuser\",\"source\":\"live\"}\n"
+        },
+        {
+          "desc": "上游 502",
+          "method": "GET",
+          "path": "/quota",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "171",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"total\":0,\"packs\":0,\"active\":{\"name\":\"\",\"used\":0,\"size\":0,\"end\":\"\"},\"nearestEnd\":{\"name\":\"\",\"date\":\"\",\"remain\":0},\"uid\":\"u-p5c\",\"nickname\":\"goldenuser\",\"source\":\"cache\"}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-16 11:39:22\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        },
+        {
+          "seq": 2,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-16 11:39:22\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        },
+        {
+          "seq": 3,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource",
+          "body": "{\"PackageStartTimeRangeBegin\":\"2024-12-01 21:25:00\",\"PackageStartTimeRangeEnd\":\"2026-10-16 11:39:22\",\"PageNumber\":1,\"PageSize\":100,\"ProductCode\":\"p_tcaca\",\"Status\":[0,3]}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        }
+      ]
+    },
+    {
+      "name": "p5c-nonstream-peek-large",
+      "desc": "非流式 + 有池：14018 判定的 Peek 只消费 4096 字节（bufio 默认缓冲）且被丢弃 ⇒ 聚合只看到 4097 字节之后的流（体量证据，>4096 才可见）",
+      "region": "CN",
+      "scope": "P5c",
+      "desensitize": false,
+      "upstream_desc": "恒 200 大 SSE（约 6KB，两帧各 3000 字 + usage + [DONE]）",
+      "upstream_spec": {
+        "status": 200,
+        "body": "data: {\"model\":\"peek-large\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"},\"finish_reason\":null}]}\n\njunk-after-4096\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":6,\"total_tokens\":11}}\n\ndata: [DONE]\n\n",
+        "headers": {
+          "Content-Type": "text/event-stream"
+        }
+      },
+      "cred_mode": "real",
+      "auth_files": [
+        {
+          "name": "workbuddy-desktop.info",
+          "body": "{\"account\":{\"enterpriseId\":\"ent\",\"nickname\":\"goldenuser\",\"uid\":\"u-p5c\"},\"auth\":{\"accessToken\":\"tok-u-p5c\",\"domain\":\"workbuddy.cn\",\"expiresAt\":4102416000000}}",
+          "mtime_unix_ms": 1792152000000
+        }
+      ],
+      "steps": [
+        {
+          "desc": "大流非流式（有池）",
+          "method": "POST",
+          "path": "/v1/chat/completions",
+          "req_body": "{\"model\":\"glm-5.2\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}",
+          "resp_status": 200,
+          "resp_headers": {
+            "access-control-allow-headers": "Content-Type, Authorization",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-origin": "*",
+            "content-length": "287",
+            "content-type": "application/json"
+          },
+          "resp_body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\"}}],\"created\":1792121962,\"finish_reason_debug\":\"stop\",\"id\":\"chatcmpl-7e33b14bb99b\",\"model\":\"glm-5.2\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":6,\"prompt_tokens\":5,\"total_tokens\":11}}\n"
+        }
+      ],
+      "upstream_seen": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "url": "https://copilot.tencent.com/v2/chat/completions",
+          "body": "{\"messages\":[{\"content\":\"hi\",\"role\":\"user\"}],\"model\":\"glm-5.2\",\"reasoning_effort\":\"max\",\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+          "headers": {
+            "Accept": "application/json",
+            "Authorization": "Bearer tok-u-p5c",
+            "Content-Type": "application/json",
+            "User-Agent": "codebuddy2openai-go/1.0",
+            "X-Domain": "workbuddy.cn",
+            "X-Enterprise-Id": "ent",
+            "X-Tenant-Id": "ent",
+            "X-User-Id": "u-p5c"
+          }
+        }
+      ]
     }
   ]
 }

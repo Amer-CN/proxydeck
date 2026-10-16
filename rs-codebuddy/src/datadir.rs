@@ -73,6 +73,7 @@ mod tests {
 
     #[test]
     fn env_override_wins() {
+        let _env = crate::test_env::lock();
         let tmp = std::env::temp_dir().join("rs-codebuddy-datadir-probe");
         std::env::set_var(DATA_DIR_ENV, &tmp);
         assert_eq!(data_dir(), tmp);

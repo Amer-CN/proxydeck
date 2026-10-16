@@ -220,6 +220,20 @@ fn respond(state: &Arc<Mutex<Value>>, hop: &CapturedHop) -> FakeResp {
     if kind.is_empty() && (spec.get("status").is_some() || spec.get("body").is_some()) {
         return spec_resp(&spec);
     }
+    // P5c 采集器的 sequence 形态：顶层带 `items`（不带 `kind`）——与 Go 采集器
+    // `p5cRespSpec.responder()`「先看 Items」的顺序一致。
+    if let Some(items) = spec.get("items").and_then(|v| v.as_array()).cloned() {
+        if !items.is_empty() {
+            let idx = {
+                let mut s = state.lock().unwrap();
+                let used = s.get("_used").and_then(|v| v.as_u64()).unwrap_or(0);
+                let next = (used + 1).min(items.len() as u64);
+                s["_used"] = Value::Number(next.into());
+                (next - 1) as usize
+            };
+            return spec_resp(&items[idx]);
+        }
+    }
     match kind {
         "fixed" => spec_resp(&spec),
         "probe" => {
@@ -336,13 +350,14 @@ pub struct AppServer {
 
 impl AppServer {
     pub async fn start(state: Arc<rs_codebuddy::AppState>) -> AppServer {
-        let app = rs_codebuddy::router(state);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("被测算例起监听");
         let addr = listener.local_addr().expect("取被测算例地址");
         let handle = tokio::spawn(async move {
-            let _ = axum::serve(listener, app).await;
+            // 走**生产 serve 入口**（自定义 Listener + ConnectInfo），测试与生产的 accept
+            // 路径完全同一条（P5c：499 的连接断开信号就在这条路上）。
+            let _ = rs_codebuddy::serve(listener, state).await;
         });
         AppServer {
             base: format!("http://{addr}"),
@@ -409,6 +424,44 @@ pub async fn send(base: &str, method: &str, path: &str, body: Option<&[u8]>) -> 
         status,
         headers,
         body,
+    }
+}
+
+/// 用**裸 socket**发一次请求（只带请求行 + Host + `Connection: close`）。
+///
+/// 为什么需要：点段（`/v1/../v1/models`）会被 `reqwest`/`url` 在**客户端**就规范化掉，
+/// 只有裸 socket 才能把原始路径送到服务端（Go 的 `http.Client` 不做这种规范化，
+/// 所以黄金里那条步骤只有裸发才能复现）。
+pub async fn send_raw(base: &str, method: &str, path: &str) -> Resp {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let hostport = base.strip_prefix("http://").unwrap_or(base).to_string();
+    let mut conn = tokio::net::TcpStream::connect(&hostport)
+        .await
+        .expect("裸 socket 连不上");
+    let req = format!("{method} {path} HTTP/1.1\r\nHost: {hostport}\r\nConnection: close\r\n\r\n");
+    conn.write_all(req.as_bytes()).await.expect("写请求失败");
+    let mut raw = Vec::new();
+    conn.read_to_end(&mut raw).await.expect("读响应失败");
+    let text = String::from_utf8_lossy(&raw).to_string();
+    let (head, body) = match text.find("\r\n\r\n") {
+        Some(i) => (text[..i].to_string(), text[i + 4..].to_string()),
+        None => (text.clone(), String::new()),
+    };
+    let mut lines = head.split("\r\n");
+    let status_line = lines.next().unwrap_or("");
+    let status = status_line
+        .split(' ')
+        .nth(1)
+        .and_then(|s| s.parse::<u16>().ok())
+        .unwrap_or(0);
+    let headers = lines
+        .filter_map(|l| l.split_once(':'))
+        .map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_string()))
+        .collect();
+    Resp {
+        status,
+        headers,
+        body: body.into_bytes(),
     }
 }
 
@@ -566,6 +619,68 @@ pub fn serial_lock() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|e| e.into_inner())
 }
 
+/// 非流式聚合体里的两个**必然不同**的墙钟/随机字段：
+/// * `"created":<秒>` —— Go 与 Rust 各自的运行时刻（差 1~2 秒是常态）；
+/// * `"id":"chatcmpl-<12 位 hex>"` —— `crypto/rand` 的 6 字节（两侧必然不同）。
+///
+/// 只归一这两处的**取值载体**，其余字节（字段集合、键序、数组顺序、usage 数值、
+/// `finish_reason_debug` 等）照旧逐字节比。黄金里 SSE 帧用的 `chatcmpl-golden`
+/// （非 hex）不在归一范围内。
+pub fn normalize_volatile_json(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0usize;
+    while i < s.len() {
+        if s[i..].starts_with("\"created\":") {
+            out.push_str("\"created\":");
+            i += "\"created\":".len();
+            while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b'-') {
+                i += 1;
+            }
+            out.push('0');
+            continue;
+        }
+        if s[i..].starts_with("\"id\":\"chatcmpl-") {
+            let head = "\"id\":\"chatcmpl-";
+            let start = i + head.len();
+            let rest = &s[start..];
+            let hex_len = rest
+                .chars()
+                .take_while(|c| c.is_ascii_hexdigit())
+                .count();
+            if hex_len >= 6 && rest.len() > hex_len && rest.as_bytes()[hex_len] == b'"' {
+                out.push_str("\"id\":\"chatcmpl-<ID>\"");
+                i = start + hex_len + 1;
+                continue;
+            }
+        }
+        let ch = s[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+/// 上游请求体归一：把**墙钟时间**占位化。
+///
+/// 唯一一处：积分请求的 `PackageStartTimeRangeEnd` = `time.Now().Format("2006-01-02 15:04:05")`
+/// （Go 与 Rust 同式），两侧运行时刻必然不同——**格式**仍被锁住（字段名与
+/// `YYYY-MM-DD HH:MM:SS` 形状照比），只把具体时刻换成标记（README 差异 19）。
+pub fn norm_upstream_body(s: &str) -> String {
+    let key = "\"PackageStartTimeRangeEnd\":\"";
+    match s.find(key) {
+        Some(i) => {
+            let start = i + key.len();
+            let rest = &s[start..];
+            match rest.find('"') {
+                Some(end) => format!("{}{}__NOW__{}", &s[..start], "", &rest[end..]),
+                None => s.to_string(),
+            }
+        }
+        None => s.to_string(),
+    }
+}
+
 /// `last_used` 取值归一：**非空**一律换成 `__LAST_USED__`，**空串保留**。
 ///
 /// 为什么只归这一处（README 差异 17）：它是墙钟时间，两侧运行时刻必然不同；
@@ -597,15 +712,17 @@ fn normalize_last_used(s: &str) -> String {
     out
 }
 
-/// `inflight` 取值的归一：**只归一到位标记**，保留「0 = 空闲」的语义。
+/// `inflight` 取值的归一：把 `"inflight":` 后面的数字**一律**换成 `__INFLIGHT__`——
+/// **包括 `0`**，也就是**不保留**「0 = 空闲」这个区分（保留下来的只有字段存在性与格式）。
 ///
 /// 为什么（README 差异 18）：`inflight` 是**进程内存态**的进行中计数，同一个快照
 /// 在两侧的**采样时刻**不同——Go 采集侧的 `/v1/accounts` 是**在请求处理中**发起的
 /// （被挑中的号此刻 inflight=1），Rust 回放侧则是请求结束后才发快照（defer 已 Dec、
 /// inflight=0）。这是**采样时刻**差异，不是产品行为差异（Rust 的 Inc/Dec 与 Go 同构：
-/// 选中即 Inc、请求结束 defer Dec）。门禁因此只锁 `use_count` 与其余字段，`inflight`
-/// 归一成 `__INFLIGHT__`；另有一条独立单测守 Inc/Dec 的钳位与配对
-/// （`pool.rs::tests::inflight_inc_dec_pairs_and_clamps`）。
+/// 选中即 Inc、请求结束 defer Dec）；采样时刻既不同，两个数值本就不可比，故 0 与非 0
+/// 一视同仁。Inc/Dec 的真实行为由 `tests/p5c_wiring.rs` 的接线测试直接守（请求进行中
+/// 断言 `inflight=1`、结束后断言 `=0`、换号后两个号都归零——那些断言读的是原始快照，
+/// 不过这道归一），钳位与配对另有 `pool.rs::tests::inflight_inc_dec_pairs_and_clamps`。
 fn normalize_inflight(s: &str) -> String {
     let key = "\"inflight\":";
     let mut out = String::with_capacity(s.len());
@@ -684,7 +801,13 @@ impl RealReplay<'_> {
     /// `invalid character 'x' …` 那一族），但「输入提前结束」这一族 Go 与 serde 用词不同。
     /// 改这两句话没有意义（都是标准库的话），故登记为已知差异、不当门禁强度。
     pub fn normalize_json_lib_error(&self, s: &str) -> String {
-        const KEYS: &[&str] = &["auth 文件格式错误: ", "bad json: "];
+        const KEYS: &[&str] = &[
+            "auth 文件格式错误: ",
+            "bad json: ",
+            // 积分接口响应解析失败（README 差异 29/33）：Go 透传 `encoding/json` 原文，
+            // 本实现走 `serde_json`（同一句前缀 + 库自己的措辞），只归一到库措辞那一层。
+            "官方积分接口响应解析失败: ",
+        ];
         let mut out = String::with_capacity(s.len());
         let mut rest = s;
         loop {
@@ -780,6 +903,10 @@ pub async fn start_real_replay<'a>(
         data.path().to_path_buf(),
         data_s.clone(),
         Some(base),
+        scenario
+            .get("desensitize")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
     )
     .unwrap_or_else(|e| panic!("[{name}] 生产装配应成功: {e}"));
     // 装配完成后再按 `auth_files_after` 改写 auth 目录（采集侧就是这么做的：

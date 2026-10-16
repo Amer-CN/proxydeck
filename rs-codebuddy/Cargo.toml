@@ -2,7 +2,7 @@
 name = "rs-codebuddy"
 version = "0.1.0"
 edition = "2021"
-description = "ProxyDeck CodeBuddy 插件 Rust 重写（绞杀者路线 P5a：合同与请求侧，测试端口用，未接入 GUI）"
+description = "ProxyDeck CodeBuddy 插件 Rust 重写（绞杀者路线 P5a~P5c：合同与请求侧 / 账号池与凭据 / 脱敏·下游聚合·统计；测试端口用，未接入 GUI）"
 
 [[bin]]
 name = "rs-codebuddy"

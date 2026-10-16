@@ -167,6 +167,7 @@ async fn p5b_scenarios_match_go_golden() {
                 data.path().to_path_buf(),
                 data_s.clone(),
                 None,
+                false,
             )
             .err()
             .unwrap_or_default();
@@ -217,10 +218,13 @@ async fn p5b_scenarios_match_go_golden() {
                 skipped_downstream += 1;
                 println!("SKIP(downstream-p5c): [{name}] {desc}（只比出站请求与状态码）");
             } else {
-                let want_norm = rp.normalize_json_lib_error(&rp.normalize_body(
-                    field(step, "resp_body").as_str().unwrap_or(""),
+                // P5c 起这些 200 步的响应体也逐字节比：非流式聚合体里的 `created` /
+                // `chatcmpl-<hex>` 是墙钟/随机字段，归一成标记（其余字节照比）。
+                let want_norm = rp.normalize_json_lib_error(&normalize_volatile_json(
+                    &rp.normalize_body(field(step, "resp_body").as_str().unwrap_or("")),
                 ));
-                let got_norm = rp.normalize_json_lib_error(&rp.normalize_body(&resp.text()));
+                let got_norm = rp
+                    .normalize_json_lib_error(&normalize_volatile_json(&rp.normalize_body(&resp.text())));
                 assert_body_equal(&name, desc, &got_norm, &want_norm);
                 if let Some(want) = field(step, "resp_headers").as_object() {
                     for (k, v) in want {

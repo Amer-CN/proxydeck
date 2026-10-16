@@ -600,6 +600,7 @@ mod tests {
     /// 这条单测是它独立的正面对冲）。
     #[test]
     fn inflight_inc_dec_pairs_and_clamps() {
+        let _env = crate::test_env::lock();
         let dir = std::env::temp_dir().join("rs-codebuddy-pool-inflight");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -648,6 +649,7 @@ mod tests {
 
     #[test]
     fn pool_state_path_has_intl_suffix() {
+        let _env = crate::test_env::lock();
         std::env::set_var("CODEBUDDY_POOL_DIR", "X:\\data");
         assert_eq!(
             pool_state_path(Region::Cn),

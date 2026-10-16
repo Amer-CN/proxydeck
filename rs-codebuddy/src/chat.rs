@@ -1,20 +1,17 @@
-//! chat.rs —— `/v1/chat/completions`（**P5a 请求侧 + P5b 池/凭据/额度/failover 分支**）。
+//! chat.rs —— `/v1/chat/completions`（**P5a 请求侧 + P5b 池/凭据/额度/failover + P5c 下游**）。
 //!
 //! 覆盖：方法门（非 POST → 405 + `Allow: POST`）、64MB 上限读体、Go `json.Unmarshal`→
 //! `map[string]any` 的入站解析（逐字错误文案）、白名单字段透传 + `stream` 强制 true +
 //! `stream_options` 缺省、`tool_choice` 归一、`$ref` 内联、`developer`→`system`、
-//! INTL 自动补首条 system、出站体**逐字节重建**（Go `mustJSONReader` → `json.Marshal`）、
+//! **全角色脱敏**（P5c；生产 CN/INTL 都开）、INTL 自动补首条 system、出站体**逐字节重建**、
 //! **账号池换号三条分支**（401/403 标死换活号、429 冷却换号、14018 额度耗尽换号）、
-//! **200 体 14018 Peek**、CN 缺省 `reasoning_effort` 注入、hy4 限流兜底改写与 trip、
-//! 11133 退避重试（上限 2 次，800ms/1600ms，退避期间客户端取消 → 499）与失败现场落盘、
-//! 上游非 200 的 `writeErr` 形状。
+//! **200 体 14018 Peek**（含 Go `bufio` 默认 4096 缓冲的消费语义）、CN 缺省
+//! `reasoning_effort` 注入、hy4 限流兜底改写与 trip、11133 退避重试（上限 2 次，
+//! 800ms/1600ms，退避期间客户端断开 → 499）与失败现场落盘、上游非 200 的 `writeErr` 形状。
 //!
-//! **不在本轮**（P5c，见 crate README 交接清单）：
-//! * 全角色脱敏 `DesensitizeBody`；
-//! * **下游**：流式 SSE 字段清洗（`sseFieldCleaner`）、非流式聚合（`collectStream`）、
-//!   usage 入账与统计（`codebuddy-stats.json`）。
-//!   本轮的 200 响应是**最小透传**（流式按原字节转发、非流式原样转发上游体），
-//!   与 Go 的下游行为**不等价**——这一点在 README 差异清单里显著登记，不静默。
+//! **P5c 的下游**（此前是最小透传，现已等价）：
+//! * 流式：`sseFieldCleaner` 逐行剔空键 + `usageScanner` 提取 usage 入账（逐字节同 Go）；
+//! * 非流式：`collectStream` 聚合为 `chat.completion` + usage 入账。
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,10 +20,13 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::{header, HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
-use futures_util::TryStreamExt;
+use bytes::Bytes;
+use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{Map, Value};
 
+use crate::conn::ConnClosed;
 use crate::gjson;
+use crate::sse::{SseFieldCleaner, UsageScanner};
 use crate::toolrefs;
 use crate::AppState;
 
@@ -36,15 +36,15 @@ pub const MAX_BODY_BYTES: usize = 64 << 20;
 pub const MAX_ERR_BODY: usize = 1 << 20;
 /// Go `transientMaxRetry`：11133 原地重试次数上限。
 pub const TRANSIENT_MAX_RETRY: usize = 2;
-/// Go 的 200 体 14018 Peek 窗口（`br.Peek(64 * 1024)`）。
-pub const PEEK_BYTES: usize = 64 * 1024;
-/// 非流式 200 上游体的读入上限。
+/// Go `bufio.NewReader` 的**默认缓冲**（`defaultBufSize = 4096`）。
 ///
-/// Go 在非流式路径用 `collectStream(resp.Body)` 边扫边聚（无显式上限）；本轮的
-/// 200 下游是**最小透传**（属 P5c），为了让「14018 判定的窗口」与「转发给客户端的字节」
-/// 同源，这里把整份上游体读进来再转发，上限取与请求侧同值的 64MB（超限即截断，
-/// 与 Go 的 `io.LimitReader` 语义同族）。P5c 换成真聚合时可撤掉这条缓冲。
-pub const MAX_OK_BODY: usize = 64 << 20;
+/// 关键：Go 的 14018 判定写的是 `bufio.NewReader(resp.Body)` + `Peek(64*1024)`，
+/// 而 `bufio.Reader` 的缓冲是 4096 —— `Peek` 在缓冲满时返回 `ErrBufferFull`，**最多只
+/// 消费 4096 字节**，而这 4096 字节被丢弃在 `br` 里（`br` 未回填 `resp.Body`），
+/// 后续 `collectStream(resp.Body)` 读到的是**从第 4097 字节开始**的流。
+/// 这是 Go 侧的真实行为（黄金里非流式 + 有池的步骤就此复现），本轮**如实复刻**：
+/// 差异与根因登记在 README，修 Go 需用户授权。
+pub const BUFIO_DEFAULT_BUF: usize = 4096;
 /// Go `passthroughBodyKeys`（顺序即 Go 的切片顺序；写出时按键排序）。
 pub const PASSTHROUGH_KEYS: &[&str] = &[
     "model",
@@ -175,7 +175,12 @@ pub async fn read_capped(body: Body, max: usize) -> Result<Vec<u8>, String> {
 }
 
 /// Go `handleChat`。
-pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Request) -> Response {
+pub async fn handle_chat(
+    State(st): State<Arc<AppState>>,
+    guard: Option<axum::extract::Extension<ConnClosed>>,
+    req: axum::extract::Request,
+) -> Response {
+    let guard = guard.map(|axum::extract::Extension(g)| g);
     if req.method() != Method::POST {
         let mut resp = http_error(405, "method not allowed");
         resp.headers_mut()
@@ -234,6 +239,18 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
     if let Some(Value::Array(msgs)) = backend.get_mut("messages") {
         toolrefs::normalize_roles(msgs);
     }
+    // 全角色脱敏（P5c；生产 CN/INTL 都开）：11128 是「内容指纹」拦截，指纹词出现在
+    // user/assistant/tool 里同样触发（2026-09-12 实证：ZCode 会话历史里引用了报错原文与
+    // Claude Code 模板句，64 条消息、零 system，每条请求都被拦）。零宽插入对模型阅读无影响；
+    // 黑名单模板句的括号注解按 fingerprintRules 删除。位置与 Go 同：在 `$ref` 内联与
+    // `developer`→`system` **之后**、INTL 补 system **之前**。
+    if st.desensitize {
+        let roles: Vec<String> = ["system", "developer", "user", "assistant", "tool"]
+            .iter()
+            .map(|r| r.to_string())
+            .collect();
+        backend = crate::desensitize::desensitize_body(&backend, &roles, true, true, true);
+    }
     // INTL 特化：国际版 11128 为「首条消息必须是 system」的结构校验。
     if st.region.cfg().force_system {
         if let Some(Value::Array(msgs)) = backend.get("messages") {
@@ -270,6 +287,19 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
             );
         }
     }
+    // Go 的 `defer func() { if acc != nil { s.pool.DecLoad(acc.UID) } }()`：请求结束（含所有
+    // 错误/换号路径）释放**最终**那个号的进行中计数。Rust 没有 defer，用 Drop 守卫等价实现：
+    // * 换号分支照旧先 `dec_load` 旧号（Go 同款），并把守卫的 uid 换成新号；
+    // * 流式响应把守卫**随流带走**——流结束（或被丢弃）时才释放，与 Go「handler 返回即释放」
+    //   的时点一致（响应体写完才算完）。
+    let mut load_guard = if acc_uid.is_empty() {
+        None
+    } else {
+        Some(LoadRelease {
+            st: st.clone(),
+            uid: acc_uid.clone(),
+        })
+    };
     let mut hdr = match st.cred.headers_for(&acc_path) {
         Ok(h) => h,
         Err(e) => return write_err(502, &e),
@@ -314,8 +344,9 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
     // 起点取 `usize::MAX` 让它首轮回绕成 0——与 Go 逐轮自增的取值序列完全一致。
     let mut attempt = usize::MAX;
 
-    // 200 响应体（非流式 + 有池）在 loop 里就地读完：14018 判定窗口与转发字节同源。
-    let mut ok_body: Option<Vec<u8>> = None;
+    // 200 响应体（非流式 + 有池）在 loop 里就地把 Peek 的消费做完：14018 判定窗口与
+    // 交给聚合的字节同源（`ok_reader` 是本轮新建的读取器，见上面的 Peek 注释）。
+    let mut ok_reader: Option<ChunkReader> = None;
     let (status, resp) = loop {
         // Go `for attempt := 0; ; attempt++`：attempt 是**轮次**，每轮自增（含 11133 退避重试、
         // 14018/401/429 换号重发），不是「hy4 兜底次数」。守卫 `(attempt == 0 || account_resent)`
@@ -336,20 +367,13 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
         };
         if resp.status().as_u16() == 200 {
             // 200 体里的 14018（腾讯 chat 系额度耗尽常以 200 业务错体回来）：判定窗口是
-            // 头 64KB（Go 用 `bufio.Peek(64*1024)`；错体在流首行，正常内容流里不会出现该业务码）。
+            // Go 的 `br := bufio.NewReader(resp.Body); br.Peek(64*1024)`——**bufio 默认缓冲
+            // 4096**，所以实际只消费 4096 字节且被丢弃（`br` 没回填 `resp.Body`）。
             // 流式路径不做此检查（headers 一旦发出中途换号会撕裂客户端流）。
             if !client_wants_stream && st.pool.is_some() && !acc_uid.is_empty() {
-                // 非流式 + 有池：整份读完（Go 在非流式路径本就要把上游体读完做聚合，
-                // 本轮的「聚合」是 P5c 的最小透传版）。body 留着转发，resp 不再用。
-                let stream = resp
-                    .bytes_stream()
-                    .map_err(std::io::Error::other);
-                let body = read_capped(Body::from_stream(stream), MAX_OK_BODY)
-                    .await
-                    .unwrap_or_default();
-                if crate::failover::is_exhausted_body(
-                    &String::from_utf8_lossy(&body[..body.len().min(PEEK_BYTES)]),
-                ) {
+                let mut reader = ChunkReader::new(resp);
+                let peeked = reader.take(BUFIO_DEFAULT_BUF).await;
+                if crate::failover::is_exhausted_body(&String::from_utf8_lossy(&peeked)) {
                     let p = st.pool.as_ref().expect("上面已判 Some");
                     p.mark_exhausted(&acc_uid);
                     if exhausted_resent < p.size() {
@@ -369,6 +393,9 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
                             hdr = nhdr;
                             acc_uid = next.uid.clone();
                             acc_path = next.auth_path.clone();
+                            if let Some(g) = load_guard.as_mut() {
+                                g.uid = acc_uid.clone();
+                            }
                             exhausted_resent += 1;
                             continue;
                         }
@@ -383,7 +410,7 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
                         r#"{"code":14018,"msg":"Credits exhausted (all accounts in pool)"}"#,
                     );
                 }
-                ok_body = Some(body);
+                ok_reader = Some(reader);
                 break (200u16, None);
             }
             break (200u16, Some(resp));
@@ -434,7 +461,7 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
                     "[codebuddy] 11133 属上游抖动，第 {}/{} 次退避 {:?} 后重试",
                     transient_resent, TRANSIENT_MAX_RETRY, backoff
                 );
-                if !wait_or_cancelled(backoff, &st).await {
+                if !wait_or_cancelled(backoff, guard.as_ref()).await {
                     return write_err(499, "client closed request");
                 }
                 continue;
@@ -466,6 +493,9 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
                     hdr = nhdr;
                     acc_uid = next.uid.clone();
                     acc_path = next.auth_path.clone();
+                    if let Some(g) = load_guard.as_mut() {
+                        g.uid = acc_uid.clone();
+                    }
                     exhausted_resent += 1;
                     continue;
                 } else {
@@ -499,6 +529,9 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
                     hdr = nhdr;
                     acc_uid = next.uid.clone();
                     acc_path = next.auth_path.clone();
+                    if let Some(g) = load_guard.as_mut() {
+                        g.uid = acc_uid.clone();
+                    }
                     dead_resent += 1;
                     continue;
                 }
@@ -529,6 +562,9 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
                         hdr = nhdr;
                         acc_uid = next.uid.clone();
                         acc_path = next.auth_path.clone();
+                        if let Some(g) = load_guard.as_mut() {
+                            g.uid = acc_uid.clone();
+                        }
                         account_resent = true;
                         continue;
                     }
@@ -563,24 +599,23 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
     };
     let _ = acc_path;
 
-    // —— 下游（P5c 范围）：本轮最小透传 ——
-    let resp = match resp {
-        Some(r) => r,
-        None => {
-            // 已在 loop 里读完的非流式体（无上游 Response 可用）：按采集到的状态与体回。
-            let mut out = Response::new(Body::from(ok_body.unwrap_or_default()));
-            *out.status_mut() = StatusCode::from_u16(status)
-                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-            out.headers_mut().insert(
-                header::CONTENT_TYPE,
-                axum::http::HeaderValue::from_static("application/json"),
-            );
-            return out;
-        }
-    };
-    let _ = status;
+    // —— 下游（P5c 已等价） ——
     if client_wants_stream {
-        let mut out = Response::new(Body::from_stream(resp.bytes_stream()));
+        // 流式：SSE 逐行清洗后转发——CodeBuddy 后端每个 delta 同时携带 content 与
+        // reasoning_content 两个键（未活动侧为空字符串），ZCode 的流解析按字段出现切分
+        // part，双键并存会把一次思考阶段撕成几十个「思考」条目（团结上游只发活动侧键，
+        // 无此现象）。剔掉空字符串键即对齐团结流形；同时行扫描 data: 行提取 usage 入账。
+        let resp = match resp {
+            Some(r) => r,
+            None => return write_err(500, "internal: streaming response missing"),
+        };
+        let mut out = Response::new(Body::from_stream(clean_and_scan_stream(
+            resp,
+            sent_model.clone(),
+            st.stats.clone(),
+            // 守卫随流带走：流结束（或被丢弃）时才 DecLoad，等价 Go 的 defer 时点。
+            load_guard.take(),
+        )));
         let h = out.headers_mut();
         h.insert(
             header::CONTENT_TYPE,
@@ -596,31 +631,211 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
         );
         return out;
     }
-    let ct = resp
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .cloned()
-        .unwrap_or_else(|| axum::http::HeaderValue::from_static("application/json"));
-    let status = resp.status();
-    let mut out = Response::new(Body::from_stream(
-        resp.bytes_stream().map_err(std::io::Error::other),
-    ));
-    *out.status_mut() = status;
-    out.headers_mut().insert(header::CONTENT_TYPE, ct);
-    out
+
+    // 非流式：聚合后端 SSE 为单个 chat.completion（usage 顺带入账）。
+    let reader = match resp {
+        Some(r) => ChunkReader::new(r),
+        None => match ok_reader {
+            Some(r) => r,
+            None => return write_err(500, "internal: aggregated response missing"),
+        },
+    };
+    let _ = status;
+    let stream = reader.into_rest_stream();
+    let started = std::time::Instant::now();
+    let result = crate::collect::collect_stream(stream, &sent_model).await;
+    println!(
+        "[codebuddy] chat model={} status=200 dur={:?} finish={}",
+        sent_model,
+        started.elapsed().as_millis(),
+        result
+            .get("finish_reason_debug")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+    );
+    if let Some(usage) = result.get("usage").and_then(|u| u.as_object()) {
+        st.stats.add_stat(
+            &sent_model,
+            to_int(usage.get("prompt_tokens")),
+            to_int(usage.get("completion_tokens")),
+            to_int(usage.get("total_tokens")),
+        );
+    }
+    crate::models::json_response(result)
+}
+
+/// Go `toInt`：宽松取数（JSON 数字是 float64）。
+pub fn to_int(v: Option<&Value>) -> i64 {
+    match v.and_then(|x| x.as_f64()) {
+        Some(f) => f as i64,
+        None => 0,
+    }
+}
+
+/// 上游响应体的分块读取器：把 `reqwest::Response` 的字节流包装成「按需取字节」，
+/// 并且能把「上一次取多了的余量」留在 `pending` 里（Go `bufio.Reader.fill` 只按剩余
+/// 缓冲空间读，从不越读——这里等价：`take(n)` 至多消费 n 字节）。
+pub struct ChunkReader {
+    stream: std::pin::Pin<
+        Box<dyn futures_util::Stream<Item = Result<Bytes, std::io::Error>> + Send>,
+    >,
+    pending: Bytes,
+    eof: bool,
+}
+
+impl ChunkReader {
+    pub fn new(resp: reqwest::Response) -> ChunkReader {
+        ChunkReader {
+            stream: Box::pin(resp.bytes_stream().map_err(std::io::Error::other)),
+            pending: Bytes::new(),
+            eof: false,
+        }
+    }
+
+    /// 取下一个上游分块（`pending` 优先）。
+    pub async fn next_chunk(&mut self) -> Option<Result<Bytes, std::io::Error>> {
+        if !self.pending.is_empty() {
+            return Some(Ok(std::mem::take(&mut self.pending)));
+        }
+        if self.eof {
+            return None;
+        }
+        match self.stream.next().await {
+            Some(Ok(b)) => Some(Ok(b)),
+            Some(Err(e)) => {
+                self.eof = true;
+                Some(Err(e))
+            }
+            None => {
+                self.eof = true;
+                None
+            }
+        }
+    }
+
+    /// **至多**消费 `max` 字节并返回（Go `bufio.Reader.Peek` 的消费语义：多余部分留在
+    /// 缓冲里，不会越读）。
+    pub async fn take(&mut self, max: usize) -> Vec<u8> {
+        let mut out: Vec<u8> = Vec::new();
+        while out.len() < max {
+            if self.pending.is_empty() {
+                match self.next_chunk().await {
+                    Some(Ok(b)) => self.pending = b,
+                    Some(Err(_)) | None => break,
+                }
+            }
+            let want = max - out.len();
+            if self.pending.len() <= want {
+                out.extend_from_slice(&self.pending);
+                self.pending = Bytes::new();
+            } else {
+                out.extend_from_slice(&self.pending.split_to(want));
+            }
+        }
+        out
+    }
+
+    /// 把「剩下的全部」包成聚合用的流（`pending` 先发，然后透传上游）。
+    pub fn into_rest_stream(
+        self,
+    ) -> std::pin::Pin<Box<dyn futures_util::Stream<Item = Result<Bytes, std::io::Error>> + Send>>
+    {
+        let pending = self.pending;
+        let stream = self.stream;
+        let head = futures_util::stream::iter(if pending.is_empty() {
+            vec![]
+        } else {
+            vec![Ok(pending)]
+        });
+        Box::pin(head.chain(stream))
+    }
+}
+
+/// 流式下游：清洗 + usage 入账（逐块 yield，与 Go 的「读一块→写一块→Flush」同形）。
+fn clean_and_scan_stream(
+    resp: reqwest::Response,
+    model: String,
+    stats: Arc<crate::stats::Stats>,
+    release: Option<LoadRelease>,
+) -> std::pin::Pin<
+    Box<dyn futures_util::Stream<Item = Result<Bytes, std::io::Error>> + Send>,
+> {
+    let reader = ChunkReader::new(resp);
+    let cleaner = SseFieldCleaner::new();
+    let scan = UsageScanner::new(&model, stats);
+    Box::pin(futures_util::stream::unfold(
+        (reader, cleaner, scan, false, release),
+        |(mut reader, mut cleaner, mut scan, done, release)| async move {
+            if done {
+                return None;
+            }
+            loop {
+                match reader.next_chunk().await {
+                    Some(Ok(chunk)) => {
+                        scan.feed(&chunk);
+                        let out = cleaner.feed(&chunk);
+                        if !out.is_empty() {
+                            return Some((
+                                Ok::<Bytes, std::io::Error>(Bytes::from(out)),
+                                (reader, cleaner, scan, false, release),
+                            ));
+                        }
+                    }
+                    Some(Err(_)) | None => {
+                        // Go 在 `rerr != nil` 时先冲尾再 return。
+                        let out = cleaner.flush();
+                        if !out.is_empty() {
+                            return Some((
+                                Ok(Bytes::from(out)),
+                                (reader, cleaner, scan, true, release),
+                            ));
+                        }
+                        // 流结束 → `release`（LoadRelease）在此 Drop，等价 Go 的 defer DecLoad。
+                        drop(release);
+                        return None;
+                    }
+                }
+            }
+        },
+    ))
+}
+
+/// Go `handleChat` 里那个 `defer func() { if acc != nil { s.pool.DecLoad(acc.UID) } }()`。
+///
+/// 为什么用 Drop 而不是在每个 return 前手写 `dec_load`：handler 有十几条退出路径
+/// （502/499/各换号分支/正常结束），手写必漏——**P5c 的行为级接线测试当场抓到过这个漏**：
+/// 原先只在换号分支里 `dec_load`，正常路径一个都没释放，`inflight` 永久 +1。
+pub struct LoadRelease {
+    st: Arc<AppState>,
+    uid: String,
+}
+
+impl Drop for LoadRelease {
+    fn drop(&mut self) {
+        if let Some(p) = self.st.pool.as_ref() {
+            p.dec_load(&self.uid);
+        }
+    }
 }
 
 /// Go 的 `select { case <-time.After(d): ; case <-r.Context().Done(): 499 }`。
 ///
-/// **如实登记（未逐字对齐，见 README 差异 13）**：499 分支已实现并可达（下面这个函数
-/// 返回 `false` 时调用方回 `499 "client closed request"`，文案与 Go 逐字一致），但
-/// **触发条件暂缺**——Go 的 `r.Context()` 是请求级 context（连接断开即 Done，退避等待
-/// 期间也能中断）；axum/hyper 侧要拿到同一信号需要 `hyper_util` 的 graceful-shutdown
-/// 观看器或自写 `Body` 包装，本小轮未引入该依赖，故这里只等完退避继续重试，
-/// 与 Go 相比表现为「客户端断开后仍会多试 1~2 次」。属 P5c 的对齐项。
-async fn wait_or_cancelled(d: Duration, _st: &Arc<AppState>) -> bool {
-    tokio::time::sleep(d).await;
-    true
+/// Go 的 `r.Context()` 是**请求级** context：HTTP/1.1 上客户端断开连接时立刻 Done，
+/// 所以退避等待期间就能中断并回 `499 "client closed request"`（文案与 Go 逐字一致）。
+/// 本实现的同一信号由 `conn::ConnClosed` 提供（自定义 `Listener` 在 `poll_read` 读到
+/// EOF/错误时点亮，经 `ConnectInfo` 塞进本请求的扩展）——见 `src/conn.rs`。
+async fn wait_or_cancelled(d: Duration, guard: Option<&ConnClosed>) -> bool {
+    match guard {
+        Some(g) => tokio::select! {
+            _ = tokio::time::sleep(d) => true,
+            _ = g.closed() => false,
+        },
+        // 没有连接信息的调用路径（理论上只有非生产装配）：退化成纯等待。
+        None => {
+            tokio::time::sleep(d).await;
+            true
+        }
+    }
 }
 
 async fn read_err_body(resp: reqwest::Response) -> String {

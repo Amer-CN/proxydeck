@@ -3,13 +3,14 @@
 //! 覆盖：Go `corsWith` 的 CORS 头与 OPTIONS 204、`ServeMux` 的 404 文案、chat 非 POST 的
 //! 405 形状（`Allow: POST` + `text/plain` + `nosniff`）、HEAD 的 `content-length` 自洽、
 //! **64MB 读体口径不得退回 axum 的 2MB 默认上限**（3.6MB 体必须逐字节到上游）、
-//! `//v1/models` 的**路径清洗已知差异**（Go `ServeMux` 307，axum 404）、以及
-//! `/v1/stats`（P5c）仍回 501 的诚实性断言。
+//! `//v1/models` 的**路径清洗**（P5c 已按 Go `ServeMux` 复刻：307 + `Location` + 体）、以及
+//! `/v1/stats`（P5c 起为真实应答，不再是 501 占位）。
 
 mod common;
 
 use std::sync::Arc;
 
+use clap::Parser as _;
 use common::*;
 use serde_json::{json, Value};
 
@@ -82,13 +83,23 @@ async fn route_boundaries_match_go() {
 
 /// P5c 的端点仍**显式 501**（不是假 404，也不是静默缺路由）；P5b 三条已放开。
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn p5c_endpoint_answers_501_and_p5b_endpoints_are_live() {
+async fn p5c_stats_endpoint_is_live_and_p5b_endpoints_are_live() {
     let dir = TestDir::new("deferred-501");
     let up = FakeUpstream::start(&sse_spec()).await;
     let app = AppServer::start(state_with(&dir, &up.base, rs_codebuddy::region::Region::Cn).await).await;
-    let r = send(&app.base, "GET", "/v1/stats", None).await;
-    assert_eq!(r.status, 501, "/v1/stats 应 501");
-    assert!(r.text().contains("P5c"), "501 文案应点名 P5c：{}", r.text());
+    // P5c：`/v1/stats` 从 501 变成真实应答（空表 + 运行时长），且**不看方法**。
+    for m in ["GET", "POST"] {
+        let r = send(&app.base, m, "/v1/stats", None).await;
+        assert_eq!(r.status, 200, "/v1/stats {m} 应 200：{}", r.text());
+        let v: Value = serde_json::from_slice(&r.body).unwrap();
+        assert_eq!(v["models"], json!({}), "/v1/stats 空表形状：{}", r.text());
+        assert!(v.get("uptimeSec").is_some());
+        assert!(
+            !r.text().contains("P5c"),
+            "/v1/stats 不该再回 P5c 占位文案：{}",
+            r.text()
+        );
+    }
 
     // P5b 放开的端点：零值 Server（无池）下的形状与 Go 一致。
     // `/quota` → Go 无池时走当前凭据文件（这里 stub 头可用但上游是假 SSE，解析必然失败
@@ -114,19 +125,33 @@ async fn p5c_endpoint_answers_501_and_p5b_endpoints_are_live() {
     assert_eq!(v["hy4_limit"], Value::Null);
 }
 
-/// `//v1/models` 的**已知差异**：Go `ServeMux` 把双斜杠清洗成单斜杠并回 307；
-/// axum 不做清洗，故这里回 404。补一条对照把差异钉死（防止后人当 bug 追）。
+/// `//v1/models` 的**路径清洗**（P5c 已对齐，差异 12 关闭）：Go `ServeMux` 在匹配之前
+/// 清洗路径并回 307；本实现复刻同一响应（状态码 / `Location` / 头 / 体逐字节）。
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn double_slash_path_is_a_known_deviation() {
+async fn double_slash_path_redirects_like_go_serve_mux() {
     let dir = TestDir::new("dbl-slash");
     let up = FakeUpstream::start(&sse_spec()).await;
     let app = AppServer::start(state_with(&dir, &up.base, rs_codebuddy::region::Region::Cn).await).await;
     let r = send(&app.base, "GET", "//v1/models", None).await;
+    assert_eq!(r.status, 307, "Go ServeMux 的清洗重定向是 307");
+    assert_eq!(r.header("location"), Some("/v1/models"));
+    assert_eq!(r.header("content-type"), Some("text/html; charset=utf-8"));
     assert_eq!(
-        r.status, 404,
-        "Rust 侧不清洗双斜杠：Go 回 307（已知差异，登记在 README），Rust 回 404"
+        r.text(),
+        "<a href=\"/v1/models\">Temporary Redirect</a>.\n\n"
     );
-    // 单斜杠（客户端实际会送出的形态，Go 的 307 也是往它跳）必须正常
+    // POST 同样 307，但**不带体、不带 Content-Type**（Go 只对 GET 写体）
+    let r = send(&app.base, "POST", "//v1/models", None).await;
+    assert_eq!(r.status, 307);
+    assert_eq!(r.header("location"), Some("/v1/models"));
+    assert!(r.body.is_empty(), "POST 的重定向体应为空");
+    assert_eq!(r.header("content-type"), None);
+    // 点段同样被清洗——但必须用**裸 socket** 发：`reqwest`/`url` 会在客户端就把 `/v1/../x`
+    // 规范化成 `/x`（Go 的 `http.Client` 不做），用高级客户端量到的是客户端行为。
+    let r = send_raw(&app.base, "GET", "/v1/../v1/models").await;
+    assert_eq!(r.status, 307);
+    assert_eq!(r.header("location"), Some("/v1/models"));
+    // 单斜杠（客户端实际会送出的形态，307 也是往它跳）必须正常
     let r = send(&app.base, "GET", "/v1/models", None).await;
     assert_eq!(r.status, 200);
 }
@@ -211,23 +236,51 @@ async fn health_reports_credential_error() {
     assert!(v.get("credential").is_none(), "错误路径不该带 credential 块");
 }
 
-/// `--desensitize` 属 P5c：传了就拒绝启动（不静默忽略）。
+/// `--desensitize`（P5c 放行）：生产装配**不再拒绝**，且开关真的落到 `AppState` 上
+/// （行为等价由 P5c 黄金门禁的脱敏场景逐字节守——这里只守「开关被接线」）。
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn desensitize_flag_is_refused() {
-    let args = rs_codebuddy::Args {
-        plugin_codebuddy: false,
-        port: 0,
-        host: "127.0.0.1".to_string(),
-        region: "CN".to_string(),
-        desensitize: true,
-        upstream_base: String::new(),
-        cred_stub: String::new(),
-        auth_dir: String::new(),
-        diag_dir: String::new(),
-        pool_dir: String::new(),
-    };
-    let err = rs_codebuddy::run(args).await.unwrap_err();
-    assert!(err.contains("P5c"), "应点名 P5c：{err}");
+async fn desensitize_flag_is_wired_into_state() {
+    let env = EnvGuard::set(&[]);
+    let auth = TestDir::new("desensitize-auth");
+    let data = TestDir::new("desensitize-data");
+    let home = TestDir::new("desensitize-home");
+    write_auth_files(
+        auth.path(),
+        &json!([{
+            "name": "workbuddy-desktop.info",
+            "body": "{\"auth\":{\"accessToken\":\"tok-u\",\"domain\":\"codebuddy.cn\",\"expiresAt\":4102416000000},\"account\":{\"uid\":\"u-d\",\"nickname\":\"n\",\"enterpriseId\":\"ent\"}}",
+            "mtime_unix_ms": 1_792_000_000_000u64,
+        }]),
+    );
+    let auth_s = auth.path().to_string_lossy().to_string();
+    let data_s = data.path().to_string_lossy().to_string();
+    env.set_locked(&[
+        ("CODEBUDDY_AUTH_DIR", Some(auth_s.as_str())),
+        ("PROXYDECK_DATA_DIR", Some(data_s.as_str())),
+        ("CODEBUDDY_POOL_DIR", Some(data_s.as_str())),
+        ("USERPROFILE", Some(home.path().to_string_lossy().as_ref())),
+        ("LOCALAPPDATA", Some("")),
+        ("XDG_DATA_HOME", Some("")),
+    ]);
+    let (st, _cred) = rs_codebuddy::AppState::production_with_data_dir(
+        rs_codebuddy::region::Region::Cn,
+        data.path().to_path_buf(),
+        data_s.clone(),
+        Some("http://127.0.0.1:1".to_string()),
+        true,
+    )
+    .expect("--desensitize 不该再被拒绝");
+    assert!(st.desensitize, "开关必须落到 AppState（聊天路径据此脱敏）");
+    // CLI 层同样不拦：`--desensitize` 是合法开关
+    let args = rs_codebuddy::Args::parse_from([
+        "rs-codebuddy",
+        "--desensitize",
+        "--plugin-codebuddy",
+        "--port",
+        "0",
+    ]);
+    assert!(args.desensitize);
+    env.point_to_empty(data.path());
 }
 
 /// 黄金基准必须入库（缺了就是静默少覆盖）。

@@ -1,5 +1,6 @@
 //! rs-codebuddy —— ProxyDeck CodeBuddy/WorkBuddy 插件（8787 CN + 8789 INTL）的 Rust 重写，
-//! 绞杀者路线。**P5a：合同与请求侧**；**P5b：账号池 / 凭据 / 额度 / failover**。
+//! 绞杀者路线。**P5a：合同与请求侧**；**P5b：账号池 / 凭据 / 额度 / failover**；
+//! **P5c：脱敏 / SSE 清理 / 非流式聚合 / 统计 / 路径清洗 / 499 取消源**。
 //!
 //! 目标：等价替换 `internal/codebuddy`，先在测试端口独立跑通，不注册进 `app/plugins.go`、
 //! 不动 Go 构建、不碰任何现行服务端口（尤其 **8787/8789 上跑着的 Go 版**）。
@@ -13,36 +14,45 @@
 //! * `GET|POST /v1/failover`    —— hy4 兜底开关与 fallback 模型读写
 //! * `GET|POST /v1/accounts`    —— 账号池管理（rescan / clear_cool / clear_exhausted /
 //!   toggle / remove / restore）
-//! * `POST /v1/chat/completions`—— 入站解析 + 出站体重建 + 池换号 + 11133 退避重试
+//! * `GET|POST /v1/stats`       —— 按模型消耗统计 + 运行时长（**P5c 起为真实应答**）
+//! * `POST /v1/chat/completions`—— 入站解析 + 出站体重建 + 池换号 + 11133 退避重试 +
+//!   脱敏 + 流式清洗/usage 入账 + 非流式聚合
+//! * 路径清洗 —— `//v1/models` 这类非规范路径按 Go `ServeMux` 回 **307**（见 `pathclean`）
 //! * 其余路径 —— Go `ServeMux` 语义的 404（`404 page not found`）
-//! * `/v1/stats`（P5c）**本轮仍显式 501** ——比假 404 诚实：路由存在但功能未迁。
 //!
 //! 测试缝（生产默认值就是 Go 的常量/环境变量）：
 //! * `upstream_base`（默认区域常量 base URL）——黄金回放靠它指向假上游；
-//! * `diag_dir`（默认 `appdir.data_dir()`）——11133 现场落盘目录，临时目录驱动；
+//! * `diag_dir`（默认 `appdir.data_dir()`）——11133 现场落盘目录与 stats 落盘目录，临时目录驱动；
 //! * `cred_dir`（默认 `$CODEBUDDY_AUTH_DIR` 或本机候选目录）——凭据层用；
 //! * `cred`（`CredSource`）——测试可喂 `StubCredential`（`--cred-stub`）。
 
 pub mod atrest;
 pub mod chat;
+pub mod collect;
+pub mod conn;
 pub mod cred;
 pub mod credential;
 pub mod datadir;
+pub mod desensitize;
 pub mod diag;
 pub mod failover;
 pub mod gjson;
 pub mod godecode;
 pub mod gotime;
 pub mod models;
+pub mod pathclean;
 pub mod pool;
 pub mod quota;
 pub mod region;
+pub mod sse;
+pub mod stats;
 pub mod toolrefs;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use axum::body::Body;
 use axum::extract::State;
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -57,6 +67,7 @@ use crate::failover::Failover;
 use crate::pool::AccountPool;
 use crate::quota::QuotaCache;
 use crate::region::Region;
+use crate::stats::Stats;
 
 /// 默认端口（与 Go 侧 CN 8787 同值；对照请显式指定测试端口，如 18787）。
 pub const DEFAULT_PORT: u16 = 8787;
@@ -81,7 +92,7 @@ pub struct Args {
     #[arg(long, default_value = "CN")]
     pub region: String,
 
-    /// 全角色脱敏。**属 P5c**：本轮未迁，传了就拒绝启动（不静默忽略）。
+    /// 全角色脱敏（P5c 起真实落地；生产 `app/plugins.go` 对 CN/INTL 都传 `--desensitize`）。
     #[arg(long, default_value_t = false)]
     pub desensitize: bool,
 
@@ -113,6 +124,26 @@ pub struct ProbeCache {
     pub list: Vec<String>,
 }
 
+/// 进程级环境变量锁（**lib 单测专用**）。
+///
+/// libtest 默认**多线程并行**跑同一个二进制里的用例，而 `WORKBUDDY_AT_REST_SECRET` /
+/// `PROXYDECK_DATA_DIR` / `CODEBUDDY_POOL_DIR` 都是**进程级**变量：一个用例 set/remove
+/// 会影响并行跑着的另一个用例（README 差异 14 那一族；集成测试已用 `common::EnvGuard`
+/// 加锁，lib 单测此前没加，曾造成一次未能复现的单点红）。
+///
+/// 纪律：**凡是要改这些变量的 lib 单测一律先取这把锁**——只锁一部分等于没锁。
+#[cfg(test)]
+pub(crate) mod test_env {
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    pub fn lock() -> MutexGuard<'static, ()> {
+        static L: OnceLock<Mutex<()>> = OnceLock::new();
+        L.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+}
+
 /// 服务状态（对应 Go `Server`；P5b 补齐池 / 额度 / failover / 凭据）。
 pub struct AppState {
     pub region: Region,
@@ -130,6 +161,10 @@ pub struct AppState {
     pub quota: QuotaCache,
     /// hy4 兜底配置 + 限流窗口。
     pub failover: Failover,
+    /// 全角色脱敏开关（Go `Server.desensitize`）。
+    pub desensitize: bool,
+    /// 按模型消耗统计（Go `Server.stats` + `codebuddy-stats(-intl).json`）。
+    pub stats: Arc<Stats>,
 }
 
 impl AppState {
@@ -146,6 +181,8 @@ impl AppState {
             pool: None,
             quota: QuotaCache::new(),
             failover: Failover::load(""),
+            desensitize: false,
+            stats: Arc::new(Stats::new(PathBuf::new())),
         }
     }
 
@@ -160,15 +197,13 @@ impl AppState {
         pool_dir_override: Option<String>,
         upstream_base_override: Option<String>,
     ) -> Result<(AppState, Arc<dyn CredSource>), String> {
-        if desensitize {
-            return Err("--desensitize 属 P5c（全角色脱敏 DesensitizeBody 尚未迁移）：本轮拒绝启动而不是静默忽略".to_string());
-        }
         let dir = diag_dir.unwrap_or_else(datadir::data_dir);
         Self::production_with_data_dir(
             region,
             dir,
             pool_dir_override.unwrap_or_else(|| datadir::data_dir().to_string_lossy().to_string()),
             upstream_base_override,
+            desensitize,
         )
     }
 
@@ -182,6 +217,7 @@ impl AppState {
         data_dir: PathBuf,
         pool_dir: String,
         upstream_base_override: Option<String>,
+        desensitize: bool,
     ) -> Result<(AppState, Arc<dyn CredSource>), String> {
         if !pool_dir.is_empty() {
             std::env::set_var("CODEBUDDY_POOL_DIR", &pool_dir);
@@ -225,6 +261,7 @@ impl AppState {
             .join(format!("codebuddy-failover{suffix}.json"))
             .to_string_lossy()
             .to_string();
+        let stats_path = data_dir.join(format!("codebuddy-stats{suffix}.json"));
         let cred_arc: Arc<dyn CredSource> = Arc::new(cred);
         let state = AppState {
             region,
@@ -237,6 +274,8 @@ impl AppState {
             pool: Some(pool),
             quota: QuotaCache::new(),
             failover: Failover::load(&fail_path),
+            desensitize,
+            stats: Arc::new(Stats::load(stats_path)),
         };
         Ok((state, cred_arc))
     }
@@ -264,15 +303,48 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/quota", any(handle_quota))
         .route("/v1/failover", any(handle_failover))
         .route("/v1/accounts", any(handle_accounts))
-        // P5c 的路径：显式 501（不是假 404，也不是静默缺路由）
-        .route("/v1/stats", any(deferred_p5c))
+        .route("/v1/stats", any(handle_stats))
         .fallback(any(handle_fallback))
         // chat 的读体口径是 Go 的 `io.LimitReader(64<<20)`（**截断**，不是拒绝），
         // 所以这里显式关掉 axum 的 2MB 默认上限——否则 >2MB 的请求会在本地被挡，
         // 而 Go 会照常转发（P3/P4 都栽过同一个默认值）。
         .layer(DefaultBodyLimit::disable())
+        // Go `ServeMux` 的路径清洗在**路由之前**（差异 12：`//v1/models` → 307）。
+        .layer(middleware::from_fn(path_clean_mw))
         .layer(middleware::from_fn(cors))
         .with_state(state)
+}
+
+/// Go `ServeMux.Handler` 的路径清洗：**匹配之前**先把非规范路径重定向出去。
+///
+/// 位置与 Go 同：在 `corsWith`（= 本 crate 的 `cors` 层）**之内**、路由**之外**——
+/// 所以重定向响应同样带 CORS 头（实测 Go 的 307 确实带三个 CORS 头）。
+async fn path_clean_mw(req: axum::extract::Request, next: middleware::Next) -> Response {
+    let path = req.uri().path().to_string();
+    let query = req.uri().query().map(|q| format!("?{q}"));
+    if let Some(r) = pathclean::clean_path_redirect(&path, query.as_deref(), req.method().as_str()) {
+        let len = r.body.len();
+        let mut resp = Response::new(Body::from(r.body));
+        *resp.status_mut() = StatusCode::from_u16(r.status).unwrap_or(StatusCode::TEMPORARY_REDIRECT);
+        let h = resp.headers_mut();
+        h.insert(
+            axum::http::header::LOCATION,
+            HeaderValue::from_str(&r.location).unwrap_or_else(|_| HeaderValue::from_static("/")),
+        );
+        if let Some(ct) = r.content_type {
+            h.insert(
+                axum::http::header::CONTENT_TYPE,
+                HeaderValue::from_static(ct),
+            );
+        }
+        // Go 侧这两种形态实测：GET 46 字节体、POST 0 字节体，Content-Length 都显式给出。
+        h.insert(
+            axum::http::header::CONTENT_LENGTH,
+            HeaderValue::from_str(&len.to_string()).unwrap_or_else(|_| HeaderValue::from_static("0")),
+        );
+        return resp;
+    }
+    next.run(req).await
 }
 
 /// 对应 Go `corsWith`：所有响应都带 CORS 头；OPTIONS 直接 204（路由之前短路）。
@@ -307,11 +379,9 @@ async fn handle_fallback() -> Response {
     chat::http_error(404, "404 page not found")
 }
 
-async fn deferred_p5c() -> Response {
-    chat::write_err(
-        501,
-        "（P5b）该端点属 P5c（出站与下游）：/v1/stats 与 usage 统计尚未迁移",
-    )
+/// Go `handleStats`（不看方法）。
+pub async fn handle_stats(State(st): State<Arc<AppState>>) -> Response {
+    models::json_response(st.stats.response(st.started_at.elapsed().as_secs() as i64))
 }
 
 /// Go `handleHealth`（不看方法）。
@@ -631,9 +701,6 @@ pub async fn run(args: Args) -> Result<(), String> {
         st.cred = cred.clone();
         (st, cred)
     } else {
-        if args.desensitize {
-            return Err("--desensitize 属 P5c（全角色脱敏 DesensitizeBody 尚未迁移）：本轮拒绝启动而不是静默忽略".to_string());
-        }
         let text = std::fs::read_to_string(&args.cred_stub)
             .map_err(|e| format!("读取 --cred-stub {} 失败: {e}", args.cred_stub))?;
         let v: Value = serde_json::from_str(&text)
@@ -641,29 +708,41 @@ pub async fn run(args: Args) -> Result<(), String> {
         let cred: Arc<dyn CredSource> = Arc::new(StubCredential::from_json(&v)?);
         let base_url = base_override.unwrap_or_else(|| region.cfg().base_url.to_string());
         let diag_dir = diag_override.unwrap_or_else(datadir::data_dir);
-        let st = AppState::new(region, cred.clone(), base_url, diag_dir);
+        let mut st = AppState::new(region, cred.clone(), base_url, diag_dir);
+        st.desensitize = args.desensitize;
         (st, cred)
     };
     let state = Arc::new(state);
-    let app = router(state.clone());
     let addr = format!("{}:{}", args.host, args.port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .map_err(|e| format!("端口 {} 被占用: {e}", args.port))?;
     println!(
-        "[codebuddy] rs-codebuddy P5b（池/凭据/额度/failover）监听 {} region={} base={} diag_dir={} pool={}",
+        "[codebuddy] rs-codebuddy P5c（脱敏/SSE 清理/聚合/统计）监听 {} region={} base={} desensitize={} diag_dir={} stats={} pool={}",
         addr,
         region.as_str(),
         state.base_url,
+        state.desensitize,
         state.diag_dir.display(),
+        state.stats.path().display(),
         state.pool.as_ref().map(|p| p.size()).unwrap_or(0)
     );
-    axum::serve(listener, app)
+    serve(listener, state).await.map_err(|e| e.to_string())
+}
+
+/// 生产 serve 入口：**自定义 `Listener` + `ConnectInfo`** 把「本连接已断开」的信号
+/// 送到 handler（差异 13 的 499 取消源，见 `conn.rs`）。测试脚手架也走这里，
+/// 保证被测的 accept 路径与生产完全同一条。
+pub async fn serve(
+    listener: tokio::net::TcpListener,
+    state: Arc<AppState>,
+) -> std::io::Result<()> {
+    let app = router(state).into_make_service_with_connect_info::<conn::ConnClosed>();
+    axum::serve(conn::WatchedListener::new(listener), app)
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
         })
         .await
-        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

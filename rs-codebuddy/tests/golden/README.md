@@ -4,12 +4,17 @@
 
 | 文件 | 体积 | 内容 |
 |---|---|---|
-| `golden-codebuddy-go.json` | 231 KB（230,643 B） | **27 个 HTTP 场景 / 122 步** + 纯函数四段（tool_choice 15 / tool_refs 17 / fingerprint 4 / summarize_tool 6） |
+| `golden-codebuddy-go.json` | 298 KB（305,562 B） | **35 个 HTTP 场景 / 149 步**（P5a 12/56 + P5b 15/66 + P5c 8/27）+ 纯函数五段（tool_choice 15 / tool_refs 17 / fingerprint 4 / summarize_tool 6 / collect_eof 5） |
 
-`scenarios[].scope` 分两段：
+`scenarios[].scope` 分三段：
 
 * `scope = "P5a"`：合同与请求侧，12 个场景 / 56 步（`tests/golden_codebuddy.rs`）；
-* `scope = "P5b"`：账号池 / 凭据 / 额度 / failover，15 个场景 / 66 步（`tests/p5b_golden.rs`）。
+* `scope = "P5b"`：账号池 / 凭据 / 额度 / failover，15 个场景 / 66 步（`tests/p5b_golden.rs`）；
+* `scope = "P5c"`：脱敏 / SSE 清洗 / 非流式聚合 / 统计 / 路径清洗 / 积分失败措辞，
+  8 个场景 / 27 步（`tests/p5c_golden.rs`）。
+
+`pure.collect_eof`（5 例）是 P5c 审查后补修新增的**纯函数段**（2026-10-16）：`collectStream` 的
+「EOF 残行」合同，由真 Go `collectStream` 采收，见 crate README 差异 42。
 
 同源副本另有一份在 `.work/rust-rewrite/golden-codebuddy-go.json`（gitignore，不进库）。
 测试的加载顺序是**先本目录、缺则回落 `.work/rust-rewrite/`**（见 `tests/common/mod.rs::golden_path`）；
@@ -17,12 +22,13 @@
 
 ## 这份基准是怎么采的
 
-**两个一次性采集器**（同包 `_test.go`，跑完立即删除）放到 `internal/codebuddy/`：
+**三个一次性采集器**（同包 `_test.go`，跑完立即删除）放到 `internal/codebuddy/`：
 
 | 采集器留档（`.work/rust-rewrite/`） | 覆盖 | 输出环境变量 |
 |---|---|---|
 | `collect-codebuddy-a2_test.go` | P5a 合同场景（含 meta / pure 段） | `CODEBUDDY_GOLDEN_OUT` |
 | `collect-codebuddy-p5b_test.go` | P5b 池/凭据/额度/failover 场景 | `CODEBUDDY_P5B_OUT` |
+| `zz_codebuddy_p5c_collect_test.go` | P5c 脱敏（`desensitize=true` 的生产口径）/ SSE 清洗 / 非流式聚合 / 大流 Peek / 统计 / 路径清洗 / 积分失败措辞，外加 11133 退避断连实验（`meta.p5c_cancel`） | `CODEBUDDY_P5C_OUT` + `CODEBUDDY_P5C_CANCEL_OUT` |
 
 ```powershell
 cd F:\AIXM\proxydeck
@@ -33,6 +39,15 @@ $env:CODEBUDDY_P5B_OUT   ="F:\AIXM\proxydeck\.work\rust-rewrite\p5b-scenarios-go
 go test ./internal/codebuddy -run 'TestZZCollectCodebuddyGolden|TestZZCollectCodebuddyP5B' -count=1
 Remove-Item internal\codebuddy\zz_codebuddy_a_collect_test.go, internal\codebuddy\zz_codebuddy_p5b_collect_test.go  # 跑完立即删
 node .work\rust-rewrite\_p5b-merge.mjs   # 打 scope、合并、写入库副本与 .work 副本
+
+# P5c（2026-10-16 新增；不依赖上面两个一次性采集器，但用了**常驻**的 pool_test.go 里的 writeAuthInfo 夹具）
+Copy-Item .work\rust-rewrite\zz_codebuddy_p5c_collect_test.go internal\codebuddy\zz_codebuddy_p5c_collect_test.go
+$env:CODEBUDDY_P5C_OUT       ="F:\AIXM\proxydeck\.work\rust-rewrite\p5c-scenarios-go.json"
+$env:CODEBUDDY_P5C_CANCEL_OUT="F:\AIXM\proxydeck\.work\rust-rewrite\p5c-cancel-go.json"
+go test ./internal/codebuddy -run 'TestZZCollectCodebuddyP5C' -count=1 -v      # 约 7s（断连实验另有 ~5s）
+Remove-Item internal\codebuddy\zz_codebuddy_p5c_collect_test.go                  # 跑完立即删
+node .work\rust-rewrite\_p5c-merge.mjs         # 文本级拼接：只插 meta.p5c / meta.p5c_cancel 与替换 scenarios
+node .work\rust-rewrite\_unskip-downstream.mjs # 摘掉 P5a/P5b 里 8 处 outbound-only（P5c 之后下游可比了）
 ```
 
 采集纪律（写死在采集器里，改动前先读它）：
@@ -57,9 +72,11 @@ node .work\rust-rewrite\_p5b-merge.mjs   # 打 scope、合并、写入库副本�
 1. **采集机字面量本地化**：临时目录在黄金里写成 `__AUTHDIR__` / `__DATA__`（占位符刻意不含
    `<`/`>`/`&`——Go 的 `json.Marshal` 会把它们转成 `\u003c` 之类，占位符一进 JSON 就和
    两侧的转义规则打架）。Rust 侧把占位符还原成本次运行的临时目录后比对（`RealReplay::localize`）。
-2. **显式跳过、不静默**：三处跳过硬编码在测试里并**打印 + 计数**——
-   * `SKIP(downstream-p5c)`：客户端没要 `stream` 的 200 响应（Go 会把上游 SSE **聚合**成
-     `chat.completion`），本轮只比出站请求与状态码；
+2. **显式跳过、不静默**：跳过硬编码在测试里并**打印 + 计数**——
+   * ~~`SKIP(downstream-p5c)`~~ **P5c 起不再跳过**：原先客户端没要 `stream` 的 200 响应只比出站
+     请求与状态码（Go 会聚合成 `chat.completion`），现在这些步（P5a/P5b 共 **8 处**
+     `body_compare: "outbound-only"`）的响应体也逐字节比，只有聚合体里的 `created` /
+     `chatcmpl-<hex>` 归一成标记（`normalize_volatile_json`）；
    * `scope = "P5b"` 的场景在 P5a 门禁里计入「由 p5b_golden.rs 接管」的计数；
    * `content-length` 头部（派生值，体已逐字节比过）——含绝对路径的体在采集机与本机
      临时目录下长度不同。
@@ -67,10 +84,11 @@ node .work\rust-rewrite\_p5b-merge.mjs   # 打 scope、合并、写入库副本�
    要看带 `-- --nocapture`。汇总行形如：
 
    ```
-   HTTP 场景黄金对比：12 个场景 / 56 步逐字节一致；显式跳过 7 步（downstream-only，P5c）+ 15 个 P5b 场景（由 p5b_golden.rs 的生产装配门禁接管）；已登记 allowance 44 处（content-length）
-   P5b 黄金对比：15 个场景 / 66 步键序无关一致（Go 结构体声明序 vs Rust 键序见 crate README 差异 22）；显式跳过下游聚合 1 步（P5c）+ 55 处 content-length（派生头部，体已逐字节比过）
+   HTTP 场景黄金对比：12 个场景 / 56 步逐字节一致；显式跳过 0 步（downstream-only，P5c）+ 23 个 P5b 场景（由 p5b_golden.rs 的生产装配门禁接管）；已登记 allowance 51 处（content-length）
+   P5b 黄金对比：15 个场景 / 66 步「键序无关一致」（JSON 响应体与落盘文件按字段集合+取值比，非 JSON 与上游请求体逐字节）；显式跳过下游聚合 0 步（P5c）+ 56 处 content-length（派生头部，体已比过）
+   P5c 黄金对比：8 个场景 / 27 步（其中脱敏硬门禁 3 步：出站体逐字节比）
    ```
-   （上面两份数字是 2026-10-16 实测的原文；旧文档里那份「4 步 / 9 处」是 P5a 时代的陈旧值，已更正。）
+   （上面三份是 **2026-10-16 P5c 实测原文**；P5c 之前那版写的是「显式跳过 7 步 / 1 步、allowance 44 处」。）
 
 3. **JSON 体的键序无关**：Go 侧序列化**结构体**的地方（`poolState` / `failoverCfg` /
    `AccountView` / `Quota`）是字段声明序，Rust 侧一律键序（等价 `map[string]any`）。
