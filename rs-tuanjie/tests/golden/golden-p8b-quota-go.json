@@ -1,0 +1,290 @@
+{
+  "cache_keys": {
+    "empty": "e3b0c44298fc1c14",
+    "live": "d91e9a30839e2a29",
+    "viewA": "2bf2bccb1c841762"
+  },
+  "cases": [
+    {
+      "body": "{\"total\":11724.25,\"daily\":{\"quota\":10000,\"used\":10.5,\"remaining\":9989.5,\"periodEnd\":\"2099-01-01T08:00:00Z\"},\"gift\":{\"remaining\":500.25},\"month\":{\"points\":42.5,\"totalTokens\":120,\"promptTokens\":100,\"completionTokens\":20,\"requests\":7,\"startDate\":\"2099-01-01\",\"endDate\":\"2099-01-31\"},\"bySource\":[{\"label\":\"kimi-k3\",\"points\":27.5,\"tokens\":40,\"requests\":4},{\"label\":\"codely-core\",\"points\":15,\"tokens\":80,\"requests\":3}],\"plan\":{\"effective_remaining\":9989.5,\"next_boundary_at\":\"2099-01-02T00:00:00+08:00\",\"windows\":[{\"type\":\"usage_5h\",\"quota\":800,\"used\":1,\"remaining\":799,\"exhausted\":false,\"period_end\":\"2099-01-01T13:00:00+08:00\"},{\"type\":\"subscription_month\",\"quota\":16000,\"used\":6000,\"remaining\":10000,\"exhausted\":false,\"period_end\":\"2099-02-01T00:00:00+08:00\"}]},\"source\":\"live\"}",
+      "desc": "首拉成功：source=live，字段全部落位（points 类为字符串、bySource 同名合并降序）",
+      "err": "",
+      "name": "live",
+      "source": "live",
+      "token_short": "eyJhbGciOiJu",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/user/billing/usage/summary",
+          "auth": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtbGl2ZSIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+          "accept": "application/json",
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "host": "codely.tuanjie.cn",
+          "call_idx": 0,
+          "all_headers": {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtbGl2ZSIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+            "User-Agent": "codely-cli/1.0.0-rc.60 (win32; x64)"
+          }
+        }
+      ]
+    },
+    {
+      "body": "{\"total\":11724.25,\"daily\":{\"quota\":10000,\"used\":10.5,\"remaining\":9989.5,\"periodEnd\":\"2099-01-01T08:00:00Z\"},\"gift\":{\"remaining\":500.25},\"month\":{\"points\":42.5,\"totalTokens\":120,\"promptTokens\":100,\"completionTokens\":20,\"requests\":7,\"startDate\":\"2099-01-01\",\"endDate\":\"2099-01-31\"},\"bySource\":[{\"label\":\"kimi-k3\",\"points\":27.5,\"tokens\":40,\"requests\":4},{\"label\":\"codely-core\",\"points\":15,\"tokens\":80,\"requests\":3}],\"plan\":{\"effective_remaining\":9989.5,\"next_boundary_at\":\"2099-01-02T00:00:00+08:00\",\"windows\":[{\"type\":\"usage_5h\",\"quota\":800,\"used\":1,\"remaining\":799,\"exhausted\":false,\"period_end\":\"2099-01-01T13:00:00+08:00\"},{\"type\":\"subscription_month\",\"quota\":16000,\"used\":6000,\"remaining\":10000,\"exhausted\":false,\"period_end\":\"2099-02-01T00:00:00+08:00\"}]},\"source\":\"cache\"}",
+      "desc": "5 分钟 TTL 内二次拉取：source 由 live 改写为 cache，且**不打上游**",
+      "err": "",
+      "name": "cache",
+      "source": "cache",
+      "token_short": "eyJhbGciOiJu",
+      "upstream": []
+    },
+    {
+      "body": "{\"total\":11724.25,\"daily\":{\"quota\":10000,\"used\":10.5,\"remaining\":9989.5,\"periodEnd\":\"2099-01-01T08:00:00Z\"},\"gift\":{\"remaining\":500.25},\"month\":{\"points\":42.5,\"totalTokens\":120,\"promptTokens\":100,\"completionTokens\":20,\"requests\":7,\"startDate\":\"2099-01-01\",\"endDate\":\"2099-01-31\"},\"bySource\":[{\"label\":\"kimi-k3\",\"points\":27.5,\"tokens\":40,\"requests\":4},{\"label\":\"codely-core\",\"points\":15,\"tokens\":80,\"requests\":3}],\"plan\":{\"effective_remaining\":9989.5,\"next_boundary_at\":\"2099-01-02T00:00:00+08:00\",\"windows\":[{\"type\":\"usage_5h\",\"quota\":800,\"used\":1,\"remaining\":799,\"exhausted\":false,\"period_end\":\"2099-01-01T13:00:00+08:00\"},{\"type\":\"subscription_month\",\"quota\":16000,\"used\":6000,\"remaining\":10000,\"exhausted\":false,\"period_end\":\"2099-02-01T00:00:00+08:00\"}]},\"source\":\"live\"}",
+      "desc": "force=true 跳过缓存直拉（GUI「↻ 刷新」路径），仍写回缓存",
+      "err": "",
+      "name": "force",
+      "source": "live",
+      "token_short": "eyJhbGciOiJu",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/user/billing/usage/summary",
+          "auth": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtbGl2ZSIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+          "accept": "application/json",
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "host": "codely.tuanjie.cn",
+          "call_idx": 1,
+          "all_headers": {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtbGl2ZSIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+            "User-Agent": "codely-cli/1.0.0-rc.60 (win32; x64)"
+          }
+        }
+      ]
+    },
+    {
+      "body": "{\"total\":0,\"daily\":{\"quota\":0,\"used\":0,\"remaining\":0},\"gift\":{\"remaining\":0},\"month\":{\"points\":0,\"totalTokens\":0,\"promptTokens\":0,\"completionTokens\":0,\"requests\":0},\"plan\":{\"effective_remaining\":0},\"source\":\"none\",\"err\":\"官网积分接口 HTTP 503: {\\\"msg\\\":\\\"boom\\\"}\"}",
+      "desc": "首次 503：source=none，err 文案逐字（HTTP 状态 + 体截断 200）",
+      "err": "官网积分接口 HTTP 503: {\"msg\":\"boom\"}",
+      "name": "http-503",
+      "source": "none",
+      "token_short": "eyJhbGciOiJu",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/user/billing/usage/summary",
+          "auth": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtaHR0cDUwMyIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+          "accept": "application/json",
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "host": "codely.tuanjie.cn",
+          "call_idx": 0,
+          "all_headers": {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtaHR0cDUwMyIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+            "User-Agent": "codely-cli/1.0.0-rc.60 (win32; x64)"
+          }
+        }
+      ]
+    },
+    {
+      "body": "{\"total\":0,\"daily\":{\"quota\":0,\"used\":0,\"remaining\":0},\"gift\":{\"remaining\":0},\"month\":{\"points\":0,\"totalTokens\":0,\"promptTokens\":0,\"completionTokens\":0,\"requests\":0},\"plan\":{\"effective_remaining\":0},\"source\":\"none\",\"err\":\"官网积分接口 HTTP 503: {\\\"msg\\\":\\\"boom\\\"}\"}",
+      "desc": "失败负缓存 60s 内二次拉取：不打上游、source 仍 none",
+      "err": "官网积分接口 HTTP 503: {\"msg\":\"boom\"}",
+      "name": "err-cache",
+      "source": "none",
+      "token_short": "eyJhbGciOiJu",
+      "upstream": []
+    },
+    {
+      "body": "{\"total\":11724.25,\"daily\":{\"quota\":10000,\"used\":10.5,\"remaining\":9989.5,\"periodEnd\":\"2099-01-01T08:00:00Z\"},\"gift\":{\"remaining\":500.25},\"month\":{\"points\":42.5,\"totalTokens\":120,\"promptTokens\":100,\"completionTokens\":20,\"requests\":7,\"startDate\":\"2099-01-01\",\"endDate\":\"2099-01-31\"},\"bySource\":[{\"label\":\"kimi-k3\",\"points\":27.5,\"tokens\":40,\"requests\":4},{\"label\":\"codely-core\",\"points\":15,\"tokens\":80,\"requests\":3}],\"plan\":{\"effective_remaining\":9989.5,\"next_boundary_at\":\"2099-01-02T00:00:00+08:00\",\"windows\":[{\"type\":\"usage_5h\",\"quota\":800,\"used\":1,\"remaining\":799,\"exhausted\":false,\"period_end\":\"2099-01-01T13:00:00+08:00\"},{\"type\":\"subscription_month\",\"quota\":16000,\"used\":6000,\"remaining\":10000,\"exhausted\":false,\"period_end\":\"2099-02-01T00:00:00+08:00\"}]},\"source\":\"live\"}",
+      "desc": "先成功拿到 live 值",
+      "err": "",
+      "name": "stale-fallback-live",
+      "source": "live",
+      "token_short": "eyJhbGciOiJu",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/user/billing/usage/summary",
+          "auth": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtc3RhbGVMaXZlIiwiZXhwIjo0MTAyNDQ0ODAwfQ.sig",
+          "accept": "application/json",
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "host": "codely.tuanjie.cn",
+          "call_idx": 0,
+          "all_headers": {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtc3RhbGVMaXZlIiwiZXhwIjo0MTAyNDQ0ODAwfQ.sig",
+            "User-Agent": "codely-cli/1.0.0-rc.60 (win32; x64)"
+          }
+        }
+      ]
+    },
+    {
+      "body": "{\"total\":11724.25,\"daily\":{\"quota\":10000,\"used\":10.5,\"remaining\":9989.5,\"periodEnd\":\"2099-01-01T08:00:00Z\"},\"gift\":{\"remaining\":500.25},\"month\":{\"points\":42.5,\"totalTokens\":120,\"promptTokens\":100,\"completionTokens\":20,\"requests\":7,\"startDate\":\"2099-01-01\",\"endDate\":\"2099-01-31\"},\"bySource\":[{\"label\":\"kimi-k3\",\"points\":27.5,\"tokens\":40,\"requests\":4},{\"label\":\"codely-core\",\"points\":15,\"tokens\":80,\"requests\":3}],\"plan\":{\"effective_remaining\":9989.5,\"next_boundary_at\":\"2099-01-02T00:00:00+08:00\",\"windows\":[{\"type\":\"usage_5h\",\"quota\":800,\"used\":1,\"remaining\":799,\"exhausted\":false,\"period_end\":\"2099-01-01T13:00:00+08:00\"},{\"type\":\"subscription_month\",\"quota\":16000,\"used\":6000,\"remaining\":10000,\"exhausted\":false,\"period_end\":\"2099-02-01T00:00:00+08:00\"}]},\"source\":\"cache\",\"err\":\"官网积分接口 HTTP 500: {}\"}",
+      "desc": "随后失败：回退旧 live 值（source=cache + 本次 err）",
+      "err": "官网积分接口 HTTP 500: {}",
+      "name": "stale-fallback-fail",
+      "source": "cache",
+      "token_short": "eyJhbGciOiJu",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/user/billing/usage/summary",
+          "auth": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtc3RhbGVMaXZlIiwiZXhwIjo0MTAyNDQ0ODAwfQ.sig",
+          "accept": "application/json",
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "host": "codely.tuanjie.cn",
+          "call_idx": 1,
+          "all_headers": {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtc3RhbGVMaXZlIiwiZXhwIjo0MTAyNDQ0ODAwfQ.sig",
+            "User-Agent": "codely-cli/1.0.0-rc.60 (win32; x64)"
+          }
+        }
+      ]
+    },
+    {
+      "body": "{\"total\":0,\"daily\":{\"quota\":0,\"used\":0,\"remaining\":0},\"gift\":{\"remaining\":0},\"month\":{\"points\":0,\"totalTokens\":0,\"promptTokens\":0,\"completionTokens\":0,\"requests\":0},\"plan\":{\"effective_remaining\":0},\"source\":\"none\",\"err\":\"官网积分接口响应解析失败: invalid character 'o' in literal null (expecting 'u')\"}",
+      "desc": "200 但体非 JSON：err 文案同 encoding/json",
+      "err": "官网积分接口响应解析失败: invalid character 'o' in literal null (expecting 'u')",
+      "name": "bad-json",
+      "source": "none",
+      "token_short": "eyJhbGciOiJu",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/user/billing/usage/summary",
+          "auth": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtYmFkanNvbiIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+          "accept": "application/json",
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "host": "codely.tuanjie.cn",
+          "call_idx": 0,
+          "all_headers": {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtYmFkanNvbiIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+            "User-Agent": "codely-cli/1.0.0-rc.60 (win32; x64)"
+          }
+        }
+      ]
+    },
+    {
+      "body": "{\"total\":11724.25,\"daily\":{\"quota\":10000,\"used\":10.5,\"remaining\":9989.5,\"periodEnd\":\"2099-01-01T08:00:00Z\"},\"gift\":{\"remaining\":500.25},\"month\":{\"points\":42.5,\"totalTokens\":120,\"promptTokens\":100,\"completionTokens\":20,\"requests\":7,\"startDate\":\"2099-01-01\",\"endDate\":\"2099-01-31\"},\"bySource\":[{\"label\":\"kimi-k3\",\"points\":27.5,\"tokens\":40,\"requests\":4},{\"label\":\"codely-core\",\"points\":15,\"tokens\":80,\"requests\":3}],\"plan\":{\"effective_remaining\":9989.5,\"next_boundary_at\":\"2099-01-02T00:00:00+08:00\",\"windows\":[{\"type\":\"usage_5h\",\"quota\":800,\"used\":1,\"remaining\":799,\"exhausted\":false,\"period_end\":\"2099-01-01T13:00:00+08:00\"},{\"type\":\"subscription_month\",\"quota\":16000,\"used\":6000,\"remaining\":10000,\"exhausted\":false,\"period_end\":\"2099-02-01T00:00:00+08:00\"}]},\"source\":\"live\"}",
+      "desc": "请求形态：GET 生产端点路径 + 头集合（Authorization/Accept/UA/Host）",
+      "err": "",
+      "name": "request-shape",
+      "source": "live",
+      "token_short": "eyJhbGciOiJu",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/user/billing/usage/summary",
+          "auth": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtbmV0d29yayIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+          "accept": "application/json",
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "host": "codely.tuanjie.cn",
+          "call_idx": 0,
+          "all_headers": {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtbmV0d29yayIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+            "User-Agent": "codely-cli/1.0.0-rc.60 (win32; x64)"
+          }
+        }
+      ]
+    },
+    {
+      "body": "{\"total\":0,\"daily\":{\"quota\":0,\"used\":0,\"remaining\":0},\"gift\":{\"remaining\":0},\"month\":{\"points\":0,\"totalTokens\":0,\"promptTokens\":0,\"completionTokens\":0,\"requests\":0},\"plan\":{\"effective_remaining\":0},\"source\":\"none\",\"err\":\"账号不在池中\"}",
+      "desc": "uid 不在池中 ⇒ 固定文案",
+      "err": "账号不在池中",
+      "name": "view-not-in-pool",
+      "source": "none",
+      "upstream": []
+    },
+    {
+      "body": "{\"total\":11724.25,\"daily\":{\"quota\":10000,\"used\":10.5,\"remaining\":9989.5,\"periodEnd\":\"2099-01-01T08:00:00Z\"},\"gift\":{\"remaining\":500.25},\"month\":{\"points\":42.5,\"totalTokens\":120,\"promptTokens\":100,\"completionTokens\":20,\"requests\":7,\"startDate\":\"2099-01-01\",\"endDate\":\"2099-01-31\"},\"bySource\":[{\"label\":\"kimi-k3\",\"points\":27.5,\"tokens\":40,\"requests\":4},{\"label\":\"codely-core\",\"points\":15,\"tokens\":80,\"requests\":3}],\"plan\":{\"effective_remaining\":9989.5,\"next_boundary_at\":\"2099-01-02T00:00:00+08:00\",\"windows\":[{\"type\":\"usage_5h\",\"quota\":800,\"used\":1,\"remaining\":799,\"exhausted\":false,\"period_end\":\"2099-01-01T13:00:00+08:00\"},{\"type\":\"subscription_month\",\"quota\":16000,\"used\":6000,\"remaining\":10000,\"exhausted\":false,\"period_end\":\"2099-02-01T00:00:00+08:00\"}]},\"source\":\"live\"}",
+      "desc": "uid 在池中 ⇒ 用账号 token 拉（首拉 live）",
+      "err": "",
+      "name": "view-uid-a-live",
+      "source": "live",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/user/billing/usage/summary",
+          "auth": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtdmlld0EiLCJleHAiOjQxMDI0NDQ4MDB9.sig",
+          "accept": "application/json",
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "host": "codely.tuanjie.cn",
+          "call_idx": 0,
+          "all_headers": {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtdmlld0EiLCJleHAiOjQxMDI0NDQ4MDB9.sig",
+            "User-Agent": "codely-cli/1.0.0-rc.60 (win32; x64)"
+          }
+        }
+      ]
+    },
+    {
+      "body": "{\"total\":11724.25,\"daily\":{\"quota\":10000,\"used\":10.5,\"remaining\":9989.5,\"periodEnd\":\"2099-01-01T08:00:00Z\"},\"gift\":{\"remaining\":500.25},\"month\":{\"points\":42.5,\"totalTokens\":120,\"promptTokens\":100,\"completionTokens\":20,\"requests\":7,\"startDate\":\"2099-01-01\",\"endDate\":\"2099-01-31\"},\"bySource\":[{\"label\":\"kimi-k3\",\"points\":27.5,\"tokens\":40,\"requests\":4},{\"label\":\"codely-core\",\"points\":15,\"tokens\":80,\"requests\":3}],\"plan\":{\"effective_remaining\":9989.5,\"next_boundary_at\":\"2099-01-02T00:00:00+08:00\",\"windows\":[{\"type\":\"usage_5h\",\"quota\":800,\"used\":1,\"remaining\":799,\"exhausted\":false,\"period_end\":\"2099-01-01T13:00:00+08:00\"},{\"type\":\"subscription_month\",\"quota\":16000,\"used\":6000,\"remaining\":10000,\"exhausted\":false,\"period_end\":\"2099-02-01T00:00:00+08:00\"}]},\"source\":\"cache\"}",
+      "desc": "同 uid 二次查询 ⇒ cache（不打上游）",
+      "err": "",
+      "name": "view-uid-a-cache",
+      "source": "cache",
+      "upstream": []
+    },
+    {
+      "body": "{\"total\":11724.25,\"daily\":{\"quota\":10000,\"used\":10.5,\"remaining\":9989.5,\"periodEnd\":\"2099-01-01T08:00:00Z\"},\"gift\":{\"remaining\":500.25},\"month\":{\"points\":42.5,\"totalTokens\":120,\"promptTokens\":100,\"completionTokens\":20,\"requests\":7,\"startDate\":\"2099-01-01\",\"endDate\":\"2099-01-31\"},\"bySource\":[{\"label\":\"kimi-k3\",\"points\":27.5,\"tokens\":40,\"requests\":4},{\"label\":\"codely-core\",\"points\":15,\"tokens\":80,\"requests\":3}],\"plan\":{\"effective_remaining\":9989.5,\"next_boundary_at\":\"2099-01-02T00:00:00+08:00\",\"windows\":[{\"type\":\"usage_5h\",\"quota\":800,\"used\":1,\"remaining\":799,\"exhausted\":false,\"period_end\":\"2099-01-01T13:00:00+08:00\"},{\"type\":\"subscription_month\",\"quota\":16000,\"used\":6000,\"remaining\":10000,\"exhausted\":false,\"period_end\":\"2099-02-01T00:00:00+08:00\"}]},\"source\":\"live\"}",
+      "desc": "同 uid + ?refresh=1 ⇒ 直拉",
+      "err": "",
+      "name": "view-uid-a-force",
+      "source": "live",
+      "upstream": [
+        {
+          "method": "GET",
+          "path": "/api/user/billing/usage/summary",
+          "auth": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtdmlld0EiLCJleHAiOjQxMDI0NDQ4MDB9.sig",
+          "accept": "application/json",
+          "ua": "codely-cli/1.0.0-rc.60 (win32; x64)",
+          "host": "codely.tuanjie.cn",
+          "call_idx": 1,
+          "all_headers": {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtdmlld0EiLCJleHAiOjQxMDI0NDQ4MDB9.sig",
+            "User-Agent": "codely-cli/1.0.0-rc.60 (win32; x64)"
+          }
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "billing_timeout": "15s",
+    "billing_url": "https://codely.tuanjie.cn/api/user/billing/usage/summary",
+    "candidate_out_of_scope": "internal/tuanjie 的账号池没有 Dead/冷却标记（那是 codebuddy 的 pool.go），本轮的池语义以 rs 侧登记为准",
+    "collected_at": "2026-10-17T02:03:29+08:00",
+    "collector_gate": "内部 tuanjie/accounts.go",
+    "note": "P8b 第二片 quota 差分基准（假 TLS 上游 + 合成账号；不碰 8788/真实凭据/不出网）",
+    "quota_err_ttl": "1m0s",
+    "quota_ttl": "5m0s",
+    "tokens": {
+      "badjson": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtYmFkanNvbiIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+      "cache": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtY2FjaGUiLCJleHAiOjQxMDI0NDQ4MDB9.sig",
+      "errcache": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtZXJyY2FjaGUiLCJleHAiOjQxMDI0NDQ4MDB9.sig",
+      "force": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtZm9yY2UiLCJleHAiOjQxMDI0NDQ4MDB9.sig",
+      "http503": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtaHR0cDUwMyIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+      "live": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtbGl2ZSIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+      "network": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtbmV0d29yayIsImV4cCI6NDEwMjQ0NDgwMH0.sig",
+      "staleFail": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtc3RhbGVGYWlsIiwiZXhwIjo0MTAyNDQ0ODAwfQ.sig",
+      "staleLive": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtc3RhbGVMaXZlIiwiZXhwIjo0MTAyNDQ0ODAwfQ.sig",
+      "viewA": "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ1aWQtcXVvdGEtdmlld0EiLCJleHAiOjQxMDI0NDQ4MDB9.sig"
+    },
+    "transport_dial": "给该客户端换标准库 Transport + 自定义 DialContext 指到假上游（生产 transport 是 uTLS RoundTripper、不认 DialTLSContext 覆写；pacing_pool_test.go:93 同款先例）",
+    "user_agent": "codely-cli/1.0.0-rc.60 (win32; x64)"
+  }
+}

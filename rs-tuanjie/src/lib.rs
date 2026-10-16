@@ -8,19 +8,23 @@
 //!
 //! **P8b 切片（本轮）**已迁入 `pacing`（KIMI-K3 429 兜底）/ `inflight`（进行中注册表 +
 //! 实时动态）/ `opencode_session`（`x-opencode-session`）/ `dist`（分布指纹纯函数）/
-//! `channels`（注水渠道静态表）；剩余 P8b 面（`server.go`/`handlers_extra.go`/`accounts.go`/
-//! `quota.go`/`providers.go`/两条转发/`media.go`/`probes.go`）见 `README.md` 的未覆盖清单。
+//! `channels`（注水渠道静态表）/ `accounts`（账号池）/ `quota`（积分）；
+//! 剩余 P8b 面（`server.go`/`handlers_extra.go`/`providers.go`/两条转发/`media.go`/
+//! `probes.go`）见 `README.md` 的未覆盖清单。
 
+pub mod accounts;
 pub mod appdir;
 pub mod channels;
 pub mod client;
 pub mod credentials;
+pub mod crypto;
 pub mod dist;
 pub mod gojson;
 pub mod headers;
 pub mod inflight;
 pub mod opencode_session;
 pub mod pacing;
+pub mod quota;
 pub mod reqshape;
 pub mod session;
 pub mod sign;
@@ -28,6 +32,16 @@ pub mod transport;
 pub mod ua;
 
 use std::time::Duration;
+
+/// 团结侧的日志行（Go 用标准 `log`，带 `YYYY/MM/DD HH:MM:SS` 行头）。
+/// 本 crate 的其余模块也用同一格式，便于与 8788 的日志逐行并排看。
+pub fn logf(msg: &str) {
+    eprintln!(
+        "{} {}",
+        chrono::Local::now().format("%Y/%m/%d %H:%M:%S"),
+        msg
+    );
+}
 
 /// 团结账号域（登录、换 key、dashboard、埋点）——`client.go:35`。
 pub const CODEY_API_BASE: &str = "https://codely.tuanjie.cn";

@@ -61,7 +61,66 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 上限时共享或新建；`promptSeq` 每次租借 +1 进 `metadata.prompt_id`）。池参数（上限 16、
 闲置 20~40 分钟、最长 180~330 分钟、逐会话随机）与 `client.go:346-480` 逐条相同。
 
+## P8b 第二片：账号池（accounts）与积分（quota）（2026-10-17）
+
+**本轮交付两块**（各有门禁：行为测试 + 对真 Go 采收基准的差分对照）：
+
+| Rust 位置 | Go 来源 | 覆盖 |
+|---|---|---|
+| `src/accounts.rs` | `accounts.go` 全量（584 行） | `Account`/`AccountStatus` 字段与 JSON 形态、`AccountPool` 的 `reload`（缺字段/坏 JSON 容忍、非 local 无 token 不入池）、`save_locked`（**DPAPI 密文落盘**，明文 token 不落盘）、`pick`（enabled/非 402 → 认领过滤 → GLM 资格 → 负载最低 → 轮询；**另跳过 Dead 与冷却中的号**）、`pick_with_token`（最多试池大小次）、`mark_budget_exceeded(_at)`、`resume_scan_once`（到点复查 → 清标记 / 顺延 5 分钟）、`inc_load`/`dec_load`（钳 0）/`load_of`、`status`（JWT exp → 剩余小时、`未知` 兜底）、`add`/`remove`/`toggle`/`set_glm`/`set_models`/`sorted_user_ids`/`get`、`ensure_local_account`/`local_account`、`is_glm_model`/`jwt_expiry`/`jwt_sub`/`split_jwt` |
+| ↑ 另加（服务层换号所需，Go 团结侧没有这三样） | 语义源 `internal/codebuddy/pool.go`（照抄「骨架同源」那条线） | `mark_dead`（401/403 标死，`pick` 永不再选，复活只靠 `rescan`）、`mark_limited`/`clear_cool`（429 冷却到期懒判定）、`rescan`（**Dead 复位**、冷却与 `enabled` 继承、文件已删的号出池） |
+| `src/quota.rs` | `quota.go` 全量（301 行） | `Quota`/`DailyQuota`/`GiftQuota`/`PlanQuota`/`PlanWindow`/`MonthQuota`/`SourceSpend` 的字段与**逐字节 JSON 形态**（字段声明序 + `omitempty` + Go 浮点口径）、`quota_cache_key`（`sha256(token)[:8]` 十六进制）、`QuotaCache`（成功 5min / 失败负缓存 60s、命中改写 `live→cache`）、`fetch_quota_with_token`（15s 请求级超时、2MB 截断、三条错误文案）、`parse_summary`（字符串型 points → `ParseFloat` 失败取 0、`by_source` 同名合并 + 按积分降序）、`fetch_quota_cached`（`force` 旁路、失败回退旧 live 值）、`QuotaView`（`/quota` 的两条固定文案） |
+| `src/crypto.rs` | `internal/appdir/crypt.go` + `crypt_windows.go` + `acl_windows.go`（副本取自 `rs-vibex/src/crypto.rs`） | `PDAPI1\n` + base64 密文的**读+写**、明文旧文件读兼容、DPAPI `CryptProtectData`/`CryptUnprotectData`（当前用户作用域）、tmp→`icacls` 收紧→rename |
+
+**门禁（两条，都有真 Go 采收的对照）**：
+
+* `tests/p8b_pool_behavior.rs`（**13 用例 + 1 ignored**）：合成账号 + 合成 JWT + 临时目录，
+  「假上游」是确定性的状态码序列（401 / timeout / 200），锁住
+  **401 标死 → 换活号 → 全死则如实透传（有界，不循环）**、**超时不标死也不换号**、
+  冷却跳过与到期恢复、`rescan` 复活死号但保留停用意图、`loads`/`use_count`/`last_used`
+  的内存态口径、本地账号的 token 缝、`status` 的 JWT 过期视图。
+* `tests/p8b_quota_diff.rs`（3 用例）：对 `tests/golden/golden-p8b-quota-go.json`
+  （真 Go 采收，见 `tests/golden/README.md`）逐例比 `source`/`err`/**响应体逐字节**/上游命中次数，
+  覆盖 live → cache → force → 503 → 负缓存 → 失败回退旧值 → 坏 JSON → 视图层文案；
+  纯函数段直接比缓存键、TTL 常量与请求形态（路径/Accept/UA/Host）。
+
 ## 已知差异（**如实登记**，不是"优化空间"）
+
+> 编号 1~6 属 P8a（凭证链），7~9 属 P8b 第一片（兜底内核），10 起属 P8b 第二片（账号池/积分）。
+
+10. **Dead/冷却标记是 Go 团结侧没有的**：`internal/tuanjie/accounts.go` 里
+   没有任何「凭据失效/冷却」标记——它的 401 只是被注释提到（`server.go:461`）、402 走
+   `budget_exceeded`。本片按 `internal/codebuddy/pool.go`（同源骨架）的语义补上
+   `mark_dead`/`mark_limited`/`clear_cool`，作为 **server 池路径换号的地基**；
+   落地时以「行为测试 + 与 P8a/P8b 既有口径一致」为准，**不是**对 `accounts.go` 的逐字复刻。
+   两处命名/分层差异：① `loads` 与 Dead/冷却都只在内存里（`reload` 只重建成员、不动计数，
+   重启才清零）；② 402 的 `budget_exceeded`/`budget_reset_at` **随池落盘**，故 `rescan`
+   重读文件后它仍在，清它走 `toggle(uid, true)`（`accounts.go:477-479`）——与内存态的 Dead 不同层。
+11. **`budget_reset_at` 的零值会被写出**：Go 的 `time.Time` 是结构体，
+   `omitempty` **对它无效** ⇒ 每个账号都会写出 `"budget_reset_at":"0001-01-01T00:00:00Z"`。
+   Rust 侧按 Go 实测行为照写（`marshal_accounts_indent`），门禁 `accounts_file_shape_is_go_marshal_indent`
+   锁住这一行。**注意别照「omitempty = 省略零值」的直觉去改。**
+12. **JSON 库的错误措辞不同**：响应体不是合法 JSON 时，Go 是
+   `encoding/json`（`invalid character 'o' in literal null (expecting 'u')`），
+   Rust 是 `serde_json`（`expected ident at line 1 column 2`）——两侧前缀
+   （`官网积分接口响应解析失败: `）逐字一致。差分门禁按「前缀逐字 + `err` 值归一化后整体逐字节」比对，
+   措辞本身不对齐（与 P5c 登记的「标准库 JSON 措辞」同族）。
+13. **`by_source` 并列名次的次序**：Go 用 map 归并后 `sort.Slice` 只比 `Points`
+   （**等分时次序不确定**），Rust 用 `BTreeMap` 归并 + 同分时按 label 兜底 ⇒
+   同一输入下 Rust 的输出**稳定**、Go 可能每次不同。只有等分并列才可能看出差别。
+14. **`Accept-Encoding: gzip` 由各自客户端补**：Go `net/http` 与 reqwest（开了
+   `gzip` 特性）都会补这个头，值相同（`gzip`）；但**头序**与其余自动头（`host` 端口、
+   `Connection`）仍属平台级差异（同下面第 2/3 条）。
+15. **`is_glm_model` 的多字节输入**：Go 逐字节原地小写（多字节 UTF-8 会被打散成
+   无效序列），Rust 同样只折 ASCII 字节 ⇒ 对「全角/非 ASCII 前缀」的判定两侧一致，
+   但**都不保证**对任意 UTF-8 输入有语义意义（只服务模型名，真实取值是 ASCII）。
+16. **`Quota` 的请求级超时覆盖面**：Go 的 `defer cancel()` 只罩 `client.Do`
+   （拿到响应头即返回，**读体不在 15s 预算内**）；reqwest 的请求级 timeout 连读体一起罩
+   （更严，不会少读）。行为上不产生差异，但极端慢读场景两侧表现可能不同。
+17. **（未覆盖）`/quota` 的 HTTP 端点装配**：`handleQuota` 的 `?uid`/`?refresh=1` 解析、
+   `writeJSON` 的形状与 CORS 属 server 骨架（下一小轮），本轮只把**分支文案**
+   （`QuotaView::not_in_pool` / `token_error`）与缓存/拉取语义做齐。
+
 
 1. **TLS 指纹（用户终裁：永久接受差异，不换栈）**：用 rustls；差的是 JA4 载荷哈希、
    GREASE、ECH padding、ALPS、后量子 key_share，以及出站 ALPN 含 h2（reqwest 开了
@@ -115,8 +174,10 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
    `stream_options` 补齐、`noteUpstreamError/OK` 告警）、`/v1/stats`、`/quota`、`/kimi-pacing`、
    `/accounts`、`/inflight`、`/activity`、`/v1/images/generations`、`/v1/videos`、`/agnesapi`。
 2. `handlers_extra.go`：账号池 HTTP 面与其余 handler。
-3. `accounts.go`：账号池全量（401 标死换活号、rescan 复位、`ResumeBudgetLoop`）。
-4. `quota.go`：`/quota?uid=`、缓存分键、积分 TOP。
+3. ~~`accounts.go`：账号池全量（401 标死换活号、rescan 复位、`ResumeBudgetLoop`）。~~
+   **【P8b 第二片已迁】** 见下节「P8b 第二片」（`src/accounts.rs`）。
+4. ~~`quota.go`：`/quota?uid=`、缓存分键、积分 TOP。~~
+   **【P8b 第二片已迁】** 见下节（`src/quota.rs`）；仅 HTTP 端点装配仍归 server 骨架。
 5. `providers.go`：三协议（chat/responses/anthropic）+ 白名单兜底 + `x-opencode-session` 接线
    （本轮的 `opencode_session.rs` 是它的前置件，尚未接进转发路径）。
 6. `responses_forward.go` / `anthropic_forward.go`：两条协议的转发与翻回。
@@ -136,16 +197,33 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 9. **`ActivityLog` 的 `time` 字段**：Windows 走 `GetLocalTime`（与 Go `time.Now()` 同时区）；
    非 Windows 退到 UTC（本 crate 只跑 Windows，未在其它平台验证）。
 
+**P8b 第二片新增的已知差异（登记）**：
+
+10. **`parse_summary` 的类型不匹配处理**：Go 的 `json.Unmarshal` 遇到类型不匹配
+    （如 points 给数字、`exhausted` 给字符串）**整体报错**；Rust `unwrap_or(0/false)`
+    静默取零继续成功。违"如实报错优先"口径，暂未修（上游字段形态稳定，Risk 低）。
+11. **JWT 解码表**：用标准 base64 表（`+/`），Go 用 RawURLEncoding（`-_`）。
+    纯 ASCII payload 数学上永不产生 62/63（golden/测试 token 因此全兼容）；
+    非 ASCII claims 时 Rust `jwt_sub`/`jwt_expiry` 静默失败 ⇒ 本地账号不入池。
+12. **2MB 内存形状**：`quota.rs` 先 `resp.bytes()` 全量读入再截断；Go `LimitReader`
+    边读边弃、峰值 2MB（rs-bai P1 同类已登记 R8，此处同理）。
+13. **等分并列次序**：Go 侧 map 迭代次序本身不确定，Rust 用 label 排序兜底 = 确定输出。
+14. **`AccountStatus` 经 serde 写出时 f64 写 `2.0` 而 Go 写 `2`**：server 片装配
+    `/accounts` 端点时必须走 gojson 口径（Go 浮点最短表示），不得直接 `serde_json::to_string`。
+
 ## 门禁与复跑
 
 ```powershell
-# Rust 侧（P8a 门禁：33 单测 + 12 集成；P8b 切片：+14 单测 + 5 集成）
+# Rust 侧（P8a 门禁：33 单测 + 12 集成；P8b 第一片：+14 单测 + 5 集成；
+#           P8b 第二片：+13 单测 + 13 池行为 + 3 quota 差分）
 cd rs-tuanjie
 $env:CARGO_TARGET_DIR="E:\cargo-target\rs-tuanjie"   # F: 盘空间紧张，构建产物放 E:
-cargo test
+cargo test                                           # 60 单测 + 12 + 5 + 13(+1 ignored) + 3 = 93 项
 cargo build --all-targets                            # 0 warning
 cargo test --test golden_p8a -- --nocapture          # 看逐条对照证据与两侧线上实抓
-cargo test --test golden_p8b -- --nocapture          # P8b 切片逐条对照
+cargo test --test golden_p8b -- --nocapture          # P8b 第一片逐条对照
+cargo test --test p8b_pool_behavior -- --nocapture   # 第二片：401 标死/换号/rescan/冷却
+cargo test --test p8b_quota_diff -- --nocapture      # 第二片：quota 差分（含假上游请求记录）
 
 # Go 侧零改动核对
 cd ..

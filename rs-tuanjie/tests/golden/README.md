@@ -101,3 +101,45 @@ go test ./internal/tuanjie -run TestZZCollectP8b -count=1 -v
 11,523 B；`cargo test --test golden_p8b` 5/5 通过（`--nocapture` 打印逐段对照证据）。
 **生成本基准时 `dist.go` 的 `collectDistSamples` 与 `channels.go` 的网络面未采**——它们不在
 本切片（见 `rs-tuanjie/README.md` 的「P8b 切片未覆盖」清单）。
+
+## P8b 第二片的基准（`golden-p8b-quota-go.json`）
+
+覆盖 `quota.go`：缓存键（`sha256(token)[:8]`）、TTL 常量、请求形态（路径/头）、
+`Quota` 的 JSON 逐字节形态，以及 **13 个行为用例**（live → cache → force → 503 → 负缓存 →
+失败回退旧值 → 200 坏 JSON → 请求形态 → 视图层 4 条）。采集器留档
+`.work/p8b/zz_p8b_quota_collect_test.go`。
+
+**再生成链**（把留档的采集器拷回 `internal/tuanjie/`，跑完**立即删除**）：
+
+```powershell
+Copy-Item <repo>\.work\p8b\zz_p8b_quota_collect_test.go <repo>\internal\tuanjie\
+$env:P8B_OUT="<repo>\.work\p8b\golden-p8b-quota-go.json"    # 必须是**绝对路径**（go test 的 cwd 在包目录）
+go test ./internal/tuanjie -run TestZZCollectP8bQuota -count=1 -v
+Remove-Item <repo>\internal\tuanjie\zz_p8b_quota_collect_test.go
+Copy-Item <repo>\.work\p8b\golden-p8b-quota-go.json <repo>\rs-tuanjie\tests\golden\ -Force
+```
+
+**采集器怎么喂上游（两个坑，照做才采得到）**：
+
+1. `quota.go:26` 的 `billingSummaryURL` 是**包级 https 常量**，无法改指 ⇒ 采集器给这个客户端
+   换一个「标准库 Transport + `DialTLSContext` 拨号重定向到 httptest 假上游」的实现
+   （先例：`pacing_pool_test.go:72-93`）。**不能覆写 `smartProxyTransport`**——它是 uTLS
+   实现（自带 RoundTripper、不认 `DialTLSContext`），覆写无效、请求会真出网。
+2. 假上游要回**官网原始报文**（snake_case 的 `/api/user/billing/usage/summary` 响应），
+   而黄金里的 `body` 是 **Go 提取后的 `Quota` JSON**。第一版就拿错了（拿提取后的体喂上游 →
+   全部字段落成零），症状是 `live` 用例 `total=0`。
+
+**第三个坑（第一次采集真踩到）**：`NewAccountPool()` 会调 `EnsureLocalAccount()` → 读
+`~/.codely-cli/oauth_creds.json`。采集器必须**把 `USERPROFILE`/`HOME` 指到空临时目录**
+（逼它返回「读取团结登录态失败」），否则会把**真实本地账号**（含真实 sub）并进采集用的池里
+——违反「不读真实凭据」纪律。第一次采集正是如此（池里混进第三个号），第二次加隔离后重采：
+除 `meta.collected_at` 外**与第一次逐字节相同**（说明那次并没有把真实数据写进基准）。
+
+**时变口径**：全部无墙钟依赖——包的积分缓存**按 token 分键**（每个用例一把独立合成 token），
+假上游的重置时刻是 `2099-01-01`，`token` 是合成 JWT（`exp=4102444800`）。
+其余字段（`request_id` 之类）只在真出网时才有，本基准里不存在。
+
+2026-10-17 实测：产出 20,513 B、13 个用例；`cargo test --test p8b_quota_diff` 3/3 通过。
+两份副本同哈希 `D2F94AF3C6D0C3AE34F2DEA30FAA7120F3132517D5B5FDA170A5CB81AAC92F85`。
+**采集器绝不出网、不碰 8788、不读真实登录态**：数据目录走 `t.TempDir()` +
+`PROXYDECK_DATA_DIR`，账号池文件是合成账号，`USERPROFILE` 指向空目录。

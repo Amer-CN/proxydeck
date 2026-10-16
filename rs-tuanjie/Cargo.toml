@@ -17,6 +17,10 @@ getrandom = "0.3"
 # HMAC-SHA256：两层密钥派生与签名体。与 rs-codebuddy 已用的 `sha2` 同族（**不自己手搓密码学**）。
 hmac = "0.12"
 sha2 = "0.10"
+# 本地时间：Go `time.Time` 的落盘形态（RFC3339 秒精度 + 本地时区偏移）、
+# `LastUsed` 的 `2006-01-02 15:04:05` 形态、`Status()` 的 `2006-01-02 15:04` 都按**本机时区**
+# 取值（Go 用 `time.Local`）。`clock` 特性提供 `Local::now()`；不用 std，因为 std 没有时区。
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 serde = { version = "1", features = ["derive"] }
 # raw_value：请求体重排要把客户端的字段值**原样字节**搬过去（对应 Go 的 json.RawMessage）。
 # 不开 preserve_order：Go 的 json.Marshal 对 map[string]any 按 key 排序，
