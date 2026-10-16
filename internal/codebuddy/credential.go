@@ -434,7 +434,7 @@ func (c *Credential) refresh(ctx context.Context, s *sessionInfo) error {
 		Msg  string `json:"msg"`
 		Data json.RawMessage `json:"data"`
 	}
-	if err := json.Unmarshal(body, &out); err != nil || out.Code != 0 || len(out.Data) == 0 {
+	if err := json.Unmarshal(body, &out); err != nil || out.Code != 0 || len(out.Data) == 0 || string(out.Data) == "null" {
 		return fmt.Errorf("刷新 token 失败(code=%d): %s", out.Code, truncate(string(out.Data), 200))
 	}
 	var newAuth map[string]any
