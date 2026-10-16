@@ -1,0 +1,29 @@
+[package]
+name = "rs-proxy"
+version = "0.1.0"
+edition = "2021"
+description = "ProxyDeck 主代理 Rust 重写（绞杀者路线 P6：等价 internal/proxy + api + server + appdir 的可迁部分；测试端口用，未接入 GUI）"
+
+[[bin]]
+name = "rs-proxy"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+base64 = "0.23"
+clap = { version = "4", features = ["derive"] }
+# reqwest 的 `bytes_stream()` 与 axum 的 `Body::from_stream` 都要 Stream 组合子
+futures-util = "0.3"
+# UUID v4 + 请求 id 随机后缀（对齐 Go 的 google/uuid）。不自己拿时间戳凑 v4——
+# 上游按 id 去重/聚合时格式不合规会被拒。
+getrandom = "0.3"
+# 读整份请求体（axum 的 `Body::collect()`）
+http-body-util = "0.1"
+# 上游是 https://api.commandcode.ai 一条出站；TLS 栈显式声明，避免将来上游改默认
+# 时静默换栈（TLS 指纹差异是圆桌点名的风险项）。
+reqwest = { version = "0.13", features = ["default-tls", "http2", "stream"] }
+serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }
+
+[profile.release]
+opt-level = 2
