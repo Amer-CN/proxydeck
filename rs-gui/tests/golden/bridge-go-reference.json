@@ -1,0 +1,460 @@
+{
+  "app_version": "v3.20.10",
+  "bindings26": [
+    "ccGetState",
+    "ccLiveSnapshot",
+    "ccStart",
+    "ccStop",
+    "ccStats",
+    "ccUsage",
+    "ccUsageRefresh",
+    "ccSaveKey",
+    "ccProbeKey",
+    "ccCheckUpdate",
+    "ccCheckUpdateForce",
+    "ccOneKeyUpdate",
+    "ccCalib",
+    "ccModels",
+    "ccAutostart",
+    "ccOpen",
+    "ccCopy",
+    "ccDismiss",
+    "ccDismissCloseHint",
+    "ccWindowCmd",
+    "ccRequestClose",
+    "ccCloseChoice",
+    "ccCloseModeGet",
+    "ccCloseModeSet",
+    "ccKeyMapGet",
+    "ccKeyMapSet"
+  ],
+  "bindings_all": [
+    "ccGetState",
+    "ccLiveSnapshot",
+    "ccStart",
+    "ccStop",
+    "ccStats",
+    "ccUsage",
+    "ccUsageRefresh",
+    "ccSaveKey",
+    "ccProbeKey",
+    "ccCheckUpdate",
+    "ccCheckUpdateForce",
+    "ccOneKeyUpdate",
+    "ccPluginList",
+    "ccPluginLog",
+    "ccPluginStart",
+    "ccPluginStop",
+    "ccCalib",
+    "ccModels",
+    "ccAutostart",
+    "ccOpen",
+    "ccCopy",
+    "ccDismiss",
+    "ccDismissCloseHint",
+    "ccWindowCmd",
+    "ccRequestClose",
+    "ccCloseChoice",
+    "ccCloseModeGet",
+    "ccCloseModeSet",
+    "ccKeyMapGet",
+    "ccKeyMapSet"
+  ],
+  "comparison_exemptions": [
+    "ccKeyMapSet 的 JSON 解析错误文案（Go encoding/json 与 serde_json 的报错文本不可能逐字相同）：仅该步的 msg 归一为 $JSONERR",
+    "appdir.log（ACL 收紧失败时的诊断日志）：带时间戳且内容取决于 icacls 是否在 PATH 上，不作黄金",
+    "PDAPI1 密文文件的字节：DPAPI 每次调用产出不同，按「能否解回同一明文」比较（见 files 的 protected 语义）",
+    "ccLiveSnapshot 的取值：随本机各插件端口实时状态变化，只比键集与 ok 形状"
+  ],
+  "core_version": "v1.2.0",
+  "normalization": [
+    "\u003cexe 路径\u003e → $EXE",
+    "\u003cPROXYDECK_DATA_DIR 临时目录\u003e → $DATA",
+    "\u003cAPPDATA 临时目录\u003e → $APPDATA",
+    "127.0.0.1:\u003c测试端口\u003e → 127.0.0.1:$PORT",
+    "\"port\":\"\u003cn\u003e\" → \"port\":\"$PORT\"",
+    "-port \u003cn\u003e → -port $PORT（自启 VBS 的命令行）",
+    "\"pid\":\u003cn\u003e → \"pid\":0",
+    "\"uptime\":\u003cn\u003e → \"uptime\":0"
+  ],
+  "scenarios": {
+    "S1_fresh": {
+      "steps": [
+        {
+          "cmd": "ccGetState",
+          "args": null,
+          "out": "{\"running\":false,\"external\":false,\"phase\":\"idle\",\"host\":\"127.0.0.1\",\"port\":\"$PORT\",\"baseUrl\":\"http://127.0.0.1:$PORT/v1\",\"uptime\":0,\"autostart\":false,\"apiKey\":\"\",\"noticeDismissed\":false,\"closeHintDismissed\":false,\"version\":\"v3.20.10\",\"startedOnce\":false,\"core\":\"v1.2.0\",\"pid\":0}"
+        },
+        {
+          "cmd": "ccLiveSnapshot",
+          "args": null,
+          "out": "{\"live\":{\"bai\":false,\"codebuddy\":false,\"codebuddy-intl\":false,\"comate\":false,\"core\":false,\"qoder\":false,\"tuanjie\":true,\"vibex\":false},\"ok\":true}"
+        },
+        {
+          "cmd": "ccStats",
+          "args": null,
+          "out": "{\"ok\":false,\"msg\":\"代理未运行或无法连接\"}"
+        },
+        {
+          "cmd": "ccUsage",
+          "args": null,
+          "out": "{\"ok\":false,\"msg\":\"统计加载中\"}"
+        },
+        {
+          "cmd": "ccUsageRefresh",
+          "args": null,
+          "out": "{\"ok\":true}"
+        },
+        {
+          "cmd": "ccCheckUpdate",
+          "args": null,
+          "out": "{\"ok\":false,\"msg\":\"checking\"}"
+        },
+        {
+          "cmd": "ccCheckUpdateForce",
+          "args": null,
+          "out": "{\"ok\":false,\"msg\":\"checking\"}"
+        },
+        {
+          "cmd": "ccCloseModeGet",
+          "args": null,
+          "out": "{\"mode\":\"ask\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccKeyMapGet",
+          "args": null,
+          "out": "{\"ok\":false,\"msg\":\"no saved keymap\"}"
+        },
+        {
+          "cmd": "ccOneKeyUpdate",
+          "args": [
+            "status"
+          ],
+          "out": "{\"msg\":\"\",\"ok\":true,\"pct\":-1,\"phase\":\"idle\"}"
+        },
+        {
+          "cmd": "ccOneKeyUpdate",
+          "args": [
+            "bogus"
+          ],
+          "out": "{\"msg\":\"未知 action: bogus\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccOneKeyUpdate",
+          "args": [
+            "start"
+          ],
+          "out": "{\"ok\":false,\"msg\":\"当前版本信息没有 exe 直链（老 Release 无 ProxyDeck.exe asset），请到仓库下载页手动更新\"}"
+        },
+        {
+          "cmd": "ccStop",
+          "args": null,
+          "out": "{\"msg\":\"代理未在运行\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccRequestClose",
+          "args": null,
+          "out": "{\"ok\":true,\"mode\":\"ask\"}"
+        },
+        {
+          "cmd": "ccWindowCmd",
+          "args": [
+            "min"
+          ],
+          "out": "{\"msg\":\"窗口句柄不可用\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccWindowCmd",
+          "args": [
+            "close"
+          ],
+          "out": "{\"msg\":\"窗口句柄不可用\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccCloseChoice",
+          "args": [
+            "bogus",
+            false
+          ],
+          "out": "{\"msg\":\"未知关窗模式: bogus\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccCloseModeSet",
+          "args": [
+            "bogus"
+          ],
+          "out": "{\"msg\":\"未知关窗模式: bogus\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccCloseChoice",
+          "args": [
+            "tray",
+            false
+          ],
+          "out": "{\"msg\":\"窗口句柄不可用\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccCalib",
+          "args": [
+            "",
+            ""
+          ],
+          "out": "{\"msg\":\"缺少模型名\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccCalib",
+          "args": [
+            "m",
+            "abc"
+          ],
+          "out": "{\"msg\":\"请输入数字（官网该模型总 Token 数）\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccOpen",
+          "args": [
+            "file:///x"
+          ],
+          "out": "{\"msg\":\"仅允许打开 http(s) 链接\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccModels",
+          "args": [
+            ""
+          ],
+          "out": "{\"ok\":false,\"msg\":\"代理未运行或无法连接\"}"
+        },
+        {
+          "cmd": "ccModels",
+          "args": [
+            "go"
+          ],
+          "out": "{\"ok\":false,\"msg\":\"代理未运行或无法连接\"}"
+        },
+        {
+          "cmd": "ccProbeKey",
+          "args": null,
+          "out": "{\"status\":\"pending\"}"
+        },
+        {
+          "cmd": "ccSaveKey",
+          "args": [
+            ""
+          ],
+          "out": "{\"msg\":\"已清除保存的 Key\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccDismiss",
+          "args": null,
+          "out": "{\"msg\":\"已记录\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccDismissCloseHint",
+          "args": null,
+          "out": "{\"msg\":\"已记录\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccCloseModeSet",
+          "args": [
+            "quit"
+          ],
+          "out": "{\"msg\":\"已保存\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccSaveKey",
+          "args": [
+            "TESTKEY-ALIGN"
+          ],
+          "out": "{\"msg\":\"API Key 已保存\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccGetState",
+          "args": null,
+          "out": "{\"running\":false,\"external\":false,\"phase\":\"idle\",\"host\":\"127.0.0.1\",\"port\":\"$PORT\",\"baseUrl\":\"http://127.0.0.1:$PORT/v1\",\"uptime\":0,\"autostart\":false,\"apiKey\":\"TESTKEY-ALIGN\",\"noticeDismissed\":true,\"closeHintDismissed\":true,\"version\":\"v3.20.10\",\"startedOnce\":false,\"core\":\"v1.2.0\",\"pid\":0}"
+        },
+        {
+          "cmd": "ccKeyMapSet",
+          "args": [
+            "[[\"cmd\"],[\"tj\"]]"
+          ],
+          "out": "{\"msg\":\"已保存\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccKeyMapGet",
+          "args": null,
+          "out": "{\"map\":[[\"cmd\"],[\"tj\"]],\"ok\":true}"
+        }
+      ],
+      "files": {
+        "api-key.txt": "PDAPI1\nAQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAm9KQmDt4iE63kAYnWkl3qgAAAAACAAAAAAAQZgAAAAEAACAAAACc8Um1DlVGWJuWGUljFoPoAx0FuVWaae+wwri+b054UQAAAAAOgAAAAAIAACAAAAABeCE8P/Gu+i4A5//MgO1u4WOkobVu/1xSDov8nhTRcRAAAACHq3rBJJfm83lUFlEVw/CjQAAAAN+l6sncc9bE681IngWG+OMRahesNb3RnA4efk76m2gel7wpi7GrHzeicZLUxdVJT0D73gQHeSSRJASNelXFE2g=\n",
+        "appdir.log": "2026-10-16 17:32:45 ACL 收紧失败（文件仍为密文）：notice_dismissed.flag: icacls 失败: exec: \"icacls\": executable file not found in %PATH% ()\n2026-10-16 17:32:45 ACL 收紧失败（文件仍为密文）：close_hint_dismissed.flag: icacls 失败: exec: \"icacls\": executable file not found in %PATH% ()\n2026-10-16 17:32:45 ACL 收紧失败（文件仍为密文）：api-key.txt: icacls 失败: exec: \"icacls\": executable file not found in %PATH% ()\n",
+        "close_hint_dismissed.flag": "PDAPI1\nAQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAm9KQmDt4iE63kAYnWkl3qgAAAAACAAAAAAAQZgAAAAEAACAAAABS9j0Zv9ANDRTc4FEt0Rd932L4Vg2tKDyYPtft7dq5gAAAAAAOgAAAAAIAACAAAACQLDu7SZ3eV1mAOJ/NE68jMLdR4pySOACEC7dXCccOFBAAAAA3Y0eCAsOrKSoHiVxOEeL6QAAAAH0ThWKTbXpR1Qb8MUq0dvIG1XkFEgI3CUDxeav9vt7A2OvpMYUaL3T8oCpMnIlVJwr/jFhO14IK4lCMEcRKgcc=\n",
+        "close_mode.txt": "quit",
+        "keymap.json": "[[\"cmd\"],[\"tj\"]]",
+        "notice_dismissed.flag": "PDAPI1\nAQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAm9KQmDt4iE63kAYnWkl3qgAAAAACAAAAAAAQZgAAAAEAACAAAAB1wH55v1Z4IJr6leHRjzthNym57s4rWvuYLf/FWCFcoAAAAAAOgAAAAAIAACAAAAAlBQyqSi6dOmgZ+1zGqiCW2vSdbfwHjzy25f8dsUGDmRAAAAB673gQ+jpeNFCQPqQR2G22QAAAAHVpKJjNxtiRSkji/CLU0YoCxYgvl2uWlaVNlC3LrXFkuAc/MqG66C+8Gar93c2ISoVNUzSTWxZPPtp+cJWzrL0=\n"
+      },
+      "absent": null,
+      "note": "全空数据目录 + 无监听端口；ccCheckUpdate 前把 updateLastFetch 置为 now（等价 GUI 刚启动拉过一轮，不触发后台拉取）"
+    },
+    "S2_healthy_core": {
+      "steps": [
+        {
+          "cmd": "ccStart",
+          "args": [
+            ""
+          ],
+          "out": "{\"msg\":\"检测到 http://127.0.0.1:$PORT 代理已在运行，已接入\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccGetState",
+          "args": null,
+          "out": "{\"running\":true,\"external\":false,\"phase\":\"running\",\"host\":\"127.0.0.1\",\"port\":\"$PORT\",\"baseUrl\":\"http://127.0.0.1:$PORT/v1\",\"uptime\":0,\"autostart\":false,\"apiKey\":\"\",\"noticeDismissed\":false,\"closeHintDismissed\":false,\"version\":\"v3.20.10\",\"startedOnce\":false,\"core\":\"v1.2.0\",\"pid\":0}"
+        },
+        {
+          "cmd": "ccStats",
+          "args": null,
+          "out": "{\"ok\":true,\"total\":7,\"today\":3,\"models\":[]}"
+        },
+        {
+          "cmd": "ccModels",
+          "args": [
+            ""
+          ],
+          "out": "{\"data\":[{\"id\":\"m1\"}],\"ok\":true}"
+        },
+        {
+          "cmd": "ccModels",
+          "args": [
+            "go"
+          ],
+          "out": "{\"data\":[{\"id\":\"m1\",\"plan\":\"go\"}],\"ok\":true}"
+        },
+        {
+          "cmd": "ccCalib",
+          "args": [
+            "m",
+            "123"
+          ],
+          "out": "{\"ok\":true,\"msg\":\"已校准\"}"
+        },
+        {
+          "cmd": "ccUsageRefresh",
+          "args": null,
+          "out": "{\"ok\":true}"
+        }
+      ],
+      "files": {},
+      "absent": null,
+      "note": "本机假核心监听测试端口：ccStart 走「探活接管」分支（不 spawn 子进程）"
+    },
+    "S3_files_present": {
+      "steps": [
+        {
+          "cmd": "ccGetState",
+          "args": null,
+          "out": "{\"running\":false,\"external\":false,\"phase\":\"idle\",\"host\":\"127.0.0.1\",\"port\":\"$PORT\",\"baseUrl\":\"http://127.0.0.1:$PORT/v1\",\"uptime\":0,\"autostart\":false,\"apiKey\":\"SAVED-KEY\",\"noticeDismissed\":true,\"closeHintDismissed\":true,\"version\":\"v3.20.10\",\"startedOnce\":true,\"core\":\"v1.2.0\",\"pid\":0}"
+        },
+        {
+          "cmd": "ccKeyMapGet",
+          "args": null,
+          "out": "{\"map\":[[\"cmd\"],[\"tj\",\"comate\"],[\"cb\",\"qoder\"],[\"ext\"]],\"ok\":true}"
+        },
+        {
+          "cmd": "ccCloseModeGet",
+          "args": null,
+          "out": "{\"mode\":\"tray\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccRequestClose",
+          "args": null,
+          "out": "{\"msg\":\"窗口句柄不可用\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccCloseChoice",
+          "args": [
+            "quit",
+            true
+          ],
+          "out": "{\"msg\":\"窗口句柄不可用\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccCloseModeGet",
+          "args": null,
+          "out": "{\"mode\":\"quit\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccKeyMapSet",
+          "args": [
+            "not json"
+          ],
+          "out": "{\"msg\":\"invalid character 'o' in literal null (expecting 'u')\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccKeyMapSet",
+          "args": [
+            "[[\"cmd\"],[\"cmd\"]]"
+          ],
+          "out": "{\"msg\":\"非法键位映射（1-4 键、每键 ≥1 页、页名须在白名单且一页一键）\",\"ok\":false}"
+        },
+        {
+          "cmd": "ccKeyMapSet",
+          "args": [
+            "[[\"cmd\"],[\"tj\",\"comate\"],[\"cb\",\"qoder\"],[\"ext\"]]"
+          ],
+          "out": "{\"msg\":\"已保存\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccKeyMapGet",
+          "args": null,
+          "out": "{\"map\":[[\"cmd\"],[\"tj\",\"comate\"],[\"cb\",\"qoder\"],[\"ext\"]],\"ok\":true}"
+        }
+      ],
+      "files": {
+        "api-key.txt": "SAVED-KEY",
+        "close_hint_dismissed.flag": "1",
+        "close_mode.txt": "quit",
+        "keymap.json": "[[\"cmd\"],[\"tj\",\"comate\"],[\"cb\",\"qoder\"],[\"ext\"]]",
+        "notice_dismissed.flag": "1",
+        "stats.json": "{\"started\":42,\"total\":9}"
+      },
+      "absent": null,
+      "note": "预置状态文件：验证读取分支与写盘口径（tray→quit 落盘、keymap 校验）"
+    },
+    "S4_autostart": {
+      "steps": [
+        {
+          "cmd": "ccAutostart",
+          "args": [
+            false
+          ],
+          "out": "{\"msg\":\"开机自启已取消\",\"ok\":true}"
+        },
+        {
+          "cmd": "ccAutostart",
+          "args": [
+            true
+          ],
+          "out": "{\"msg\":\"开机自启已设置 · 登录 Windows 后将以无窗口模式自动点火\",\"ok\":true}"
+        }
+      ],
+      "files": {
+        "$APPDATA/Microsoft/Windows/Start Menu/Programs/Startup/command-code-proxy-autostart.vbs": "Set sh = CreateObject(\"WScript.Shell\")\r\nsh.Run \"\"\"$EXE\"\" -headless -port $PORT\", 0, False\r\n"
+      },
+      "absent": null,
+      "note": "APPDATA 指向临时目录（并预建启动目录）：VBS 只落临时启动文件夹，不碰用户真实开机项"
+    },
+    "S5_keymap_bad_file": {
+      "steps": [
+        {
+          "cmd": "ccKeyMapGet",
+          "args": null,
+          "out": "{\"ok\":false,\"msg\":\"no saved keymap\"}"
+        }
+      ],
+      "files": {
+        "keymap.json": "[[\"cmd\"],[\"nope\"]]"
+      },
+      "absent": null,
+      "note": "非法映射文件：读盘必须回落默认值且 ok:false（前端据此保持快路值、不回写）"
+    }
+  }
+}

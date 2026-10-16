@@ -1,0 +1,44 @@
+[package]
+name = "rs-gui"
+version = "0.1.0"
+edition = "2021"
+description = "ProxyDeck GUI 宿主 Rust 重写（绞杀者路线 P7a：桥接层与状态；单 exe 多子模式）"
+
+[lib]
+name = "rs_gui"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rs-gui"
+path = "src/main.rs"
+
+[dependencies]
+# 六个 Rust crate 作为**库依赖**接入（用户裁决形态：单 exe 多 --plugin-* 子模式）。
+rs-bai = { path = "../rs-bai" }
+rs-codebuddy = { path = "../rs-codebuddy" }
+rs-comate = { path = "../rs-comate" }
+rs-qoder = { path = "../rs-qoder" }
+rs-vibex = { path = "../rs-vibex" }
+rs-proxy = { path = "../rs-proxy" }
+
+# 桥接层用到 clap 只为把「子模式 argv」交给各 crate 自己的 clap Args 解析器——
+# 参数名/默认值/校验与各 crate 单独启动时**完全同源**，不在分发器里重造一遍。
+clap = { version = "4", features = ["derive"] }
+# 桥接层的同步 HTTP（httpGet/httpOK/httpGetSlow/ccCalib 的 POST、一键更新下载）。
+# Go 侧是 net/http 同步调用；这里用 blocking，保持同一执行形态（bind 回调不是 tokio 上下文）。
+# `form`：ccCalib 走 `PostForm`（application/x-www-form-urlencoded），与 Go 同款。
+reqwest = { version = "0.13", features = ["blocking", "default-tls", "http2", "form"] }
+serde = { version = "1", features = ["derive"] }
+# 不开 preserve_order：Go 的 json.Marshal 对 map[string]any **按 key 排序**，
+# serde_json 默认的 BTreeMap 同样是排序 —— 键序逐字节对齐靠的就是这个默认值。
+serde_json = { version = "1" }
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }
+
+# GUI 外壳（P7c 全部落地；P7a 只做窗口/事件循环与 26 桥的挂载）。
+# Windows 上 wry 底层仍是 WebView2，与 Go 版 webview_go 同源。
+tao = "0.37"
+wry = "0.57"
+
+[profile.release]
+opt-level = 2

@@ -1011,3 +1011,57 @@ pub fn pick_response_headers(h: &HeaderMap) -> Vec<(String, String)> {
     }
     out
 }
+
+/* ---------------- 可编程入口（P7a：`rs-gui` 单 exe 分发用） ----------------
+ *
+ * 边界例外（简报 P7 形态裁决第 3 条）：把 `main.rs` 的启动逻辑抽成 `pub async fn run(args)`，
+ * `main` 改为调用它。**行为、参数名、日志文本、端口默认值全部零变化**：
+ * 下面的 `Args` 与 `run` 是从 `main.rs` 原样搬过来的，只加了 `pub`。
+ */
+
+/// 插件子模式命令行参数（原 `main.rs` 的私有 `Args`，字段与默认值逐字未改）。
+#[derive(clap::Parser, Debug)]
+#[command(name = "rs-vibex", version, about = "VibeX 插件（REST+WS 协议客户端，本地 OpenAI 兼容）")]
+pub struct Args {
+    /// 插件服务模式（与 ProxyDeck 的 --plugin-vibex 同名）
+    #[arg(long = "plugin-vibex")]
+    pub plugin_vibex: bool,
+    #[arg(long, default_value = "127.0.0.1")]
+    pub host: String,
+    #[arg(long, default_value_t = 8790)]
+    pub port: u16,
+    /// 单 token（也可用环境变量 RH_ACCESSTOKEN 或配置文件的 tokens 数组）
+    #[arg(long = "vibex-token", default_value = "")]
+    pub vibex_token: String,
+    /// 配置文件路径（缺省 <数据目录>/vibex-config.json，权限 0600）
+    #[arg(long = "vibex-config")]
+    pub vibex_config: Option<std::path::PathBuf>,
+    /// 便携模式（数据写 exe 同目录）
+    #[arg(long)]
+    pub portable: bool,
+}
+
+/// 启动插件服务（原 `main.rs` 中「`--plugin-vibex` 判定之后」那一段，逐行原样搬入）。
+///
+/// 返回 `Err` = 启动失败；调用方按原有前缀打印（单独跑 `rs-vibex` 时是
+/// `vibex-plugin: 启动失败: {e}` + 退出码 1），文案与退出码零变化。
+pub async fn run(args: Args) -> Result<(), String> {
+    datadir::init(args.portable);
+    let env_token = std::env::var("RH_ACCESSTOKEN").unwrap_or_default();
+    let cfg = config::load_config(&config::LoadInputs {
+        config_path: args.vibex_config.clone(),
+        flag_token: args.vibex_token.clone(),
+        env_token: env_token.clone(),
+    });
+    logf(&format!(
+        "配置：base_url={} app_name={} turn_timeout={}s ready_timeout={}s queue_limit={} heartbeat={}s",
+        cfg.base_url(),
+        cfg.app_name,
+        cfg.turn_timeout_sec,
+        cfg.ready_timeout_sec,
+        cfg.queue_limit,
+        cfg.heartbeat_sec
+    ));
+    let srv = Server::new(cfg, Seams::default());
+    srv.serve(&args.host, args.port).await
+}

@@ -219,4 +219,143 @@ mod tests {
     }
 }
 
+/* ---------------- 可编程入口（P7a：`rs-gui` 单 exe 分发用） ----------------
+ *
+ * 边界例外（简报 P7 形态裁决第 3 条）：把 `main.rs` 的启动逻辑抽成 `pub async fn run(args)`，
+ * `main` 改为调用它。**行为、参数名、日志文本、端口默认值全部零变化**：
+ * 下面的 `Args`、数据目录判定函数与 `run` 都是从 `main.rs` 原样搬过来的，只加了 `pub`。
+ */
+
+/// 命令行参数（原 `main.rs` 的私有 `Args`，字段、默认值、帮助文本逐字未改）。
+#[derive(clap::Parser, Debug)]
+#[command(
+    name = "rs-proxy",
+    about = "ProxyDeck 主代理（Rust 重写，P6；等价 internal/proxy + internal/server）",
+    version
+)]
+pub struct Args {
+    /// 代理监听端口
+    #[arg(long, default_value = "55990")]
+    pub port: u16,
+    /// 代理监听地址
+    #[arg(long, default_value = "127.0.0.1")]
+    pub host: String,
+    /// CommandCode API Key（可选；也可放数据目录的 api-key.txt）
+    #[arg(long, default_value = "")]
+    pub api_key: String,
+    /// 调试模式：打印请求/响应体到日志
+    #[arg(long, default_value_t = false)]
+    pub debug: bool,
+    /// 便携模式：状态文件写 exe 同目录（缺省写 %APPDATA%\ProxyDeck）
+    #[arg(long, default_value_t = false)]
+    pub portable: bool,
+    /// 统计文件路径覆盖（缺省为数据目录下的 stats.json）；测试用
+    #[arg(long, default_value = "")]
+    pub stats_file: String,
+    /// 打印版本并退出
+    #[arg(long, default_value_t = false)]
+    pub version_only: bool,
+}
+
+/// 数据目录判定链（`internal/appdir` 的常用那一半：环境变量 → 便携 → `%APPDATA%`）。
+///
+/// 便携判定同 Go `appdir.Init`：**显式 `--portable` 或 exe 同目录的 `portable` 标记文件**
+/// （`appdir.go:53-55` 的 `markerExists`：`os.Stat(ExeDir()/portable)` 且**不是目录**）。
+pub fn data_dir(portable: bool) -> std::path::PathBuf {
+    data_dir_with(portable, &exe_dir())
+}
+
+/// `data_dir` 的可注入版本（exe 目录由调用方给，便于测试）。
+pub fn data_dir_with(portable: bool, exe_dir: &std::path::Path) -> std::path::PathBuf {
+    if let Ok(d) = std::env::var("PROXYDECK_DATA_DIR") {
+        let d = d.trim().to_string();
+        if !d.is_empty() {
+            return std::path::PathBuf::from(d);
+        }
+    }
+    if portable || portable_marker_exists(exe_dir) {
+        return exe_dir.to_path_buf();
+    }
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        if !appdata.trim().is_empty() {
+            return std::path::PathBuf::from(appdata).join("ProxyDeck");
+        }
+    }
+    if let Ok(home) = std::env::var("USERPROFILE") {
+        if !home.trim().is_empty() {
+            return std::path::PathBuf::from(home)
+                .join("AppData")
+                .join("Roaming")
+                .join("ProxyDeck");
+        }
+    }
+    exe_dir.to_path_buf()
+}
+
+/// exe 同目录的便携标记文件（名 `portable`，**必须是文件、不能是目录**——同 Go `markerExists`）。
+fn portable_marker_exists(exe_dir: &std::path::Path) -> bool {
+    match std::fs::metadata(exe_dir.join("portable")) {
+        Ok(md) => !md.is_dir(),
+        Err(_) => false,
+    }
+}
+
+fn exe_dir() -> std::path::PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
+/// 启动主代理（原 `main.rs` 里 `Args::parse()` 之后的全部逻辑，逐行原样搬入）。
+///
+/// 返回 `Err` = 服务启动失败；调用方按原有前缀打印（单独跑 `rs-proxy` 时是
+/// `Server failed: {e}` + 退出码 1），文案与退出码零变化。
+pub async fn run(args: Args) -> Result<(), String> {
+    if args.version_only {
+        println!("rs-proxy {} (proxy core P6)", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
+    // 版本号后台预热（对应 Go `version` 包的 init goroutine）；失败不阻塞
+    crate::version::warm_up();
+
+    let dir = data_dir(args.portable);
+    let _ = std::fs::create_dir_all(&dir);
+
+    let mut api_key = args.api_key.trim().to_string();
+    if api_key.is_empty() {
+        let p = dir.join("api-key.txt");
+        // 同 Go：`app/main.go` 经 `appdir.ReadFile` 读——**明文与 `PDAPI1` 密文两形态都支持**
+        // （v3.20.2 起 GUI 保存的 key 必为 DPAPI 密文；裸读会把密文当 key）。
+        if let Ok(b) = crate::cred_crypt::read_file(&p) {
+            api_key = String::from_utf8_lossy(&b).trim().to_string();
+        }
+    }
+
+    let mut proxy = crate::Proxy::new(&api_key);
+    proxy.debug = args.debug;
+    let stats = if args.stats_file.is_empty() {
+        dir.join("stats.json")
+    } else {
+        std::path::PathBuf::from(&args.stats_file)
+    };
+    proxy.set_stats_file(&stats.to_string_lossy());
+
+    // 代理环境变量只报存在性、不打印值（变量值里可能带凭据）
+    println!(
+        "{}",
+        crate::upstream::proxy_log_line(proxy.client.proxy_env_detected)
+    );
+    if proxy.client.proxy_env_detected {
+        eprintln!("[warn] 检测到代理环境变量（值不打印）");
+    }
+
+    let proxy = std::sync::Arc::new(proxy);
+    crate::http::serve(proxy, &args.host, args.port)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 
