@@ -342,13 +342,20 @@ pub fn encrypt_like(
         &aad_for_key_id(&key.key_id),
     )?;
     let (ct, tag) = sealed.split_at(sealed.len() - 16);
-    let inner = serde_json::json!({
-        "suite": 1,
-        "keyId": key.key_id,
-        "nonce": b64_encode(&nonce),
-        "authTag": b64_encode(tag),
-        "ciphertext": b64_encode(ct),
-    });
+    // 显式 BTreeMap：键序恒为字典序，不随构建单元漂移。`json!` 的 Map 在
+    // workspace feature 并集下会变成 IndexMap（书写序），单独构建则是 BTreeMap
+    // （字典序）——信封字节因此随构建配置变（P7d-2 审查 #2；与 rs-bai 同款问题，
+    // 那边是递归排键，这里键固定且扁平，直接用 BTreeMap）。
+    // 注：nonce 本来就随机，信封字节本来就不逐次一致；这里只保证键序稳定。
+    let inner: std::collections::BTreeMap<String, serde_json::Value> = [
+        ("suite".to_string(), serde_json::json!(1)),
+        ("keyId".to_string(), serde_json::json!(key.key_id)),
+        ("nonce".to_string(), serde_json::json!(b64_encode(&nonce))),
+        ("authTag".to_string(), serde_json::json!(b64_encode(tag))),
+        ("ciphertext".to_string(), serde_json::json!(b64_encode(ct))),
+    ]
+    .into_iter()
+    .collect();
     let ib = serde_json::to_vec(&inner).map_err(|_| "信封组装失败".to_string())?;
     Ok(serde_json::json!({
         "$wbEncrypted": 1,

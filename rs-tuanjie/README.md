@@ -1,8 +1,9 @@
 # rs-tuanjie —— 团结（Codely）插件 Rust 重写
 
-绞杀者路线 **P8a 小轮：凭证链与请求整形**。逐字节对位 `internal/tuanjie/client.go` +
-`reqshape.go`（**Go 侧只读不改**）。本小轮**不含**服务与转发编排（`server.go` /
-`handlers_extra.go` 等 = P8b）与种子卫兵/注水/基线/CDP（= P8c）。
+绞杀者路线 **P8 全量落地**：P8a（凭证链与请求整形）+ P8b（服务与转发层五片）+
+P8c（种子卫兵/注水/基线/CDP/代理/appdir）+ P8d-3（desensitize）。逐字节对位
+`internal/tuanjie/`（**Go 侧只读不改**）。旧文"本小轮不含服务与转发编排"为
+P8a 时代表述，已过期（P8b/P8c 落地表见下文各节）。
 
 > **P7d-1 状态（2026-10-17）**：启动逻辑已从 `main.rs` 搬进 `lib.rs` 的
 > `Args` + `run(args)`（与 `rs-vibex` / `rs-proxy` 同一形态），**接进了 `rs-gui` 的
