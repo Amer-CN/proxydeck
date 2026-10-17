@@ -7,6 +7,7 @@
 package codebuddy
 
 import (
+	"encoding/json"
 	"regexp"
 	"sort"
 	"strings"
@@ -75,6 +76,44 @@ var sensitivePattern = func() *regexp.Regexp {
 	}
 	return regexp.MustCompile(`(?i)\b(?:` + strings.Join(esc, "|") + `)\b`)
 }()
+
+// bodyHas11128Trigger 判定一份出站请求体是否还有 11128 内容指纹：把 messages 与
+// tools 序列化后过 sensitivePattern（品牌/合规词）与 fingerprintRules（黑名单句），
+// 命中即"内容嫌疑"。判定只读词表，不改写请求体；空体（无 messages 也无 tools）判干净。
+//
+// server.go 的 11128 治理据此分流：命中 → 上游多半是按内容拦的，换号无用，原样
+// 透传且不冷却任何号；未命中 → 内容侧已无可指认的触发物，按账号级封禁处理。
+// 判的是"即将发给上游的那份体"（已脱敏之后的 backendBody）——脱敏在位时已知词都已
+// 插零宽去不掉的内容（如 tool_calls 参数、工具 enum/name 等）才是真嫌疑。
+func bodyHas11128Trigger(body map[string]any) bool {
+	if body == nil {
+		return false
+	}
+	probe := make(map[string]any, 2)
+	if v, ok := body["messages"]; ok {
+		probe["messages"] = v
+	}
+	if v, ok := body["tools"]; ok {
+		probe["tools"] = v
+	}
+	if len(probe) == 0 {
+		return false
+	}
+	raw, err := json.Marshal(probe)
+	if err != nil {
+		return false
+	}
+	text := string(raw)
+	if sensitivePattern.MatchString(text) {
+		return true
+	}
+	for _, r := range fingerprintRules {
+		if r.re.MatchString(text) {
+			return true
+		}
+	}
+	return false
+}
 
 // harnessUserMarkers Codex/CLI 注入上下文的特征（不是用户自然输入）。
 var harnessUserMarkers = []string{

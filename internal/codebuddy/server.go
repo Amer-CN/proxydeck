@@ -575,6 +575,21 @@ func failoverDecide(cfg failoverConfig, sentModel string, limited bool, status i
 // transientMaxRetry 上游瞬时拒绝（11133）的原地重试次数上限（2026-10-14 K3 实测抖动）。
 const transientMaxRetry = 2
 
+// flaggedCooldown 11128 账号级封禁的冷却时长。2026-10-17 实证：国际版 5 号中 2 号
+// 被上游按号封禁——干净请求也照回 400/11128，同字节换号即 200，与内容/模型无关。
+// 上游不给 reset 时点（不是 429 频控），固定 1 小时兜底：Pick 懒判定到期即自动可选；
+// GUI「提前恢复」（pool.go ClearCool）可立即解冷却。
+const flaggedCooldown = time.Hour
+
+// flaggedBodyRe 判定上游 11128（Illegal API invocation from an unapproved channel，
+// 2026-10-17 实证既可能是内容拦截也可能是账号级封禁）。只认字段级 code（数字或字符串
+// 两种形态）：裸子串 "11128" 会把 requestId/正文里的同数字串误判成封号。
+var flaggedBodyRe = regexp.MustCompile(`"code"\s*:\s*"?11128"?\b`)
+
+func isFlaggedBody(errBody string) bool {
+	return flaggedBodyRe.MatchString(errBody)
+}
+
 // isTransientReject 判定上游"瞬时拒绝"：腾讯网关 11133（Invalid request parameters /
 // the request parameters were rejected by the model provider）。
 // 2026-10-14 K3 排查实证属抖动：同账号同请求数秒后即 200，且真实请求全构件逐字回放
@@ -1257,6 +1272,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	deadResent := 0        // 凭据失效(401/403)换号重发计数，上限 = 池大小（全死防循环）
 	exhaustedResent := 0   // 额度耗尽(14018)换号重发计数，上限 = 池大小（全耗尽可能防循环）
 	transientResent := 0   // 上游瞬时拒绝(11133)原地重试计数，上限 transientMaxRetry
+	flaggedResent := 0     // 账号级封禁(11128)换号重发计数，上限 = 池大小（全封防循环）
 	hy4Tripped := false    // hy4 模型级兜底重放只允许一次（恒 429 下防 trip→429→trip 死循环）
 	for attempt := 0; ; attempt++ {
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
@@ -1328,6 +1344,41 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(string(errBody), "11128") {
 			log.Printf("[codebuddy] 11128 为内容指纹拦截（第三方 Agent system 模板句/品牌词常见），对照 desensitize.go 指纹清洗表排查，body 预览: %s", truncate(string(errBody), 200))
 		}
+		// 11128 账号级封禁治理（2026-10-17）：国际版实证存在「按号封禁」——同一条
+		// 干净请求在该号上必回 400/11128，换号即 200，与内容/模型无关。分两支：
+		//   ① 内容嫌疑（messages/tools 命中指纹表，见 bodyHas11128Trigger）→ 上游是
+		//      按内容拦的，该号无过：原样透传，不冷却任何号；
+		//   ② 干净请求 → 判账号级封禁：当前号记 flaggedCooldown（1 小时）冷却
+		//     （MarkLimited 走既有冷却机制，Pick 自动跳过；到期自恢复/GUI 提前恢复），
+		//      换下一个可用号重发本次请求（客户端零感知）。
+		// 换号有界：最多换池大小次（计数到顶或 Pick 拿不到可用号即停，落到下方
+		// writeErr 如实透传上游报文），防恒 11128 下无限 continue。计数与 14018/401
+		// 各自独立：封号不是额度耗尽也不是凭据失效。
+		if isFlaggedBody(string(errBody)) && s.pool != nil && acc != nil {
+			if bodyHas11128Trigger(backendBody) {
+				log.Printf("[codebuddy] 11128 命中内容指纹（%s），不判账号、不冷却，原样透传", uidShort(acc.UID))
+			} else {
+				s.pool.MarkLimited(acc.UID, time.Now().Add(flaggedCooldown))
+				if flaggedResent < s.pool.Size() {
+					if next := s.pool.Pick(); next != nil {
+						nhdr, nerr := s.cred.HeadersFor(r.Context(), next.AuthPath)
+						if nerr != nil {
+							writeErr(w, 502, nerr.Error())
+							return
+						}
+						log.Printf("[codebuddy] 账号 %s 被封(11128)，冷却 %v 后换 %s 重发",
+							uidShort(acc.UID), flaggedCooldown, uidShort(next.UID))
+						s.pool.DecLoad(acc.UID) // 旧号释放进行中计数
+						s.pool.Touch(next.UID)
+						s.pool.IncLoad(next.UID)
+						hdr, acc = nhdr, next
+						flaggedResent++
+						continue
+					}
+				}
+				log.Printf("[codebuddy] 全池 %d 个号 11128 封禁（冷却中），如实透传", s.pool.Size())
+			}
+		}
 		// 11129 结构诊断（2026-09-14 GPT-6 工具定义校验失败）：只记出站 tools 定义
 		// 与 tool_choice + 完整上游错误，不记 messages 正文、不记认证头，便于定位
 		// tools[0].parameters 里哪个字段不合法。转发行为不变。
@@ -1396,7 +1447,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		// 非死号、HeadersFor 重建头后重发本次请求。换号有界：最多换池大小次；
 		// Pick 返回 nil（全死）→ 不 continue，落到下方 writeErr 把 401/403 如实
 		// 透传。401 不是配额信号：不记 hy4 限流窗口、不触发模型 fallback
-		//（hy4Tripped 逻辑不参与）；11128/11101/11134 等其他 4xx 仍不碰。
+		//（hy4Tripped 逻辑不参与）；11101/11134 等其他 4xx 仍不碰（11128 已由上方
+		// 账号级封禁分支单独治理）。
 		if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && s.pool != nil && acc != nil {
 			s.pool.MarkDead(acc.UID)
 			if deadResent < s.pool.Size() {
@@ -1419,7 +1471,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		// 账号级轮换（CN/INTL 一视同仁）：429 且报文是配额/频控族（6004 系列，
 		// 含国际版英文 "frequency limit"）→ 当前号记冷却，同请求内换下一个可用
 		// 号重发一次（最多 1 次；重发再 429 落到下方 hy4 兜底或如实透传，不循环）。
-		// 其他 4xx/5xx（11128/11101/11134 等）保持现有行为，不碰。
+		// 其他 4xx/5xx（11101/11134 等）保持现有行为，不碰（11128 已由上方账号级
+		// 封禁分支单独治理，不走 429 这条路）。
 		if resp.StatusCode == http.StatusTooManyRequests && s.pool != nil && acc != nil {
 			if until := parseQuotaReset(string(errBody)); !until.IsZero() {
 				s.pool.MarkLimited(acc.UID, until)

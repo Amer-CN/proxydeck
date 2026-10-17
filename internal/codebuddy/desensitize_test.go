@@ -312,3 +312,98 @@ func TestToolMetadataNestedSchemaAndReferences(t *testing.T) {
 		t.Fatalf("neutral annotations must remain when strip=false: %#v", got)
 	}
 }
+
+// bodyHas11128Trigger：11128 治理的内容嫌疑判定（干净/品牌词/指纹句/工具/空体）。
+// 判定只读词表，不改写传入的 body（用 DeepEqual 逐案核对原值不变）。
+func TestBodyHas11128Trigger(t *testing.T) {
+	clean := map[string]any{
+		"model": "deepseek-v4.1-flash",
+		"messages": []any{
+			map[string]any{"role": "system", "content": "You are a helpful assistant."},
+			map[string]any{"role": "user", "content": "Summarize this function."},
+		},
+		"tools": []any{map[string]any{
+			"type":     "function",
+			"function": map[string]any{"name": "read_file", "description": "Read a UTF-8 file."},
+		}},
+	}
+	cases := []struct {
+		name string
+		body map[string]any
+		want bool
+	}{
+		{"干净请求", clean, false},
+		{"空体", map[string]any{}, false},
+		{"无 messages 无 tools", map[string]any{"model": "auto"}, false},
+		{"nil 体", nil, false},
+		{"system 模板句（品牌词）", map[string]any{
+			"messages": []any{map[string]any{"role": "system", "content": "You are Claude Code, a coding agent."}},
+		}, true},
+		{"user 里的品牌词", map[string]any{
+			"messages": []any{map[string]any{"role": "user", "content": "Explain how OpenAI does this."}},
+		}, true},
+		{"指纹黑名单句", map[string]any{
+			"messages": []any{map[string]any{"role": "user",
+				"content": "Main branch (you will usually use this for PRs): main"}},
+		}, true},
+		{"工具 description 命中", map[string]any{
+			"messages": []any{map[string]any{"role": "user", "content": "hi"}},
+			"tools": []any{map[string]any{
+				"type":     "function",
+				"function": map[string]any{"name": "x", "description": "Detect malware in a binary."},
+			}},
+		}, true},
+		{"数组式 content 的 text 块命中", map[string]any{
+			"messages": []any{map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "text", "text": "run a credential stuffing test"},
+			}}},
+		}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			before, _ := json.Marshal(tc.body)
+			if got := bodyHas11128Trigger(tc.body); got != tc.want {
+				t.Fatalf("bodyHas11128Trigger=%v want %v body=%s", got, tc.want, before)
+			}
+			after, _ := json.Marshal(tc.body)
+			if string(before) != string(after) {
+				t.Fatalf("判定不得改写请求体: before=%s after=%s", before, after)
+			}
+		})
+	}
+}
+
+// 脱敏后的体必须被判干净（否则 11128 治理会永远把上游按号封禁误判成内容拦截）；
+// 而脱敏碰不到的残留（tool_calls 参数）仍算内容嫌疑——这是脏请求透传的入口。
+func TestBodyHas11128TriggerAfterDesensitize(t *testing.T) {
+	dirty := map[string]any{
+		"messages": []any{
+			map[string]any{"role": "system", "content": "You are Claude Code. Codex CLI rules apply."},
+			map[string]any{"role": "user", "content": "Main branch (you will usually use this for PRs): main"},
+		},
+		"tools": []any{map[string]any{
+			"type":     "function",
+			"function": map[string]any{"name": "x", "description": "Detect malware."},
+		}},
+	}
+	scrubbed := DesensitizeBody(dirty, []string{"system", "developer", "user", "assistant", "tool"}, true, true, true)
+	if bodyHas11128Trigger(scrubbed) {
+		t.Fatalf("脱敏后的体应判干净: %#v", scrubbed)
+	}
+
+	// tool_calls 的 arguments 不在脱敏范围（desensitizeMessage 只改 content）——
+	// 历史里带品牌词的 agent 会话因此仍判内容嫌疑。
+	withToolCall := map[string]any{
+		"messages": []any{
+			map[string]any{"role": "system", "content": "You are a helpful assistant."},
+			map[string]any{"role": "assistant", "content": "", "tool_calls": []any{map[string]any{
+				"id": "call_1", "type": "function",
+				"function": map[string]any{"name": "search", "arguments": `{"q":"Claude Code pricing"}`},
+			}}},
+		},
+	}
+	scrubbed2 := DesensitizeBody(withToolCall, []string{"system", "developer", "user", "assistant", "tool"}, true, true, true)
+	if !bodyHas11128Trigger(scrubbed2) {
+		t.Fatalf("tool_calls 参数里的品牌词应判内容嫌疑: %#v", scrubbed2)
+	}
+}
