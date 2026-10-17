@@ -76,6 +76,12 @@ pub struct Client {
 impl Client {
     /// 创建客户端（对应 `NewClient`，`client.go:156-158`）。
     pub fn new() -> Result<Self> {
+        // 代理来源只报**来源名**（环境变量 / 注册表 / 无），绝不打印代理 URL ——
+        // URL 可能带 `user:pass@`（P8c 卫生要求）。
+        crate::logf(&format!(
+            "[tuanjie] 出站代理来源：{}（本地/内网地址恒直连）",
+            crate::transport::proxy_source().as_str()
+        ));
         Ok(Self {
             http: build_http_client()?,
             codey_api_base: default_codey_base(),

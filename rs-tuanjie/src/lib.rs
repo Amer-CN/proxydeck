@@ -20,6 +20,8 @@
 pub mod accounts;
 pub mod anthropic_forward;
 pub mod appdir;
+pub mod baseline;
+pub mod cdp_browser;
 pub mod channels;
 pub mod chat;
 pub mod client;
@@ -27,6 +29,7 @@ pub mod credentials;
 pub mod crypto;
 pub mod dist;
 pub mod gojson;
+pub mod gziptar;
 pub mod headers;
 pub mod inflight;
 pub mod media;
@@ -37,12 +40,17 @@ pub mod providers;
 pub mod quota;
 pub mod reqshape;
 pub mod responses_forward;
+pub mod seedcheck;
 pub mod server;
 pub mod session;
 pub mod sign;
 pub mod stats;
 pub mod transport;
 pub mod ua;
+pub mod water;
+pub mod water_handler;
+pub mod winpaths;
+pub mod winreg;
 
 use std::time::Duration;
 

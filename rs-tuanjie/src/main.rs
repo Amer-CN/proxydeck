@@ -29,6 +29,11 @@ pub struct Args {
     /// 测试实例请指向临时目录，避免碰到真实账号池与统计文件。
     #[arg(long)]
     pub data_dir: Option<String>,
+
+    /// 便携模式：状态文件写 exe 同目录（等价于 exe 同目录存在 `portable` 标记文件）——
+    /// 与 Go 侧 `-portable` 同名同义（`app/main.go:54`）。
+    #[arg(long, default_value_t = false)]
+    pub portable: bool,
 }
 
 /// **测试缝**（仅 `RS_TUANJIE_TEST_BASES` 显式存在时生效）：把账号域与推理域一起指向
@@ -83,7 +88,37 @@ async fn main() -> std::io::Result<()> {
         std::env::set_var(rs_tuanjie::pacing::DATA_DIR_ENV, dir);
     }
     apply_test_bases(args.port);
+    // 数据目录必须在任何状态文件读写之前定下来（Go 在 `main()` 开头 `runDataDirInit()`）：
+    // 便携模式解析 → 历史状态文件迁移 → 明文凭据升级，有事情才写摘要日志。
+    let notes = rs_tuanjie::appdir::run_data_dir_init(args.portable);
+    for n in &notes {
+        rs_tuanjie::logf(&format!("[tuanjie] 数据目录收口：{n}"));
+    }
     let state = Arc::new(AppState::new().expect("构造服务状态失败"));
+    // 种子卫兵后台循环（Go `SeedGuardLoop`：启动先扫一次，之后每小时一次）。
+    //
+    // **测试缝**：`RS_TUANJIE_TEST_BASES` 生效时**不起**该循环——它每轮都要查 npm 公网
+    // （对照环境不该出网），生产运行不带该变量。
+    if std::env::var(TEST_BASES_ENV).is_err() {
+        let guard = state.seed_guard.clone();
+        let http = state.client.http().clone();
+        tokio::spawn(async move {
+            loop {
+                let (round, flip) = rs_tuanjie::seedcheck::run_seed_guard_check(&guard, &http).await;
+                match flip {
+                    Some("置位") => rs_tuanjie::logf(&format!(
+                        "[tuanjie] seedguard 官方 CLI 签名特征已变化，告警置位：{}",
+                        round.signal
+                    )),
+                    Some("解除") => rs_tuanjie::logf(
+                        "[tuanjie] seedguard 告警解除（官方 bundle 签名特征恢复命中）",
+                    ),
+                    _ => {}
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+            }
+        });
+    }
     rs_tuanjie::logf(&format!(
         "[tuanjie] rs-tuanjie 监听 {}:{}（数据目录 {}，上游 {}）",
         args.host,

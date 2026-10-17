@@ -7,12 +7,12 @@
 //! - `Pacer.load/save`（`:70-99`）= 数据目录 `tuanjie-pacing.json`，形态 `{"enabled":<bool>}`
 //!   （Go 的 `json.Marshal(map[string]bool)` → 单键、无缩进、无换行），落盘走 `tmp + rename`。
 //!
-//! 数据目录判定链（`internal/appdir/appdir.go:84-98`）本模块只实现**这条链本身**
-//! （`PROXYDECK_DATA_DIR` → 便携标记 → `%APPDATA%\ProxyDeck\`），因为 pacing 持久化要用它；
-//! appdir 的全量面（Migrate/UpgradePlaintext/ACL/日志轮转…）仍属 P8c。
+//! 数据目录判定链（`internal/appdir/appdir.go:84-98`）在 **P8c 已整块迁进
+//! [`crate::appdir`]**（该模块现在是 appdir 全量的落点：判定链 / 迁移 / 明文升级 /
+//! 日志轮转 / 启动收口）。本模块只**转出**这几个名字，保持既有调用点与测试缝不变。
 
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 
 /// `pacing.go:21` —— Retry-After 缺省（一个窗口）。
@@ -21,60 +21,38 @@ pub const PACING_RETRY_DEFAULT_SECS: u64 = 60;
 /// `pacing.go:22` —— 单请求总兜底预算。
 pub const PACING_MAX_WAIT_SECS: u64 = 30 * 60;
 
-/// 数据目录覆盖环境变量名 —— `appdir.go:26`。
-pub const DATA_DIR_ENV: &str = "PROXYDECK_DATA_DIR";
+/// 数据目录覆盖环境变量名 —— `appdir.go:26`（转发自 [`crate::appdir`]）。
+pub const DATA_DIR_ENV: &str = crate::appdir::DATA_DIR_ENV;
 
-/// 便携标记文件名 —— `appdir.go:24`。
-pub const PORTABLE_MARKER: &str = "portable";
+/// 便携标记文件名 —— `appdir.go:24`（转发自 [`crate::appdir`]）。
+pub const PORTABLE_MARKER: &str = crate::appdir::PORTABLE_MARKER;
 
-/// `%APPDATA%` 下的数据目录名 —— `appdir.go:22`。
-pub const APP_NAME: &str = "ProxyDeck";
+/// `%APPDATA%` 下的数据目录名 —— `appdir.go:22`（转发自 [`crate::appdir`]）。
+pub const APP_NAME: &str = crate::appdir::APP_NAME;
 
-/// 数据目录（对齐 `appdir.dataDir()`；不负责建目录，建目录在 [`data_dir_ensure`]）。
+/// 数据目录（对齐 `appdir.dataDir()`）—— `appdir.go:84-98`。
 pub fn data_dir() -> PathBuf {
-    if let Some(d) = std::env::var_os(DATA_DIR_ENV) {
-        let s = d.to_string_lossy().trim().to_string();
-        if !s.is_empty() {
-            return PathBuf::from(s);
-        }
-    }
-    if portable_marker_exists() {
-        return crate::appdir::exe_dir();
-    }
-    if let Some(appdata) = std::env::var_os("APPDATA") {
-        let s = appdata.to_string_lossy().trim().to_string();
-        if !s.is_empty() {
-            return Path::new(&s).join(APP_NAME);
-        }
-    }
-    if let Some(home) = std::env::var_os("USERPROFILE") {
-        let s = home.to_string_lossy().to_string();
-        if !s.is_empty() {
-            return Path::new(&s).join("AppData").join("Roaming").join(APP_NAME);
-        }
-    }
-    crate::appdir::exe_dir()
+    crate::appdir::data_dir()
 }
 
-/// 便携标记是否在 exe 同目录（**是文件、不是目录** —— `appdir.go:33-36`）。
+/// 便携标记是否在 exe 同目录（**是文件、不是目录**）—— `appdir.go:33-36`。
 pub fn portable_marker_exists() -> bool {
-    std::fs::metadata(crate::appdir::exe_dir().join(PORTABLE_MARKER))
-        .map(|m| !m.is_dir())
-        .unwrap_or(false)
+    crate::appdir::marker_exists()
+}
+
+/// 当前是否便携模式 —— `appdir.go:39`（由 [`crate::appdir::init`] 按 flag/标记解析）。
+pub fn portable() -> bool {
+    crate::appdir::portable()
 }
 
 /// 数据目录（不存在则建；失败退回 exe 同目录）—— `appdir.go:72-78`。
 pub fn data_dir_ensure() -> PathBuf {
-    let dir = data_dir();
-    if std::fs::create_dir_all(&dir).is_ok() {
-        return dir;
-    }
-    crate::appdir::exe_dir()
+    crate::appdir::data_dir_ensure()
 }
 
 /// 数据目录下的某个文件路径 —— `appdir.go:82`。
 pub fn data_path(name: &str) -> PathBuf {
-    data_dir_ensure().join(name)
+    crate::appdir::data_path(name)
 }
 
 /// 429 兜底是否适用于该模型：`pacing.go:55-57`（**不分大小写**地找 "KIMI"）。

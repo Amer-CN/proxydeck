@@ -269,3 +269,16 @@ Copy-Item <repo>\.work\p8b5\golden-p8b5-go.json <repo>\rs-tuanjie\tests\golden\ 
 
 
 
+
+## P8c 的基准（`golden-p8c-go.json`，18,892 B + `p8c-synthetic-seed.tgz` 297 B）
+
+覆盖 **108 项**：种子扫描（合成 tgz 双轨道 + registry 零下载口径）、注水（三题/漂移/
+环形/落盘）、baseline 比对面、CDP 探测消息、代理三步判定、appdir 清单/迁移/轮转。
+合成 tgz 由 `.work/p8c/mktgz.py` 确定性生成（两侧解**同一份字节**）。
+
+**⚠ 再生成链断档（P8c 审查后如实登记）**：采集器源码（`zz_p8b_collect_test.go` 同款的一次性
+Go 文件）**没有留档**——执行轮跑完即删，`.work/p8c/` 里只有产物（golden/tgz/日志），
+没有源码。与 P8a/P8b/P8b5（源码都在 `.work`）不同，P8c 的金标当前**不可重采**。
+金标本身有效（已入库，Rust 门禁逐条对照它）；若将来 Go 侧这些模块有变，需按
+`tests/p8c_diff.rs` 的场景清单重写采集器（场景定义见该文件头注释与金标 `name` 键）。
+2026-10-17 实测：`cargo test --test p8c_diff` **1/1 通过，108 项逐条一致**。

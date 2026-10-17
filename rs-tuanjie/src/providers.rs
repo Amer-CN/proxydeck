@@ -1101,7 +1101,10 @@ pub async fn forward_external_chat(
                 async move {
                     match inner.next().await {
                         Some(Ok(chunk)) => {
-                            scan.feed(&stc2.stats, &chunk);
+                            // 外部 provider 路径**不做**别名解析观测（Go 的 `external`
+                            // 分支不经团结的 usageScanner，故不落 water 记录）；这里把
+                            // 记法收窄为「只喂 stats」——`water` 传一只分离实例，不写生产表。
+                            scan.feed(&stc2.stats, &stc2.water_scratch, &chunk);
                             stc2.registry.touch(g.rid(), chunk.len() as i64);
                             let out: Result<Vec<u8>, std::io::Error> = Ok(chunk.to_vec());
                             Some((out, (inner, scan, g)))

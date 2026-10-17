@@ -56,6 +56,10 @@ reqwest = { version = "0.13", features = ["default-tls", "http2", "gzip", "strea
 # 以及空响应嗅探时「先吐已读出的首段、再接上游剩余部分」。
 futures-util = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
+# gzip 解包（P8c 种子卫兵在线层）：Go 用 `compress/gzip`，Rust 侧用 flate2。
+# **不是新依赖**——它已在依赖树里（reqwest 的 gzip 特性经 miniz_oxide 引入的同一族），
+# 这里只是把它显式声明成直接依赖（tar 层是自写的 uSTAR 只读解析，见 `src/gziptar.rs`）。
+flate2 = "1"
 
 [profile.release]
 opt-level = 2

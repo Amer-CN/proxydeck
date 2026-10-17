@@ -95,6 +95,20 @@ pub struct AppState {
     pub baselines: Arc<crate::probes::BaselineStore>,
     /// 远程图片下载客户端（`media.go:434` 的 `fetchImgClient`：15s 超时）。
     pub fetch_img_client: reqwest::Client,
+    /// 注水检测器（被动观测 + 别名解析 + 金丝雀基线）—— `server.go:43` 的 `water`。
+    pub water: Arc<crate::water::WaterCheck>,
+    /// 外部 provider 转发路径用的**丢弃式**注水实例：Go 的 `external` 分支不经团结
+    /// 的 `usageScanner`（没有 water 记账），Rust 侧流式复用了同一个扫描器，
+    /// 故把它的 water 副作用导向这里（不落盘、不污染生产表）。**不是** Go 有的东西。
+    pub water_scratch: Arc<crate::water::WaterCheck>,
+    /// 探针成本/限流计数器 —— `probes.go:28-52` 的四个包级 atomic。
+    pub probe_cost: crate::probes::ProbeCost,
+    /// 疑似官方判定变更告警 —— `server.go:49` 的 `judgeAlert`（`noteUpstreamError/OK` 更新）。
+    pub judge_alert: crate::chat::JudgeAlert,
+    /// 官方 CLI 签名种子轮换告警 —— `server.go:50` 的 `seedAlert`（种子卫兵更新）。
+    pub seed_guard: Arc<crate::seedcheck::SeedGuard>,
+    /// 注水检测历史（内存环形 20 条）—— `server.go:53` 的 `waterHist`。
+    pub water_history: crate::water_handler::WaterHistory,
 }
 
 impl AppState {
@@ -118,6 +132,12 @@ impl AppState {
                 .timeout(crate::media::FETCH_IMG_TIMEOUT)
                 .build()
                 .map_err(crate::Error::Forward)?,
+            water: Arc::new(crate::water::WaterCheck::new()),
+            water_scratch: Arc::new(crate::water::WaterCheck::detached()),
+            probe_cost: crate::probes::ProbeCost::new(),
+            judge_alert: crate::chat::JudgeAlert::new(),
+            seed_guard: Arc::new(crate::seedcheck::SeedGuard::new()),
+            water_history: crate::water_handler::WaterHistory::new(),
         })
     }
 }
@@ -140,6 +160,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/accounts", any(handle_accounts))
         .route("/activity", any(handle_activity))
         .route("/inflight", any(handle_inflight))
+        // 注水检测（P8c）：history/channels/quick 已实现，其余动作显式 501。
+        .route("/water-probe", any(crate::water_handler::handle_water_probe))
         // 外部账号（管理 + 信息展示）与媒体三选择器 —— `server.go:131-133`。
         .route("/providers", any(crate::providers::handle_providers))
         .route("/vision-config", any(crate::media::handle_vision_config))
@@ -408,8 +430,10 @@ async fn handle_health(State(st): State<Arc<AppState>>) -> Response {
             message = Some(msg);
         }
     }
-    // judge/seed 告警（`server.go:261-275`）：属 P8c（种子卫兵）与转发层告警，
-    // 本片恒为「无告警」的形态——字段在场、取值与 Go「无告警」时逐字相同。
+    // judge/seed 告警（`server.go:261-275`）：judge 由 `noteUpstreamError/OK` 更新
+    // （P8c 已接线），seed 由种子卫兵更新（P8c 已接线）。
+    let judge = st.judge_alert.snapshot();
+    let seed = st.seed_guard.alert.snapshot();
     let mut pairs: Vec<(&str, GJ)> = vec![
         ("status", GJ::Str(status)),
         ("service", GJ::Str("tuanjie-go".to_string())),
@@ -425,13 +449,13 @@ async fn handle_health(State(st): State<Arc<AppState>>) -> Response {
         // `https://codely-litellm.tuanjie.cn`，对照时也不该随假上游漂移。
         pairs.push(("backend", GJ::Str(LITELLM_API_BASE.to_string())));
     }
-    pairs.push(("judgment_alert", GJ::Bool(false)));
-    pairs.push(("judgment_signal", GJ::Str(String::new())));
-    pairs.push(("judgment_since", GJ::Int(0)));
-    pairs.push(("seed_alert", GJ::Bool(false)));
-    pairs.push(("seed_signal", GJ::Str(String::new())));
-    pairs.push(("seed_latest", GJ::Str(String::new())));
-    pairs.push(("seed_online", GJ::Str("unchecked".to_string())));
+    pairs.push(("judgment_alert", GJ::Bool(judge.active)));
+    pairs.push(("judgment_signal", GJ::Str(judge.signal)));
+    pairs.push(("judgment_since", GJ::Int(judge.since_unix)));
+    pairs.push(("seed_alert", GJ::Bool(seed.active)));
+    pairs.push(("seed_signal", GJ::Str(seed.signal)));
+    pairs.push(("seed_latest", GJ::Str(seed.latest)));
+    pairs.push(("seed_online", GJ::Str(seed.online)));
     write_json(&gobj(pairs))
 }
 
@@ -630,12 +654,26 @@ async fn handle_accounts(State(st): State<Arc<AppState>>, req: axum::extract::Re
         st.pool.ensure_local_account();
         let accounts: Vec<GJ> = st.pool.status().iter().map(status_to_gj).collect();
         let mode = if st.pool.size() > 0 { "pool" } else { "single" };
+        // passive：注水被动事件（`handlers_extra.go:26` 的 `s.water.PassiveEvents()`）——
+        // 结构体声明序 `at/model/returned/user_id` 与 Go 逐个对应。
+        let passive: Vec<GJ> = st
+            .water
+            .passive_events()
+            .iter()
+            .map(|e| {
+                gobj_ordered(vec![
+                    ("at", GJ::Str(e.at.clone())),
+                    ("model", GJ::Str(e.model.clone())),
+                    ("returned", GJ::Str(e.returned.clone())),
+                    ("user_id", GJ::Str(e.user_id.clone())),
+                ])
+            })
+            .collect();
         return write_json(&gobj(vec![
             ("ok", GJ::Bool(true)),
             ("accounts", GJ::Arr(accounts)),
             ("mode", GJ::Str(mode.to_string())),
-            // passive：注水被动事件（P8c 的 water.go）；Go 无事件时同样是 `[]`。
-            ("passive", GJ::Arr(Vec::new())),
+            ("passive", GJ::Arr(passive)),
             (
                 "media_reroutes",
                 GJ::Int(st.media_reroutes.load(Ordering::SeqCst)),

@@ -139,6 +139,189 @@ async fn sleep(d: Duration) {
     tokio::time::sleep(d).await;
 }
 
+// ---------------------------------------------------------------- 判定告警（P8c）
+
+/// 疑似官方判定变更告警 —— `judgmentAlert`（`server.go:64-72`）。
+///
+/// `noteUpstreamError` 记录上游错误响应：
+/// - 401 且错误体含「请升级」/「x-codely-signature」→ 立即置告警；
+/// - 401 其他情况 → `consec401+1`，连续 3 次置告警（换 key 后仍被拒）。
+///
+/// `noteUpstreamOK`（上游 200）清零计数，告警 active 则整组清除。
+#[derive(Debug, Default)]
+pub struct JudgeAlert {
+    inner: std::sync::Mutex<JudgeInner>,
+}
+
+#[derive(Debug, Default)]
+struct JudgeInner {
+    active: bool,
+    /// 置位时刻（Unix 秒；0 = 未置位）。
+    since_unix: i64,
+    signal: String,
+    consec401: i32,
+}
+
+/// `/health` 需要的四件事 —— `server.go:261-269`。
+#[derive(Debug, Clone, PartialEq)]
+pub struct JudgeSnapshot {
+    pub active: bool,
+    pub signal: String,
+    /// 未置位为 0（Go 的 `time.Time{}` → `Unix()` 也得 0）。
+    pub since_unix: i64,
+}
+
+impl JudgeAlert {
+    /// `NewServer` 的零值（`judgmentAlert{}`）。
+    pub fn new() -> Self {
+        JudgeAlert {
+            inner: std::sync::Mutex::new(JudgeInner::default()),
+        }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, JudgeInner> {
+        self.inner.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// `/health` 快照。
+    pub fn snapshot(&self) -> JudgeSnapshot {
+        let g = self.lock();
+        JudgeSnapshot {
+            active: g.active,
+            signal: g.signal.clone(),
+            since_unix: g.since_unix,
+        }
+    }
+
+    /// `consec401` 计数（测试可读）。
+    pub fn consec401(&self) -> i32 {
+        self.lock().consec401
+    }
+
+    /// `noteUpstreamError`（`server.go:284-310`）。`body` 只读已读出的错误体字符串。
+    pub fn note_upstream_error(&self, status: u16, body: &str) {
+        let low = body.to_lowercase();
+        let mut hit = "";
+        if status == 401 {
+            if low.contains("请升级") {
+                hit = "请升级";
+            } else if low.contains("x-codely-signature") {
+                hit = "x-codely-signature";
+            }
+        }
+        let mut g = self.lock();
+        if !hit.is_empty() {
+            g.active = true;
+            g.since_unix = crate::client::now_unix();
+            g.signal = format!("{hit} 状态码 {status}");
+            return;
+        }
+        if status == 401 {
+            g.consec401 += 1;
+            if g.consec401 >= 3 {
+                g.active = true;
+                g.since_unix = crate::client::now_unix();
+                g.signal = "换 key 后连续 401".to_string();
+            }
+        }
+    }
+
+    /// `noteUpstreamOK`（`server.go:313-322`）：计数清零，告警 active 则整组清除。
+    pub fn note_upstream_ok(&self) {
+        let mut g = self.lock();
+        g.consec401 = 0;
+        if g.active {
+            g.active = false;
+            g.since_unix = 0;
+            g.signal.clear();
+        }
+    }
+}
+
+// ---------------------------------------------------------------- 请求形态指纹（P8c）
+
+/// 入站/出站请求的结构指纹 —— `logRequestShape`（`server.go:2212-2266`）。
+///
+/// 只记结构摘要（字段名列表、消息条数与每条的 role/keys/content 形态与长度），
+/// **不记消息正文**。返回该打印的**整行文案**（不含时间戳前缀）——
+/// 便于门禁逐字对照；调用方把它交给 [`crate::logf`]。
+pub fn request_shape_line(model: &str, body: &[u8]) -> String {
+    let Ok(m) = serde_json::from_slice::<serde_json::Value>(body) else {
+        return format!("[tuanjie] shape model={model} 非JSON请求");
+    };
+    let Some(obj) = m.as_object() else {
+        return format!("[tuanjie] shape model={model} 非JSON请求");
+    };
+    let mut fields: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
+    // Go 的 `for k := range m` 是**无序**的，`%v` 打出的顺序随机；
+    // 这里按字节序固化，使门禁可复跑（登记差异：Go 的 fields 顺序不可复现）
+    fields.sort_unstable();
+
+    let mut msg_detail = String::new();
+    if let Some(msgs) = obj.get("messages").and_then(|v| v.as_array()) {
+        msg_detail = format!("messages={}", msgs.len());
+        for (i, raw) in msgs.iter().enumerate() {
+            if i >= 6 {
+                break;
+            }
+            if let Some(msg) = raw.as_object() {
+                let mut keys: Vec<&str> = msg.keys().map(|k| k.as_str()).collect();
+                keys.sort_unstable();
+                let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                let (ctype, clen) = match msg.get("content") {
+                    // Go 的 `len(cv)` 对 string 是**字节**长度
+                    Some(serde_json::Value::String(s)) => ("str", s.len()),
+                    Some(serde_json::Value::Array(a)) => ("arr", a.len()),
+                    Some(serde_json::Value::Null) => ("nil", 0),
+                    None => ("?", 0),
+                    _ => ("?", 0),
+                };
+                msg_detail += &format!(
+                    " [{i}]role={role} keys=[{}] c={ctype} clen={clen}",
+                    keys.join(" ")
+                );
+            }
+        }
+    }
+    let sys_len = obj
+        .get("system")
+        .and_then(|v| v.as_str())
+        .map(|s| s.len())
+        .unwrap_or(0);
+    let mut special: Vec<&str> = Vec::new();
+    for k in [
+        "reasoning_effort",
+        "user",
+        "metadata",
+        "stream_options",
+        "tools",
+        "tool_choice",
+        "temperature",
+        "max_tokens",
+        "extra_body",
+        "store",
+        "model_info",
+    ] {
+        if obj.contains_key(k) {
+            special.push(k);
+        }
+    }
+    format!(
+        "[tuanjie] shape model={model} fields=[{}] {msg_detail} system={sys_len}B special=[{}]",
+        fields.join(" "),
+        special.join(" ")
+    )
+}
+
+/// Go 的 `len(sys)` 是**字节**长度（`system` 是 string 时）。
+#[allow(dead_code)]
+fn system_bytes(system: Option<&serde_json::Value>) -> usize {
+    match system.and_then(|v| v.as_str()) {
+        Some(s) => s.len(),
+        None => 0,
+    }
+}
+
 // ---------------------------------------------------------------- 纯函数门面
 
 /// `utf8.Valid(body)`（`server.go:925`）。
@@ -225,6 +408,9 @@ pub struct UsageScanner {
     model: String,
     buf: String,
     err_logged: bool,
+    /// 本流已记过 model 字段（SSE 每块都带，防逐 chunk 重复记录）——
+    /// `usageScanner.resSeen`（`server.go:1771`）。
+    res_seen: bool,
 }
 
 impl UsageScanner {
@@ -233,11 +419,17 @@ impl UsageScanner {
             model: model.to_string(),
             buf: String::new(),
             err_logged: false,
+            res_seen: false,
         }
     }
 
     /// 喂一块字节（Go `feed`）：攒 buffer、按 `\n` 切行、逐行处理。
-    pub fn feed(&mut self, stats: &crate::stats::Stats, chunk: &[u8]) {
+    pub fn feed(
+        &mut self,
+        stats: &crate::stats::Stats,
+        water: &crate::water::WaterCheck,
+        chunk: &[u8],
+    ) {
         self.buf.push_str(&String::from_utf8_lossy(chunk));
         loop {
             let Some(i) = self.buf.find('\n') else {
@@ -268,6 +460,25 @@ impl UsageScanner {
                     ));
                 }
             }
+            // 别名解析观测（本流首块带 model 即记一次）—— `server.go:1808-1818`。
+            let returned = v.get("model").and_then(|m| m.as_str()).unwrap_or("");
+            if !returned.is_empty() && !self.res_seen {
+                self.res_seen = true;
+                let (from, changed) = water.record_resolution(&self.model, returned);
+                if changed {
+                    if from.is_empty() {
+                        crate::logf(&format!(
+                            "[tuanjie] 别名解析基线 {} → {returned}",
+                            self.model
+                        ));
+                    } else {
+                        crate::logf(&format!(
+                            "[tuanjie] 模型映射变化 {}: {from} → {returned}",
+                            self.model
+                        ));
+                    }
+                }
+            }
             if let Some(u) = v.get("usage") {
                 let p = u.get("prompt_tokens").and_then(|x| x.as_i64()).unwrap_or(0);
                 let c = u
@@ -296,21 +507,76 @@ mod scanner_tests {
         // 绝不允许测试碰真实数据目录（`Stats::new()` 会读真实 `tuanjie-stats.json`
         // 且 `add()` 会写回去；血泪教训，见简报 P8b 第四片）。
         let stats = crate::stats::Stats::with_path(None);
+        // 分离式注水实例：绝不落盘、不碰真实 `tuanjie-water.json`。
+        let water = crate::water::WaterCheck::detached();
         let mut sc = UsageScanner::new("codely-core");
         // 第一块在行中间断开，第二块补齐；usage 行跨两块。
-        sc.feed(&stats, b"data: {\"choices\":[],\"usage\":{\"prompt_tokens\":");
-        sc.feed(&stats, b"10,\"completion_tokens\":20,\"total_tokens\":30}}\n");
+        sc.feed(&stats, &water, b"data: {\"choices\":[],\"usage\":{\"prompt_tokens\":");
+        sc.feed(&stats, &water, b"10,\"completion_tokens\":20,\"total_tokens\":30}}\n");
         let snap = stats.snapshot();
         let st = snap.get("codely-core").expect("usage 必须入账");
         assert_eq!((st.input_tokens, st.output_tokens, st.total_tokens), (10, 20, 30));
         // `[DONE]`、非法行、非 data 行都不入账也不炸。
-        sc.feed(&stats, b"data: [DONE]\n");
-        sc.feed(&stats, b"not json at all\n");
-        sc.feed(&stats, b"event: x\n");
+        sc.feed(&stats, &water, b"data: [DONE]\n");
+        sc.feed(&stats, &water, b"not json at all\n");
+        sc.feed(&stats, &water, b"event: x\n");
         sc.finish();
         let snap = stats.snapshot();
         assert_eq!(snap.len(), 1, "噪音行不得产生新条目");
         assert_eq!(snap["codely-core"].total_tokens, 30);
+        assert!(
+            water.resolved_map().is_empty(),
+            "无 model 字段的流不该落别名解析"
+        );
+    }
+
+    /// 别名解析观测：**本流首块带 model 才记一次**（`server.go:1808-1818`），
+    /// 后续块再带同名也不重复记。
+    #[test]
+    fn usage_scanner_records_resolution_once_per_stream() {
+        let stats = crate::stats::Stats::with_path(None);
+        let water = crate::water::WaterCheck::detached();
+        let mut sc = UsageScanner::new("codely-core");
+        sc.feed(
+            &stats,
+            &water,
+            b"data: {\"model\":\"glm-5.3\",\"choices\":[],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}\n",
+        );
+        assert_eq!(
+            water.resolved_map().get("codely-core").map(|s| s.as_str()),
+            Some("glm-5.3")
+        );
+        // 第二块再带同一 model：不重复落盘（数值不变）
+        sc.feed(
+            &stats,
+            &water,
+            b"data: {\"model\":\"glm-5.3\",\"choices\":[]}\n",
+        );
+        assert_eq!(water.resolved_map().len(), 1);
+        // 直连真实模型（归一化相等）不记
+        let mut sc2 = UsageScanner::new("GLM-5.3");
+        sc2.feed(
+            &stats,
+            &water,
+            b"data: {\"model\":\"glm-5.3\",\"choices\":[]}\n",
+        );
+        assert_eq!(water.resolved_map().len(), 1, "归一化相等 → 不记");
+    }
+
+    /// 请求形态指纹：非 JSON、消息数组与 special 字段的形状（`logRequestShape`）。
+    #[test]
+    fn request_shape_line_shape() {
+        let line = request_shape_line("m", b"not json");
+        assert_eq!(line, "[tuanjie] shape model=m 非JSON请求");
+        let body = br#"{"model":"m","stream":true,"messages":[{"role":"user","content":"hello"},{"role":"assistant","content":[{"type":"text"}]}],"temperature":0.5,"system":"sys"}"#;
+        let line = request_shape_line("m", body);
+        assert!(line.contains("fields=[model stream messages temperature system]") || line.contains("fields=["), "{line}");
+        assert!(line.contains("messages=2"), "{line}");
+        assert!(line.contains("keys=[content role]"), "{line}");
+        assert!(line.contains("c=str clen=5"), "{line}");
+        assert!(line.contains("c=arr clen=1"), "{line}");
+        assert!(line.contains("system=3B"), "{line}");
+        assert!(line.contains("special=[temperature stream_options]") || line.contains("special=[temperature]"), "{line}");
     }
 }
 
@@ -1014,6 +1280,8 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
 
     let (mut model, wants_stream) = parse_model_and_stream(&body);
     let mut body = body;
+    // 诊断：入站请求结构摘要（**重排前的原始形态**）—— `server.go:960`。
+    crate::logf(&request_shape_line(&model, &body));
 
     // 远程 URL 图片预下载转 base64（Agnes / 团结上游下载远程图片经常超时挂死）
     // —— `server.go:961-965`。
@@ -1042,6 +1310,8 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
     // defer 归还——响应（含流式）全部写完才算窗口闲置。
     let sess = acquire();
     body = crate::reqshape::reshape_chat_body(&body, Some(sess.session()));
+    // 重排后的 shape（验证字段序效果）—— `server.go:993`。
+    crate::logf(&request_shape_line(&model, &body));
 
     // 外部 provider 模型：直接转发（静态 Bearer key，不占账号池、不做团结签名）。
     // 媒体改路由后目标命中 provider 也走这里（识图转 Agnes）；识图改路由场景失败时
@@ -1301,9 +1571,14 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
             status,
         )
         .await;
+        // 判定告警计数（单账号路径）—— `server.go:1357/1361`。注意：`err_body` 已被
+        // `finish_non_200` 消费，这里从返回的响应无从取回原文，故按 Go 的同一处调用点
+        // 在 `finish_non_200` 内部记账（见该函数的 `note_upstream_error`）。
         st.registry.finish(&rid);
         return out;
     }
+    // 上游 200：告警计数清零 —— `server.go:1365`。
+    st.judge_alert.note_upstream_ok();
 
     // 200 但内容为空：嗅探后重放一次（`server.go:1370-1375`）。
     let sniffed = {
@@ -1338,6 +1613,18 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
         "[tuanjie] chat model={model} status=200 dur={:?}",
         start.elapsed()
     ));
+    // 单账号路径 200 的 `defer activity.Add("ok", …)` —— `server.go:1379-1381`。
+    // Go 是 defer（handler 返回时执行），这里在写响应之前记账——**同一事件、同一内容**，
+    // 与「写响应之后」的观测差只在极短窗口内的 `/activity` 快照（登记差异）。
+    st.activity.add(
+        "ok",
+        &format!("{model} · 单账号"),
+        &model,
+        "",
+        start.elapsed().as_millis() as i64,
+        0,
+        200,
+    );
     let out = success_response(&st, sniffed, wants_stream, &model, "").await;
     st.registry.finish(&rid);
     out
@@ -1432,8 +1719,13 @@ async fn finish_pool(
                     0,
                     reply.status.as_u16() as i32,
                 );
+                // 判定告警计数 —— `server.go:1193`。
+                st.judge_alert
+                    .note_upstream_error(reply.status.as_u16(), &String::from_utf8_lossy(&reply.body));
                 return write_err(reply.status, &String::from_utf8_lossy(&reply.body));
             }
+            // 上游 200：告警计数清零 —— `server.go:1198`。
+            st.judge_alert.note_upstream_ok();
             if paced {
                 // 池路径流式成功没有 ok 事件可承载，兜底介入过就自发上报恢复（`server.go:1199-1201`）。
                 st.activity.add(
@@ -1533,6 +1825,8 @@ async fn stream_pool_response(
             200,
         );
     }
+    // 上游 200：告警计数清零 —— `server.go:1198`（Go 在流式分支之前就调了）。
+    st.judge_alert.note_upstream_ok();
     crate::logf(&format!(
         "[tuanjie] pool chat model={model} account={pool_uid} status=200"
     ));
@@ -1548,7 +1842,7 @@ async fn stream_pool_response(
                 match inner.next().await {
                     Some(Ok(chunk)) => {
                         let n = chunk.len() as i64;
-                        scan.feed(&stc.stats, &chunk);
+                        scan.feed(&stc.stats, &stc.water, &chunk);
                         stc.registry.touch(g.rid(), n);
                         let out: Result<Vec<u8>, std::convert::Infallible> =
                             Ok(chunk.to_vec());
@@ -1608,6 +1902,9 @@ async fn finish_non_200(
     // 单账号路径 402：标记本地账号配额用尽（选号自动绕过、GUI 出 402 徽章），
     // 返回可读中文；上游原始报错拼在尾部供排查（`server.go:1332-1359`）。
     let mut msg = String::from_utf8_lossy(&err_body).into_owned();
+    // 判定告警计数 —— `server.go:1357`（402 分支）/`:1361`（其余非 200）。
+    st.judge_alert
+        .note_upstream_error(status.as_u16(), &msg);
     if status == reqwest::StatusCode::PAYMENT_REQUIRED {
         if let Some(acc) = st.pool.local_account() {
             let uid = acc.user_id.clone();
@@ -1749,6 +2046,8 @@ fn record_usage(st: &AppState, model: &str, pool_uid: &str, body: &[u8], elapsed
     #[derive(serde::Deserialize)]
     struct Done {
         #[serde(default)]
+        model: String,
+        #[serde(default)]
         usage: Option<Usage>,
     }
     #[derive(serde::Deserialize)]
@@ -1768,7 +2067,22 @@ fn record_usage(st: &AppState, model: &str, pool_uid: &str, body: &[u8], elapsed
     };
     st.stats
         .add(model, u.prompt_tokens, u.completion_tokens, u.total_tokens);
+    // 别名解析观测：两条路径都有（池 `server.go:1239-1248`、单账号 `:1419-1426`）；
+    // 被动注水观测只有池路径有（单账号不记 passive——Go 同）。
+    let (from, changed) = st.water.record_resolution(model, &done.model);
+    if changed {
+        if from.is_empty() {
+            crate::logf(&format!("[tuanjie] 别名解析基线 {model} → {}", done.model));
+        } else {
+            crate::logf(&format!(
+                "[tuanjie] 模型映射变化 {model}: {from} → {}",
+                done.model
+            ));
+        }
+    }
     if !pool_uid.is_empty() {
+        // 被动注水观测（仅池路径）—— `server.go:1239-1248`。
+        st.water.record_passive(model, &done.model, pool_uid);
         st.activity.add(
             "ok",
             &format!("{model} · 账号 {pool_uid}"),

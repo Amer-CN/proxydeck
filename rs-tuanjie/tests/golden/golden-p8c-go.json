@@ -1,0 +1,888 @@
+{
+  "anchor_conflict_note": {
+    "empty": "",
+    "one_over": "",
+    "phrase_green": "与 团结 官方基准一致",
+    "phrase_grey": "",
+    "phrase_nil": "",
+    "phrase_yellow": "与 团结 官方基准比对",
+    "two_over": "官方锚点之间不一致：团结 vs B.ai 有 2 项探针指纹不同——其中至少一条链路可疑（该提示不参与灯色判定）"
+  },
+  "combine_seed_alerts": [
+    {
+      "active": true,
+      "signal": "在线"
+    },
+    {
+      "active": true,
+      "signal": "本地"
+    },
+    {
+      "active": false,
+      "signal": "ok"
+    },
+    {
+      "active": true,
+      "signal": "在线2"
+    }
+  ],
+  "compare_against_anchors_best": {
+    "cmps": [
+      {
+        "name": "tokenizer_en",
+        "current": "26",
+        "baseline": "26",
+        "match": true,
+        "comparable": true,
+        "status": "ok"
+      }
+    ],
+    "light": "green",
+    "matched": "tuanjie",
+    "reason": "与 团结 官方基准一致：管道探针全部匹配；分布不可比：样本不足",
+    "score": 100
+  },
+  "compare_against_anchors_empty": {
+    "cmps": [],
+    "light": "grey",
+    "matched": "",
+    "reason": "该模型无官方基准，先在官方渠道（团结 / Comate / Qoder / TokenRouter）检测一次以自动采集基准"
+  },
+  "compare_to_baseline": [
+    {
+      "cmps": [],
+      "name": "nil-baseline",
+      "sim": {
+        "cosine": 0,
+        "jsDiv": 0,
+        "mode": 0,
+        "overall": 0
+      },
+      "verdict": {
+        "label": "无基准",
+        "light": "grey",
+        "reason": "该模型无官方基准，先在官方渠道（团结 / Comate / Qoder / TokenRouter）检测一次以自动采集基准",
+        "score": 0
+      }
+    },
+    {
+      "cmps": [
+        {
+          "name": "tokenizer_en",
+          "current": "26",
+          "baseline": "26",
+          "match": true,
+          "comparable": true,
+          "status": "ok"
+        }
+      ],
+      "name": "all-match",
+      "sim": {
+        "cosine": 0,
+        "jsDiv": 0,
+        "mode": 0,
+        "overall": 0
+      },
+      "verdict": {
+        "label": "一致",
+        "light": "green",
+        "reason": "管道探针全部匹配；分布不可比：样本不足",
+        "score": 100
+      }
+    },
+    {
+      "cmps": [
+        {
+          "name": "tokenizer_en",
+          "current": "40",
+          "baseline": "26",
+          "match": false,
+          "comparable": true,
+          "status": "ok"
+        },
+        {
+          "name": "tokenizer_cjk",
+          "current": "35",
+          "baseline": "35",
+          "match": true,
+          "comparable": true,
+          "status": "ok"
+        }
+      ],
+      "name": "one-mismatch",
+      "sim": {
+        "cosine": 0,
+        "jsDiv": 0,
+        "mode": 0,
+        "overall": 0
+      },
+      "verdict": {
+        "label": "轻微偏差",
+        "light": "yellow",
+        "reason": "1 个探针不匹配；分布不可比：样本不足",
+        "score": 90
+      }
+    },
+    {
+      "cmps": [
+        {
+          "name": "tokenizer_en",
+          "current": "40",
+          "baseline": "26",
+          "match": false,
+          "comparable": true,
+          "status": "ok"
+        },
+        {
+          "name": "tokenizer_cjk",
+          "current": "50",
+          "baseline": "35",
+          "match": false,
+          "comparable": true,
+          "status": "ok"
+        }
+      ],
+      "name": "two-mismatch",
+      "sim": {
+        "cosine": 0,
+        "jsDiv": 0,
+        "mode": 0,
+        "overall": 0
+      },
+      "verdict": {
+        "label": "显著偏差",
+        "light": "red",
+        "reason": "管道探针 2 项不匹配（注水嫌疑）；分布不可比：样本不足",
+        "score": 60
+      }
+    },
+    {
+      "cmps": [
+        {
+          "name": "tokenizer_en",
+          "current": "26",
+          "baseline": "26",
+          "match": true,
+          "comparable": true,
+          "status": "ok"
+        },
+        {
+          "name": "finish_stop",
+          "current": "x",
+          "baseline": "",
+          "match": false,
+          "comparable": false,
+          "status": "error"
+        }
+      ],
+      "name": "partial-unstable",
+      "sim": {
+        "cosine": 0,
+        "jsDiv": 0,
+        "mode": 0,
+        "overall": 0
+      },
+      "verdict": {
+        "label": "无法判定",
+        "light": "grey",
+        "reason": "管道探针仅 1 项可比且一致，本次不构成一致结论；分布不可比：样本不足；1 项探针 unstable 未计入比对",
+        "score": 0
+      }
+    },
+    {
+      "cmps": [
+        {
+          "name": "tokenizer_en",
+          "current": "26",
+          "baseline": "26",
+          "match": false,
+          "comparable": false,
+          "status": "error"
+        }
+      ],
+      "name": "no-comparable",
+      "sim": {
+        "cosine": 0,
+        "jsDiv": 0,
+        "mode": 0,
+        "overall": 0
+      },
+      "verdict": {
+        "label": "无法判定",
+        "light": "grey",
+        "reason": "管道探针全部未测成/无法归一化，本次不构成比对结论；分布不可比：样本不足；1 项探针 unstable 未计入比对",
+        "score": 0
+      }
+    },
+    {
+      "cmps": [
+        {
+          "name": "error_temp2",
+          "current": "温度非法（temperature must be \u003c=2）",
+          "baseline": "invalid temperature",
+          "match": false,
+          "comparable": false,
+          "status": "skip",
+          "note": "报错原文按各网关口径措辞不同，跨渠道不可比，已跳过"
+        }
+      ],
+      "name": "cross-channel-skip",
+      "sim": {
+        "cosine": 0,
+        "jsDiv": 0,
+        "mode": 0,
+        "overall": 0
+      },
+      "verdict": {
+        "label": "无法判定",
+        "light": "grey",
+        "reason": "管道探针全部未测成/无法归一化，本次不构成比对结论；分布不可比：样本不足；报错原文探针 1 项跨渠道不可比，已跳过",
+        "score": 0
+      }
+    },
+    {
+      "cmps": [
+        {
+          "name": "error_temp2",
+          "current": "temperature must be \u003c= 2",
+          "baseline": "invalid temperature",
+          "match": false,
+          "comparable": true,
+          "status": "ok"
+        }
+      ],
+      "name": "same-channel-wording",
+      "sim": {
+        "cosine": 0,
+        "jsDiv": 0,
+        "mode": 0,
+        "overall": 0
+      },
+      "verdict": {
+        "label": "轻微偏差",
+        "light": "yellow",
+        "reason": "1 个探针不匹配；分布不可比：样本不足",
+        "score": 90
+      }
+    },
+    {
+      "cmps": [
+        {
+          "name": "tokenizer_mixed",
+          "current": "12",
+          "baseline": "",
+          "match": false,
+          "comparable": false,
+          "status": "ok"
+        }
+      ],
+      "name": "missing-probe-name",
+      "sim": {
+        "cosine": 0,
+        "jsDiv": 0,
+        "mode": 0,
+        "overall": 0
+      },
+      "verdict": {
+        "label": "无法判定",
+        "light": "grey",
+        "reason": "管道探针全部未测成/无法归一化，本次不构成比对结论；分布不可比：样本不足；1 项探针 unstable 未计入比对",
+        "score": 0
+      }
+    },
+    {
+      "cmps": [
+        {
+          "name": "tokenizer_en",
+          "current": "26",
+          "baseline": "26",
+          "match": true,
+          "comparable": true,
+          "status": "ok"
+        }
+      ],
+      "name": "dist-ready-green",
+      "sim": {
+        "cosine": 0,
+        "jsDiv": 0,
+        "mode": 0,
+        "overall": 0
+      },
+      "verdict": {
+        "label": "一致",
+        "light": "green",
+        "reason": "管道探针全部匹配；分布不可比：样本不足",
+        "score": 100
+      }
+    }
+  ],
+  "contains_ci": [
+    {
+      "hay": "396",
+      "needle": "396",
+      "want": true
+    },
+    {
+      "hay": "答案是 396。",
+      "needle": "396",
+      "want": true
+    },
+    {
+      "hay": "QX7-8842",
+      "needle": "qx7-8842",
+      "want": true
+    },
+    {
+      "hay": "",
+      "needle": "396",
+      "want": false
+    },
+    {
+      "hay": "396",
+      "needle": "",
+      "want": false
+    },
+    {
+      "hay": "397",
+      "needle": "396",
+      "want": false
+    }
+  ],
+  "eval_seed_scan": [
+    {
+      "active": false,
+      "header": false,
+      "scanned": false,
+      "seed": false,
+      "signal": "cli_not_found"
+    },
+    {
+      "active": false,
+      "header": true,
+      "scanned": true,
+      "seed": true,
+      "signal": "ok"
+    },
+    {
+      "active": true,
+      "header": false,
+      "scanned": true,
+      "seed": false,
+      "signal": "签名种子与签名头名均未命中"
+    },
+    {
+      "active": true,
+      "header": true,
+      "scanned": true,
+      "seed": false,
+      "signal": "签名种子未命中（官方可能已轮换种子）"
+    },
+    {
+      "active": true,
+      "header": false,
+      "scanned": true,
+      "seed": true,
+      "signal": "签名头名未命中（官方可能已改签名方案）"
+    }
+  ],
+  "fixture_tgz": {
+    "bytes": 297,
+    "err": "",
+    "found": true,
+    "header": true,
+    "names": [
+      "package/package.json",
+      "package/README.md",
+      "package/bundle/gemini.js"
+    ],
+    "seed": true,
+    "sha256": "7d5bdef3099062396d2c981f62225d73d3fbf3fed98aaaeeb93858f8a40700d7"
+  },
+  "gateway_wording": [
+    {
+      "gateway": true,
+      "name": "error_temp2"
+    },
+    {
+      "gateway": true,
+      "name": "error_maxtok"
+    },
+    {
+      "gateway": false,
+      "name": "tokenizer_en"
+    },
+    {
+      "gateway": false,
+      "name": "finish_stop"
+    },
+    {
+      "gateway": false,
+      "name": "error_temp1"
+    }
+  ],
+  "http_layer": {
+    "size": 262,
+    "status": 200
+  },
+  "install_hint": [
+    {
+      "dir": "D:\\Program Files (x86)",
+      "hint": "D:"
+    },
+    {
+      "dir": "C:/x/y",
+      "hint": "C:"
+    },
+    {
+      "dir": "\\\\server\\share\\app",
+      "hint": "\\\\server\\share:"
+    },
+    {
+      "dir": "",
+      "hint": ""
+    },
+    {
+      "dir": ".",
+      "hint": ""
+    }
+  ],
+  "is_numeric_str": [
+    {
+      "numeric": true,
+      "s": "396"
+    },
+    {
+      "numeric": true,
+      "s": "-5"
+    },
+    {
+      "numeric": true,
+      "s": "+5"
+    },
+    {
+      "numeric": false,
+      "s": ""
+    },
+    {
+      "numeric": false,
+      "s": "3.9"
+    },
+    {
+      "numeric": false,
+      "s": " 396"
+    },
+    {
+      "numeric": false,
+      "s": "abc"
+    },
+    {
+      "numeric": true,
+      "s": "007"
+    }
+  ],
+  "label_desktop_sources": [
+    {
+      "labels": [
+        {
+          "label": "桌面端 CLI",
+          "path": "D:\\a\\codely.exe"
+        }
+      ]
+    },
+    {
+      "labels": [
+        {
+          "label": "桌面端 CLI(D:)",
+          "path": "D:\\a\\codely.exe"
+        },
+        {
+          "label": "桌面端 CLI(C:)",
+          "path": "C:\\b\\codely.exe"
+        }
+      ]
+    },
+    {
+      "labels": [
+        {
+          "label": "桌面端 CLI",
+          "path": "D:\\a\\codely.exe"
+        }
+      ]
+    },
+    {
+      "labels": []
+    }
+  ],
+  "legacy_state_files": [
+    "api-key.txt",
+    "stats.json",
+    "keymap.json",
+    "close_mode.txt",
+    "notice_dismissed.flag",
+    "close_hint_dismissed.flag",
+    "headless-error.log",
+    "calibration.json",
+    "tuanjie-accounts.json",
+    "tuanjie-providers.json",
+    "tuanjie-media.json",
+    "tuanjie-vision.json",
+    "tuanjie-water.json",
+    "tuanjie-water-channels.json",
+    "tuanjie-baselines.json",
+    "tuanjie-stats.json",
+    "tuanjie-pacing.json",
+    "codebuddy-pool.json",
+    "codebuddy-pool-intl.json",
+    "codebuddy-stats.json",
+    "codebuddy-stats-intl.json",
+    "codebuddy-failover.json",
+    "codebuddy-failover-intl.json",
+    "vibex-config.json",
+    "vibex-stats.json",
+    "bai-stats.json",
+    "vibex-plugin-error.log",
+    "tuanjie-plugin-error.log",
+    "codebuddy-plugin-error.log",
+    "codebuddy-intl-plugin-error.log",
+    "bai-plugin-error.log",
+    "comate-plugin-error.log",
+    "qoder-plugin-error.log"
+  ],
+  "local_cli_sources": [
+    {
+      "srcs": [
+        {
+          "label": "npm CLI",
+          "path": "C:\\Users\\u\\AppData\\Roaming\\npm\\node_modules\\@unity-china\\codely-cli\\bundle\\gemini.js"
+        },
+        {
+          "label": "桌面端 CLI(D:)",
+          "path": "D:\\Program Files (x86)\\cli\\bin\\win32-x64\\codely.exe"
+        },
+        {
+          "label": "桌面端 CLI(C:)",
+          "path": "C:\\Users\\u\\AppData\\Local\\Programs\\Tuanjie Cowork\\cli\\bin\\win32-x64\\codely.exe"
+        }
+      ]
+    },
+    {
+      "srcs": [
+        {
+          "label": "npm CLI",
+          "path": "X:\\appdata\\npm\\node_modules\\@unity-china\\codely-cli\\bundle\\gemini.js"
+        },
+        {
+          "label": "npm CLI",
+          "path": "C:\\Users\\u\\AppData\\Roaming\\npm\\node_modules\\@unity-china\\codely-cli\\bundle\\gemini.js"
+        },
+        {
+          "label": "桌面端 CLI(D:)",
+          "path": "D:\\Program Files (x86)\\cli\\bin\\win32-x64\\codely.exe"
+        },
+        {
+          "label": "桌面端 CLI(C:)",
+          "path": "C:\\Users\\u\\AppData\\Local\\Programs\\Tuanjie Cowork\\cli\\bin\\win32-x64\\codely.exe"
+        }
+      ]
+    },
+    {
+      "srcs": []
+    }
+  ],
+  "migrate": {
+    "dst_has_water": true,
+    "dst_pacing_content": "{\"enabled\":false}",
+    "notes": [
+      "tuanjie-water.json 已搬入数据目录",
+      "tuanjie-pacing.json 目标已存在，旧文件改名保留为 tuanjie-pacing.json.migrated"
+    ],
+    "same_dir_empty": true,
+    "src_has_migrated": true,
+    "src_has_water": false
+  },
+  "normalize_model_name": [
+    {
+      "in": "Codely-Core",
+      "out": "codely-core"
+    },
+    {
+      "in": "GLM-5.3",
+      "out": "glm-5.3"
+    },
+    {
+      "in": "alias/team/GLM-5.3",
+      "out": "glm-5.3"
+    },
+    {
+      "in": "z-ai/x",
+      "out": "x"
+    },
+    {
+      "in": "",
+      "out": ""
+    }
+  ],
+  "passive_after_3": 1,
+  "passive_cap": {
+    "last": "r59",
+    "len": 50
+  },
+  "probe_value_match": [
+    {
+      "base": "26",
+      "cur": "26",
+      "name": "tokenizer_en",
+      "want": true
+    },
+    {
+      "base": "26",
+      "cur": "27",
+      "name": "tokenizer_en",
+      "want": true
+    },
+    {
+      "base": "26",
+      "cur": "28",
+      "name": "tokenizer_en",
+      "want": false
+    },
+    {
+      "base": "stop",
+      "cur": "stop",
+      "name": "finish_stop",
+      "want": true
+    },
+    {
+      "base": "length",
+      "cur": "stop",
+      "name": "finish_stop",
+      "want": false
+    },
+    {
+      "base": "stop",
+      "cur": "stob",
+      "name": "finish_stop",
+      "want": true
+    },
+    {
+      "base": "stop",
+      "cur": "xtob",
+      "name": "finish_stop",
+      "want": false
+    },
+    {
+      "base": "stop",
+      "cur": "stopx",
+      "name": "finish_stop",
+      "want": false
+    },
+    {
+      "base": "396",
+      "cur": "396",
+      "name": "x",
+      "want": true
+    },
+    {
+      "base": "396",
+      "cur": "386",
+      "name": "x",
+      "want": false
+    },
+    {
+      "base": "invalid temperature valuf",
+      "cur": "invalid temperature value",
+      "name": "error_temp2",
+      "want": false
+    },
+    {
+      "base": "",
+      "cur": "",
+      "name": "error_temp2",
+      "want": true
+    },
+    {
+      "base": "-4",
+      "cur": "-5",
+      "name": "tokenizer_en",
+      "want": true
+    },
+    {
+      "base": "26",
+      "cur": "abc",
+      "name": "tokenizer_en",
+      "want": false
+    }
+  ],
+  "proxy_probe": {
+    "env_seen": {
+      "HTTPS_PROXY": "\u003clen=21\u003e",
+      "HTTP_PROXY": "\u003clen=21\u003e",
+      "http_proxy": "\u003clen=21\u003e",
+      "https_proxy": "\u003clen=21\u003e"
+    },
+    "proxy_enable": "0x1",
+    "proxy_server": "127.0.0.1:7897",
+    "reg_read_proxy": "http://127.0.0.1:7897"
+  },
+  "record_resolution": [
+    {
+      "changed": false,
+      "from": "",
+      "req": "glm-5.3",
+      "ret": "GLM-5.3"
+    },
+    {
+      "changed": true,
+      "from": "",
+      "req": "codely-core",
+      "ret": "glm-5.3"
+    },
+    {
+      "changed": false,
+      "from": "glm-5.3",
+      "req": "Codely-Core",
+      "ret": "alias/glm-5.3"
+    },
+    {
+      "changed": true,
+      "from": "glm-5.3",
+      "req": "codely-core",
+      "ret": "kimi-k3"
+    },
+    {
+      "changed": false,
+      "from": "",
+      "req": "",
+      "ret": "x"
+    },
+    {
+      "changed": false,
+      "from": "",
+      "req": "x",
+      "ret": ""
+    }
+  ],
+  "seed_scan": [
+    {
+      "case": "neither",
+      "err": false,
+      "header": false,
+      "seed": false
+    },
+    {
+      "case": "big-cross",
+      "err": false,
+      "header": true,
+      "seed": false
+    },
+    {
+      "case": "both.txt",
+      "err": false,
+      "header": true,
+      "seed": false
+    },
+    {
+      "case": "seed-only",
+      "err": false,
+      "header": false,
+      "seed": false
+    },
+    {
+      "case": "header-only",
+      "err": false,
+      "header": true,
+      "seed": false
+    },
+    {
+      "active": false,
+      "case": "sources-both",
+      "signal": "ok（已核 npm CLI）"
+    },
+    {
+      "active": true,
+      "case": "sources-none",
+      "signal": "npm CLI：签名种子与签名头名均未命中"
+    },
+    {
+      "active": false,
+      "case": "sources-missing",
+      "signal": "cli_not_found"
+    },
+    {
+      "active": true,
+      "case": "sources-second-bad",
+      "signal": "桌面端 CLI(D:)：签名种子与签名头名均未命中"
+    }
+  ],
+  "tgz": {
+    "bad-gzip": {
+      "err_text": "gzip: invalid header",
+      "found": false,
+      "header": false,
+      "seed": false
+    },
+    "both": {
+      "err_text": "",
+      "found": true,
+      "header": true,
+      "seed": true
+    },
+    "missing-file": {
+      "err_text": "",
+      "found": false,
+      "header": false,
+      "seed": false
+    },
+    "no-features": {
+      "err_text": "",
+      "found": true,
+      "header": false,
+      "seed": false
+    },
+    "real-constants": {
+      "err": false,
+      "found": true,
+      "header": true,
+      "seed": false
+    },
+    "traversal": {
+      "err_text": "",
+      "found": true,
+      "header": false,
+      "seed": false
+    }
+  },
+  "tokenizer_batch_shift": [
+    {
+      "median": 0,
+      "n": 2,
+      "shift": false
+    },
+    {
+      "median": -6,
+      "n": 3,
+      "shift": true
+    },
+    {
+      "median": -6,
+      "n": 2,
+      "shift": true
+    },
+    {
+      "median": 0,
+      "n": 0,
+      "shift": false
+    },
+    {
+      "median": 0,
+      "n": 1,
+      "shift": false
+    },
+    {
+      "median": 0,
+      "n": 1,
+      "shift": true
+    }
+  ],
+  "water_file_bytes": "{\n  \"baseline\": {},\n  \"passive\": null,\n  \"resolved\": {\n    \"codely-core\": \"kimi-k3\"\n  }\n}"
+}

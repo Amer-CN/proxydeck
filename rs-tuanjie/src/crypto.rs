@@ -400,6 +400,59 @@ mod tests {
         assert!(unprotect_file_bytes(plain).is_err());
     }
 
+    /// **一次性取证**（默认 `#[ignore]`，手工跑）：用同一把 DPAPI（当前用户）解开
+    /// 真实数据目录里的历史文件，把大小与顶层结构写进临时文件供核对。
+    ///
+    /// 只读不写：`read_file` 不落盘、不改动源文件；输出落到临时目录，绝不打印内容。
+    /// 用法：`cargo test --offline --lib decrypt_real -- --ignored --nocapture`
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn decrypt_real_file_one_shot() {
+        let name = std::env::var("RS_TJ_DECRYPT_NAME").unwrap_or_else(|_| "tuanjie-accounts.json".into());
+        let dir = std::env::var("APPDATA")
+            .map(|a| std::path::PathBuf::from(a).join("ProxyDeck"))
+            .expect("APPDATA");
+        let p = dir.join(&name);
+        let plain = read_file(&p).expect("解开真实文件");
+        let v: serde_json::Value = serde_json::from_slice(&plain).expect("解出的应是合法 JSON");
+        let shape = if let Some(o) = v.as_object() {
+            let mut keys: Vec<String> = o.keys().cloned().collect();
+            keys.sort();
+            let mut per: Vec<String> = Vec::new();
+            if let Some(arr) = o.get("accounts").and_then(|a| a.as_array()) {
+                per.push(format!("accounts={}", arr.len()));
+                if let Some(first) = arr.first().and_then(|f| f.as_object()) {
+                    let mut fk: Vec<String> = first.keys().cloned().collect();
+                    fk.sort();
+                    per.push(format!("first.keys={}", fk.join(",")));
+                    per.push(format!(
+                        "first.user_id.len={}",
+                        first
+                            .get("user_id")
+                            .and_then(|x| x.as_str())
+                            .map(|s| s.len())
+                            .unwrap_or(0)
+                    ));
+                    per.push(format!(
+                        "first.token.len={}",
+                        first
+                            .get("token")
+                            .and_then(|x| x.as_str())
+                            .map(|s| s.len())
+                            .unwrap_or(0)
+                    ));
+                }
+            }
+            format!("keys=[{}] {}", keys.join(","), per.join(" "))
+        } else {
+            "非对象".to_string()
+        };
+        let out = std::env::temp_dir().join("rs-tj-decrypt-shape.txt");
+        std::fs::write(&out, format!("{name}: plain={} 字节 {shape}\n", plain.len())).unwrap();
+        println!("{name}: plain={} 字节 {shape}", plain.len());
+    }
+
     #[cfg(windows)]
     #[test]
     fn dpapi_rejects_unrelated_bytes() {

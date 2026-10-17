@@ -276,8 +276,7 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 40. **中转路径不做请求上下文取消**：Go 用 `r.Context()` 让客户端断连时取消上游请求，
     Rust 侧（与本 crate 其余转发路径一致）没有等价中断点。只影响断连时的上游资源占用，
     不影响响应字节。
-41. **P8b 第五片审查后补记（边缘输入分歧族，只影响畸形上游/极端输入）**：
-    - 探针错误文本Latin-1化（`probes.rs:405`）：非 ASCII 错误文本脱敏前即 mojibake，
+41. **P8b 第五片审查后补记（边缘输入分歧族，只影响畸形上游/极端输入）**：    - 探针错误文本Latin-1化（`probes.rs:405`）：非 ASCII 错误文本脱敏前即 mojibake，
       指纹值与截断点漂移；金标全 ASCII 未暴露。
     - `decode_json_object` 全量严格解析 vs Go `Decoder` 首值语义：合法 JSON 后带尾随数据时
       Go 成功、Rust 报错（差异 32 只登记了文案，未覆盖此条）。
@@ -435,10 +434,9 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
    处理、不 panic。要修 Go 侧须改 `internal/tuanjie/reqshape.go`（P8 只读不改）。
 5. **代理自探测**：`smartProxy` 的 Windows 注册表分支属 P8c（`proxy_windows.go`）；本轮
    reqwest 客户端按默认口径走环境变量代理（与 Go 的第一步一致）。
-6. **未移植面**：`server.go`/`handlers_extra.go`/`accounts.go`/`quota.go`/`providers.go`/
-   `responses_forward.go`/`anthropic_forward.go`/`media.go`/`probes.go` = P8b 剩余；
-   `seedcheck.go`/`water.go`/`baseline.go`/`cdp_browser.go`/`desktop_path_windows.go`/
-   `proxy_windows.go` = P8c。
+6. **未移植面**：~~`seedcheck.go`/`water.go`/`baseline.go`/`cdp_browser.go`/
+   `desktop_path_windows.go`/`proxy_windows.go` = P8c~~ —— **P8c 已迁，见本文件
+   「P8c：团结剩余面」一节**（含未迁动作的显式 501 清单与 8 条新登记的差异）。
 
 ## P8b 切片：KIMI-K3 429 兜底集群 + 会话头 + 纯函数内核（2026-10-16）
 
@@ -530,21 +528,103 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
       进计费命中比对，形状一变就红——P8b 第四片脚手架曾把默认改成带 salt 致差分红，
       已回退；要区分 token 请用 `synthetic_jwt_for` 显式盐。
 
+## P8c：团结剩余面（种子卫兵 / 注水 / 基线比对 / 浏览器探测 / 代理自探测 / appdir 全量）（2026-10-17）
+
+### 落地对照（Go 行号 → Rust 落点）
+
+| Rust 位置 | Go 来源 | 覆盖 |
+|---|---|---|
+| `src/seedcheck.rs` | `seedcheck.go` 全量 + `desktop_path_windows.go` | 双轨道扫描（npm `bundle/gemini.js` + 桌面端 `cli/bin/win32-x64/codely.exe`）、流式分块特征核对（1 MiB 块 + `needle-1` 重叠）、`evalSeedScan`/`labelDesktopSources`/`installHint`/`combineSeedAlerts`/`scanCliSources` 纯函数、registry 在线层（`dist-tags.latest` 版本没变**零下载**、变了才下 tgz 解包核验）、`SeedAlert` 六字段状态机 |
+| `src/gziptar.rs` | `compress/gzip` + `archive/tar` 的**只读对等物** | uSTAR 解析（`prefix/name` 两段、`'\0'` 截断、八进制与 GNU base-256 数字字段）、GNU 长名（`L`）/ PAX（`x`/`g`）跳过、`package/` 前缀、路径穿越判据（绝对路径 / `..` / `../`）与 Go 同款 |
+| `src/winreg.rs` | `golang.org/x/sys/windows/registry` 的两处读法 | 普通 `reg query` 的值解析（真输出文本已锁进单测；值内的单空格按原文保留；**无 `/subkeys` 开关**——曾误用，P8c 审查抓包，真机退出码 1 为证，子键改走普通查询回显） |
+| `src/winpaths.rs` | `proxy_windows.go` + `client.go:117-137` + `desktop_path_windows.go` | 代理三步判定（本地/内网短路 → 环境变量 → 注册表 `ProxyEnable`/`ProxyServer` 多段取首）、`ProxyEnable` 缺失或 0 即空、Cowork 安装目录/内置 CLI 路径 |
+| `src/water.rs` | `water.go` 全量 | 三题金丝雀题库（题面逐字节照抄）、`WaterProbeResult` 全字段与 `omitempty` 口径、未作答语义（传输错/非 200/空正文重试 800 仍空 → `unanswered`，**不算答错**；指纹题出错则整个探针失败——P8c 审查后补齐）、指纹基线漂移 8%、`RecordPassive`（归一化相等不记、环形 50）、`RecordResolution`（首次/相同/变化三态）、落盘形态 `tuanjie-water.json`（`MarshalIndent` 逐字节；**`passive` 空表写 `[]`，Go 写 `null`**——双向互读兼容，行为一致，字节不同） |
+| `src/baseline.rs` | `baseline.go:289-627` | `probeValueMatch`（tokenizer ±1 / 短值 ±1 字符位 / 数值型不享短值容差）、`tokenizerBatchShift`（散播 ≤1 + 中位数）、`CompareToBaseline`（跨渠道措辞 skip、分布仅参考、灯色只由可比探针决定）、`CompareAgainstAnchors`（取匹配最好 + 点名来源渠道）、`anchorConflictNote`、`formatPct` 截断口径 |
+| `src/cdp_browser.rs` | `cdp_browser.go` 全量 | 调试口探测 9222~9225、`/json` 取 page、手写 WebSocket（掩码字节与 Go 同值）、`Network.getCookies` 多域消息逐字节、token 挑选（名字含 token/session/auth 优先，兜底长 `eyJ`）、`jwtSub`、一次性 profile 拉起浏览器、`freeCDPPort`/`cleanupStaleProbeProfiles`/`processRunning` |
+| `src/water_handler.rs` | `handlers_extra.go:387-507` | `/water-probe`：`GET ?history=1`（环形 20，旧→新）、`GET ?channels=1`（八渠道静态清单）、`POST action=quick`（金丝雀 + 第一层管道探针；quick 也记一条 history——Go 只在 check 路径入列，用户可见的行为增量，P8c 审查后登记）；`check`/`deep`/`baseline`/`setkey` 显式 501（不假装已通） |
+| `src/appdir.rs` | `internal/appdir/` 全量 + `app/main.go:192-208` | 判定链（`PROXYDECK_DATA_DIR` → 便携标记 → `%APPDATA%\ProxyDeck\`）、`Init`/`PortableArgs`/`ExeDir`/`DataDir`/`Path`、`Migrate`（33 条清单、目标优先、`*.migrated`、目录、删不掉就改名让位）、`UpgradePlaintext`（DPAPI 升级 + ACL）、日志轮转（1 MiB × 3、`StampedWriter` 按行加时间戳）、`run_data_dir_init` 启动收口 |
+| `src/pacing.rs` | `appdir.go:84-98` | 数据目录判定链**改为转出** `appdir`（去掉 P8b 的重复实现） |
+| `src/server.rs` | `server.go:248-278` / `handlers_extra.go:19-86` | `/health` 的 `judgment_*`/`seed_*` 八字段接**真状态**（不再是恒「无告警」）、`/accounts` 的 `passive` 接真被动事件、`/water-probe` 挂路由、`AppState` 增 `water`/`water_scratch`/`probe_cost`/`judge_alert`/`seed_guard`/`water_history` |
+| `src/chat.rs` | `server.go:280-322` / `:960,:993,:1193,:1198,:1239-1248,:1357,:1361,:1365,:1379-1381,:1808-1818,:2212-2266` | `noteUpstreamError`/`noteUpstreamOK` 判定告警计数（401「请升级」/`x-codely-signature` 立即置位、连续 3 次 401 置位、200 清零）、`logRequestShape` 两次（重排前/后）、单账号 200 的 `defer ok` 事件、别名解析观测接进 `UsageScanner` 与 `record_usage`、被动事件接进池路径非流式 |
+| `src/transport.rs` | `client.go:92-137` | 代理自探测（环境变量交给 reqwest 内建，**仅无环境变量时**追加注册表那条判定；日志只报来源名，绝不打印代理 URL） |
+| `src/main.rs` | `app/main.go:210-215` | `--portable` 参数 + `run_data_dir_init` 启动收口 + 种子卫兵后台循环（每小时一轮；`RS_TUANJIE_TEST_BASES` 生效时不起，避免对照环境出网） |
+| `Cargo.toml` | — | 显式声明 `flate2`（**已在依赖树内**，非新依赖：reqwest 的 gzip 特性经 miniz_oxide 引入同一族） |
+
+### 差分对照（真 Go 采收，108 项逐条一致）
+
+金标 `tests/golden/golden-p8c-go.json` 由一次性 Go 采集器（`internal/tuanjie/zz_p8c_collect_test.go`，
+**跑完即删**）真跑 Go 实现采收。注意其中 `proxy_probe` 4 项是**本机活体值**
+（`ProxyEnable`/`ProxyServer`/环境变量存在性）——换机或改代理设置即红，
+系环境耦合的严格断言，非实现分歧（P8c 审查后标注）。
+
+```powershell
+$env:P8C_OUT="<repo>\.work\p8c\golden-p8c-go.json"; $env:P8C_TGZ_DIR="<repo>\.work\p8c\tgz"
+go test ./internal/tuanjie -run TestZZCollectP8CGolden -count=1 -v
+# 然后删除 internal/tuanjie/zz_p8c_collect_test.go 并复核 git status --short internal/ 为空
+python .work/p8c/mktgz.py rs-tuanjie/tests/golden/p8c-synthetic-seed.tgz   # 合成夹具（确定性）
+```
+
+采集面：`probeValueMatch` 14 例真值表、`tokenizerBatchShift` 6 组、`CompareToBaseline` 10 场景
+（含跨渠道 skip / 部分未测成压灰 / 无可比项 / 分布就绪）、`CompareAgainstAnchors`（最佳锚 + 空锚）、
+`anchorConflictNote` 3 例、`anchorMatchPhrase` 4 例、`gatewayWordingProbe` 5 例、`isNumericStr` 8 例、
+`evalSeedScan` 5 例、`labelDesktopSources` 4 组、`installHint` 5 例、`localCliSources` 3 组、
+`combineSeedAlerts` 4 例、`normalizeModelName` 5 例、`containsCI` 6 例、`RecordResolution` 6 步、
+`PassiveEvents` 环形、`legacyStateFiles` 清单、`Migrate` 5 项、tgz 解包 5 形态、
+**代理自探测的真机值**（`ProxyEnable`/`ProxyServer`/`regReadProxy()` 原样 + 代理环境变量的存在性）。
+
+合成 tgz：`tests/golden/p8c-synthetic-seed.tgz`（297 字节，`.work/p8c/mktgz.py` 确定性生成，
+tar 头 mtime 与 gzip mtime 都钉死）。**两侧解同一份字节**：Go 侧由采集器解出
+`names=[package/package.json, package/README.md, package/bundle/gemini.js]`、`seed=true`/`header=true`；
+Rust 侧由 `p8c_diff.rs` 解出同一结果。内容全是合成串（`SYNTHETICSEED0001` /
+`X-Codely-Signature`），**不含任何真实种子值**。
+
+### 本轮新增的已知差异（如实登记）
+
+38. **tar 层是自写的 uSTAR 只读实现**（Go 用 `archive/tar`）：不校验 tar 头校验和、
+    不支持稀疏文件/多卷/PAX 的字段解析（PAX 与 GNU 长名只**跳读**）。真实 npm 包是
+    普通 uSTAR，不受影响；构造输入上的差异已在本项登记。
+39. **注册表读取走 `reg.exe` 子进程**（Go 用 `x/sys/windows` API）：判据等价
+    （`ProxyEnable` 缺失或 0 → 空；`ProxyServer` 多段取第一个非空段），
+    但 `reg.exe` 是外部进程（启动开销 ~10ms 级、依赖系统 PATH）。
+40. **代理环境变量层交给 reqwest 内建**（不是自己实现 `http.ProxyFromEnvironment`）：
+    `NO_PROXY` 的域名/端口/CIDR 匹配语义由 reqwest 决定，Go 的宽匹配
+    （`172.2*`/`172.3*` 前缀）在注册表分支里用 `NoProxy` 的 CIDR 显式列出；
+    真实运行环境中这条链的可观测差异只在 `NO_PROXY` 的边界写法上。
+    另：Go 字符串前缀 `172.2*`/`172.3*` 会覆盖 172.32-39.x、172.200+ 等公网段，
+    Rust 的 /12+/16 组合覆盖不到——对本 crate 上游域名无实际影响（P8c 审查后登记）。
+41. **`logRequestShape` 的 `fields` 顺序**：Go 是 `for k := range m`（**无序**，每次打印
+    都可能不同），Rust 侧按字节序固化（门禁可复跑）。`%v` 打出的其余段（消息条目、
+    `special` 列表）逐字对齐；`c=...`/`clen` 与 `system=<n>B` 用**字节**长度（Go 的 `len()`）。
+42. **单账号 200 的 `ok` 事件时机**：Go 是 `defer`（handler 返回时写），Rust 在写响应**之前**
+    记账——同一事件同一内容，差异只在极短窗口内的 `/activity` 快照。
+43. **`water_scratch`**：Go 的外部 provider 分支不走团结的 `usageScanner`（无 water 记账），
+    Rust 的流式复用了同一个扫描器，故把那条路径的 water 副作用导向一只**分离实例**
+    （`AppState::water_scratch`，不落盘、不污染生产表）。**Go 没有这个对象**。
+44. **`/water-probe` 未迁动作**：`check` / `deep` / `baseline` / `setkey` 显式 501
+    （报告组装、分布采样与建锚编排、渠道密钥 DPAPI 落盘）；`channels` 的 `models`
+    字段恒空数组 + `note` 如实标注（Go 要逐渠道打 `/v1/models`）。
+45. **`StampedWriter` 的按大小轮转**：Go 用 `w.f.Name()` 自动拿路径，Rust 的
+    `std::fs::File` 没有取路径接口，故提供带路径的 `StampedWriterAt`（生产入口
+    `open_log`/`run_data_dir_init` 用它）；`StampedWriter`（无路径版）不退化为
+    「不轮转」的静默差异——它只服务显式给路径的调用方。
+
 ## 门禁与复跑
 
 ```powershell
 # Rust 侧（P8a 门禁：33 单测 + 12 集成；P8b 第一片：+14 单测 + 5 集成；
 #           P8b 第二片：+13 单测 + 13 池行为 + 3 quota 差分；
-#           P8b 第三片：+13 单测 + 6 HTTP 合同）
+#           P8b 第三片：+13 单测 + 6 HTTP 合同；
+#           P8b 第四/五片 + P8c：见下 cargo test 的实数）
 cd rs-tuanjie
 $env:CARGO_TARGET_DIR="E:\cargo-target\rs-tuanjie"   # F: 盘空间紧张，构建产物放 E:
-cargo test                                           # 73 单测 + 12 + 5 + 6 + 15(+1 ignored) + 3 = 114 项
+cargo test              # P8c 后：170 单测 + 12 + 5 + 7 + 22 + 2 + 1 + 15(+1 ignored) + 3 + 1(p8c) 全绿
 cargo build --all-targets                            # 0 warning
 cargo test --test golden_p8a -- --nocapture          # 看逐条对照证据与两侧线上实抓
 cargo test --test golden_p8b -- --nocapture          # P8b 第一片逐条对照
 cargo test --test p8b_pool_behavior -- --nocapture   # 第二片：401 标死/换号/rescan/冷却
 cargo test --test p8b_quota_diff -- --nocapture      # 第二片：quota 差分（含假上游请求记录）
 cargo test --test p8b3_http_contract -- --nocapture  # 第三片：CORS/OPTIONS/405/404/writeJSON/writeErr
+cargo test --test p8c_diff -- --nocapture            # P8c：108 项与真 Go 采收逐条一致
 
 # 第三片的**差分对照**（跑真 Go Server 在测试端口，一键复跑；**不碰 8788**）
 cd ..
@@ -558,14 +638,29 @@ go vet ./internal/tuanjie
 git status --short internal/                          # 必须为空（临时采集器跑完即删）
 ```
 
-⚠ **`go test ./internal/tuanjie` 的 TMP 前提**：本机 `TMP=TEMP=E:\Temp` 里残留
-`seedguard-1403084733`，`seedcheck_test.go` 会 glob `os.TempDir()/seedguard-*` 并要求删净，
-于是 `TestSeedCheckRegistry` 确定性失败（与 Rust 侧无关）。复跑时把 TMP 指到干净目录即可：
+⚠ **`go test ./internal/tuanjie` 的 TMP 前提**：本机 `TMP=TEMP=E:\Temp` 里若残留
+`seedguard-*`（`seedcheck_test.go` 会 glob `os.TempDir()/seedguard-*` 并要求删净），
+`TestSeedCheckRegistry` 会确定性失败（与 Rust 侧无关）。复跑时把 TMP 指到干净目录即可：
 
 ```powershell
 $env:TMP="<repo>\.work\p8b\tmp"; $env:TEMP=$env:TMP
 go test ./internal/tuanjie -count=1     # ok
 ```
+
+⚠⚠ **另一条更重要的前置（2026-10-17 P8c 实测）**：`go test ./internal/tuanjie` 会**读写真实
+数据目录**（`%APPDATA%\ProxyDeck`）——包内某个用例走了 `appdir.runDataDirInit`
+（`app/main.go:192-208` 的同款逻辑），于是把仍是明文的 `tuanjie-accounts.json`
+**原地升级成 DPAPI 密文**（实测两次，内容无损：解开后 `accounts=2` 且字段齐全）。
+要跑 Go 测试而不动数据目录，把 `APPDATA` 一起指到临时目录：
+
+```powershell
+$env:APPDATA="<tmp>"; $env:LOCALAPPDATA="<tmp>"; $env:TMP="<tmp>"; $env:TEMP="<tmp>"
+go test ./internal/tuanjie -count=1     # ok，真实数据目录 mtime 不变（已实测）
+```
+
+**2026-10-17 实测补充**：残留的 `seedguard-1403084733`（2026-10-14 06:53 创建，非本轮产物）
+已删除；删后 `go test ./internal/tuanjie -count=1` 直接 `ok`（3.488s），无需 TMP 覆盖。
+若将来再出现同名残留，按上法临时覆盖 TMP 或删残留即可 —— **不要去改 Go 测试**。
 
 测试**不读任何真实凭据内容**：`oauth_creds.json` / `tuanjie-accounts.json*` / JWT 的内容
 一个字节都不进测试——`fetch_key` 的 access_token 来源经 `Client::with_token_loader` 注入合成值，

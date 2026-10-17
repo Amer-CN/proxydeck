@@ -226,10 +226,21 @@ async fn unimplemented_routes_say_so_instead_of_pretending() {
         );
     }
     // 未注册的端点回 404（**不**假装存在）
-    for path in ["/account-models", "/water-probe"] {
+    for path in ["/account-models"] {
         let (status, _h, _b) = call(st.clone(), "GET", path).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{path} 应回 404（本片未注册）");
     }
+    // P8c 起 `/water-probe` 已注册：不带 `?history=1` / `?channels=1` 的 GET 回 Go 同款
+    // 纯文本 405（`handlers_extra.go:442` 的 `http.Error(w,"method not allowed",405)`）。
+    let (status, headers, body) = call(st.clone(), "GET", "/water-probe").await;
+    assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED, "GET /water-probe 应回 405");
+    assert_eq!(body, "method not allowed\n");
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("text/plain; charset=utf-8")
+    );
 
     // `/v1/chat/completions` 已在 P8b 第四片迁入（池路径 + 单账号路径）；
     // `/providers`、`/media-config`、`/vision-config`、`/v1/images/generations`、
