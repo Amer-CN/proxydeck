@@ -126,12 +126,35 @@ fn get_slow_status_limited(url: &str, limit: usize) -> Result<(u16, String), Str
 ///
 /// 注：曾试过"死结果缓存 10s"把剩下的 300ms 也省掉，但缓存与语义冲突——
 /// 端口刚起来（夹具/用户拉杆）时界面要最多 10s 才认，门禁里大面积打红。
-/// 结论：**不缓存**，只把探活超时压到 300ms（见 [`PROBE_TIMEOUT`]）。
+/// 结论：**不缓存**。
 pub fn ok_fresh(url: &str) -> bool {
+    // 回环地址**先查系统监听表**（`GetExtendedTcpTable`，纯 syscall、不建连接）：
+    // 没在听立刻判死。这一步绕开杀软 HIPS 对 `connect()` 的 ~2s 拖挂——
+    // 详见 `win32::port_is_listening` 的说明。在听的端口才继续走 HTTP 健康检查
+    //（活端口毫秒级应答）。
+    if let Some(port) = loopback_port(url) {
+        if !crate::win32::port_is_listening(port) {
+            return false;
+        }
+    }
     match probe_client().get(url).send() {
         Ok(resp) => resp.status().as_u16() == 200,
         Err(_) => false,
     }
+}
+
+/// 从 URL 取"回环端口"（`127.x` / `localhost` / `::1`）；非回环返回 `None`。
+fn loopback_port(url: &str) -> Option<u16> {
+    let u = reqwest::Url::parse(url).ok()?;
+    let host = u.host_str()?;
+    let local = host.eq_ignore_ascii_case("localhost")
+        || host == "::1"
+        || host == "[::1]"
+        || host.starts_with("127.");
+    if !local {
+        return None;
+    }
+    u.port_or_known_default()
 }
 
 /// 端口上有健康服务即 true（对应 Go `httpOK`：只看 200，不关心内容）。

@@ -342,9 +342,154 @@ pub fn fatal_box(title: &str, msg: &str) {
     }
 }
 
+/* ---------------- 监听表查询（探活用，不建连接） ---------------- */
+
+/// `MIB_TCPROW_OWNER_PID`（IPv4）。
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct MibTcpRowOwnerPid {
+    state: u32,
+    local_addr: u32,
+    local_port: u32,
+    remote_addr: u32,
+    remote_port: u32,
+    owning_pid: u32,
+}
+
+/// `MIB_TCP6ROW_OWNER_PID`（IPv6，端口偏移与 v4 不同）。
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct MibTcp6RowOwnerPid {
+    local_addr: [u8; 16],
+    local_scope_id: u32,
+    local_port: u32,
+    remote_addr: [u8; 16],
+    remote_scope_id: u32,
+    remote_port: u32,
+    state: u32,
+    owning_pid: u32,
+}
+
+#[link(name = "iphlpapi")]
+extern "system" {
+    fn GetExtendedTcpTable(
+        table: *mut c_void,
+        size: *mut u32,
+        order: i32,
+        af: u32,
+        table_class: i32,
+        reserved: u32,
+    ) -> u32;
+}
+
+const AF_INET: u32 = 2;
+const AF_INET6: u32 = 23;
+const TCP_TABLE_OWNER_PID_LISTENER: i32 = 3;
+const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+const NO_ERROR: u32 = 0;
+
+/// 取监听表原始字节（失败 → 空）。调用两次：先问大小，再取内容。
+fn listener_table(af: u32, row_size: usize) -> Vec<u8> {
+    let mut size: u32 = 0;
+    unsafe {
+        GetExtendedTcpTable(
+            std::ptr::null_mut(),
+            &mut size,
+            0,
+            af,
+            TCP_TABLE_OWNER_PID_LISTENER,
+            0,
+        );
+    }
+    if size == 0 {
+        return Vec::new();
+    }
+    // 多留一行的余量，抵掉两次调用之间的新连接
+    let mut buf = vec![0u8; size as usize + row_size * 4];
+    let mut sz = buf.len() as u32;
+    let rc = unsafe {
+        GetExtendedTcpTable(
+            buf.as_mut_ptr() as *mut c_void,
+            &mut sz,
+            0,
+            af,
+            TCP_TABLE_OWNER_PID_LISTENER,
+            0,
+        )
+    };
+    if rc != NO_ERROR && rc != ERROR_INSUFFICIENT_BUFFER {
+        return Vec::new();
+    }
+    buf.truncate(sz as usize);
+    buf
+}
+
+/// 端口是否处于 LISTEN —— **纯系统调用，不建立任何连接**。
+///
+/// 为什么不用「连一下试试」：火绒 HIPS 的网络钩子会把**未监听端口**的 `connect()`
+/// 拖到 ~2.0s 才回 RST（2026-10-18 实测：curl / Python / Rust `std::net` 全 2.05s），
+/// 而 Go 的 net 拨号器走 `WSASocket`+`ConnectEx`（非阻塞 overlapped）天然绕过
+/// ——这正是「Go 版不卡、Rust 版卡」的真因。查监听表把这一步变成一次 syscall
+/// （亚毫秒），**从软件自身绕开那条被钩的路**，不要求用户去改杀软白名单。
+pub fn port_is_listening(port: u16) -> bool {
+    // IPv4：`MIB_TCPTABLE_OWNER_PID` = u32 行数 + 行数组
+    let v4 = listener_table(AF_INET, std::mem::size_of::<MibTcpRowOwnerPid>());
+    if v4.len() >= 4 {
+        let n = u32::from_le_bytes([v4[0], v4[1], v4[2], v4[3]]) as usize;
+        let rows = &v4[4..];
+        for i in 0..n {
+            let off = i * std::mem::size_of::<MibTcpRowOwnerPid>();
+            if off + std::mem::size_of::<MibTcpRowOwnerPid>() > rows.len() {
+                break;
+            }
+            let row: MibTcpRowOwnerPid = unsafe {
+                std::ptr::read_unaligned(rows.as_ptr().add(off) as *const MibTcpRowOwnerPid)
+            };
+            // dwLocalPort 是网络字节序（高字节在前）放在低 16 位
+            let p = u16::from_be((row.local_port & 0xffff) as u16);
+            if p == port {
+                return true;
+            }
+        }
+    }
+    // IPv6：`MIB_TCP6TABLE_OWNER_PID`
+    let v6 = listener_table(AF_INET6, std::mem::size_of::<MibTcp6RowOwnerPid>());
+    if v6.len() >= 4 {
+        let n = u32::from_le_bytes([v6[0], v6[1], v6[2], v6[3]]) as usize;
+        let rows = &v6[4..];
+        for i in 0..n {
+            let off = i * std::mem::size_of::<MibTcp6RowOwnerPid>();
+            if off + std::mem::size_of::<MibTcp6RowOwnerPid>() > rows.len() {
+                break;
+            }
+            let row: MibTcp6RowOwnerPid = unsafe {
+                std::ptr::read_unaligned(rows.as_ptr().add(off) as *const MibTcp6RowOwnerPid)
+            };
+            let p = u16::from_be((row.local_port & 0xffff) as u16);
+            if p == port {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 监听表查询（v4.0.4 卡顿修复的门禁）：刚绑上的端口必须判「在听」，
+    /// 释放后必须判「不在听」——且全程**不建立任何连接**（只查系统表）。
+    #[test]
+    fn port_is_listening_sees_bound_port_and_not_dead_one() {
+        // 先取一个确定没人听的端口（绑上再立刻问，然后释放）
+        let ln = std::net::TcpListener::bind("127.0.0.1:0").expect("绑临时端口");
+        let port = ln.local_addr().expect("读端口").port();
+        assert!(port_is_listening(port), "刚绑定的端口必须判在听（port={port}）");
+        drop(ln);
+        // 释放后应判不在听（LISTEN 条目消失；TIME_WAIT 不算 LISTEN）
+        assert!(!port_is_listening(port), "释放后必须判不在听（port={port}）");
+    }
 
     /// `wide()` 就是 `UTF16PtrFromString`：UTF-16 编解码 + 一个 NUL 结尾。
     #[test]
