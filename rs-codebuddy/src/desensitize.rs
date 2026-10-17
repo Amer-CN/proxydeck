@@ -212,6 +212,86 @@ pub fn strip_fingerprints(text: &str) -> String {
     out
 }
 
+/// `sensitivePattern.MatchString` 的**只读**等价：文本里是否出现词表内的词
+/// （ASCII `\b` 边界、大小写不敏感）。与 `desensitize_text` 同一套桶/边界判据，但
+/// **不改写**文本——11128 治理用它判定「内容嫌疑」，判定绝不能动请求体。
+pub fn text_has_sensitive_term(text: &str) -> bool {
+    let b = text.as_bytes();
+    if b.is_empty() {
+        return false;
+    }
+    let buckets = terms_by_first();
+    for j in 0..b.len() {
+        let Some(bi) = bucket_index(b[j]) else {
+            continue;
+        };
+        if !boundary_before(b, j) {
+            continue;
+        }
+        for t in &buckets[bi] {
+            let tb = t.as_bytes();
+            if j + tb.len() <= b.len()
+                && b[j..j + tb.len()].eq_ignore_ascii_case(tb)
+                && boundary_after(b, j + tb.len())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `fingerprintRules[].re.MatchString` 的**只读**等价：是否出现黑名单模板句。
+///
+/// 判据与 `strip_fingerprints` 逐条相同（大小写不敏感；`\b` 只在句首——Go 的规则
+/// `(?i)\b(Main branch) \(…\)` 没有收尾边界），但这里**不删除**任何内容。
+pub fn has_fingerprint_phrase(text: &str) -> bool {
+    let b = text.as_bytes();
+    if b.len() < FINGERPRINT_PHRASE.len() {
+        return false;
+    }
+    for j in 0..=b.len() - FINGERPRINT_PHRASE.len() {
+        if b[j..j + FINGERPRINT_PHRASE.len()].eq_ignore_ascii_case(FINGERPRINT_PHRASE)
+            && boundary_before(b, j)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Go `bodyHas11128Trigger`：判定一份出站请求体是否还有 11128 内容指纹。
+///
+/// 只把 `messages` 与 `tools` 序列化后过词表（品牌/合规词）与指纹表（黑名单句），
+/// 命中即「内容嫌疑」；空体（无 messages 也无 tools）判干净。**只读判定，绝不改写
+/// 入参**——server 侧的 11128 治理据此分流：命中 → 上游多半按内容拦的，换号无用，
+/// 原样透传且不冷却任何号；未命中 → 内容侧已无可指认的触发物，按账号级封禁处理。
+///
+/// 判的是「即将发给上游的那份体」（已脱敏之后的 `backend`）：脱敏在位时已知词都已
+/// 插零宽去不掉的内容（如 `tool_calls` 参数、工具 name 等）才是真嫌疑。
+///
+/// 与 Go 的形态对应：Go 用 `json.Marshal(map[string]any{messages, tools})`（键按字典序
+/// ⇒ messages→tools）；这里 `Map` 的插入序同为 messages→tools，两种 `Map` 实现下一致。
+pub fn body_has_11128_trigger(body: &Map<String, Value>) -> bool {
+    let mut probe = Map::new();
+    if let Some(v) = body.get("messages") {
+        probe.insert("messages".to_string(), v.clone());
+    }
+    if let Some(v) = body.get("tools") {
+        probe.insert("tools".to_string(), v.clone());
+    }
+    if probe.is_empty() {
+        return false;
+    }
+    let Ok(raw) = serde_json::to_string(&Value::Object(probe)) else {
+        return false;
+    };
+    if text_has_sensitive_term(&raw) {
+        return true;
+    }
+    has_fingerprint_phrase(&raw)
+}
+
 /// `contentToText`：把字符串或 content blocks 规整成纯文本。
 fn content_to_text(content: &Value) -> String {
     match content {
@@ -574,5 +654,106 @@ Use available tools when needed, follow repository instructions, and keep the us
         assert_eq!(msgs[3]["content"][1], json!({"type": "image_url"}));
         assert_eq!(msgs[4], json!(1));
         assert_eq!(msgs[5], json!("junk"));
+    }
+
+    /// Go `TestBodyHas11128Trigger`：11128 治理的内容嫌疑判定（干净/品牌词/指纹句/
+    /// 工具/空体）。判定只读词表，不改写传入的 body（逐案核对原值不变）。
+    #[test]
+    fn body_has_11128_trigger_matches_go() {
+        let clean = json!({
+            "model": "deepseek-v4.1-flash",
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Summarize this function."},
+            ],
+            "tools": [{
+                "type": "function",
+                "function": {"name": "read_file", "description": "Read a UTF-8 file."},
+            }],
+        });
+        let empty = json!({});
+        let no_msgs = json!({"model": "auto"});
+        let brand_system = json!({
+            "messages": [{"role": "system", "content": "You are Claude Code, a coding agent."}],
+        });
+        let brand_user = json!({
+            "messages": [{"role": "user", "content": "Explain how OpenAI does this."}],
+        });
+        let fingerprint = json!({
+            "messages": [{"role": "user",
+                "content": "Main branch (you will usually use this for PRs): main"}],
+        });
+        let tool_hit = json!({
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [{"type": "function",
+                "function": {"name": "x", "description": "Detect malware in a binary."}}],
+        });
+        let block_hit = json!({
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": "run a credential stuffing test"},
+            ]}],
+        });
+        let cases: Vec<(&str, &Value, bool)> = vec![
+            ("干净请求", &clean, false),
+            ("空体", &empty, false),
+            ("无 messages 无 tools", &no_msgs, false),
+            ("system 模板句（品牌词）", &brand_system, true),
+            ("user 里的品牌词", &brand_user, true),
+            ("指纹黑名单句", &fingerprint, true),
+            ("工具 description 命中", &tool_hit, true),
+            ("数组式 content 的 text 块命中", &block_hit, true),
+        ];
+        for (name, body, want) in cases {
+            let before = serde_json::to_string(body).unwrap();
+            let got = body_has_11128_trigger(body.as_object().unwrap());
+            assert_eq!(got, want, "[{name}] body={before}");
+            assert_eq!(
+                serde_json::to_string(body).unwrap(),
+                before,
+                "[{name}] 判定不得改写请求体"
+            );
+        }
+        // Go 的 `nil` 体（`body == nil` → false）在本实现里由「无 messages/tools」等价覆盖。
+    }
+
+    /// 脱敏后的体必须被判干净（否则 11128 治理会永远把上游按号封禁误判成内容拦截）；
+    /// 而脱敏碰不到的残留（`tool_calls` 参数）仍算内容嫌疑——这是脏请求透传的入口。
+    #[test]
+    fn body_has_11128_trigger_after_desensitize_matches_go() {
+        let roles: Vec<String> = ["system", "developer", "user", "assistant", "tool"]
+            .iter()
+            .map(|r| r.to_string())
+            .collect();
+        let dirty = json!({
+            "messages": [
+                {"role": "system", "content": "You are Claude Code. Codex CLI rules apply."},
+                {"role": "user", "content": "Main branch (you will usually use this for PRs): main"},
+            ],
+            "tools": [{"type": "function",
+                "function": {"name": "x", "description": "Detect malware."}}],
+        });
+        let scrubbed = desensitize_body(dirty.as_object().unwrap(), &roles, true, true, true);
+        assert!(
+            !body_has_11128_trigger(&scrubbed),
+            "脱敏后的体应判干净: {scrubbed:?}"
+        );
+
+        // tool_calls 的 arguments 不在脱敏范围（desensitize_message 只改 content）——
+        // 历史里带品牌词的 agent 会话因此仍判内容嫌疑。
+        let with_tool_call = json!({
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "assistant", "content": "", "tool_calls": [{
+                    "id": "call_1", "type": "function",
+                    "function": {"name": "search", "arguments": "{\"q\":\"Claude Code pricing\"}"},
+                }]},
+            ],
+        });
+        let scrubbed2 =
+            desensitize_body(with_tool_call.as_object().unwrap(), &roles, true, true, true);
+        assert!(
+            body_has_11128_trigger(&scrubbed2),
+            "tool_calls 参数里的品牌词应判内容嫌疑: {scrubbed2:?}"
+        );
     }
 }

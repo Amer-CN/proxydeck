@@ -7,8 +7,11 @@
 //! ② **499 的取消信号**（差异 13）：Go 的 `r.Context().Done()` 在 11133 退避等待期间可中断
 //!    ⇒ 客户端断开后**不再打上游**。Go 侧事实由采集器采收在黄金 `meta.p5c_cancel`，
 //!    本测试对同一场景比对「上游命中数」。
+//! ③ **11128 按号封禁治理**（2026-10-17，对齐 Go `0415ec1`）：干净请求遇 11128 → 当次换号
+//!    重试 + 肇事号 1 小时冷却；脏请求（内容指纹命中）→ 原样透传、不冷却任何号；全池被封
+//!    → 有界透传（换号次数上限 = 池大小）；冷却到期由 `pick` 懒判定自动恢复。
 //!
-//! 两个测试都用**生产装配**（真凭据 + 真池 + 真 failover），域名/夹具与 P5b 黄金同款。
+//! 测试都用**生产装配**（真凭据 + 真池 + 真 failover），域名/夹具与 P5b 黄金同款。
 
 mod common;
 
@@ -297,4 +300,287 @@ async fn client_disconnect_during_backoff_cancels_like_go() {
         );
         rp.finish();
     }
+}
+
+// ---------- ③ 11128 按号封禁治理（2026-10-17，对齐 Go `0415ec1`） ----------
+//
+// 场景与 Go `server_test.go::TestChatFlagged11128Governance` 一一对应：同一条干净请求在
+// 「被封号」上必回 400/11128、换号即 200；脏请求（命中内容指纹）原样透传且不冷却任何号；
+// 全池被封时有界透传（上游命中数 = 池大小，不死循环）。上游是进程内假上游按 `X-User-Id`
+// 分派，登录态是合成 `.info`（临时目录），**不碰 8787/8789 与真实账号**。
+
+/// 11128 上游错体（与 Go 单测同款：`code` 是字段级数字）。
+const FLAGGED_BODY_11128: &str = r#"{"error":{"data":{"code":11128,"msg":"Illegal API invocation from an unapproved channel","requestId":"x"}}}"#;
+
+/// 一路正常的 SSE（`stream:false` 时由 `collectStream` 聚合成 `chat.completion`）。
+const OK_SSE: &str = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"},\"finish_reason\":null}]}\n\n\
+data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2,\"total_tokens\":9}}\n\n\
+data: [DONE]\n\n";
+
+/// 干净请求：无任何指纹词（品牌/合规词表与黑名单句都不命中）⇒ 11128 判账号级封禁。
+const CLEAN_PAYLOAD: &[u8] = br#"{"model":"auto","messages":[{"role":"system","content":"You are a helpful assistant."},{"role":"user","content":"Summarize this function."}],"stream":false}"#;
+
+/// 脏请求：品牌词 + 指纹黑名单句（`desensitize=false` 的部署形态；脱敏开着时同样内容会
+/// 被插零宽/删句，那条路径由 `desensitize.rs` 的脱敏后判定单测覆盖）。
+const DIRTY_PAYLOAD: &[u8] = br#"{"model":"auto","messages":[{"role":"system","content":"You are Claude Code, a coding agent."},{"role":"user","content":"Main branch (you will usually use this for PRs): main"}],"stream":false}"#;
+
+/// 假上游 spec：`flagged` 里的号恒回 400/11128，其余号回 200 SSE（按 uid 分派）。
+fn flagged_spec(flagged: &[&str]) -> Value {
+    let bad = json!([{
+        "status": 400,
+        "headers": {"Content-Type": "application/json"},
+        "body": FLAGGED_BODY_11128,
+    }]);
+    let ok = json!([{
+        "status": 200,
+        "headers": {"Content-Type": "text/event-stream"},
+        "body": OK_SSE,
+    }]);
+    let mut table = serde_json::Map::new();
+    for uid in ["u-wire", "u-wire2"] {
+        table.insert(
+            uid.to_string(),
+            if flagged.contains(&uid) {
+                bad.clone()
+            } else {
+                ok.clone()
+            },
+        );
+    }
+    json!({"per_user": Value::Object(table)})
+}
+
+/// 上游命中的 uid 序列（按发生顺序；Go 侧打点计数同义）。
+fn hit_uids(up: &FakeUpstream) -> Vec<String> {
+    up.hits()
+        .iter()
+        .map(|h| h.header("x-user-id").unwrap_or("").to_string())
+        .collect()
+}
+
+/// 快照里某号三个状态位都必须是 false（脏请求/正常号不该被标记）。
+fn assert_untouched(snapshot: &str, uid: &str) {
+    for key in ["cooling", "dead", "exhausted"] {
+        assert_eq!(
+            account_field(snapshot, uid, key),
+            json!(false),
+            "{uid}.{key} 不应被标记——实得快照：{snapshot}"
+        );
+    }
+}
+
+/// 场景一：干净请求遇 11128 → 当次换号重试成功（客户端 200），肇事号进 1 小时冷却；
+/// 后续请求不再轮到它。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn flagged11128_clean_request_swaps_then_cools_for_an_hour() {
+    let env = EnvGuard::set(&[]);
+    let up = FakeUpstream::start(&flagged_spec(&["u-wire"])).await;
+    let sc = scenario();
+    let rp = start_real_replay(
+        "p5c-11128-clean",
+        Region::Cn,
+        &sc,
+        Some(up.base.clone()),
+        &env,
+    )
+    .await;
+
+    let r = send(
+        &rp.app.base,
+        "POST",
+        "/v1/chat/completions",
+        Some(CLEAN_PAYLOAD),
+    )
+    .await;
+    assert_eq!(
+        r.status,
+        200,
+        "干净请求遇 11128 应换号拿到 200（实得 {}）",
+        r.text()
+    );
+    assert_eq!(
+        hit_uids(&up),
+        vec!["u-wire", "u-wire2"],
+        "上游应 A(封)/B(好) 各打一次"
+    );
+
+    let snap = send(&rp.app.base, "GET", "/v1/accounts", None).await;
+    let text = snap.text();
+    assert_eq!(
+        account_field(&text, "u-wire", "cooling"),
+        json!(true),
+        "肇事号应进冷却——实得快照：{text}"
+    );
+    let until = account_field(&text, "u-wire", "limited_until")
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    let until_ms = rs_codebuddy::gotime::parse_rfc3339(&until)
+        .unwrap_or_else(|| panic!("limited_until 应是 RFC3339（实得 {until:?}）"));
+    let remaining_min = (until_ms - rs_codebuddy::gotime::now_millis()) / 60_000;
+    assert!(
+        (55..=65).contains(&remaining_min),
+        "冷却时长应约 1 小时（Go `flaggedCooldown = time.Hour`），实得 {remaining_min} 分钟"
+    );
+    assert_untouched(&text, "u-wire2");
+
+    // 冷却生效：第二发同一请求直接由 B 承接（A 不再被 Pick）。
+    let r2 = send(
+        &rp.app.base,
+        "POST",
+        "/v1/chat/completions",
+        Some(CLEAN_PAYLOAD),
+    )
+    .await;
+    assert_eq!(r2.status, 200, "第二发应仍 200（实得 {}）", r2.text());
+    assert_eq!(
+        hit_uids(&up),
+        vec!["u-wire", "u-wire2", "u-wire2"],
+        "冷却中的号不应再被选中"
+    );
+    rp.finish();
+}
+
+/// 场景二：脏请求（品牌词/system 模板句）11128 → 原样透传，不冷却任何号。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn flagged11128_dirty_request_passes_through_without_cooling() {
+    let env = EnvGuard::set(&[]);
+    let up = FakeUpstream::start(&flagged_spec(&["u-wire"])).await;
+    let sc = scenario();
+    let rp = start_real_replay(
+        "p5c-11128-dirty",
+        Region::Cn,
+        &sc,
+        Some(up.base.clone()),
+        &env,
+    )
+    .await;
+
+    let r = send(
+        &rp.app.base,
+        "POST",
+        "/v1/chat/completions",
+        Some(DIRTY_PAYLOAD),
+    )
+    .await;
+    assert_eq!(
+        r.status,
+        400,
+        "脏请求应原样透传 400/11128（实得 {}：{}）",
+        r.status,
+        r.text()
+    );
+    assert!(
+        r.text().contains("11128"),
+        "透传体应含 11128（实得 {}）",
+        r.text()
+    );
+    assert_eq!(
+        hit_uids(&up),
+        vec!["u-wire"],
+        "脏请求只打肇事号一次、不换号"
+    );
+
+    let snap = send(&rp.app.base, "GET", "/v1/accounts", None).await;
+    let text = snap.text();
+    for uid in ["u-wire", "u-wire2"] {
+        assert_untouched(&text, uid);
+    }
+    rp.finish();
+}
+
+/// 场景三：全池被封 → 有界透传（不死循环），全部号被冷却。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn flagged11128_all_pool_flagged_passes_through_bounded() {
+    let env = EnvGuard::set(&[]);
+    let up = FakeUpstream::start(&flagged_spec(&["u-wire", "u-wire2"])).await;
+    let sc = scenario();
+    let rp = start_real_replay(
+        "p5c-11128-all",
+        Region::Cn,
+        &sc,
+        Some(up.base.clone()),
+        &env,
+    )
+    .await;
+
+    let r = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        send(
+            &rp.app.base,
+            "POST",
+            "/v1/chat/completions",
+            Some(CLEAN_PAYLOAD),
+        ),
+    )
+    .await
+    .expect("全池被封必须返回（疑似 11128 换号死循环）");
+    assert_eq!(
+        r.status,
+        400,
+        "全池被封应如实透传 400（实得 {}：{}）",
+        r.status,
+        r.text()
+    );
+    assert_eq!(
+        up.hits().len(),
+        2,
+        "全池被封时上游命中数应为池大小 2 发（有界）"
+    );
+
+    let snap = send(&rp.app.base, "GET", "/v1/accounts", None).await;
+    let text = snap.text();
+    for uid in ["u-wire", "u-wire2"] {
+        assert_eq!(
+            account_field(&text, uid, "cooling"),
+            json!(true),
+            "全池被封时 {uid} 应被冷却——实得快照：{text}"
+        );
+    }
+    rp.finish();
+}
+
+/// 场景四（`MarkLimited` 语义）：冷却到期由 `pick` 懒判定自动恢复——与 Go 的
+/// `limitedUntil` + `Pick` 同款，无后台恢复循环。用 60 秒冷却验证「到期即可选」，
+/// 不必等 1 小时（1 小时的常量本身由场景一按 `limited_until` 精确核对）。
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn flagged11128_cooldown_expires_lazily() {
+    let env = EnvGuard::set(&[]);
+    let auth = TestDir::new("flagged-expiry-auth");
+    write_auth_files(auth.path(), &cn_auth_files());
+    let data = TestDir::new("flagged-expiry-data");
+    let home = TestDir::new("flagged-expiry-home");
+    let auth_s = auth.path().to_string_lossy().to_string();
+    let data_s = data.path().to_string_lossy().to_string();
+    let home_s = home.path().to_string_lossy().to_string();
+    env.set_locked(&[
+        ("CODEBUDDY_AUTH_DIR", Some(auth_s.as_str())),
+        ("PROXYDECK_DATA_DIR", Some(data_s.as_str())),
+        ("CODEBUDDY_POOL_DIR", Some(data_s.as_str())),
+        ("WORKBUDDY_AT_REST_SECRET", Some("c2VjcmV0LWdvbGRlbi1zZWNyZXQ=")),
+        ("USERPROFILE", Some(home_s.as_str())),
+        ("LOCALAPPDATA", Some("")),
+        ("XDG_DATA_HOME", Some("")),
+    ]);
+    rs_codebuddy::atrest::reset_key_cache();
+
+    let pool = rs_codebuddy::pool::AccountPool::new(Region::Cn).expect("合成登录态应建池成功");
+    let (_, _, uid) = pool.newest_path().expect("池内必有一号");
+    let all: Vec<String> = pool.snapshot().iter().map(|a| a.uid.clone()).collect();
+    assert!(all.len() >= 2, "夹具应有两个号（实得 {all:?}）");
+    let now = rs_codebuddy::gotime::now_millis();
+    for u in &all {
+        pool.mark_limited(u, now + 60_000);
+    }
+    assert!(
+        pool.pick().is_none(),
+        "未到期的冷却号不应被选中（MarkLimited 语义）"
+    );
+    pool.mark_limited(&uid, now - 1);
+    assert_eq!(
+        pool.pick().map(|a| a.uid).unwrap_or_default(),
+        uid,
+        "冷却到期应自动可选（Pick 懒判定，无后台恢复循环）"
+    );
+    env.point_to_empty(home.path());
 }

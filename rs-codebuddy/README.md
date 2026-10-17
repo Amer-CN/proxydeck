@@ -83,7 +83,7 @@
 ```powershell
 cd rs-codebuddy
 $env:CARGO_TARGET_DIR="E:\cargo-target\rs-codebuddy"   # F: 盘紧张时的外置目标目录
-cargo test                                            # 58 单测 + 3 P5a 黄金 + 8 合同 + 5 P5b 门禁 + 2 hy4 + 3 刷新 + 2 P5c 黄金 + 3 P5c 接线 = 84
+cargo test                                            # 61 单测 + 3 P5a 黄金 + 8 合同 + 5 P5b 门禁 + 2 hy4 + 3 刷新 + 2 P5c 黄金 + 7 P5c 接线 = 91
 cargo test -- --nocapture                             # 看「跳过/allowance」汇总行
 
 # 起一个测试实例（**别用 8787/8789**）
@@ -139,7 +139,9 @@ cargo run -- --port 18786 --region INTL --desensitize
     原先只有换号分支 `dec_load`，正常路径一个都没释放（Go 用 `defer`），`inflight` 永久 +1
     ——P5b 门禁把 `inflight` 归一成 `__INFLIGHT__`（差异 18）所以一直没暴露；
   * 499 取消信号 —— 退避期间断开连接后**不再打上游**（与 Go 采收的 `meta.p5c_cancel` 比对：
-    带取消 1 次命中 / 不带取消 3 次）。
+    带取消 1 次命中 / 不带取消 3 次）；
+  * 11128 按号封禁治理（2026-10-17 补，见第十一节）——干净请求换号重试 + 肇事号 1 小时
+    冷却、脏请求原样透传不冷却、全池被封有界透传、冷却到期懒判定自动恢复（4 个用例）。
 * **P5c 关闭的历史跳过**：P5a/P5b 期间非流式 200 步标着 `body_compare: "outbound-only"`
   （下游留给 P5c），本轮把 **8 处标记全部摘掉**，这些步的响应体现在也逐字节比
   （聚合体里的 `created` / `chatcmpl-<hex>` 归一成标记，其余字节照比）。
@@ -399,6 +401,23 @@ pub trait CredSource {                              // src/cred.rs
     `pure.collect_eof` 5 例（末帧无换行 / 对照带换行 / `[DONE]` 之后的残行必须作废 /
     残行本身是 `[DONE]` / 残行是坏 JSON），另有 `collect.rs` 单测守「残行跨 chunk 拼接」。
 
+### 11128 治理同步新增登记（2026-10-17）
+
+43. **11128 内容嫌疑判定的字符折叠**：`desensitize::text_has_sensitive_term` 与
+    `has_fingerprint_phrase` 走与 `desensitize_text`/`strip_fingerprints` 同一套 ASCII
+    判据，故 Go `(?i)` 的 Unicode 简单折叠差异**同属差异 36**（只有全角等同字面才会看出
+    差别，真实提示词里不存在）。另：Go 的 `json.Marshal` 会把 `<`/`>`/`&` 转成 `\u003c`
+    等，`serde_json::to_string` 不转——词表与黑名单句**全 ASCII 且不含这三个字符**，
+    转义与否都不改变命中结果（两侧判定输入键序同为 messages→tools）。
+44. **换号日志的冷却时长文案**：Go 用 `%v` 打印 `time.Hour` ⇒ `1h0m0s`；本实现打印
+    `60 分钟`（由 `FLAGGED_COOLDOWN_MS / 60_000` 派生，改常量不会失真）。**冷却时长本身
+    同值**（`3_600_000` ms，由集成测试按 `limited_until` 精确核对）；日志文案不参与任何
+    逐字节门禁（`_cmp11128.mjs` 比的那两条 11128/11129 诊断行未改动）。
+45. **错误体匹配器的空白字符类微差**：Go 正则 `\s` 含换页符 `\f`（0x0C），本实现的
+    字节匹配器只认空格/Tab/LF/CR——`"code"` 与 `:` 之间出现 `\f` 时两侧判定分叉。
+    腾讯 JSON 错体实际不可能出现该字节；同形态微差在既有 `is_transient_reject`
+    里同样存在（非本次引入）。
+
 ## 六、P5c 交接清单（**已全部完成**，保留作对照）
 
 1. ✅ `desensitize.go` 全角色脱敏 + `--desensitize` 放行（`src/desensitize.rs`，硬门禁 3 步）。
@@ -526,3 +545,64 @@ Go 侧两条真缺陷由主智能体在 `3d4627f`（用户授权）修掉：非�
 **本轮未做**：`sse.rs::parse_usage` 的字面量对齐（差异 41 前半，同前一轮的登记）；
 统计**写出**侧 `> 2^53` 的 f64 变形（差异 41 末尾，本轮只在 `stats_malformed_shapes_match_go`
 的期望值里如实锁定）。
+
+## 十一、11128 按号封禁治理同步（2026-10-17，对齐 Go `0415ec1`）
+
+Go 侧 `0415ec1` 修的是「按号封禁」：2026-10-17 实证国际版 5 号中 2 号被上游按号封禁——
+**同一条干净请求在该号上必回 400/11128，同字节换号即 200**，与内容/模型无关。Rust 侧把
+同款逻辑同步跟进（绞杀者双轨一致），**行为口径逐条照抄 Go，不自行发挥**。
+
+### 改了什么
+
+| # | 改动 | 位置 |
+|---|---|---|
+| 1 | `body_has_11128_trigger`：只读判定「即将发给上游的那份体」还有没有内容指纹——只把 `messages`/`tools` 序列化后过**既有**词表与指纹黑名单句（`SENSITIVE_TERMS` / `FINGERPRINT_PHRASE`），**不改写任何内容** | `src/desensitize.rs`（`text_has_sensitive_term` / `has_fingerprint_phrase` / `body_has_11128_trigger`） |
+| 2 | `is_flagged_body`：字段级 11128 判定（Go 正则 `"code"\s*:\s*"?11128"?\b` 的逐条等价；裸子串不算，防 requestId 里的同数字串误判） | `src/chat.rs` |
+| 3 | `handle_chat` 重试循环加 11128 分支 + `flagged_resent` 计数器：干净请求 → `mark_limited(now + 1h)` 后换号重发（上限 = 池大小）；内容嫌疑 → 原样透传、不冷却任何号；全池被封 → 如实透传上游报文 | `src/chat.rs` |
+| 4 | 单测 + 集成门禁（见下「门禁计数」） | `src/desensitize.rs`、`src/chat.rs`、`tests/p5c_wiring.rs` |
+
+### 场景对照表（判定输入 → 换号 / 冷却 / 透传）
+
+| 场景 | 上游回 400/11128 的号 | 判定（`body_has_11128_trigger`） | Go `0415ec1` | Rust（本次） | 证据 |
+|---|---|---|---|---|---|
+| 干净请求 | 池内首号（u-wire / uid-a） | 不命中 | 换号重发（客户端 200）+ 肇事号 1h 冷却 | 同 Go（命中序列 A→B；`limited_until` 距现在 55~65 分钟） | Rust `flagged11128_clean_request_swaps_then_cools_for_an_hour`；Go `TestChatFlagged11128Governance/clean-11128-swaps-and-cools` |
+| 脏请求（品牌词/指纹句） | 同上 | 命中 | **不换号、不冷却**，400/11128 原样透传 | 同 Go（上游只命中 1 发；两个号 cooling/dead/exhausted 全 false） | Rust `..._dirty_request_passes_through_without_cooling`；Go `.../dirty-11128-passthrough-no-cooling` |
+| 全池被封 | 池内全部 | 不命中 | 换号有界（= 池大小）后如实透传，全部号冷却 | 同 Go（2 个号 → 上游 2 发，400 透传，两号均 cooling；10s 超时守卫防死循环） | Rust `..._all_pool_flagged_passes_through_bounded`；Go `.../all-flagged-bounded-passthrough` |
+| `MarkLimited` 语义 | — | — | 冷却到期由 `Pick` 懒判定自动恢复（无后台恢复循环） | 同（`pick` 跳过未到期号，过期即可选） | Rust `flagged11128_cooldown_expires_lazily`（60s 冷却验证到期恢复）+ 上一行的 1h 精确核对 |
+| 判定（纯函数） | — | 干净/空体/无 messages&tools → false；品牌词、指纹句、工具 description、数组式 content 命中 → true；不写回入参 | Go `TestBodyHas11128Trigger`（9 例，含 nil 体） | 逐案同值（8 例 + 每例改写核对；`nil` 体由「无 messages/tools」等价覆盖） | Rust `desensitize::tests::body_has_11128_trigger_matches_go` |
+| 脱敏后判定 | — | 脱敏后的体判干净；`tool_calls` 参数残留仍判嫌疑 | Go `TestBodyHas11128TriggerAfterDesensitize` | 同 | Rust `desensitize::tests::body_has_11128_trigger_after_desensitize_matches_go` |
+| 错误体判定 | — | `"code":11128` / `"code":"11128"` → 命中；`111280` / `"11128x"` / requestId 里的裸子串 → 不命中 | Go `flaggedBodyRe` | 同（10 例：4 正 + 6 反） | Rust `chat::tests::flagged_body_matches_go_regex` |
+
+**已知边界（照抄 Go，未自行发挥）**：冷却/`dead`/`exhausted` 都是**进程内存态**（重启清零；
+只有 `Enabled`/`Removed` 落盘）；`rescan` **继承冷却**（不解）；**内容嫌疑不碰号**——命中
+指纹表就认定「上游是按内容拦的」，既不给该号冷却也不换号（避免把好号误判成封号）。
+所有测试都用**进程内假上游 + 临时目录合成登录态**，不碰 8787/8789、不碰真实账号。
+
+### 门禁计数（本次实测）
+
+* `cargo test -p rs-codebuddy`：**91 passed / 0 failed**
+  （lib 61 + `golden_codebuddy` 3 + `http_contract` 8 + `p5b_golden` 5 +
+  `p5b_hy4_guard` 2 + `p5b_refresh` 3 + `p5c_golden` 2 + `p5c_wiring` 7）。
+  其中 `p5c_wiring` 由 3 → 7（+4：治理三场景 + 冷却到期）；`lib` 内新增 3 个判定单测
+  （`body_has_11128_trigger_matches_go`、`..._after_desensitize_matches_go`、
+  `flagged_body_matches_go_regex`）。
+* `cargo build -p rs-codebuddy`（`cargo clean -p` 后重编）：**0 warning**。
+* Go 侧同场景实测（**只读**跑 `go test ./internal/codebuddy -run 'TestChatFlagged11128Governance|TestBodyHas11128Trigger'`，
+  `internal/**` 一字未改）：`ok github.com/Amer-CN/proxydeck/internal/codebuddy 0.080s`，
+  三个治理子用例 + 两个判定用例全 PASS。
+
+### 反向验证（门禁非空转，2026-10-17 实测）
+
+逐条「改坏 → 重编 → 跑门禁 → 必须判红 → 还原」（还原后 `src/chat.rs` SHA-256 与改前一致
+`4E885210…`）：
+
+| # | 突变 | 结果 | 失败断言（实得） |
+|---|---|---|---|
+| A | 内容嫌疑判定恒 false（`if false && body_has_11128_trigger(...)`） | **判红** | 脏请求应原样透传 400，实得 200（被换号救活） |
+| B | 整个 11128 分支禁用（`if false && is_flagged_body(...)`） | **判红** | 干净请求应换号拿 200，实得透传 400/11128 |
+| C | 冷却时长改成 2 小时 | **判红** | 「冷却时长应约 1 小时」，实得 119 分钟 |
+| D | 记冷却但不换号（删掉 `continue`） | **判红** | 干净请求应换号拿 200，实得透传 400/11128 |
+
+**一条诚实边界**：`flagged_resent` 计数器与「冷却 + `pick` 跳过冷却号」是**双保险**，
+现有「全池被封有界」门禁无法单独区分二者（把计数上限放宽到 `<=` 仍会被 `pick` 返回
+`None` 兜住、上游命中数仍是 2）——与 Go 侧同构，不是门禁缺口。

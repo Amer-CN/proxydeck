@@ -4,7 +4,8 @@
 //! `map[string]any` 的入站解析（逐字错误文案）、白名单字段透传 + `stream` 强制 true +
 //! `stream_options` 缺省、`tool_choice` 归一、`$ref` 内联、`developer`→`system`、
 //! **全角色脱敏**（P5c；生产 CN/INTL 都开）、INTL 自动补首条 system、出站体**逐字节重建**、
-//! **账号池换号三条分支**（401/403 标死换活号、429 冷却换号、14018 额度耗尽换号）、
+//! **账号池换号分支**（401/403 标死换活号、429 冷却换号、14018 额度耗尽换号、
+//! 11128 按号封禁换号 + 1h 冷却）、
 //! **200 体 14018 Peek**（判定窗口 64KB；不命中时 peek 到的字节**一字不丢**地交给下游聚合，
 //! 对齐 Go `3d4627f` 之后的行为，见 `PEEK_WINDOW`）、CN 缺省
 //! `reasoning_effort` 注入、hy4 限流兜底改写与 trip、11133 退避重试（上限 2 次，
@@ -37,6 +38,12 @@ pub const MAX_BODY_BYTES: usize = 64 << 20;
 pub const MAX_ERR_BODY: usize = 1 << 20;
 /// Go `transientMaxRetry`：11133 原地重试次数上限。
 pub const TRANSIENT_MAX_RETRY: usize = 2;
+/// Go `flaggedCooldown`：11128 账号级封禁的冷却时长（`time.Hour`）。
+///
+/// 2026-10-17 实证：国际版 5 号中 2 号被上游按号封禁——干净请求也照回 400/11128，
+/// 同字节换号即 200，与内容/模型无关。上游不给 reset 时点（不是 429 频控），固定
+/// 1 小时兜底：`pick` 懒判定到期即自动可选；GUI「提前恢复」（`clear_cool`）可立即解冷却。
+pub const FLAGGED_COOLDOWN_MS: i64 = 60 * 60 * 1000;
 /// Go `br.Peek(64 * 1024)` 的**判定窗口**。
 ///
 /// Go 写的 `bufio.NewReader(resp.Body)` 默认缓冲只有 4096，`Peek(64KB)` 实到 4096 字节就
@@ -105,6 +112,54 @@ pub fn is_transient_reject(err_body: &str) -> bool {
         i += 1;
     }
     false
+}
+
+/// Go `isFlaggedBody`：上游 11128（`Illegal API invocation from an unapproved channel`，
+/// 2026-10-17 实证既可能是内容拦截也可能是账号级封禁）。
+///
+/// Go 的正则是 `"code"\s*:\s*"?11128"?\b`：只认**字段级** code（数字或字符串两种形态），
+/// 裸子串 `11128` 会把 requestId/正文里的同数字串误判成封号。尾随 `"?` 是可选的，
+/// 故是否命中只取决于「11128 之后那个字节不是词字符」——与 Go 的 `\b` 逐条等价
+/// （数字是词字符，其后是 `,`/`}`/`"`/行尾都成立；`111280`/`"11128x"` 都不成立）。
+pub fn is_flagged_body(err_body: &str) -> bool {
+    let b = err_body.as_bytes();
+    let needle = b"\"code\"";
+    let mut i = 0usize;
+    while i + needle.len() <= b.len() {
+        if &b[i..i + needle.len()] == needle {
+            let mut j = i + needle.len();
+            while j < b.len() && matches!(b[j], b' ' | b'\t' | b'\n' | b'\r') {
+                j += 1;
+            }
+            if b.get(j) == Some(&b':') {
+                j += 1;
+                while j < b.len() && matches!(b[j], b' ' | b'\t' | b'\n' | b'\r') {
+                    j += 1;
+                }
+                // 正则里的 `"?`：数字形态与字符串形态都认（只吃一个引号）。
+                if b.get(j) == Some(&b'"') {
+                    j += 1;
+                }
+                if b[j..].starts_with(b"11128") {
+                    let after = b.get(j + 5).copied();
+                    // Go 的 `\b`：后面不能是 [0-9A-Za-z_]
+                    let word = after
+                        .map(|c| c.is_ascii_alphanumeric() || c == b'_')
+                        .unwrap_or(false);
+                    if !word {
+                        return true;
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// 11128 治理的冷却到期时点（epoch 毫秒）：Go `time.Now().Add(flaggedCooldown)`。
+pub fn flagged_until(now_ms: i64) -> i64 {
+    now_ms.saturating_add(FLAGGED_COOLDOWN_MS)
 }
 
 /// Go `writeErr`：`Content-Type: application/json` + `{"error":{"message":…,"type":"upstream_error"}}`
@@ -343,6 +398,7 @@ pub async fn handle_chat(
     let mut dead_resent = 0usize; // 凭据失效换号重发计数，上限 = 池大小
     let mut exhausted_resent = 0usize; // 额度耗尽换号重发计数，上限 = 池大小
     let mut transient_resent = 0usize; // 11133 原地重试计数，上限 TRANSIENT_MAX_RETRY
+    let mut flagged_resent = 0usize; // 11128 按号封禁换号计数，上限 = 池大小（全封防循环）
     let mut hy4_tripped = false; // hy4 模型级兜底重放只允许一次
     // Go `for attempt := 0; ; attempt++` 的**轮次**语义：先判后增，首轮 `attempt == 0`。
     // 这里的循环体在末尾用 `continue`（不是 `for` 的增量表达式），故把自增放在**轮首**，
@@ -437,6 +493,58 @@ pub async fn handle_chat(
                 truncate(&err_body, 200)
             );
         }
+        // 11128 账号级封禁治理（2026-10-17，对齐 Go `0415ec1`）：国际版实证存在「按号
+        // 封禁」——同一条干净请求在该号上必回 400/11128，换号即 200，与内容/模型无关。
+        // 分两支：
+        //   ① 内容嫌疑（messages/tools 命中指纹表，见 `desensitize::body_has_11128_trigger`）
+        //      → 上游是按内容拦的，该号无过：原样透传，不冷却任何号；
+        //   ② 干净请求 → 判账号级封禁：当前号记 `FLAGGED_COOLDOWN_MS`（1 小时）冷却
+        //      （走既有 `mark_limited` 冷却机制，`pick` 自动跳过；到期自恢复 / GUI 提前
+        //      恢复），换下一个可用号重发本次请求（客户端零感知）。
+        // 换号有界：最多换池大小次（计数到顶或 `pick` 拿不到可用号即停，落到下方
+        // `write_err` 如实透传上游报文），防恒 11128 下无限 continue。计数与 14018/401
+        // 各自独立：封号不是额度耗尽也不是凭据失效。
+        if is_flagged_body(&err_body) && st.pool.is_some() && !acc_uid.is_empty() {
+            if crate::desensitize::body_has_11128_trigger(&backend) {
+                println!(
+                    "[codebuddy] 11128 命中内容指纹（{}），不判账号、不冷却，原样透传",
+                    crate::pool::uid_short(&acc_uid)
+                );
+            } else {
+                let p = st.pool.as_ref().expect("上面已判 Some");
+                p.mark_limited(&acc_uid, flagged_until(crate::gotime::now_millis()));
+                if flagged_resent < p.size() {
+                    if let Some(next) = p.pick() {
+                        let nhdr = match st.cred.headers_for(&next.auth_path) {
+                            Ok(h) => h,
+                            Err(e) => return write_err(502, &e),
+                        };
+                        println!(
+                            "[codebuddy] 账号 {} 被封(11128)，冷却 {} 分钟后换 {} 重发",
+                            crate::pool::uid_short(&acc_uid),
+                            FLAGGED_COOLDOWN_MS / 60_000,
+                            crate::pool::uid_short(&next.uid)
+                        );
+                        p.dec_load(&acc_uid); // 旧号释放进行中计数
+                        p.touch(&next.uid);
+                        p.inc_load(&next.uid);
+                        hdr = nhdr;
+                        acc_uid = next.uid.clone();
+                        acc_path = next.auth_path.clone();
+                        if let Some(g) = load_guard.as_mut() {
+                            g.uid = acc_uid.clone();
+                        }
+                        flagged_resent += 1;
+                        continue;
+                    }
+                }
+                println!(
+                    "[codebuddy] 全池 {} 个号 11128 封禁（冷却中），如实透传",
+                    p.size()
+                );
+            }
+        }
+
         // 11129 结构诊断（GPT-6 工具定义校验失败）：只记出站 tools 定义与 tool_choice +
         // 完整上游错误，不记 messages 正文、不记认证头。
         if err_body.contains("11129") || err_body.contains("invalid_function_parameters") {
@@ -939,5 +1047,29 @@ mod tests {
         assert!(!is_transient_reject(""));
         // 非字段级（裸子串）不算
         assert!(!is_transient_reject("error 11133 happened"));
+    }
+
+    /// Go `flaggedBodyRe`（`"code"\s*:\s*"?11128"?\b`）的等价判定：数字/字符串两种 code
+    /// 形态都认，裸子串与 `111280`/`"11128x"` 不认。
+    #[test]
+    fn flagged_body_matches_go_regex() {
+        assert!(is_flagged_body(
+            r#"{"error":{"data":{"code":11128,"msg":"Illegal API invocation from an unapproved channel","requestId":"x"}}}"#
+        ));
+        assert!(is_flagged_body(r#"{"code" : 11128 ,"msg":"x"}"#));
+        assert!(is_flagged_body(r#"{"code":"11128"}"#));
+        assert!(is_flagged_body("prefix\n  \"code\":\n\t11128"));
+        // 词边界：尾随字符仍是词字符时不算（Go 的 `\b`）
+        assert!(!is_flagged_body(r#"{"code":111280}"#));
+        assert!(!is_flagged_body(r#"{"code":"11128x"}"#));
+        assert!(!is_flagged_body(r#"{"code":11129}"#));
+        assert!(!is_flagged_body(""));
+        // 非字段级（requestId 里同数字串、正文提及）不算
+        assert!(!is_flagged_body(r#"{"requestId":"11128"}"#));
+        assert!(!is_flagged_body("error 11128 happened"));
+        // 冷却时长与 Go `flaggedCooldown = time.Hour` 同值
+        assert_eq!(FLAGGED_COOLDOWN_MS, 3_600_000);
+        assert_eq!(flagged_until(1_000), 1_000 + 3_600_000);
+        assert_eq!(flagged_until(i64::MAX), i64::MAX, "溢出饱和而非回绕");
     }
 }
