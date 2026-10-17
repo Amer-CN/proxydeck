@@ -2,7 +2,7 @@
 name = "rs-tuanjie"
 version = "0.1.0"
 edition = "2021"
-description = "ProxyDeck 团结插件 Rust 重写（绞杀者路线 P8a：凭证链与请求整形；测试端口用，未接入 GUI）"
+description = "ProxyDeck 团结插件 Rust 重写（绞杀者路线 P8a~P8c 全量；P7d-1 起接进 rs-gui 分发器的 --plugin-tuanjie，测试端口用，未接管 8788）"
 
 [lib]
 name = "rs_tuanjie"

@@ -43,16 +43,21 @@ pub enum Mode {
 }
 
 /// 插件 id → 承载它的 Rust crate 名（`None` = 该插件**没有** Rust 实现）。
+///
+/// P7d-1 起七条全有承载（团结于本轮接入）；`None` 这条分支保留——Go 侧 `pluginDefs`
+/// 是数据驱动的，将来加插件时这里仍要如实报「尚无实现」，不许静默当成功。
 pub fn plugin_crate(id: &str) -> Option<&'static str> {
     match id {
         "bai" => Some("rs-bai"),
         "codebuddy" | "codebuddy-intl" => Some("rs-codebuddy"),
         "comate" => Some("rs-comate"),
         "qoder" => Some("rs-qoder"),
+        // 团结（tuanjie / 8788）：P7d-1 起由 `rs-tuanjie` 承接（`pub async fn run(args)`，
+        // 与 rs-vibex / rs-proxy 同一形态）。**本 exe 仍不去接管生产端口 8788**——
+        // 那是停服/换装动作，须用户确认；`rs-tuanjie` 自己那条「8788 + 测试缝 → 拒绝」
+        // 的守卫照旧生效。
+        "tuanjie" => Some("rs-tuanjie"),
         "vibex" => Some("rs-vibex"),
-        // 团结（tuanjie / 8788）**还没有 Rust 实现**：Go 侧实现留在 internal/tuanjie，
-        // Rust 侧没有对应 crate。子模式如实报「尚未实现」，绝不静默当成功。
-        "tuanjie" => None,
         _ => None,
     }
 }
@@ -116,7 +121,11 @@ pub fn plan(argv: &[String]) -> Mode {
 /// 三处翻译，其余原样透传：
 ///   * `--plugin-codebuddy-intl` → `--plugin-codebuddy --region INTL`（rs-codebuddy 用 region 区分）
 ///   * `--portable`：只留给接受它的 crate（rs-vibex）；其余 crate 由调用方改用
-///     `PROXYDECK_DATA_DIR` 环境变量保证父子数据目录一致
+///     `PROXYDECK_DATA_DIR` 环境变量保证父子数据目录一致。
+///     ⚠ `rs-tuanjie` 的 `Args` 其实也接受 `--portable`（P7d-1），但这里**沿用原行为**一并丢掉：
+///     两处落点同址（便携模式的数据目录就是 exe 同目录），数据目录不漂移；唯一差别是
+///     `run_data_dir_init(portable=false)` 少做一次 exe 同目录的历史状态文件迁移。
+///     要改成透传属于新的行为选择，未经用户裁决不动（登记在 `README.md` P7d-1 节）。
 ///   * 其它未知 flag 原样带上——由 crate 自己的 clap 如实报错，不在这里静默丢弃
 pub fn plugin_argv(prog: &str, plugin_id: &str, argv: &[String]) -> Vec<String> {
     let mut out = vec![prog.to_string()];
@@ -194,6 +203,20 @@ fn block_on<F: Future<Output = Result<(), String>>>(f: F) -> Result<(), String> 
     rt.block_on(f)
 }
 
+/// 同 [`block_on`]，但把错误保留成「文案 + 退出码」——`rs-tuanjie` 的
+/// [`rs_tuanjie::RunError`] 分两档（守卫拒绝 → 2，启动失败 → 1），不能一律压成 String，
+/// 否则 `--plugin-tuanjie` 的退出码就与单独跑 `rs-tuanjie` 分道扬镳了。
+fn block_on_tuanjie<F>(f: F) -> Result<(), (String, i32)>
+where
+    F: Future<Output = std::result::Result<(), rs_tuanjie::RunError>>,
+{
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| (format!("创建 tokio 运行时失败: {e}"), 1))?;
+    rt.block_on(f).map_err(|e| (e.to_string(), e.exit_code()))
+}
+
 /// 进程入口（`main` 只做 `std::process::exit(dispatch::run(...))`）。
 pub fn run(argv: Vec<String>) -> i32 {
     let prog = argv
@@ -248,6 +271,23 @@ pub fn run(argv: Vec<String>) -> i32 {
                 },
                 "rs-qoder" => match rs_qoder::Args::try_parse_from(&sub) {
                     Ok(a) => block_on(rs_qoder::run(a)),
+                    Err(e) => Err(e.to_string()),
+                },
+                "rs-tuanjie" => match rs_tuanjie::Args::try_parse_from(&sub) {
+                    Ok(a) => match block_on_tuanjie(rs_tuanjie::run(a)) {
+                        Ok(()) => Ok(()),
+                        // 退出码与单独跑 `rs-tuanjie` 同源（守卫拒绝 → 2，启动失败 → 1）。
+                        // 两者的收尾**不同**：拒绝启动是用法错误（连端口都没碰），只打印、
+                        // **不落** `<id>-plugin-error.log`（那会误报成「后端起不来」）；
+                        // 启动失败与其余 crate 同一个失败收尾（写诊断 + 退出 1）。
+                        Err((msg, code)) => {
+                            if code == 2 {
+                                eprintln!("{msg}");
+                                return 2;
+                            }
+                            Err(msg)
+                        }
+                    },
                     Err(e) => Err(e.to_string()),
                 },
                 "rs-vibex" => match rs_vibex::Args::try_parse_from(&sub) {
@@ -411,6 +451,12 @@ mod tests {
         // vibex 接受 --portable：原样保留
         let c = plugin_argv("rs-gui", "vibex", &v(&["--plugin-vibex", "--port", "18790", "--portable"]));
         assert_eq!(c, v(&["rs-gui", "--plugin-vibex", "--port", "18790", "--portable"]));
+        // rs-tuanjie 也接受 --portable（`Args::portable`），但**保留现行行为**：非 vibex 一律
+        // 丢掉该参数，改用 `PROXYDECK_DATA_DIR` 给子模式钉数据目录（见 `Mode::Plugin` 分支）。
+        // 两处落点同址（便携模式的数据目录 = exe 同目录），故数据目录不漂移；差异只有
+        // `run_data_dir_init(portable)` 少做一次 exe 同目录的历史文件迁移。
+        let d = plugin_argv("rs-gui", "tuanjie", &v(&["--plugin-tuanjie", "--port", "18788", "--portable"]));
+        assert_eq!(d, v(&["rs-gui", "--plugin-tuanjie", "--port", "18788"]));
     }
 
     #[test]
@@ -471,6 +517,15 @@ mod tests {
         assert_eq!(a.port, 18790);
         assert!(a.portable);
 
+        let a = rs_tuanjie::Args::try_parse_from(plugin_argv(
+            "rs-gui",
+            "tuanjie",
+            &v(&["--plugin-tuanjie", "--port", "18788"]),
+        ))
+        .expect("rs-tuanjie 必须接受翻译后的 argv");
+        assert_eq!(a.port, 18788);
+        assert!(a.plugin_tuanjie);
+
         let a = rs_proxy::Args::try_parse_from(proxy_argv(
             "rs-gui",
             &v(&["-headless", "-port", "18788", "-debug"]),
@@ -502,11 +557,16 @@ mod tests {
     }
 
     #[test]
-    fn tuanjie_has_no_rust_crate_yet() {
-        assert_eq!(plugin_crate("tuanjie"), None, "团结还没有 Rust 实现，必须如实报");
+    fn every_plugin_id_maps_to_a_real_crate_or_reports_honestly() {
+        // P7d-1 起团结也有 Rust 承载（rs-tuanjie）；七条全通。
+        assert_eq!(plugin_crate("tuanjie"), Some("rs-tuanjie"));
         assert_eq!(plugin_crate("bai"), Some("rs-bai"));
         assert_eq!(plugin_crate("codebuddy"), Some("rs-codebuddy"));
         assert_eq!(plugin_crate("codebuddy-intl"), Some("rs-codebuddy"));
+        assert_eq!(plugin_crate("comate"), Some("rs-comate"));
+        assert_eq!(plugin_crate("qoder"), Some("rs-qoder"));
         assert_eq!(plugin_crate("vibex"), Some("rs-vibex"));
+        // 未知 id 仍如实报「没有承载」（不静默当成功）
+        assert_eq!(plugin_crate("zz-nope"), None);
     }
 }

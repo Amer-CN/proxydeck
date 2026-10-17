@@ -52,9 +52,8 @@ rs-gui.exe
 ├─ --plugin-codebuddy-intl    → rs-codebuddy::run（翻译成 --plugin-codebuddy --region INTL）
 ├─ --plugin-comate --port N   → rs-comate  ::run
 ├─ --plugin-qoder  --port N   → rs-qoder   ::run
+├─ --plugin-tuanjie --port N  → rs-tuanjie ::run（**P7d-1 起真起服务**；退出码与单独跑该 crate 同源）
 ├─ --plugin-vibex  --port N   → rs-vibex   ::run
-├─ --plugin-tuanjie           → **如实报错**：团结还没有 Rust crate（见 §5）+ 写
-│                               `<数据目录>/tuanjie-plugin-error.log`（Go `pluginFailLog` 同源）
 ├─ -version                   → `ProxyDeck v3.20.10 (proxy core v1.2.0)`（与 Go 同形）
 └─ --fax                      → 注水专线独立浮窗（580×784、标题「注水专线 · WATER PROBE FX-01」、
                                 进程名互斥体单实例、`#fax` 模式、挂全 33 桥）
@@ -203,7 +202,7 @@ Select-String -Path app/bridge.go -Pattern 'w\.Bind\("([A-Za-z]+)"'   # → 26 �
 | **C. Go↔Rust 差分对照** | `tests/bridge_contract.rs` + `tests/golden/bridge-go-reference.json` | 黄金场景 **9 个 / 90 步命令**逐条比对（归一化后逐字节）+ 落盘文件格式与逻辑内容比对 + 30 个绑定的存在性补跑 + 换血标记 10 例 + spawn argv 逐位断言 |
 | **D. 纯函数用例对照** | 同上（`exit_reason_cases_match_go` / `stamped_writer_cases_match_go`） | 退出原因 8 例（含 >300 字节截断、多字节断口、4KB 尾部读）、`StampedWriter` 6 例（分行/半行/空行/CRLF/多字节），期望值由 Go 侧实采 |
 | **E. 插件托管行为测试** | `src/plugin_hosting_tests.rs`（lib 段，12 条）+ `tests/command_dispatch.rs` | 真起假后端进程（`tests/fixtures/fake-backend.js`）+ 测试端口 1981x：接管/自愈、spawn argv、退出监视三种文案、停堆成功／「杀不掉如实报错」／**按 PID 收掉没上线的子进程**、未知 id、并发探活、失败子模式写诊断文件 |
-| **F. 分发骨架真跑** | `tests/command_dispatch.rs` | 真起 `rs-gui.exe`：`-version` 文案与退出码、缺 crate 的 `--plugin-tuanjie` 如实报错且不占端口、`-headless` 失败自写 `headless-error.log`、失败子模式写 `<id>-plugin-error.log` |
+| **F. 分发骨架真跑** | `tests/command_dispatch.rs` | 真起 `rs-gui.exe`：`-version` 文案与退出码、**`--plugin-tuanjie --port 18788` 真起服务并过 `/health`**（P7d-1）、`--plugin-tuanjie --port 8788` + 测试缝 → 拒绝（退出码 2）、`-headless` 失败自写 `headless-error.log`、失败子模式写 `<id>-plugin-error.log` |
 | **G. 宿主外壳真值表 + 源码锚（P7c）** | `tests/shell_contract.rs`（9 项） | `ccOpenFax` 的「已有浮窗」分支与 Go 黄金**逐字节同形** + 不 spawn 证据；`ccFaxWin`/`ccFaxClose` 的 `app/main.go` **逐字源码锚** + 句柄真值表；单实例（互斥体名/首次放行/二次挡住）；`Migrate` 四条语义 + `UpgradePlaintext` 形态与 Go 黄金逐字段同值；`legacyStateFiles` 清单 33 条与 5 条凭据集合 |
 | **H. 宿主外壳行为测试（P7c）** | `src/shell_tests.rs`（lib 段）+ 各模块单测 | 换血**端到端**（真占端口的旧后端 → 真被杀 → 真 spawn 新后端 → 真等 health 绿）；真 netstat 快照下关着的端口保持关闭；`waitPortFree` 真端口真值表；`-headless` 的僵死端口清理与失败日志；托盘线程真拉起 + 真挂图标（**子进程隔离**）；`setFrameless` 真清掉 `WS_CAPTION`（子进程隔离）；`Migrate`/`UpgradePlaintext` 临时目录行为 |
 
@@ -236,7 +235,7 @@ Rust 侧把**同一串命令、同一套场景前置**再跑一遍，两边跑�
 ### 跑门禁
 
 ```powershell
-# 单元测试 + 行为测试（lib 113 含插件托管 13 条 + 外壳行为 5 条；集成 5+4+9+2）
+# 单元测试 + 行为测试（P7d-1 实测：lib 114 含插件托管 13 条 + 外壳行为 5 条；集成 5+5+9+2）
 pwsh -NoProfile -Command "& 'F:\AIXM\proxydeck\.work\p7a\_p7atest.ps1' -Targets lib,bridge_contract,ui_html,command_dispatch,shell_contract"
 # 或直接跑全量
 cargo test --manifest-path rs-gui/Cargo.toml --all-targets       # CARGO_TARGET_DIR=E:\cargo-target\rs-gui
@@ -277,16 +276,18 @@ G 管「与 Go 同形」（差分 / 源码锚 / 真值表），H 管「真起进
 | 16 | **`--fax` 的父侧 spawn 不走 `cmd.Start()` 的错误文案逐字** | Go 是 `jsonErr(err)`，`err.Error()` 形如 `fork/exec <exe>: …`；Rust 补一句 `启动 <exe> 失败: <os error>`（同样带程序路径，可读性更好）。**这是能看到的一处文案差异**，登记在案 |
 | 17 | **主 GUI 不做单实例**（与 Go 一致，但值得写明） | Go 侧只有注水浮窗用命名互斥体做单实例，主 GUI 多开是现行行为。Rust 照抄同一范围——**没有**擅自给主 GUI 加锁（那是新行为，需用户裁决） |
 | 18 | **`Migrate` 的目标存在判定对齐 Go `migrate.go` 版**（与 `bridge.go` 版不同） | Go 同名函数有两套语义：`bridge.go` 是纯 `err == nil`（目录也算），`migrate.go` 是 `err == nil && !fi.IsDir()`（目录不算）。Rust 此前两处混用同一份"目录也算"的实现——目标是目录时会错走"目标已存在"分支（改名旧文件），而 Go 走"拷贝→改名失败→落位失败"。已改 `migrate.rs` 的私有 `file_exists` 为 `is_file` 判定，并加单测 `migrate_target_is_dir_falls_through_to_placement_failure_like_go`（真 Go 探针取证：note 为"落位失败，保留在原处：＜OS 原文＞"、源文件留、目录不动、tmp 清掉；OS 原文平台相关，门禁只断前缀） |
+| 19 | **`--plugin-tuanjie` 的退出码分两档**（P7d-1） | 其余插件 crate 的 `run` 用 `Result<(), String>`，分发器一律「失败 → 写诊断 + 退出 1」。`rs-tuanjie` 的 `RunError` 分 `Refused`（测试缝与生产端口 8788 同用，**退出 2**）与 `Startup`（**退出 1**）；分发器为它单接一个 `block_on_tuanjie`，把 `Refused` 原样还原成退出码 2 且**不写** `<id>-plugin-error.log`（用法错误不是启动失败）。单独跑 `rs-tuanjie` 的退出码因此逐字未变 |
+| 20 | **`--portable` 对 `rs-tuanjie` 仍是「丢掉」**（`plugin_argv`） | `rs-tuanjie::Args` 其实接受 `--portable`，但分发器沿用原行为：非 vibex 一律去掉该参数，改由 `PROXYDECK_DATA_DIR` 给子模式钉数据目录。**两处落点同址**（便携模式的数据目录就是 exe 同目录）⇒ 数据目录不漂移；唯一差别是 `run_data_dir_init(portable=false)` 少做一次 exe 同目录的历史状态文件迁移。要改成透传属**新的行为选择**，未经用户裁决不动（代码注释与单测都标了） |
 
 ## 5. **没做**与留给后续阶段的（如实登记）
 
 ### P7a 范围内没做到的
 
-1. **`--plugin-tuanjie` 无 Rust 承载**：六个 crate 里没有 rs-tuanjie（团结后端仍是
-   `internal/tuanjie` 的 Go 实现）。分发器对它**如实报错并退出 1**，不静默降级、不假装启动。
-   要落地必须新增 `rs-tuanjie` crate（体量与 rs-codebuddy 同级）。
-   **P7b 补强**：这种失败现在也会写 `<数据目录>/tuanjie-plugin-error.log`（Go `pluginFailLog`
-   同源），GUI 的退出监视因此能显示「启动失败：…」而不是停在「启动中」。
+1. ~~**`--plugin-tuanjie` 无 Rust 承载**~~ —— **P7d-1 已收口**：`rs-tuanjie` 以库依赖接入，
+   `plugin_crate("tuanjie") → Some("rs-tuanjie")`，`--plugin-tuanjie --port N` **真起服务**
+   （门禁 `plugin_submode_really_starts_the_service` 真起 exe + 真探活）。
+   原「如实报错并退出 1 + 写 `tuanjie-plugin-error.log`」那两条用例随之删掉（不保留空转断言）；
+   失败诊断那条改用**确定性的失败路径**（`--port 99999` 超出 `u16`）继续锁。
 2. **`ccCalib` 未被 ui.html 调用**：宿主提供、当前界面零引用（历史绑定）。它的对齐由
    差分门禁覆盖，`tests/ui_html.rs` 的界面调用面断言不涉及它。
 3. **GUI 分支只编译未启动**：P7a~P7c 都**没有**运行过 `rs-gui` 的无参模式——启动会弹窗，
@@ -329,7 +330,10 @@ G 管「与 Go 同形」（差分 / 源码锚 / 真值表），H 管「真起进
    与 `.work` 副本同哈希；门禁优先读入库副本、缺则回落 `.work`——P1 第 4 轮口径）。
 
 **P8 / 后续阶段**：
-1. **`rs-tuanjie` 仍是缺口**：`--plugin-tuanjie` 在 Rust 侧如实报错（不静默降级）。
+1. ~~**`rs-tuanjie` 仍是缺口**：`--plugin-tuanjie` 在 Rust 侧如实报错（不静默降级）。~~
+   **P7d-1 已收口**（见 §5 第 1 条）：七条 `--plugin-*` 全有 Rust 承载。
+   **仍未做的**：把 8788 从 Go `internal/tuanjie` 切到 `rs-tuanjie`——那是**停服/换装**动作，
+   须用户确认；本轮只做到「测试端口能真起服务并过健康检查」。
 2. **主 GUI 的单实例**要不要加：Go 侧没有，本轮照抄；要加是**新行为**，需用户裁决。
 3. **`-headless` 的 `u16` 端口上限**：`--port 99999` 在 Go 侧（`string` + `net.JoinHostPort`）
    是"端口被其他程序占用/非法"的运行时错，在 Rust 侧被 clap 的 `u16` 解析当场拒掉——
@@ -362,6 +366,39 @@ G 管「与 Go 同形」（差分 / 源码锚 / 真值表），H 管「真起进
   版本串同步清单要从 Go 的 8 处扩展到含 `rs-gui/src/lib.rs` 的 `APP_VERSION`；
   多二进制与单 exe 的取舍与 P9 打包合并评估。
 
+### P7d-1（团结接线进分发器）——**本轮已做**
+
+| 简报要求 | 落地位置 | 门禁 |
+|---|---|---|
+| `rs-tuanjie` 搬出 `Args` + `run(args)`（照 `rs-vibex`/`rs-proxy` 先例） | `rs-tuanjie/src/lib.rs`（`pub struct Args` / `pub async fn run` / `RunError`）、`rs-tuanjie/src/main.rs` 变薄入口 | `p8b3_http_contract::refuses_test_seams_on_production_port_8788`（真跑二进制，退出码 2 逐字未变） |
+| 顺手修 `main.rs:59` 缩进损坏 | 该行已随启动逻辑一并重排（原 `}` 与 `apply_test_bases` 的尾行挤在同一行） | 编译 + `rustfmt --check rs-tuanjie/src/main.rs` 干净 |
+| `rs-gui` 加 path 依赖 | `Cargo.toml`（`rs-tuanjie = { path = "../rs-tuanjie" }`）+ `Cargo.lock` | 编译期 |
+| `plugin_crate` 接真启动 | `dispatch.rs`：`"tuanjie" => Some("rs-tuanjie")` + `Mode::Plugin` 的 `"rs-tuanjie"` 分支（`block_on_tuanjie` 保留退出码） | `dispatch::tests::every_plugin_id_maps_to_a_real_crate_or_reports_honestly`、`translated_argv_parses_with_each_crates_own_parser` |
+| 改掉锁失败态的测试（改成功态） | `tests/command_dispatch.rs`：删「无 Rust 承载 → 退出 1 且不占端口」；改为 `plugin_submode_really_starts_the_service`（真起服务 + 真探活 + 进程常驻）与 `plugin_tuanjie_refuses_test_seams_on_production_port`；失败诊断那条换确定性路径（`--port 99999`） | 上面三条 |
+| 更新过期文档 | `rs-gui/README.md`（本文件：形态图、门禁表 F、§5 两条缺口）+ `rs-tuanjie/README.md`（头部状态、覆盖表 `main.rs` 行、门禁节、P7d-1 节）+ `rs-tuanjie/Cargo.toml` 描述串 | — |
+
+**门禁实测**（命令与真实输出见 `.work/p7d1/`）：
+
+```powershell
+$env:CARGO_TARGET_DIR='E:\cargo-target\rs-gui';     cargo test --manifest-path rs-gui\Cargo.toml
+#   lib 114 passed / bridge_contract 5 / command_dispatch 5 / shell_contract 9 / ui_html 2 → 0 failed
+$env:CARGO_TARGET_DIR='E:\cargo-target\rs-tuanjie'; cargo test --manifest-path rs-tuanjie\Cargo.toml
+#   178(+1 ignored) + 12 + 5 + 7 + 22 + 2 + 1 + 15(+1 ignored) + 3 + 1 → 0 failed
+go test ./internal/tuanjie -count=1   # 只读不改 Go；本轮未跑（见下方边界）
+```
+
+**反向验证（证明新门禁不是空转）**：把 `plugin_crate("tuanjie")` 临时改回 `None` →
+`plugin_submode_really_starts_the_service`（30s 超时后带子进程 stderr 报错）、
+`plugin_tuanjie_refuses_test_seams_on_production_port`、
+`plugin_submode_failure_writes_the_diagnostic_log` **三条同时变红**；改回即全绿（已实测）。
+
+**边界（如实登记）**：
+- **没有切流**：8788 上仍是 Go `internal/tuanjie`；换装/停服须用户确认。本轮任何实例都用
+  测试端口（18788）+ 临时数据目录 + 临时 HOME + 假上游（`RS_TUANJIE_TEST_BASES`），
+  **绝不读真实登录态、不碰任何现行端口**。
+- `--plugin-tuanjie` 的 argv 由分发器原样透传（含 `--data-dir`），**参数口径不在分发器里重造**。
+
+
 ## 6. P7c 验收（实测；日志见 `.work/p7c/`）
 
 | 项 | 结果 |
@@ -369,7 +406,7 @@ G 管「与 Go 同形」（差分 / 源码锚 / 真值表），H 管「真起进
 | `cargo test`（lib，含 13 条插件托管 + **5 条外壳行为测试**） | **113 项全绿**（0 warning） |
 | `bridge_contract` | **5 项全绿**（P7b 的差分 90 步**一步不变**；仅 `fake_backend_sha256` 因仪器改动重算） |
 | `shell_contract` | **9 项全绿**（传真差分 + 源码锚 + 单实例 + Migrate/Upgrade 真值表 + 清单 33/5 + 版本常量） |
-| `command_dispatch` | **4 项全绿**（真起 exe；新增 `-headless` 失败自写日志） |
+| `command_dispatch` | 当时 **4 项全绿**（真起 exe；新增 `-headless` 失败自写日志）。**P7d-1 后 5 项**（删 1 条「团结无 Rust 承载」、加 2 条：真起服务 + 8788 守卫） |
 | `ui_html` | **2 项全绿**（字节一致 + 哈希 + 界面调用面 ⊆ 26+4+3） |
 | `rs-proxy` / `rs-vibex`（薄包装回归） | 各自全绿（86+3+11 / 37+3+3） |
 | `go test ./app/... -count=1` / `go vet ./app/...` | Go 侧零改动，`ok` / 干净（临时采集器已删除） |

@@ -4,6 +4,13 @@
 `reqshape.go`（**Go 侧只读不改**）。本小轮**不含**服务与转发编排（`server.go` /
 `handlers_extra.go` 等 = P8b）与种子卫兵/注水/基线/CDP（= P8c）。
 
+> **P7d-1 状态（2026-10-17）**：启动逻辑已从 `main.rs` 搬进 `lib.rs` 的
+> `Args` + `run(args)`（与 `rs-vibex` / `rs-proxy` 同一形态），**接进了 `rs-gui` 的
+> 单 exe 分发器**——`rs-gui.exe --plugin-tuanjie --port N` 真起服务（门禁
+> `rs-gui/tests/command_dispatch.rs::plugin_submode_really_starts_the_service`）。
+> 本 crate 仍是**测试端口实例**：Go `internal/tuanjie` 仍在 8788 上跑，**没有**被接管
+> （切流/换装是停服动作，须用户确认）。细则见文末「P7d-1：接进 rs-gui 分发器」。
+
 ## uTLS 路线取证结论（2026-10-16 实测；P8a 开工前必须先定的那一条）
 
 Go 侧 `utls_transport.go` 用 `utls.HelloChrome_Auto` 伪装 TLS 指纹，且**每条连接都会置换
@@ -547,7 +554,8 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
 | `src/server.rs` | `server.go:248-278` / `handlers_extra.go:19-86` | `/health` 的 `judgment_*`/`seed_*` 八字段接**真状态**（不再是恒「无告警」）、`/accounts` 的 `passive` 接真被动事件、`/water-probe` 挂路由、`AppState` 增 `water`/`water_scratch`/`probe_cost`/`judge_alert`/`seed_guard`/`water_history` |
 | `src/chat.rs` | `server.go:280-322` / `:960,:993,:1193,:1198,:1239-1248,:1357,:1361,:1365,:1379-1381,:1808-1818,:2212-2266` | `noteUpstreamError`/`noteUpstreamOK` 判定告警计数（401「请升级」/`x-codely-signature` 立即置位、连续 3 次 401 置位、200 清零）、`logRequestShape` 两次（重排前/后）、单账号 200 的 `defer ok` 事件、别名解析观测接进 `UsageScanner` 与 `record_usage`、被动事件接进池路径非流式 |
 | `src/transport.rs` | `client.go:92-137` | 代理自探测（环境变量交给 reqwest 内建，**仅无环境变量时**追加注册表那条判定；日志只报来源名，绝不打印代理 URL） |
-| `src/main.rs` | `app/main.go:210-215` | `--portable` 参数 + `run_data_dir_init` 启动收口 + 种子卫兵后台循环（每小时一轮；`RS_TUANJIE_TEST_BASES` 生效时不起，避免对照环境出网） |
+| `src/main.rs` | `app/main.go:210-215` | 薄入口：`Args::parse()` → [`rs_tuanjie::run`] → 按退出码报错（**P7d-1 起启动主体搬进 `lib.rs`**，与 `rs-vibex`/`rs-proxy` 同形） |
+| `src/lib.rs`（P7d-1 追加段） | `app/main.go:210-215` | `pub struct Args` + `pub async fn run(args)`：`--portable` 参数 + `run_data_dir_init` 启动收口 + 种子卫兵后台循环（每小时一轮；`RS_TUANJIE_TEST_BASES` 生效时不起，避免对照环境出网）+ 两条测试缝守卫（`RunError::Refused` ↔ 退出码 2） |
 | `Cargo.toml` | — | 显式声明 `flate2`（**已在依赖树内**，非新依赖：reqwest 的 gzip 特性经 miniz_oxide 引入同一族） |
 
 ### 差分对照（真 Go 采收，108 项逐条一致）
@@ -608,6 +616,36 @@ Rust 侧由 `p8c_diff.rs` 解出同一结果。内容全是合成串（`SYNTHETI
     `open_log`/`run_data_dir_init` 用它）；`StampedWriter`（无路径版）不退化为
     「不轮转」的静默差异——它只服务显式给路径的调用方。
 
+## P7d-1：接进 rs-gui 分发器（2026-10-17）
+
+**做了什么**：把「起服务」这件事从 bin 搬进库，`rs-gui` 的单 exe 分发器直接调它：
+
+| 面 | 位置 | 说明 |
+|---|---|---|
+| `pub struct Args` | `src/lib.rs` | 原 `main.rs` 的 `Args` **逐字段搬入**（`plugin_tuanjie`/`port`/`host`/`data_dir`/`portable`），只加 `pub` |
+| `pub async fn run(args)` | `src/lib.rs` | 原 `main` 主体逐行搬入，启动顺序未改：守卫 → 钉数据目录 → 测试缝 → `run_data_dir_init` → `AppState::new` → 种子卫兵循环 → 监听 |
+| `RunError` | `src/lib.rs` | 结构化回报（原先是 `std::process::exit`，库里不能退进程）：`Refused` → 退出码 **2**，`Startup` → **1**。`TEST_SEAMS` / `TEST_BASES_ENV` / `TEST_INFLIGHT_ENV` 由私有 const 提为 `pub` |
+| `src/main.rs` | 薄入口 | `Args::parse()` → `run()` → `eprintln!("{e}"); exit(e.exit_code())`。**stdout/stderr 文案与退出码逐字未变** |
+| 顺手修的 | `src/main.rs` | 原 `:59` 一处缩进损坏（`}` 与下一条语句挤在同一行） |
+
+**行为零变化的证据**（真跑二进制，非推断）：
+
+```powershell
+# ①「测试缝 + 8788」拒绝路径：文案与退出码逐字不变
+$env:RS_TUANJIE_TEST_BASES='http://127.0.0.1:1 http://127.0.0.1:1'
+E:\cargo-target\rs-tuanjie\debug\rs-tuanjie.exe --plugin-tuanjie --port 8788
+#   拒绝：RS_TUANJIE_TEST_BASES 不允许与生产端口 8788 同时使用
+#   exit=2
+# ② 测试端口下的启动日志三行不变（经 rs-gui 分发器起时实测）
+#   [tuanjie] 测试缝生效：codey_base=… litellm_base=…（仅对照用）
+#   [tuanjie] 出站代理来源：环境变量（本地/内网地址恒直连）
+#   [tuanjie] rs-tuanjie 监听 127.0.0.1:18788（数据目录 …，上游 https://codely-litellm.tuanjie.cn）
+```
+
+`src/main.rs` 里原来那两条守卫的**唯一态度变化**：错误不再就地 `exit(2)`，而是作为
+`RunError::Refused` 交给调用方——单独跑时 `exit_code()` 还原成 2，`rs-gui --plugin-tuanjie`
+同样还原成 2；`Startup`（绑定失败等）→ 1。**没有静默降级**：拒绝就是拒绝，不退化成 1。
+
 ## 门禁与复跑
 
 ```powershell
@@ -617,7 +655,7 @@ Rust 侧由 `p8c_diff.rs` 解出同一结果。内容全是合成串（`SYNTHETI
 #           P8b 第四/五片 + P8c：见下 cargo test 的实数）
 cd rs-tuanjie
 $env:CARGO_TARGET_DIR="E:\cargo-target\rs-tuanjie"   # F: 盘空间紧张，构建产物放 E:
-cargo test              # P8c 后：170 单测 + 12 + 5 + 7 + 22 + 2 + 1 + 15(+1 ignored) + 3 + 1(p8c) 全绿
+cargo test              # P7d-1 实测：178 单测(+1 ignored) + 12 + 5 + 7 + 22 + 2 + 1 + 15(+1 ignored) + 3 + 1(p8c) 全绿
 cargo build --all-targets                            # 0 warning
 cargo test --test golden_p8a -- --nocapture          # 看逐条对照证据与两侧线上实抓
 cargo test --test golden_p8b -- --nocapture          # P8b 第一片逐条对照
@@ -669,3 +707,16 @@ go test ./internal/tuanjie -count=1     # ok，真实数据目录 mtime 不变�
 不读内容、不落日志/断言/文件）**。不碰 8788 与任何现行服务端口。
 
 基准再生成链见 `tests/golden/README.md`。
+
+### 本 crate 承接的门禁（P7d-1）
+
+| 门禁 | 位置 | 锁什么 |
+|---|---|---|
+| `refuses_test_seams_on_production_port_8788` | `tests/p8b3_http_contract.rs` | 真起 `rs-tuanjie.exe`：测试缝 + 8788 → **退出码 2**，不监听 |
+| `plugin_submode_really_starts_the_service` | **`rs-gui/tests/command_dispatch.rs`** | 真起 `rs-gui.exe --plugin-tuanjie --port 18788`（`--data-dir` 指向临时目录）：`/health` 真应答 200 + `"status":"ok"`（假上游给合成 key）+ `"service":"tuanjie-go"` + 进程常驻不退出；收尾 kill 并等端口空出 |
+| `plugin_tuanjie_refuses_test_seams_on_production_port` | 同上 | 分发器这一层的同一条守卫（退出码 2、文案点名 8788），且**不落** `<id>-plugin-error.log` |
+
+反向验证（非空转）：把 `dispatch::plugin_crate("tuanjie")` 临时改回 `None` → 上面后两条
+与 `plugin_submode_failure_writes_the_diagnostic_log` **三条同时变红**（服务门禁在 30s 后
+带子进程 stderr 报错），改回即全绿。
+

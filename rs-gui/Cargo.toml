@@ -14,10 +14,13 @@ path = "src/main.rs"
 
 [dependencies]
 # 六个 Rust crate 作为**库依赖**接入（用户裁决形态：单 exe 多 --plugin-* 子模式）。
+# P7d-1 起七路齐了：bai / codebuddy / comate / qoder / tuanjie / vibex / proxy。
 rs-bai = { path = "../rs-bai" }
 rs-codebuddy = { path = "../rs-codebuddy" }
 rs-comate = { path = "../rs-comate" }
 rs-qoder = { path = "../rs-qoder" }
+# P7d-1：团结接进分发器（`--plugin-tuanjie --port N` 真起服务）。
+rs-tuanjie = { path = "../rs-tuanjie" }
 rs-vibex = { path = "../rs-vibex" }
 rs-proxy = { path = "../rs-proxy" }
 
