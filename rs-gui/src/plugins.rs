@@ -500,7 +500,7 @@ impl PluginHost {
 
         // 端口已有健康实例（可能是 CLI/上一会话/别的工具拉起的）→ 直接接管复用，
         // 不杀不重启——正在用它跑任务的客户端（子智能体等）不受影响。
-        if httpc::ok(&plugin_health_url(&d)) {
+        if httpc::ok_fresh(&plugin_health_url(&d)) {
             let mut g = st.lock().unwrap();
             g.running = true; // GUI 语义：端口上有可用服务 = 运行中（外部实例，pid 为 None）
             g.pid = None;

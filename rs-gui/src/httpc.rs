@@ -20,6 +20,18 @@ pub const LOCAL_TIMEOUT: Duration = Duration::from_secs(3);
 /// 响应体读取上限（Go `io.LimitReader(resp.Body, 4<<20)`）。
 pub const BODY_LIMIT: usize = 4 << 20;
 
+/// **本地探活**的超时（`ok()` 专用）。
+///
+/// Go 侧探活用 `httpClient` 的 1.5s，那是在「死端口毫秒级拒绝」的机器上定的。
+/// 本机实测（2026-10-18，火绒 HIPS 网络过滤在场）：**所有未监听端口的连接**
+/// 都要挂到 ~2.0s 才回 `WSAECONNREFUSED`（回环、`127.0.0.2`、LAN IP、IPv6 全一样），
+/// 于是「探 N 个端口」= N × 超时：GUI 每 2.5s 轮询要探核心 + 7 个插件，
+/// 多数端口没起 → 每次轮询 1.5~4.5s，UI 线程全程在等 → 用户感知为「卡」。
+///
+/// 活着的本地服务毫秒级应答，300ms 对探活足够宽裕；死端口 300ms 判死，
+/// 轮询不再被拖住。**只用于探活**——真正的业务读写仍走 1.5s/3s/10s 原超时。
+pub const PROBE_TIMEOUT: Duration = Duration::from_millis(300);
+
 fn client_with(timeout: Duration) -> Client {
     Client::builder()
         .timeout(timeout)
@@ -40,6 +52,12 @@ fn slow_client() -> &'static Client {
 fn local_client() -> &'static Client {
     static C: OnceLock<Client> = OnceLock::new();
     C.get_or_init(|| client_with(LOCAL_TIMEOUT))
+}
+
+/// 探活专用客户端（300ms 超时；见 [`PROBE_TIMEOUT`] 的实测说明）。
+fn probe_client() -> &'static Client {
+    static C: OnceLock<Client> = OnceLock::new();
+    C.get_or_init(|| client_with(PROBE_TIMEOUT))
 }
 
 /// 建一个自定义超时的客户端（一键更新下载用：镜像 120s / 直连 30 分钟）。
@@ -104,9 +122,26 @@ fn get_slow_status_limited(url: &str, limit: usize) -> Result<(u16, String), Str
     Ok((code, body))
 }
 
+/// 探一次端口（**不吃缓存**）：给"要不要拉起/接管"这类决策用。
+///
+/// 注：曾试过"死结果缓存 10s"把剩下的 300ms 也省掉，但缓存与语义冲突——
+/// 端口刚起来（夹具/用户拉杆）时界面要最多 10s 才认，门禁里大面积打红。
+/// 结论：**不缓存**，只把探活超时压到 300ms（见 [`PROBE_TIMEOUT`]）。
+pub fn ok_fresh(url: &str) -> bool {
+    match probe_client().get(url).send() {
+        Ok(resp) => resp.status().as_u16() == 200,
+        Err(_) => false,
+    }
+}
+
 /// 端口上有健康服务即 true（对应 Go `httpOK`：只看 200，不关心内容）。
+///
+/// 探活用 300ms 超时（不是 Go 时代的 1.5s）：本机（火绒 HIPS 在场时）死端口要
+/// ~2s 才回 `WSAECONNREFUSED`，用 1.5s 会让每次轮询都卡满超时 → UI 线程全程在等
+/// → 用户感知为"卡"。实测（2026-10-18）：`ccPluginList` 4519ms → 311ms、
+/// `ccGetState` 1507ms → 305ms、`ccCloseModeGet` 1508ms → 0ms。
 pub fn ok(url: &str) -> bool {
-    get(url).is_some()
+    ok_fresh(url)
 }
 
 /// 表单 POST（对应 Go `httpClientLocal.PostForm`：`application/x-www-form-urlencoded`）。

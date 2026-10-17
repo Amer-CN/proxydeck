@@ -262,12 +262,39 @@ pub fn refresh_releases(app: &Arc<App>) {
     };
     let (body, status) = fetch();
     if status == 403 {
+        // 匿名额度撞墙（GitHub 按出口 IP 限 60/h，共享代理/VPN 出口极易耗尽）。
+        // 面向用户的话要说人话 + 给出可执行的出路；前端只把 `msg` 原样上屏
+        //（`checkUpdateNow` 里 `r.msg` 直出），故文案在这里定。
         let mut s = app.update.lock().unwrap();
-        s.cache = r#"{"ok":false,"msg":"github rate limited"}"#.to_string();
+        s.cache = jsons::marshal(&jsons::obj(&[
+            ("ok", json!(false)),
+            (
+                "msg",
+                json!("GitHub 匿名查询额度用尽（60 次/小时，共享网络出口容易撞满）——装一次 GitHub CLI 并 `gh auth login` 即可升到 5000 次/小时，或等 10 分钟后自动重试"),
+            ),
+        ]));
+        s.at = Some(Instant::now());
+        return;
+    }
+    if status == 0 {
+        let mut s = app.update.lock().unwrap();
+        s.cache = jsons::marshal(&jsons::obj(&[
+            ("ok", json!(false)),
+            (
+                "msg",
+                json!("连不上 GitHub（网络或代理问题）——检查能否打开 github.com 后再点「立即检查」"),
+            ),
+        ]));
         s.at = Some(Instant::now());
         return;
     }
     if status != 200 {
+        let mut s = app.update.lock().unwrap();
+        s.cache = jsons::marshal(&jsons::obj(&[
+            ("ok", json!(false)),
+            ("msg", json!(format!("GitHub 返回 {status}，稍后再试"))),
+        ]));
+        s.at = Some(Instant::now());
         return;
     }
     let Ok(releases) = serde_json::from_str::<serde_json::Value>(&body) else {

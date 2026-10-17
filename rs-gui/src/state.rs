@@ -172,7 +172,7 @@ impl App {
         }
 
         // 端口已有健康代理（可能是上次遗留的 headless 子进程）→ 直接接管观察。
-        if httpc::ok(&self.health_url()) {
+        if httpc::ok_fresh(&self.health_url()) {
             inner.running = true;
             inner.external = false;
             inner.started = Some(Instant::now());
@@ -231,7 +231,7 @@ impl App {
         // 等待代理就绪（最多 ~5s）
         let deadline = Instant::now() + Duration::from_secs(5);
         while Instant::now() < deadline {
-            if httpc::ok(&self.health_url()) {
+            if httpc::ok_fresh(&self.health_url()) {
                 inner.running = true;
                 inner.external = false;
                 inner.started = Some(Instant::now());
