@@ -16,9 +16,15 @@
 //!
 //! 值一律按 Go `json.Marshal` 口径输出（见 [`crate::gojson`]）——客户端字段是
 //! **原样字节搬运**（compact+HTML 转义），构造出来的字段走 Go 的字符串/浮点/键序规则。
+//!
+//! 另有 P8d-3 补上的 [`desensitize_agent_identity`]（Go `server.go:1970` 的
+//! `desensitizeAgentIdentity`）：反竞品身份脱敏。**调用方必须在 [`reshape_chat_body`]
+//! 之前调**（与 Go `server.go:988` / `:992` 同序——reshape 会重建有序 JSON）。
 
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
+use regex::Regex;
 use serde_json::value::RawValue;
 use serde_json::Value;
 
@@ -357,6 +363,193 @@ fn is_json_null_literal(body: &[u8]) -> bool {
     matches!(s.trim_matches(|c: char| c.is_ascii_whitespace()), "null")
 }
 
+// ---------------------------------------------------------------- 反竞品身份脱敏（P8d-3）
+
+/// 触发正则的 Go 源文本——`server.go:1959` 的 `agentIdentityTriggerRe`，**逐字照抄**。
+///
+/// 编译前由 [`go_regex`] 做两处机械替换（`\b`/`\s` 在 Go 是 ASCII 类，在 Rust `regex`
+/// 默认是 Unicode 类）——那两处有 Go 真函数采收的向量锁住，见 [`go_regex`]。
+const AGENT_IDENTITY_TRIGGER_GO: &str = r"(?i)\byou\s+are\s+(a\s+|an\s+|the\s+)?(z\s*code|claude\s*code|codex|cursor|windsurf|trae|cline|aider|opencode|codebuddy|codegeex)";
+
+/// 改写正则的 Go 源文本——`server.go:1953` 的 `youAreRe`，**逐字照抄**。
+const YOU_ARE_GO: &str = r"(?i)\b(you)\s+(are)\b";
+
+/// 零宽空格（U+200B），对模型不可见——`server.go:1962` 的 `zwsp`。
+const ZWSP: char = '\u{200B}';
+
+/// 把 Go 正则里的两个字符类在 Rust `regex` 里还原成 Go 的 **ASCII** 语义
+/// （**机械替换，不改语义**）：
+///
+/// * `\b`：Go `regexp` 的词边界只看 ASCII 词字符（`[0-9A-Za-z_]`），Rust 默认按 Unicode
+///   词字符判。差别实打实：`"你好You are Claude Code"` 在 Go 里 `\b` 成立（`好` 不是 ASCII
+///   词字符）→ 命中；Rust 的 Unicode `\b` 里 `好` 和 `Y` 都是词字符 → **漏命中**。
+///   故换成 `(?-u:\b)`（ASCII 词边界）。
+/// * `\s`：Go 的 `\s` 是 `[\t\n\f\r ]`（**不含 `\v`**）；Rust 默认的 Unicode `\s` 还认
+///   NBSP 等、ASCII `\s` 还认 `\x0B` → 都会**多命中**。故展开成 Go 的字符集。
+///
+/// 三处证据（Go 真函数采收，`tests/golden/golden-p8d3-go.json`）：
+/// `boundary-chinese-adjacent` 命中 / `nbsp-between` 不命中 / `vtab-between` 不命中。
+fn go_regex(src: &str) -> String {
+    src.replace(r"\s", r"[\t\n\f\r ]")
+        .replace(r"\b", r"(?-u:\b)")
+}
+
+/// 触发正则（Go 侧是包级 `regexp.MustCompile`，这里用 `OnceLock` 同义）。
+fn agent_identity_trigger_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(&go_regex(AGENT_IDENTITY_TRIGGER_GO)).expect("触发正则可编译"))
+}
+
+/// 改写正则。
+fn you_are_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(&go_regex(YOU_ARE_GO)).expect("改写正则可编译"))
+}
+
+/// `you are` → `you<ZWSP>are`（`ReplaceAll` 全量替换）——`server.go:2001/2023`。
+fn rewrite_you_are(s: &str) -> String {
+    you_are_re()
+        .replace_all(s, format!("${{1}}{ZWSP}${{2}}").as_str())
+        .into_owned()
+}
+
+/// `gojson::write_go_string` 的字节版（`json.Marshal(string)`）。
+fn go_marshal_string(s: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len() + 2);
+    gojson::write_go_string(&mut out, s);
+    out
+}
+
+/// Go `json.Marshal(map[string]json.RawMessage)` 口径的对象：
+/// 键按**字节序**（`BTreeMap` 迭代序，与 Go 的 map 键排序同结果）、值 compact + HTML 转义。
+fn go_marshal_raw_map(m: &BTreeMap<String, Box<RawValue>>) -> Vec<u8> {
+    let mut out = Vec::with_capacity(64);
+    out.push(b'{');
+    for (i, (k, v)) in m.iter().enumerate() {
+        if i > 0 {
+            out.push(b',');
+        }
+        gojson::write_go_string(&mut out, k);
+        out.push(b':');
+        out.extend_from_slice(&gojson::compact_go(v.get().as_bytes(), true));
+    }
+    out.push(b'}');
+    out
+}
+
+/// Go `json.Marshal([]json.RawMessage)` 口径的数组：元素 compact + HTML 转义、保序。
+///
+/// ⚠ 这里的 `escape_html=true` 与 Go 逐字同形，但**在本模块的两处调用点都不可单独观测**：
+/// 数组总是随后被 `go_marshal_raw_map` 再 compact+转义一遍（外层对象），外层那遍会把
+/// 这里的差别抹平。留着是为了与 Go 的 `json.Marshal` 语义一致，不是死代码。
+fn go_marshal_raw_array(items: &[Box<RawValue>]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(64);
+    out.push(b'[');
+    for (i, v) in items.iter().enumerate() {
+        if i > 0 {
+            out.push(b',');
+        }
+        out.extend_from_slice(&gojson::compact_go(v.get().as_bytes(), true));
+    }
+    out.push(b']');
+    out
+}
+
+/// 回填一个自己刚编出来的值（`json.Marshal` 的产物必定是合法 JSON）。
+fn raw_from_bytes(bytes: Vec<u8>) -> Box<RawValue> {
+    let s = String::from_utf8(bytes).expect("自编 JSON 恒为合法 UTF-8");
+    RawValue::from_string(s).expect("自编 JSON 恒可回填 RawValue")
+}
+
+/// 一条 system 消息改写后的 `content` 值（Go `json.Marshal` 口径）；
+/// `None` = 这条消息不改（对应 Go 里各个 `continue` 分支）。
+///
+/// 形态一：`content` 是字符串；形态二：`content` 是分段数组（**只动 `text` 字段**，
+/// 其余段与段内其他键原样）。两形态都要求命中触发正则才改。
+fn desensitized_content(content: &[u8]) -> Option<Vec<u8>> {
+    // 形态一：content 为字符串（Go `json.Unmarshal(contentRaw, &s)` 成功即此形态）
+    if let Ok(s) = serde_json::from_slice::<String>(content) {
+        if !agent_identity_trigger_re().is_match(&s) {
+            return None;
+        }
+        return Some(go_marshal_string(&rewrite_you_are(&s)));
+    }
+    // 形态二：content 为分段数组（只动 text 字段）
+    let mut parts: Vec<Box<RawValue>> = serde_json::from_slice(content).ok()?;
+    let mut part_changed = false;
+    for pr in parts.iter_mut() {
+        let Ok(mut part) = serde_json::from_str::<BTreeMap<String, Box<RawValue>>>(pr.get()) else {
+            continue; // 非对象段（如纯字符串）跳过
+        };
+        let Some(text) = part.get("text") else {
+            continue;
+        };
+        let Ok(t) = serde_json::from_str::<String>(text.get()) else {
+            continue; // text 非字符串：Go 侧 Unmarshal 报错 → 跳过
+        };
+        if !agent_identity_trigger_re().is_match(&t) {
+            continue;
+        }
+        part.insert("text".into(), raw_from_bytes(go_marshal_string(&rewrite_you_are(&t))));
+        *pr = raw_from_bytes(go_marshal_raw_map(&part));
+        part_changed = true;
+    }
+    part_changed.then(|| go_marshal_raw_array(&parts))
+}
+
+/// 反竞品过滤规避——`server.go:1970` 的 `desensitizeAgentIdentity` 逐条对应物。
+///
+/// 上游网关只检测 **system 消息**里的 `You are <竞品名>` 身份声明（ZCode / Claude Code /
+/// Codex 实测被拦，400「欢迎使用Codely」；user 消息与 tools 描述实测不查），在 `You` 与
+/// `are` 之间插入零宽空格即可放行（模型读不到该字符，语义无损）。
+///
+/// 返回 `None` = 无需处理（调用方原样透传，对应 Go 返回 `nil`）；
+/// `Some(bytes)` = 改写后的完整请求体。
+///
+/// **调用位置**：必须在 [`reshape_chat_body`] **之前**（`server.go:988` 与 `:992` 的
+/// 同一顺序）——reshape 会重建有序 JSON。
+///
+/// 与 Go 的逐条对应：
+/// * 只处理 `role == "system"`（缺 `role` / 非字符串 / 其它角色一律跳过）；
+/// * 未命中的消息**原样字节**搬回（Go 的 `json.RawMessage` 语义：数字形态 `1.50`、
+///   大整数、转义形态都不被重写）；只有被改的消息才重新序列化（键按字节序）；
+/// * 顶层键同样按字节序重排、值 compact + HTML 转义（Go `json.Marshal(map…)`）；
+/// * 未命中任何一条 → `None`（零开销原样透传）。
+pub fn desensitize_agent_identity(body: &[u8]) -> Option<Vec<u8>> {
+    // Go `json.Unmarshal(body, &map[string]json.RawMessage)`：非对象（含 `null`）→ nil
+    let mut top: BTreeMap<String, Box<RawValue>> = serde_json::from_slice(body).ok()?;
+    let msgs_raw = top.get("messages")?;
+    // Go `json.Unmarshal(msgsRaw, &[]json.RawMessage)`：非数组 → nil
+    let mut msgs: Vec<Box<RawValue>> = serde_json::from_str(msgs_raw.get()).ok()?;
+    let mut changed = false;
+    for mr in msgs.iter_mut() {
+        let Ok(mut msg) = serde_json::from_str::<BTreeMap<String, Box<RawValue>>>(mr.get()) else {
+            continue; // 非对象消息（null / 数字 / 字符串）跳过
+        };
+        let is_system = msg
+            .get("role")
+            .and_then(|r| serde_json::from_str::<String>(r.get()).ok())
+            .is_some_and(|r| r == "system");
+        if !is_system {
+            continue;
+        }
+        let Some(content) = msg.get("content") else {
+            continue;
+        };
+        let Some(nb) = desensitized_content(content.get().as_bytes()) else {
+            continue;
+        };
+        msg.insert("content".into(), raw_from_bytes(nb));
+        *mr = raw_from_bytes(go_marshal_raw_map(&msg));
+        changed = true;
+    }
+    if !changed {
+        return None;
+    }
+    top.insert("messages".into(), raw_from_bytes(go_marshal_raw_array(&msgs)));
+    Some(go_marshal_raw_map(&top))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -524,5 +717,98 @@ mod tests {
         ] {
             assert_eq!(reasoning_effort_wire(input), want, "输入 {input}");
         }
+    }
+
+    // ---------------- 反竞品身份脱敏（P8d-3）----------------
+
+    /// 机械替换的目标形态（Go `\b`/`\s` 的 ASCII 语义）——单独锁住 [`go_regex`]，
+    /// 免得哪天有人"顺手简化"成 Unicode 类而门禁还没覆盖到。
+    #[test]
+    fn go_regex_translation_is_ascii_like_go() {
+        assert_eq!(go_regex(r"\byou\s+are"), r"(?-u:\b)you[\t\n\f\r ]+are");
+        // 空替换：Go 正则里没有 `\b`/`\s` 时不改动
+        assert_eq!(go_regex(r"(?i)codex"), r"(?i)codex");
+    }
+
+    #[test]
+    fn rewrite_inserts_zwsp_between_you_and_are() {
+        assert_eq!(
+            rewrite_you_are("You are codex"),
+            format!("You{ZWSP}are codex")
+        );
+        // ReplaceAll 语义：全量替换，不是只换第一处
+        assert_eq!(
+            rewrite_you_are("You are a, You  are b"),
+            format!("You{ZWSP}are a, You{ZWSP}are b")
+        );
+    }
+
+    /// 顺序证据：**先脱敏、再重排**（Go `server.go:988` → `:992`）之后，
+    /// 零宽空格仍在、顶层仍是**官方字段序**。
+    ///
+    /// 反过来的顺序（先重排再脱敏）会让脱敏那一步的「键按字节序」把官方字段序冲掉
+    /// —— 这正是 Go 注释里「必须在 reshape 前」的理由（红线 8）。
+    #[test]
+    fn desensitize_then_reshape_keeps_zwsp_and_official_order() {
+        let im = br#"{"stream":true,"model":"codely-flash","messages":[{"role":"system","content":"You are Claude Code"}]}"#;
+        let after = desensitize_agent_identity(im).expect("命中竞品身份声明");
+        let out = reshape_chat_body_with_cwd(&after, Some(&sess()), CWD);
+        assert_eq!(
+            top_order(&out).join(","),
+            "model,messages,metadata,litellm_session_id,prompt_cache_key,stream,stream_options"
+        );
+        let v: Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(
+            v["messages"][0]["content"].as_str().unwrap(),
+            format!("You{ZWSP}are Claude Code")
+        );
+    }
+
+    /// P8d-3 门禁：Go 真函数 `desensitizeAgentIdentity` 采收的期望向量，逐字节比对。
+    ///
+    /// 基准 = `rs-tuanjie/tests/golden/golden-p8d3-go.json`（15,019 B，**55 条用例 /
+    /// 26 条命中改写 / 29 条返回 nil**，由 `internal/tuanjie/zz_p8d3_collect_test.go`
+    /// 一次性采集，采集器源码留档在 `.work/p8d3/`）。`out == null` 表示 Go 返回 `nil`。
+    #[test]
+    fn golden_go_desensitize_vectors() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/golden/golden-p8d3-go.json");
+        let raw = std::fs::read(&path)
+            .unwrap_or_else(|e| panic!("读不到黄金基准 {}: {e}", path.display()));
+        let doc: Value = serde_json::from_slice(&raw).expect("黄金基准是合法 JSON");
+        let cases = doc["cases"].as_array().expect("cases 是数组");
+        assert!(
+            cases.len() >= 50,
+            "用例条数异常（{} 条）：基准被裁剪过？",
+            cases.len()
+        );
+        let mut hits = 0usize;
+        for c in cases {
+            let name = c["name"].as_str().expect("name 是字符串");
+            let input = c["in"].as_str().expect("in 是字符串");
+            let want = match c.get("out") {
+                Some(Value::String(s)) => Some(s.as_str()),
+                _ => None,
+            };
+            let got = desensitize_agent_identity(input.as_bytes());
+            match (want, &got) {
+                (None, None) => {}
+                (Some(w), Some(g)) => assert_eq!(
+                    String::from_utf8_lossy(g),
+                    w,
+                    "[{name}] 改写后的字节与 Go 不一致"
+                ),
+                (w, _) => panic!(
+                    "[{name}] 命中与否不一致：Go 命中={} / Rust 命中={}",
+                    w.is_some(),
+                    got.is_some()
+                ),
+            }
+            if got.is_some() {
+                hits += 1;
+            }
+        }
+        // 防空转：基准里既有命中项也有不命中项，任一侧全空都说明比对没跑起来
+        assert!(hits > 0 && hits < cases.len(), "命中项 {hits} / {}", cases.len());
     }
 }

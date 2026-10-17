@@ -1,0 +1,320 @@
+{
+  "cases": [
+    {
+      "name": "hit-system-string",
+      "note": "Claude Code：You/are 间插 ZWSP",
+      "in": "{\"model\":\"codely-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"You are Claude Code, an AI assistant.\"},{\"role\":\"user\",\"content\":\"hi\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are Claude Code, an AI assistant.\",\"role\":\"system\"},{\"role\":\"user\",\"content\":\"hi\"}],\"model\":\"codely-flash\"}"
+    },
+    {
+      "name": "case-insensitive",
+      "note": "大写不敏感",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"YOU ARE CODEX\"}]}",
+      "out": "{\"messages\":[{\"content\":\"YOU​ARE CODEX\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "whitespace-tolerance",
+      "note": "换行/制表/多空格 + z\\s*code 容忍",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You\\n\\t are   Z  Code\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are   Z  Code\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "replace-all-occurrences",
+      "note": "命中后 ReplaceAll 全量改写（含非竞品那句）",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are helpful. You are Claude Code. You  are codex.\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are helpful. You​are Claude Code. You​are codex.\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "article-the",
+      "note": "the 冠词",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are the Cursor agent\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are the Cursor agent\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "article-an",
+      "note": "an 冠词 + opencode",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are an OpenCode agent\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are an OpenCode agent\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "article-a",
+      "note": "a 冠词 + cline",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are a Cline assistant\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are a Cline assistant\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "rest-of-names",
+      "note": "其余名单：aider/windsurf/trae/codebuddy/codegeex",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are Aider\"},{\"role\":\"system\",\"content\":\"you are windsurf\"},{\"role\":\"system\",\"content\":\"You are TRAE\"},{\"role\":\"system\",\"content\":\"You are CodeBuddy\"},{\"role\":\"system\",\"content\":\"You are codegeex\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are Aider\",\"role\":\"system\"},{\"content\":\"you​are windsurf\",\"role\":\"system\"},{\"content\":\"You​are TRAE\",\"role\":\"system\"},{\"content\":\"You​are CodeBuddy\",\"role\":\"system\"},{\"content\":\"You​are codegeex\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "claude-space-code",
+      "note": "claude\\s*code 的分隔空白",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are Claude   Code\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are Claude   Code\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "html-escape-in-content",
+      "note": "\u003c \u003e \u0026 走 Go escapeHTML",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are Cursor \u003cb\u003e \u0026 'stuff'\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are Cursor \\u003cb\\u003e \\u0026 'stuff'\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "input-escape-forms",
+      "note": "输入是 \\u00e9 转义 → 输出走 UTF-8 原字",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are Codex \\u00e9 \\u003c\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are Codex é \\u003c\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "key-order-sorted",
+      "note": "消息内键序被打乱 → 输出按字节序",
+      "in": "{\"messages\":[{\"content\":\"You are Codex\",\"role\":\"system\",\"zeta\":1,\"alpha\":2}]}",
+      "out": "{\"messages\":[{\"alpha\":2,\"content\":\"You​are Codex\",\"role\":\"system\",\"zeta\":1}]}"
+    },
+    {
+      "name": "raw-number-preserved",
+      "note": "未改字段的原始数字形态原样搬运（1.50 / 大整数）",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are Codex\",\"weight\":1.50,\"n\":12345678901234567890},{\"role\":\"user\",\"content\":\"hi\",\"temp\":1e3}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are Codex\",\"n\":12345678901234567890,\"role\":\"system\",\"weight\":1.50},{\"role\":\"user\",\"content\":\"hi\",\"temp\":1e3}]}"
+    },
+    {
+      "name": "top-level-order-and-raw",
+      "note": "顶层键排序 + 顶层原始数字形态",
+      "in": "{\"stream\":true,\"messages\":[{\"role\":\"system\",\"content\":\"You are Codex\"}],\"model\":\"m\",\"temperature\":0.70}",
+      "out": "{\"messages\":[{\"content\":\"You​are Codex\",\"role\":\"system\"}],\"model\":\"m\",\"stream\":true,\"temperature\":0.70}"
+    },
+    {
+      "name": "message-inner-whitespace",
+      "note": "消息体内空白 → 输出 compact",
+      "in": "{\"messages\":[ {\n\t\"role\" : \"system\" ,\n\t\"content\" : \"You are Codex\" } ]}",
+      "out": "{\"messages\":[{\"content\":\"You​are Codex\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "raw-html-escape-in-extra-field",
+      "note": "被改消息里的其它原始字段也要转义",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are Codex\",\"note\":\"a\u003cb \u0026 c\u003ed\"}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are Codex\",\"note\":\"a\\u003cb \\u0026 c\\u003ed\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "raw-html-escape-in-unchanged-message",
+      "note": "未改消息原样搬运时同样转义",
+      "in": "{\"messages\":[{\"role\":\"user\",\"content\":\"a\u003cb \u0026 c\u003ed\"},{\"role\":\"system\",\"content\":\"You are Codex\"}]}",
+      "out": "{\"messages\":[{\"role\":\"user\",\"content\":\"a\\u003cb \\u0026 c\\u003ed\"},{\"content\":\"You​are Codex\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "raw-html-escape-in-top-level",
+      "note": "顶层其它字段同样转义",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are Codex\"}],\"extra\":\"a\u003cb \u0026 c\u003ed\"}",
+      "out": "{\"extra\":\"a\\u003cb \\u0026 c\\u003ed\",\"messages\":[{\"content\":\"You​are Codex\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "raw-line-separator-escape",
+      "note": "U+2028 恒转义（未改消息里）",
+      "in": "{\"messages\":[{\"role\":\"user\",\"content\":\"a\\u2028b\"},{\"role\":\"system\",\"content\":\"You are Codex\"}]}",
+      "out": "{\"messages\":[{\"role\":\"user\",\"content\":\"a\\u2028b\"},{\"content\":\"You​are Codex\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "miss-plain-system",
+      "note": "You are + 非竞品名",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are a helpful assistant.\"}]}",
+      "out": null
+    },
+    {
+      "name": "miss-not-competitor",
+      "note": "You are Codely（不在名单）",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are Codely, a coding assistant.\"}]}",
+      "out": null
+    },
+    {
+      "name": "user-only",
+      "note": "user 消息不动",
+      "in": "{\"messages\":[{\"role\":\"user\",\"content\":\"You are Claude Code\"}]}",
+      "out": null
+    },
+    {
+      "name": "tools-desc",
+      "note": "tools 描述不动",
+      "in": "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"f\",\"description\":\"You are Cursor\"}}]}",
+      "out": null
+    },
+    {
+      "name": "you-are-no-space",
+      "note": "Youare（无空白）不命中",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"Youare Claude Code\"}]}",
+      "out": null
+    },
+    {
+      "name": "apostrophe",
+      "note": "You're 不命中",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You're Claude Code\"}]}",
+      "out": null
+    },
+    {
+      "name": "zwsp-already",
+      "note": "已插过 ZWSP → you\\s+are 不再命中",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You\\u200bare Claude Code\"}]}",
+      "out": null
+    },
+    {
+      "name": "boundary-chinese-adjacent",
+      "note": "中文紧邻 You：Go 的 \\b 是 ASCII → 命中",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"你好You are Claude Code\"}]}",
+      "out": "{\"messages\":[{\"content\":\"你好You​are Claude Code\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "boundary-word-char-adjacent",
+      "note": "ASCII 词字符紧邻 You → 不命中",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"xYou are Claude Code\"}]}",
+      "out": null
+    },
+    {
+      "name": "boundary-underscore-adjacent",
+      "note": "下划线紧邻 You → 不命中",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"_You are Claude Code\"}]}",
+      "out": null
+    },
+    {
+      "name": "nbsp-between",
+      "note": "NBSP 不是 Go 的 \\s → 不命中",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You\\u00a0are Claude Code\"}]}",
+      "out": null
+    },
+    {
+      "name": "vtab-between",
+      "note": "\\v 不在 Go 的 \\s 里 → 不命中",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You\\u000bare Claude Code\"}]}",
+      "out": null
+    },
+    {
+      "name": "nbsp-after-are",
+      "note": "are 后是 NBSP → 不命中",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are\\u00a0Claude Code\"}]}",
+      "out": null
+    },
+    {
+      "name": "parts-array",
+      "note": "只改 text 段，image_url 原样",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":[{\"type\":\"text\",\"text\":\"You are Cursor\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AAA\"}}]}]}",
+      "out": "{\"messages\":[{\"content\":[{\"text\":\"You​are Cursor\",\"type\":\"text\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AAA\"}}],\"role\":\"system\"}]}"
+    },
+    {
+      "name": "parts-not-object",
+      "note": "数组里的非对象元素跳过，对象元素改写",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":[\"You are Codex\",{\"type\":\"text\",\"text\":\"You are Cursor\"}]}]}",
+      "out": "{\"messages\":[{\"content\":[\"You are Codex\",{\"text\":\"You​are Cursor\",\"type\":\"text\"}],\"role\":\"system\"}]}"
+    },
+    {
+      "name": "parts-text-nonstring",
+      "note": "text 非字符串 → 整段不改",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":[{\"type\":\"text\",\"text\":5}]}]}",
+      "out": null
+    },
+    {
+      "name": "parts-empty",
+      "note": "空分段数组 → 不改",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":[]}]}",
+      "out": null
+    },
+    {
+      "name": "parts-two-texts",
+      "note": "两段 text 都命中 → 都改",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":[{\"type\":\"text\",\"text\":\"You are Cursor\"},{\"type\":\"text\",\"text\":\"You are Codex\"}]}]}",
+      "out": "{\"messages\":[{\"content\":[{\"text\":\"You​are Cursor\",\"type\":\"text\"},{\"text\":\"You​are Codex\",\"type\":\"text\"}],\"role\":\"system\"}]}"
+    },
+    {
+      "name": "invalid-json",
+      "in": "not json",
+      "out": null
+    },
+    {
+      "name": "null-body",
+      "in": "null",
+      "out": null
+    },
+    {
+      "name": "empty-object",
+      "in": "{}",
+      "out": null
+    },
+    {
+      "name": "no-messages-key",
+      "in": "{\"model\":\"m\",\"input\":\"You are Codex\"}",
+      "out": null
+    },
+    {
+      "name": "messages-null",
+      "in": "{\"messages\":null}",
+      "out": null
+    },
+    {
+      "name": "messages-object",
+      "in": "{\"messages\":{\"role\":\"system\",\"content\":\"You are Codex\"}}",
+      "out": null
+    },
+    {
+      "name": "messages-string",
+      "in": "{\"messages\":\"You are Codex\"}",
+      "out": null
+    },
+    {
+      "name": "messages-empty",
+      "in": "{\"messages\":[]}",
+      "out": null
+    },
+    {
+      "name": "content-null",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":null}]}",
+      "out": null
+    },
+    {
+      "name": "content-number",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":5}]}",
+      "out": null
+    },
+    {
+      "name": "content-object",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":{\"text\":\"You are Codex\"}}]}",
+      "out": null
+    },
+    {
+      "name": "role-nonstring",
+      "in": "{\"messages\":[{\"role\":123,\"content\":\"You are Codex\"}]}",
+      "out": null
+    },
+    {
+      "name": "role-null",
+      "in": "{\"messages\":[{\"role\":null,\"content\":\"You are Codex\"}]}",
+      "out": null
+    },
+    {
+      "name": "role-missing",
+      "in": "{\"messages\":[{\"content\":\"You are Codex\"}]}",
+      "out": null
+    },
+    {
+      "name": "message-null",
+      "in": "{\"messages\":[null,{\"role\":\"system\",\"content\":\"You are Codex\"}]}",
+      "out": "{\"messages\":[null,{\"content\":\"You​are Codex\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "message-number",
+      "in": "{\"messages\":[5,{\"role\":\"system\",\"content\":\"You are Codex\"}]}",
+      "out": "{\"messages\":[5,{\"content\":\"You​are Codex\",\"role\":\"system\"}]}"
+    },
+    {
+      "name": "system-role-uppercase",
+      "note": "role 大小写敏感（system 才处理）",
+      "in": "{\"messages\":[{\"role\":\"System\",\"content\":\"You are Codex\"}]}",
+      "out": null
+    },
+    {
+      "name": "deep-nesting-200",
+      "note": "200 层嵌套的额外字段：两侧都只是 raw 搬运、不递归展开",
+      "in": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are Codex\",\"deep\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}]}",
+      "out": "{\"messages\":[{\"content\":\"You​are Codex\",\"deep\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]],\"role\":\"system\"}]}"
+    }
+  ],
+  "go_version": "go1.26.5",
+  "source": "internal/tuanjie/server.go desensitizeAgentIdentity（真函数，一次性采集）"
+}

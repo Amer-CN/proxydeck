@@ -3,7 +3,8 @@
 //! ## 本片覆盖什么
 //!
 //! * 入站：`POST` 方法闸门 → 64MB 限读 → **非法 UTF-8 本地 400**（`rejectInvalidUTF8Body`）
-//!   → 解析 `model`/`stream` → 会话租借 → 体重排（`reqshape::reshape_chat_body`）。
+//!   → 解析 `model`/`stream` → 会话租借 → 反竞品身份脱敏
+//!   （`reqshape::desensitize_agent_identity`）→ 体重排（`reqshape::reshape_chat_body`）。
 //! * 池路径（有池且选得出号）：`ForwardDirect`（按号换 key + 签名头）→ 402 禁用该号并换号
 //!   → 瞬时错误重发（≤3 次，间隔 800ms）→ **429 兜底两层**（即时换号 ≤3 次、换前
 //!   [`ChatTiming::switch_backoff`] 退避；全池撞墙按 `Retry-After` 排队重发，单请求
@@ -19,9 +20,10 @@
 //!    （`server.go:280-322`）。本片不写告警状态，`/health` 的 `judgment_alert` 仍恒 `false`
 //!    （第三片已登记）。
 //! 2. **`logRequestShape` 未迁**：纯诊断日志（`server.go:2212-2266`），不含响应字节。
-//! 3. **`desensitizeAgentIdentity`（反竞品身份脱敏）未迁**：Go 在 `reshapeChatBody` **之前**
-//!    对 system 消息里的 `You are <竞品名>` 做零宽空格改写（`server.go:1970`）。
-//!    含该声明的请求出站体因此不同（Go 多两个零宽字符）；差分金标不含这类声明。
+//! 3. **`desensitizeAgentIdentity`（反竞品身份脱敏）已迁（P8d-3）**：Go 在
+//!    `reshapeChatBody` **之前**对 system 消息里的 `You are <竞品名>` 做零宽空格改写
+//!    （`server.go:988-991`），Rust 侧同位调用 [`crate::reqshape::desensitize_agent_identity`]，
+//!    55 条 Go 真函数采收向量逐字节一致。
 //!    【P8b 第五片更新】媒体改路由（`RerouteIfMedia`）/远程图片预下载（`FetchRemoteImages`）
 //!    与外部 provider 分支**已迁**（见 [`crate::media`] / [`crate::providers`]），
 //!    `handle_chat` 开头按 Go 的同一顺序调用。
@@ -1309,6 +1311,13 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
     // 闲置 30min/超 4h 自动清理。B3 traceid/parentspanid 绑在会话上。
     // defer 归还——响应（含流式）全部写完才算窗口闲置。
     let sess = acquire();
+    // 反竞品过滤规避（**必须在 reshape 前**，reshape 会重建有序 JSON）——`server.go:983-991`。
+    // 上游网关只检测 system 消息里的 `You are <竞品名>` 身份声明，在 You/are 之间插
+    // 零宽空格即可放行；未命中时返回 `None`，body 原样透传。
+    if let Some(nb) = crate::reqshape::desensitize_agent_identity(&body) {
+        body = nb;
+        crate::logf("[tuanjie] agent-identity 脱敏已应用（system 含竞品身份声明）");
+    }
     body = crate::reqshape::reshape_chat_body(&body, Some(sess.session()));
     // 重排后的 shape（验证字段序效果）—— `server.go:993`。
     crate::logf(&request_shape_line(&model, &body));

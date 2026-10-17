@@ -258,10 +258,9 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 
 **P8b 第五片新增的已知差异（登记）**：
 
-30. **`desensitizeAgentIdentity`（反竞品身份脱敏）未迁**：Go 在 `reshapeChatBody` **之前**
-    对 system 消息里的 `You are <竞品名>` 做零宽空格改写（`server.go:1970`），Rust 侧没有。
-    含该声明的请求出站体因此**不同**（Go 会多两个零宽字符）；差分金标的场景不含这类声明，
-    故未暴露。属本片范围外的既有缺口（第四片也未迁），登记备查。
+30. ~~**`desensitizeAgentIdentity`（反竞品身份脱敏）未迁**~~ **【P8d-3 已迁】**：
+    见本文件「P8d-3」节（55 条 Go 真函数向量金标 + `go_regex` ASCII 还原 + 接线位次）。
+    原文保留作历史：Go 在 `reshapeChatBody` 之前改写，未迁时含声明的请求出站体不同。
 31. **网络级错误的文案**：`/providers` 的 `/models` 探测失败时，Go 写
     `Get "http://…": dial tcp …`，Rust 写 reqwest 的 `error sending request for url (…)`。
     只进 `error` 字段与日志，**不进差分金标**（金标只覆盖 `HTTP <code>` 与可复现的解码错文案）。
@@ -652,6 +651,96 @@ E:\cargo-target\rs-tuanjie\debug\rs-tuanjie.exe --plugin-tuanjie --port 8788
 `RunError::Refused` 交给调用方——单独跑时 `exit_code()` 还原成 2，`rs-gui --plugin-tuanjie`
 同样还原成 2；`Startup`（绑定失败等）→ 1。**没有静默降级**：拒绝就是拒绝，不退化成 1。
 
+## P8d-3：反竞品身份脱敏（`desensitizeAgentIdentity`，2026-10-17）
+
+**补的是什么**：P8b5 时登记为「不在本片范围」的那一块——上游网关只检测 **system 消息**
+里的 `You are <竞品名>` 身份声明（ZCode / Claude Code / Codex 实测被拦，400「欢迎使用
+Codely」），在 `You` 与 `are` 之间插零宽空格（U+200B）即可放行（模型读不到该字符）。
+Rust 侧此前缺失 = 带这类声明的请求直发上游吃 400 的真缺口。
+
+### 落地对照（Go 行号 → Rust 落点）
+
+| 面 | Go | Rust |
+|---|---|---|
+| 触发正则 | `server.go:1959` `agentIdentityTriggerRe` | `reqshape.rs` 的 `AGENT_IDENTITY_TRIGGER_GO`（**逐字**）+ `go_regex` 还原 Go 的 ASCII 字符类 |
+| 改写正则 | `server.go:1953` `youAreRe` → `$1<ZWSP>$2` | `YOU_ARE_GO` + `rewrite_you_are`（`ReplaceAll` 全量替换） |
+| 零宽空格 | `server.go:1962` `zwsp` | `reqshape::ZWSP`（`U+200B`） |
+| 主体 | `server.go:1970` `desensitizeAgentIdentity` | `reqshape::desensitize_agent_identity`（签名同简报：`&[u8] -> Option<Vec<u8>>`） |
+| 调用位 | `server.go:983-991`（**reshape 之前**） | `chat.rs` 的 `handle_chat`：`acquire()` 之后、`reshape_chat_body` 之前，命中打 `[tuanjie] agent-identity 脱敏已应用（system 含竞品身份声明）` |
+
+语义逐条对齐（都由 Go 真函数采收向量锁住）：
+
+* 只处理 `role == "system"`；缺 `role` / 非字符串 / 其它角色一律跳过。
+* `content` 两种形态：字符串、分段数组（**只动 `text` 字段**，`image_url` 等原样）；
+  数组里非对象元素（如纯字符串）跳过。
+* 只在命中触发正则时才改；**未命中任何一条 → `None`，调用方原样透传**。
+* **未改的消息按原始字节搬运**（Go `json.RawMessage` 语义）：数字形态 `1.50`、
+  大整数 `12345678901234567890`、`1e3`、原始键序、原始转义形态都不被重写；
+  只有被改的消息才重新序列化（键按字节序）。
+* 顶层键同样按字节序重排，值 compact + **HTML 转义**（`<`/`>`/`&` → `\u003c`/…；
+  U+2028/2029 恒转义），与 Go `json.Marshal(map[string]json.RawMessage)` 逐字节同形。
+
+### 关键取证：Go 的 `\b` / `\s` 是 ASCII 类，Rust `regex` 默认是 Unicode 类
+
+正则文本照抄不难，**难在这两个字符类的默认语义不同**，直接交给 `regex` 会产出真分歧。
+三条向量（Go 真函数采收）把两侧钉死：
+
+| 向量 | 输入（system content） | Go | 直接照抄的 Rust 默认语义 |
+|---|---|---|---|
+| `boundary-chinese-adjacent` | `你好You are Claude Code` | **命中**（`好` 不是 ASCII 词字符 → `\b` 成立） | **漏命中**（Unicode `\b` 里 `好`/`Y` 都是词字符） |
+| `nbsp-between` | `You\u00a0are Claude Code` | 不命中（`\s` 不含 NBSP） | **多命中**（Unicode `\s` 含 NBSP） |
+| `vtab-between` | `You\u000bare Claude Code` | 不命中（Go 的 `\s == [\t\n\f\r ]`，**不含 `\v`**） | **多命中**（Rust ASCII `\s` 含 `\x0B`） |
+
+故 `go_regex()` 做两处**机械替换**（`\b` → `(?-u:\b)`、`\s` → `[\t\n\f\r ]`），
+不改任何其它字符。反向验证（临时把 `go_regex` 改成恒等）实测：
+`boundary-chinese-adjacent` 立刻 `命中与否不一致：Go 命中=true / Rust 命中=false`；
+只还原 `\b` 不还原 `\s` 时 `nbsp-between` 立刻 `Go 命中=false / Rust 命中=true`。
+
+### 门禁（55 条真 Go 向量，逐字节）
+
+基准 `tests/golden/golden-p8d3-go.json`（15,019 B，**55 条用例 / 26 条命中改写 / 29 条
+返回 nil**；含命中、未命中、user 消息、tools 描述、分段数组、大小写与空白、HTML 转义
+三处、原始数字形态、深嵌套 200 层、以及 15 类非法/边缘输入）。
+比对在 `reqshape::tests::golden_go_desensitize_vectors`（`cargo test` 默认就跑）。
+
+**反向验证（四次突变，逐次变红、逐次还原复绿）**：
+
+| 突变 | 变红的用例 |
+|---|---|
+| `go_regex` 改成恒等（不还原 ASCII 字符类） | `boundary-chinese-adjacent`（漏命中） |
+| 只还原 `\b`、不还原 `\s` | `nbsp-between`（多命中） |
+| `role == "system"` 放宽成「任意非空角色」 | `user-only` / `tools-desc`（不该改的改了） |
+| `go_marshal_raw_map` 的 HTML 转义关掉 | `raw-html-escape-in-top-level` / `-in-extra-field`（字节不一致） |
+
+### 再生成基准（一次性 Go 采集器，跑完即删）
+
+采集器源码留档：`.work/p8d3/zz_p8d3_collect_test.go`（gitignore，不进库）。
+它**只调真函数**，不复制逻辑、不读凭据：
+
+```powershell
+Copy-Item .work\p8d3\zz_p8d3_collect_test.go internal\tuanjie\
+$env:P8D3_GOLDEN_OUT="<repo>\.work\p8d3\golden-p8d3-go.json"
+go test ./internal/tuanjie -run TestZZCollectP8d3Golden -count=1 -v
+Remove-Item internal\tuanjie\zz_p8d3_collect_test.go
+Copy-Item .work\p8d3\golden-p8d3-go.json rs-tuanjie\tests\golden\
+git status --short internal/      # 必须为空
+```
+
+采集器采集时实报：`采集完成：55 条用例（其中 26 条命中改写，29 条返回 nil）`。
+
+### 本轮登记（如实，不是"优化空间"）
+
+1. **非法 UTF-8 的请求体**：Go `json.Unmarshal` 会把坏字节替换成 U+FFFD 继续走；Rust
+   `serde_json` 直接报错 → 不改写。**本路径不可达**：两侧都在进入脱敏之前先做「非法
+   UTF-8 本地 400」闸门（`handle_chat` 第一段），故不构成为行为差异。
+2. **孤代理转义（如 `"\ud800"`）**：Go 解成 U+FFFD 后可能命中触发；Rust `serde_json`
+   拒绝该字符串 → 该消息不改写。只在构造输入下可见，真实上游不发这种请求体。
+3. **`go_marshal_raw_array` 的 `escape_html=true` 不可单独观测**：数组在两处调用点都
+   随即被外层 `go_marshal_raw_map` 再 compact+转义一遍，两层转义幂等、差别被抹平。
+   保留 `true` 是为与 Go `json.Marshal([]RawMessage)` 逐字同形（不是死代码）。
+4. **深嵌套不设限**：200 层嵌套的额外字段两侧都只做 raw 搬运、都命中改写（有向量锁住）；
+   `RawValue` 的跳读不走 `serde_json` 的 128 层递归上限。
+
 ## 门禁与复跑
 
 **P7d-2 起本 crate 是仓库根 workspace 的成员**：在仓库根 `cargo test` 会把 8 个成员一起跑；
@@ -671,6 +760,8 @@ cargo build -p rs-tuanjie --features diff-runner --bin p8b3-diff-run
 cd rs-tuanjie
 $env:CARGO_TARGET_DIR="E:\cargo-target\rs-tuanjie"   # F: 盘空间紧张，构建产物放 E:
 cargo test              # P7d-1 实测：178 单测(+1 ignored) + 12 + 5 + 7 + 22 + 2 + 1 + 15(+1 ignored) + 3 + 1(p8c) 全绿
+                        # P8d-3 起单测 182（+4：反竞品脱敏的向量门禁、ASCII 字符类还原、
+                        #                    ReplaceAll 替换、脱敏→重排的顺序证据）
 cargo build --all-targets                            # 0 warning
 cargo test --test golden_p8a -- --nocapture          # 看逐条对照证据与两侧线上实抓
 cargo test --test golden_p8b -- --nocapture          # P8b 第一片逐条对照

@@ -70,6 +70,10 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time",
 # **不是新依赖**——它已在依赖树里（reqwest 的 gzip 特性经 miniz_oxide 引入的同一族），
 # 这里只是把它显式声明成直接依赖（tar 层是自写的 uSTAR 只读解析，见 `src/gziptar.rs`）。
 flate2 = "1"
+# 反竞品身份脱敏（P8d-3）：`desensitizeAgentIdentity` 的两条 Go 正则逐字照抄后交给它编译。
+# RE2 语义与 Go `regexp` 同族（无回溯）；Go 的 `\b`/`\s` 是 ASCII 类、Rust 默认是 Unicode 类，
+# 那两处的还原写在 `reqshape::go_regex` 里（有 Go 真函数采收的向量锁住）。
+regex = "1"
 
 # release profile 的唯一真源在仓库根 `Cargo.toml`（workspace 级 `[profile.release]`
 # opt-level = 2，与本文件原先逐字相同）。workspace 成员的 `[profile]` 会被 cargo

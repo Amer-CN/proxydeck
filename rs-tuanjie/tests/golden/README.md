@@ -282,3 +282,21 @@ Go 文件）**没有留档**——执行轮跑完即删，`.work/p8c/` 里只有
 金标本身有效（已入库，Rust 门禁逐条对照它）；若将来 Go 侧这些模块有变，需按
 `tests/p8c_diff.rs` 的场景清单重写采集器（场景定义见该文件头注释与金标 `name` 键）。
 2026-10-17 实测：`cargo test --test p8c_diff` **1/1 通过，108 项逐条一致**。
+
+## P8d-3 的基准（`golden-p8d3-go.json`，15,019 B）
+
+反竞品身份脱敏（`desensitizeAgentIdentity`）的期望向量：**55 条用例**，每条是
+`{name, note, in, out}`——`in` 是请求体原文，`out` 是 Go 真函数的返回字节
+（`null` = Go 返回 `nil`，即不改写）。26 条命中改写 / 29 条返回 `nil`。
+
+门禁在 `src/reqshape.rs` 的单测 `golden_go_desensitize_vectors`（`cargo test` 默认跑），
+不做归一化，直接比对整段字节。覆盖：命中与未命中、user 消息、tools 描述、
+分段数组（含非对象段与 `text` 非字符串）、大小写与空白容忍、冠词形式、
+`<`/`>`/`&` 三处 HTML 转义、原始数字形态（`1.50`/大整数/`1e3`）、键序重排、
+深嵌套 200 层、以及 15 类非法/边缘输入（非法 JSON / `null` / `messages` 非数组 /
+`role` 非字符串 / 消息非对象 …）。
+
+**再生成**：采集器源码留档 `.work/p8d3/zz_p8d3_collect_test.go`（gitignore，不进库）。
+拷回 `internal/tuanjie/` → 跑 `TestZZCollectP8d3Golden`（输出路径由 `P8D3_GOLDEN_OUT` 给）
+→ **立即删除** → 把产物复制回本目录。采集器只调真函数，不读凭据，合成请求体。
+完整命令与实测输出见 `../../README.md` 的「P8d-3」节。
