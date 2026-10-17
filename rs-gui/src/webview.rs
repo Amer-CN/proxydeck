@@ -18,6 +18,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use tao::dpi::LogicalSize;
+use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoop};
 use tao::window::WindowBuilder;
 use wry::http::Request;
@@ -89,7 +90,22 @@ pub fn run_gui(app: Arc<App>) -> Result<(), String> {
     app.start_background();
 
     let slot_loop = Rc::clone(&slot);
-    event_loop.run(move |_event, _target, control_flow| {
+    event_loop.run(move |event, _target, control_flow| {
+        // 原生关窗（WM_CLOSE）→ 退出消息循环、进程自然结束。
+        // 来源有三：Alt+F4 / 任务栏右键关闭 / **一键更新替换完成后的收尾**
+        // （`update.rs` 那一跳 `close_after_update`）。对齐 Go `w.Run()` 的语义：
+        // WM_CLOSE → Run 返回 → main 返回 → 进程退出。
+        // ⚠ 不能只靠 JS 的红灯：红灯走 `ccRequestClose`（托盘/退出二选一），
+        // 原生关窗不经过它——此前事件循环把 CloseRequested 丢在地上，
+        // 导致窗口关不掉、一键更新后新旧两个实例并存（v4.0.1 实测）。
+        if let Event::WindowEvent {
+            event: WindowEvent::CloseRequested,
+            ..
+        } = event
+        {
+            *control_flow = ControlFlow::Exit;
+            return;
+        }
         let _keep_alive = &slot_loop;
         *control_flow = ControlFlow::Wait;
     });

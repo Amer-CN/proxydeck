@@ -74,6 +74,9 @@ impl Normalizer {
         out = replace_digits(&out, "\"uptime\":", "0");
         out = replace_digits(&out, "\"port\":\"", "$PORT");
         out = replace_digits(&out, "-port ", "$PORT");
+        // `version` 是**有意分道**的字段：v4.0.0 起 Rust 即产品本体（v4.x），
+        // Go 侧冻结在 v3.20.11，两侧同形不同值。归一成哨兵后，差分的其余字节照比。
+        out = replace_quoted(&out, "\"version\":", "$VER");
         out
     }
 }
@@ -90,6 +93,37 @@ fn replace_digits(s: &str, marker: &str, sentinel: &str) -> String {
             out.push_str(sentinel);
         }
         rest = &after[digits..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// 把 `marker` 之后引号里的内容换成哨兵（`"version":"v4.0.1"` → `"version":"$VER"`）。
+fn replace_quoted(s: &str, marker: &str, sentinel: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find(marker) {
+        let after_marker = i + marker.len();
+        out.push_str(&rest[..after_marker]);
+        let after = &rest[after_marker..];
+        let Some(open) = after.find('"') else {
+            rest = after;
+            break;
+        };
+        if open > 0 {
+            // marker 与引号之间有空白等原样保留
+            out.push_str(&after[..open]);
+        }
+        let tail = &after[open + 1..];
+        let Some(close) = tail.find('"') else {
+            out.push_str(&after[open..]);
+            rest = "";
+            break;
+        };
+        out.push('"');
+        out.push_str(sentinel);
+        out.push('"');
+        rest = &tail[close + 1..];
     }
     out.push_str(rest);
     out
@@ -871,7 +905,15 @@ fn stamped_writer_cases_match_go() {
 #[test]
 fn golden_pins_the_expected_go_versions() {
     let golden: Value = serde_json::from_str(GOLDEN).unwrap();
-    assert_eq!(golden["app_version"].as_str().unwrap(), rs_gui::APP_VERSION);
+    // 金标是**Go 侧**采收的，里面的 `app_version` 是采收当时的 Go 值（钉字面量：
+    // 金标一重采就该有人来看一眼）。Rust 侧 v4.0.0 起即产品本体、版本号与 Go
+    // 有意分道，故这里**不再**要求两侧同值——只要求 Rust 侧是个正常版本串。
+    assert_eq!(golden["app_version"].as_str().unwrap(), "v3.20.10");
+    assert!(
+        rs_gui::APP_VERSION.starts_with('v') && rs_gui::APP_VERSION.len() > 2,
+        "Rust 侧版本串形态不对：{:?}",
+        rs_gui::APP_VERSION
+    );
     assert_eq!(
         golden["core_version"].as_str().unwrap(),
         rs_gui::CORE_VERSION

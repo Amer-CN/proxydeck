@@ -494,6 +494,13 @@ fn upgrade_plaintext_shape_matches_go_truth_table() {
 #[test]
 fn versions_match_go_golden() {
     let g = golden();
-    assert_eq!(g["app_version"].as_str().unwrap(), rs_gui::APP_VERSION);
+    // 黄金是 **Go 侧**采收的（`app_version` = 采收当时的 Go 值）；Rust 侧 v4.0.0 起
+    // 即产品本体、版本号与 Go 有意分道，故不再要求两侧同值——只钉形态与 core 同值。
+    assert_eq!(g["app_version"].as_str().unwrap(), "v3.20.10");
+    assert!(
+        rs_gui::APP_VERSION.starts_with('v') && rs_gui::APP_VERSION.len() > 2,
+        "Rust 侧版本串形态不对：{:?}",
+        rs_gui::APP_VERSION
+    );
     assert_eq!(g["core_version"].as_str().unwrap(), rs_gui::CORE_VERSION);
 }

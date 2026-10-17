@@ -19,6 +19,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoop};
 use tao::window::WindowBuilder;
 use wry::http::Request;
@@ -88,7 +89,19 @@ pub fn run_fax_window(app: Arc<App>) -> Result<(), String> {
     window.set_visible(true);
 
     let slot_loop = Rc::clone(&slot);
-    event_loop.run(move |_event, _target, control_flow| {
+    event_loop.run(move |event, _target, control_flow| {
+        // 原生关窗（WM_CLOSE）→ 退出消息循环、进程自然结束。
+        // 浮窗的关闭按钮走 `ccFaxClose` → `windowCmd(hwnd,"close")` = PostMessage WM_CLOSE
+        // （`main.go:143-147`），所以**这条必须处理**，否则浮窗关不掉。
+        // 与主窗同款（见 `webview.rs` 的说明）。
+        if let Event::WindowEvent {
+            event: WindowEvent::CloseRequested,
+            ..
+        } = event
+        {
+            *control_flow = ControlFlow::Exit;
+            return;
+        }
         let _keep_alive = &slot_loop;
         *control_flow = ControlFlow::Wait;
     });
