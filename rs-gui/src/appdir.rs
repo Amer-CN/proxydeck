@@ -127,16 +127,25 @@ pub fn write_file(path: &Path, plain: &[u8]) -> Result<(), String> {
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
     std::fs::write(&tmp, &enc).map_err(|e| e.to_string())?;
-    if let Err(e) = acl_user_only(&tmp) {
-        logf(&format!(
-            "ACL 收紧失败（文件仍为密文）：{}: {}",
-            file_name(path),
-            e
-        ));
-    }
     if let Err(e) = std::fs::rename(&tmp, path) {
         let _ = std::fs::remove_file(&tmp);
         return Err(e.to_string());
+    }
+    // ACL 收紧放到**改名之后**的后台线程：`icacls` 是子进程，冷启动实测 ~550ms
+    //（v4.0.4 全绑定扫描里 `ccDismiss`/`ccDismissCloseHint` 就是被它拖的）。
+    // 安全性不变：文件内容已是 DPAPI 密文、改名也不依赖 ACL 完成——收紧是纵深
+    // 防御，晚几毫秒落定没有语义损失。失败照旧记日志。
+    {
+        let final_path = path.to_path_buf();
+        std::thread::spawn(move || {
+            if let Err(e) = acl_user_only(&final_path) {
+                logf(&format!(
+                    "ACL 收紧失败（文件仍为密文）：{}: {}",
+                    file_name(&final_path),
+                    e
+                ));
+            }
+        });
     }
     Ok(())
 }

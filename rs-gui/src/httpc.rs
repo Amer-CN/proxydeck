@@ -88,6 +88,9 @@ fn body_of(resp: reqwest::blocking::Response, limit: usize) -> Option<String> {
 
 /// GET 并要求 200（对应 Go `httpGet`：非 200 / 网络错误 / 读失败一律 false）。
 pub fn get(url: &str) -> Option<String> {
+    if local_unreachable(url) {
+        return None;
+    }
     get_limited(url, BODY_LIMIT)
 }
 
@@ -112,6 +115,9 @@ pub fn get_slow(url: &str) -> Option<String> {
 
 /// 慢速 GET 并回状态码（更新检查要区分 403 限额与其它失败）。
 pub fn get_slow_status(url: &str) -> Result<(u16, String), String> {
+    if local_unreachable(url) {
+        return Err("本地端口没在监听（跳过连接）".to_string());
+    }
     get_slow_status_limited(url, 8 << 20)
 }
 
@@ -157,6 +163,20 @@ fn loopback_port(url: &str) -> Option<u16> {
     u.port_or_known_default()
 }
 
+/// 回环 URL 且端口**没在听** → true（调用方应立刻失败，别去 connect）。
+///
+/// 为什么要有它：杀软 HIPS 把**未监听端口**的 `connect()` 拖到 ~2s 才回 RST
+/// （`win32::port_is_listening` 里记了完整实测）。探活路径已改成先查监听表；
+/// **数据路径**（拉 stats / quota / models 等）同样可能打到没起的插件端口——
+/// 不先判一下就会白等 2 秒。这里统一在 httpc 的四个出口做前置检查，
+/// 让"目标没起"变成 0 等待的失败，而不是 2 秒的超时。
+fn local_unreachable(url: &str) -> bool {
+    match loopback_port(url) {
+        Some(port) => !crate::win32::port_is_listening(port),
+        None => false,
+    }
+}
+
 /// 端口上有健康服务即 true（对应 Go `httpOK`：只看 200，不关心内容）。
 ///
 /// 探活用 300ms 超时（不是 Go 时代的 1.5s）：本机（火绒 HIPS 在场时）死端口要
@@ -169,6 +189,9 @@ pub fn ok(url: &str) -> bool {
 
 /// 表单 POST（对应 Go `httpClientLocal.PostForm`：`application/x-www-form-urlencoded`）。
 pub fn post_form(url: &str, fields: &[(&str, &str)]) -> Result<(u16, String), String> {
+    if local_unreachable(url) {
+        return Err("本地端口没在监听（跳过连接）".to_string());
+    }
     let resp = local_client()
         .post(url)
         .form(fields)
