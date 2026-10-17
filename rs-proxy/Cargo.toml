@@ -25,5 +25,6 @@ reqwest = { version = "0.13", features = ["default-tls", "http2", "stream"] }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }
 
-[profile.release]
-opt-level = 2
+# release profile 的唯一真源在仓库根 `Cargo.toml`（workspace 级 `[profile.release]`
+# opt-level = 2，与本文件原先逐字相同）。workspace 成员的 `[profile]` 会被 cargo
+# 忽略并打 warning，故已在 P7d-2 随「收进 workspace」删除，口径不变。

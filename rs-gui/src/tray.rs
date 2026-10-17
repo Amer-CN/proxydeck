@@ -630,6 +630,7 @@ fn tray_menu() {
 
 /// 取 exe 图标资源（ID = 1，与 `win32::set_window_icon` 同源）。
 /// 托盘按 16×16 取小图，取不到退回默认尺寸。句柄进程内复用、不 `DestroyIcon`。
+/// 资源本体来自 `rs-gui/winres.rc`（P7d-2 起 exe 内嵌图标；ID=1 与 Go 对齐）。
 fn tray_icon_handle() -> *mut c_void {
     let cur = TRAY_ICON_H.load(Ordering::SeqCst);
     if cur != 0 {

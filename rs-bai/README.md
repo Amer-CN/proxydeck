@@ -165,6 +165,30 @@ F7/F8 两条超大用例允许缺失，且缺失时 `golden_adapt` **逐条打 `
 | 8（R8） | 本文件 差异 7 | 补一句内存形状：Go `LimitReader` 边读边弃（峰值约 4MB），Rust 先整段读入再判超限 |
 | 9（R9） | 本文件 第 3 轮表 #8 | 删掉与现实相反的那半句（「5xx 重试次数不在黄金门禁里」——重采后黄金门禁的精确命中数断言正是锁它的地方） |
 
+## P7d-2（打包形态）：本 crate 被迫对齐的一个真坑
+
+进 workspace 时实测出来的，**与本 crate 的对外合同直接相关**，记在这里：
+
+- cargo 的 feature 解析在**整个构建单元内取并集**。`serde_json` 的 `preserve_order`
+  一开，`serde_json::Map` 就从 `BTreeMap`（字典序）变成 `IndexMap`（插入序）。
+  本 crate 的改写路径（`adapt::adapt_quirks_body`）要重新序列化 `Value`，于是
+  出站**键序**会随"本 crate 和谁一起编"而变。
+- 实测现象：`cargo test --workspace`（与 `rs-comate`/`rs-proxy`/`rs-qoder`/`rs-vibex`/
+  `rs-gui` 同构建单元）→ `golden_adapt` 红（F2 出站键序 `model,messages,max_tokens`
+  而不是 Go 的 `max_tokens,messages,model`）；同一条命令 `cargo test -p rs-bai`
+  （只选本 crate）→ 绿。**差别只在"选了谁"**。
+- 同一件事还出现在宿主上：`rs-gui` 依赖本 crate，而 `rs-gui` 的构建单元里
+  `preserve_order` 是开的 ⇒ **宿主里跑的 `--plugin-bai` 与本 crate 单独跑会产出不同键序**。
+- 处置（两条一起做，缺一条都不够）：
+  1. `Cargo.toml` 里 serde_json **显式打开** `preserve_order`——让两种构建配置下
+     Map 实现一致，不再靠"碰巧没被并集影响"；
+  2. `adapt::go_json_bytes`（先递归排键到 Go 的字典序，再编字节）成为**唯一**的
+     `Value → 字节`出口，`/health` 也走它。排序与 Map 实现无关。
+- 门禁：`src/adapt.rs` 单测 `remarshal_is_go_sorted_regardless_of_map_impl`（先断言
+  Map 确实是插入序，再断言输出是字典序）+ `tests/golden_adapt.rs` 的同名回归
+  （不依赖 baseline 字面量是否正确，独立按字典序复核三键位置）+ P1 黄金的
+  `health-methods` 场景。
+
 ## 密钥卫生（本 crate 的硬性纪律）
 
 - 渠道配置里的 Bearer **只**在内存里用于两处：`/model/matrix` 拉上游清单、以及客户端自带

@@ -237,7 +237,12 @@ pub trait CredSource {                              // src/cred.rs
     （Go 与 Rust 同式），门禁把具体时刻归一成 `__NOW__`，字段名与格式照比。
 20. **`reasoning_default_for` 的返回类型**：Go 是 `string`（空串 = 不注入），Rust 是 `Option<String>`
     （`None` = 不注入）——语义同，形态差，仅内部实现。
-21. **未覆盖**：64MB 截断边界；`WorkBuddy` 桌面端真实 exe 的注册表发现（只做了纯函数级对照）；
+21. **`$wbEncrypted` 信封字节随构建单元漂移**：`atrest.rs` 用 `json!` + `to_vec` 组装，
+    单独构建（BTreeMap 字典序）与 workspace 构建（IndexMap 书写序）字节不同
+    （P7d-2 feature 并集实测）。无门禁锁信封字节（nonce 随机本来就不锁），
+    消费方按键名解析、不破坏互通；与 rs-bai 同款问题（那边已显式排键），
+    这里登记不断言——P7d-2 审查 #2。
+22. **未覆盖**：64MB 截断边界；`WorkBuddy` 桌面端真实 exe 的注册表发现（只做了纯函数级对照）；
     DPAPI 路径（at-rest 用的是合成 secret，没碰真机 DPAPI 密文）。
 
 ### P5b 修正轮（2026-10-15，审查驳回后）新增登记

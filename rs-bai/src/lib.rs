@@ -206,12 +206,16 @@ pub fn add_cors(h: &mut HeaderMap) {
 /// 末尾换行与 Go 的 `json.NewEncoder(w).Encode(...)` 对齐（Encoder 会补一个 `\n`），
 /// 方法也不限——Go 的 handler 不判方法，POST 同样回这份 JSON。
 async fn handle_health(State(st): State<Arc<AppState>>) -> Response {
-    let body = json!({
+    let mut body = json!({
         "status": "ok",
         "service": "bai-go",
         "uptimeSec": st.started_at.elapsed().as_secs() as i64,
     });
-    let mut out = serde_json::to_vec(&body).unwrap_or_default();
+    // 走 Go 口径（先递归排键再编字节）：`json!` 的键序是**写下**的顺序，
+    // 而 Go 那侧是 `map[string]any` → `encoding/json` 按字典序输出
+    // （黄金基准里就是 service/status/uptimeSec）。键序随构建配置飘的话，
+    // 与 Go 的逐字节对照会莫名其妙地红——P7d-2 实测踩过一次。
+    let mut out = crate::adapt::go_json_bytes(&mut body);
     out.push(b'\n');
     (
         [(header::CONTENT_TYPE, "application/json")],

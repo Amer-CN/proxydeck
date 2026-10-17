@@ -1,4 +1,5 @@
 /bin/
+/target/
 *.log
 checkin-bot/
 .author-keys/

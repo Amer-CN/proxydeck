@@ -63,7 +63,46 @@ pub fn adapt_quirks_body(buf: &[u8]) -> Vec<u8> {
     if !changed {
         return buf.to_vec();
     }
-    serde_json::to_vec(&m).unwrap_or_else(|_| buf.to_vec())
+    // 重新序列化：走 `go_json_bytes`（先递归排键到 Go 的字典序，再编字节）。
+    // 不能直接 `serde_json::to_vec`——`serde_json::Map` 的实现取决于 `preserve_order`
+    // 特性（见 Cargo.toml 注释），直接编出来的字节会随构建配置变。
+    let out = go_json_bytes(&mut m);
+    if out.is_empty() {
+        buf.to_vec()
+    } else {
+        out
+    }
+}
+
+/// 递归按字典序排一个 JSON 值里所有对象的键（数组逐元素递归）。
+///
+/// 只排**键**，不动任何值、不动数组次序；`serde_json::Map::sort_keys()` 在
+/// `preserve_order` 下就是给 IndexMap 重排（两种实现下都可用）。
+pub(crate) fn sort_keys(v: &mut Value) {
+    match v {
+        Value::Object(map) => {
+            for (_, child) in map.iter_mut() {
+                sort_keys(child);
+            }
+            map.sort_keys();
+        }
+        Value::Array(items) => {
+            for item in items.iter_mut() {
+                sort_keys(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 把 JSON 值编成 **Go `encoding/json` 口径**的字节：先递归排键（字典序），再序列化。
+///
+/// 本 crate 里凡是要把 `Value` 化成字节、且那份字节会被门禁逐字节比对的地方，
+/// 一律走这里——`serde_json::Map` 的实现取决于 `preserve_order` 特性（见 Cargo.toml），
+/// 直接 `to_vec` 的字节会随构建配置变，那就不是合同了。
+pub(crate) fn go_json_bytes(v: &mut Value) -> Vec<u8> {
+    sort_keys(v);
+    serde_json::to_vec(v).unwrap_or_default()
 }
 
 /// 与 Go 侧 `estTokens` 等价的保守估算（4 字符 ≈ 1 token）。
@@ -219,5 +258,40 @@ mod tests {
     fn bad_json_passes_through() {
         let b = b"not-a-json-body {{".to_vec();
         assert_eq!(adapt_quirks_body(&b), b);
+    }
+
+    /// P7d-2：不论 `serde_json::Map` 是 BTreeMap 还是 IndexMap（preserve_order 开/关），
+    /// 重排后都必须是 **Go 的字典序**，且逐字节一致。
+    ///
+    /// 这条测试**不依赖构建配置**：前半句先证明「本构建下 Map 确实是插入序的
+    /// IndexMap」，后半句才断言改写输出是字典序——把「特性漂移」这件事钉成可回归的
+    /// 事实，而不是靠「碰巧没被并集影响」。
+    #[test]
+    fn remarshal_is_go_sorted_regardless_of_map_impl() {
+        let src = br#"{"zebra":1,"messages":[{"role":"developer","content":"d","zz":2,"aa":3}],"max_tokens":99999}"#;
+
+        // 1) 证明 preserve_order 确实生效（否则这条测试就没测到东西）
+        let parsed: Value = serde_json::from_slice(src).unwrap();
+        let naive = serde_json::to_string(&parsed).unwrap();
+        assert_eq!(
+            naive, r#"{"zebra":1,"messages":[{"role":"developer","content":"d","zz":2,"aa":3}],"max_tokens":99999}"#,
+            "preserve_order 没生效：Map 是 BTreeMap（插入序已在解析时被排序）——\
+             那本条测试就测不到 sort_keys，需按实际实现调整（不要删断言来让它变绿）"
+        );
+
+        // 2) 改写后的出站字节 = Go 的字典序（递归，含嵌套对象）
+        let out = adapt_quirks_body(src);
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            r#"{"max_tokens":8192,"messages":[{"aa":3,"content":"d","role":"system","zz":2}],"zebra":1}"#,
+            "改写后必须是 Go 的字典序（递归排到嵌套对象），与 Map 实现无关"
+        );
+    }
+
+    /// 未改写时**一个字节都不许动**（哪怕键序不是字典序）——原样透传是合同。
+    #[test]
+    fn passthrough_keeps_non_sorted_key_order() {
+        let b = br#"{"zebra":1,"alpha":2}"#.to_vec();
+        assert_eq!(adapt_quirks_body(&b), b, "无改写就原样返回，不许顺手排序");
     }
 }

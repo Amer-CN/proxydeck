@@ -10,8 +10,12 @@
 //!    客户端字段值靠这条**原样字节搬运**（数字形态、转义形态都不许被重写）。
 //! 3. **`any` 的再序列化**（[`marshal_go_value`]）：`stream_options` 这种被解成
 //!    `map[string]any` 再吐出来的值，键**按字节序排序**、数字一律按 float64 走 Go 的
-//!    `strconv.AppendFloat` 口径。serde_json 默认（不开 `preserve_order`）的 `Map`
-//!    就是按键排序，与 Go 相同。
+//!    `strconv.AppendFloat` 口径。
+//!    ⚠ `serde_json::Map` 的顺序**不能指望**：它的实现由 `preserve_order` 特性决定，
+//!    而 cargo 的 feature 解析在**整个构建单元内取并集**（P7d-2 实测：本 crate 与
+//!    rs-bai/rs-proxy/rs-qoder/rs-vibex 同处一个 workspace 时，并集把 Map 变成插入序的
+//!    IndexMap，`marshal_go_value` 当场不再排序）。故 [`write_go_value`] 里**显式 sort**，
+//!    与 Map 实现无关。
 
 use serde_json::Value;
 use std::fmt::Write as _;
@@ -171,16 +175,23 @@ fn write_go_value(out: &mut Vec<u8>, v: &Value) {
             out.push(b']');
         }
         Value::Object(map) => {
-            // serde_json 默认 Map = BTreeMap（按字节序排序），与 Go 的
-            // `json.Marshal(map[string]any)` 排序口径一致
+            // Go `json.Marshal(map[string]any)` 按 key **字典序**输出。
+            //
+            // 这里**显式排序**，不能指望 `map.iter()` 的顺序：`serde_json::Map` 的
+            // 实现由 `preserve_order` 特性决定，而特性在 cargo 的构建单元里是**并集**
+            // （P7d-2 实测：本 crate 与 rs-bai 同处一个 workspace 时，那条特性的并集
+            // 让这里的 Map 从 BTreeMap 变成插入序的 IndexMap，本函数当场不排序了）。
+            // 排序后与 Map 实现无关，两种构建配置下字节一致。
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
             out.push(b'{');
-            for (i, (k, val)) in map.iter().enumerate() {
+            for (i, k) in keys.into_iter().enumerate() {
                 if i > 0 {
                     out.push(b',');
                 }
                 write_go_string(out, k);
                 out.push(b':');
-                write_go_value(out, val);
+                write_go_value(out, &map[k]);
             }
             out.push(b'}');
         }

@@ -10,6 +10,12 @@
 > `rs-gui/tests/command_dispatch.rs::plugin_submode_really_starts_the_service`）。
 > 本 crate 仍是**测试端口实例**：Go `internal/tuanjie` 仍在 8788 上跑，**没有**被接管
 > （切流/换装是停服动作，须用户确认）。细则见文末「P7d-1：接进 rs-gui 分发器」。
+>
+> **P7d-2 状态（2026-10-17）**：本 crate 成为仓库根 workspace 的成员（8 个 crate 一份
+> `Cargo.lock`）。两处随之调整：① `p8b3-diff-run` 标为非生产 bin（`required-features =
+> ["diff-runner"]`，默认不构建）；② `gojson::write_go_value` 的对象键改为**显式按字典序
+> 排**——cargo 的 feature 并集会把 `serde_json::Map` 变成插入序的 IndexMap，原先"靠
+> BTreeMap 自动排序"的写法在 workspace 里当场失效（4 条单测变红）。细则见「门禁与复跑」。
 
 ## uTLS 路线取证结论（2026-10-16 实测；P8a 开工前必须先定的那一条）
 
@@ -647,6 +653,15 @@ E:\cargo-target\rs-tuanjie\debug\rs-tuanjie.exe --plugin-tuanjie --port 8788
 同样还原成 2；`Startup`（绑定失败等）→ 1。**没有静默降级**：拒绝就是拒绝，不退化成 1。
 
 ## 门禁与复跑
+
+**P7d-2 起本 crate 是仓库根 workspace 的成员**：在仓库根 `cargo test` 会把 8 个成员一起跑；
+`cd rs-tuanjie && cargo test` 仍然可用（同一份根 `Cargo.lock`、同一个 target 目录）。
+差分对照 runner `p8b3-diff-run` 现在是**非生产 bin**，默认不构建（发布排除口径），
+要跑 P8b 第三片的对照需显式开特性：
+
+```powershell
+cargo build -p rs-tuanjie --features diff-runner --bin p8b3-diff-run
+```
 
 ```powershell
 # Rust 侧（P8a 门禁：33 单测 + 12 集成；P8b 第一片：+14 单测 + 5 集成；

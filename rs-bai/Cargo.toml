@@ -20,9 +20,16 @@ reqwest = { version = "0.13", features = ["default-tls", "http2", "stream", "jso
 serde = { version = "1", features = ["derive"] }
 # raw_value：矩阵端点要用 `RawValue` 把上游 `data` 字段的原文字节抠出来（对应 Go 的
 # `json.RawMessage`）——解析成 Value 再序列化会重排对象键序，就不是上游原文了。
-serde_json = { version = "1", features = ["raw_value"] }
+# preserve_order（P7d-2 补）：`serde_json::Map` 的实现是**特性决定**的，而特性在整个
+# cargo 构建单元里是**并集**——本 crate 一旦与开了 preserve_order 的 crate（rs-proxy /
+# rs-qoder / rs-vibex，或宿主 rs-gui）编进同一个构建单元，本 crate 的 Map 就从 BTreeMap
+# 变成 IndexMap（插入序）。实测把 rs-bai 的黄金门禁打成红的（F2 出站键序变了）。
+# 这里**显式打开**，让两种构建方式下行为一致、不再靠"碰巧没被并集影响"；
+# 重排后仍要求 Go 的字典序，由 `adapt::sort_keys` 保证（不依赖 Map 实现）。
+serde_json = { version = "1", features = ["raw_value", "preserve_order"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync"] }
 url = "2"
 
-[profile.release]
-opt-level = 2
+# release profile 的唯一真源在仓库根 `Cargo.toml`（workspace 级 `[profile.release]`
+# opt-level = 2，与本文件原先逐字相同）。workspace 成员的 `[profile]` 会被 cargo
+# 忽略并打 warning，故已在 P7d-2 随「收进 workspace」删除，口径不变。

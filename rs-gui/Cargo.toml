@@ -32,8 +32,10 @@ clap = { version = "4", features = ["derive"] }
 # `form`：ccCalib 走 `PostForm`（application/x-www-form-urlencoded），与 Go 同款。
 reqwest = { version = "0.13", features = ["blocking", "default-tls", "http2", "form"] }
 serde = { version = "1", features = ["derive"] }
-# 不开 preserve_order：Go 的 json.Marshal 对 map[string]any **按 key 排序**，
-# serde_json 默认的 BTreeMap 同样是排序 —— 键序逐字节对齐靠的就是这个默认值。
+# 不开 preserve_order：本 crate 的 JSON 写出走 `jsons.rs` 的显式 BTreeMap 构造
+# （`obj_sorts_keys_regardless_of_writing_order` 锁死），不依赖 serde_json 默认 Map
+# 实现——workspace feature 并集会把它变成 IndexMap（P7d-2 实测），"靠默认值对齐"
+# 的说法在 workspace 下不成立，特此更正。
 serde_json = { version = "1" }
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }
@@ -43,5 +45,13 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal
 tao = "0.37"
 wry = "0.57"
 
-[profile.release]
-opt-level = 2
+[build-dependencies]
+# P7d-2：把 `winres.rc`（图标 + VERSIONINFO）编译进 exe。用它是因为
+# rc.exe / llvm-rc / windres 的发现逻辑已经现成，不自己手搓资源编译。
+# 仅 Windows 需要 → target 限定，别处不引入（build.rs 里也整段跳过）。
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3"
+
+# release profile 的唯一真源在仓库根 `Cargo.toml`（workspace 级 `[profile.release]`
+# opt-level = 2，与本文件原先逐字相同）。workspace 成员的 `[profile]` 会被 cargo 忽略，
+# 故原有那份已在 P7d-2 随「收进 workspace」一并删除，口径不变。

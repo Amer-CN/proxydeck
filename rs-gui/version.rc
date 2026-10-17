@@ -1,0 +1,61 @@
+// version.rc -- VERSIONINFO resource for rs-gui.exe (P7d-2).
+//
+// This is what the user sees under right click -> Properties -> Details, and
+// what `(Get-Item .\rs-gui.exe).VersionInfo.FileVersion` reads back.
+//
+// SOURCE OF TRUTH FOR THE VERSION NUMBERS: `rs-gui/src/lib.rs`
+//
+//     APP_VERSION  = "v3.20.10"   ->  FILEVERSION 3,20,10,0 / "3.20.10.0"
+//     CORE_VERSION = "v1.2.0"     ->  Comments "Proxy core v1.2.0"
+//
+// Two different numbers in the two places means the exe reports two different
+// versions (properties page vs `--version`), so `tests/winres_contract.rs`
+// compares the digits here against APP_VERSION/CORE_VERSION and turns red on
+// any mismatch. Change both together.
+//
+// THIS FILE IS ASCII ONLY (see winres.rc header). The digit literals are
+// deliberate:
+//   1. NO comments inside the VERSIONINFO block at all. rc.exe 10.0.10011
+//      rejects `//` there with RC2132 ("expected VALUE, BLOCK, or END").
+//      Trailing comments after a statement fail the same way. All explanation
+//      lives out here.
+//   2. FILEOS / FILETYPE / FILESUBTYPE use numeric literals instead of the
+//      VOS_/VFT_ symbolic names: the names need winver.h and fail with RC2104
+//      without it. The numbers are the SDK values:
+//        FILEOS      0x00040004  VOS_NT_WINDOWS32
+//        FILETYPE    0x00000001  VFT_APP
+//        FILESUBTYPE 0x00000000  VFT2_UNKNOWN
+//   3. String values are ASCII only.
+//
+// -- Release-time only: the four digits below move together with APP_VERSION.
+//    As of 2026-10-17 they match APP_VERSION and this round changes neither. --
+// Version numbering policy: `CLAUDE.md` in the repo root; the fourth digit is
+// always 0 (Windows convention).
+
+1 VERSIONINFO
+  FILEVERSION     3,20,10,0
+  PRODUCTVERSION  3,20,10,0
+  FILEOS          0x00040004L
+  FILETYPE        0x00000001L
+  FILESUBTYPE     0x00000000L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "CompanyName",      "ProxyDeck"
+      VALUE "FileDescription",  "ProxyDeck - multi-platform proxy console"
+      VALUE "FileVersion",      "3.20.10.0"
+      VALUE "InternalName",     "rs-gui"
+      VALUE "LegalCopyright",   "ProxyDeck"
+      VALUE "OriginalFilename", "ProxyDeck.exe"
+      VALUE "ProductName",      "ProxyDeck"
+      VALUE "ProductVersion",   "3.20.10.0"
+      VALUE "Comments",         "Proxy core v1.2.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

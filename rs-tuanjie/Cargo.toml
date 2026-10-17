@@ -15,9 +15,19 @@ path = "src/main.rs"
 # P8b 第三片的**差分对照 runner**：跑同一串固定请求，把每次响应的
 # `{status, content_type, body}` 与假上游观测量写成 JSON，供与 Go 侧对照 diff。
 # 不是生产产物（不上 GUI、不发版），只是把「两侧同输入」这件事固化成可复跑的脚本。
+#
+# P7d-2（发布排除口径）：**默认不构建**，只在显式开 `diff-runner` 特性时才编。
+# 这样 `cargo build --release`（打包口径）不会把它带进产物清单，也不会误入分发。
+# 需要时照旧：`cargo build -p rs-tuanjie --features diff-runner --bin p8b3-diff-run`
+# （`.work/p8b3/*.mjs` 的对照脚本仍按这个名字找它）。**行为零变化**，只改构建条件。
 [[bin]]
 name = "p8b3-diff-run"
 path = "src/bin/p8b3_diff_run.rs"
+required-features = ["diff-runner"]
+
+[features]
+# 非生产 bin 的开关，默认关（见上）。空特性：只当「允许构建这个 bin」的闸门用。
+diff-runner = []
 
 [dependencies]
 # 本地 HTTP 服务（P8b 第三片：服务骨架与路由表）。
@@ -61,8 +71,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time",
 # 这里只是把它显式声明成直接依赖（tar 层是自写的 uSTAR 只读解析，见 `src/gziptar.rs`）。
 flate2 = "1"
 
-[profile.release]
-opt-level = 2
+# release profile 的唯一真源在仓库根 `Cargo.toml`（workspace 级 `[profile.release]`
+# opt-level = 2，与本文件原先逐字相同）。workspace 成员的 `[profile]` 会被 cargo
+# 忽略并打 warning，故已在 P7d-2 随「收进 workspace」删除，口径不变。
 
 [dev-dependencies]
 # 集成测试里直接驱动 axum 路由（`router(state).oneshot(req)`）——`tower` 的 `ServiceExt`。

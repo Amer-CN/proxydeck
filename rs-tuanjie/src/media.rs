@@ -589,7 +589,13 @@ fn write_indent_go(out: &mut Vec<u8>, v: &serde_json::Value, depth: usize) {
     match v {
         serde_json::Value::Object(m) if !m.is_empty() => {
             out.push(b'{');
-            for (i, (k, val)) in m.iter().enumerate() {
+            // 键按**字节序**输出（Go `json.MarshalIndent(map[string]any, …)` 的行为）。
+            // 不能靠 `m.iter()` 的顺序：`serde_json::Map` 的实现由 `preserve_order`
+            // 特性决定，而特性在 cargo 构建单元里是并集（P7d-2 实测：本 crate 进
+            // workspace 后 Map 变成插入序的 IndexMap，这里当场不排序）。
+            let mut keys: Vec<&String> = m.keys().collect();
+            keys.sort();
+            for (i, k) in keys.into_iter().enumerate() {
                 if i > 0 {
                     out.push(b',');
                 }
@@ -597,7 +603,7 @@ fn write_indent_go(out: &mut Vec<u8>, v: &serde_json::Value, depth: usize) {
                 pad(out, depth + 1);
                 crate::gojson::write_go_string(out, k);
                 out.extend_from_slice(b": ");
-                write_indent_go(out, val, depth + 1);
+                write_indent_go(out, &m[k], depth + 1);
             }
             out.push(b'\n');
             pad(out, depth);

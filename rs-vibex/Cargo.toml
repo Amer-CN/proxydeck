@@ -34,5 +34,6 @@ tokio-native-tls = "0.3"
 # 对端用现成实现省事）。`ws` 特性只在这里开，生产依赖保持最小。
 axum = { version = "0.8", features = ["ws"] }
 
-[profile.release]
-opt-level = 2
+# release profile 的唯一真源在仓库根 `Cargo.toml`（workspace 级 `[profile.release]`
+# opt-level = 2，与本文件原先逐字相同）。workspace 成员的 `[profile]` 会被 cargo
+# 忽略并打 warning，故已在 P7d-2 随「收进 workspace」删除，口径不变。

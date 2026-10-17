@@ -105,9 +105,9 @@ pub fn screen_size() -> (i32, i32) {
 /// 把 exe 自带的图标设置到窗口（`WM_SETICON`，ICON_BIG + ICON_SMALL）。
 ///
 /// Go 侧 `LoadIconW(hInst, 1)`：图标资源 ID = 1（rsrc 生成）。
-/// ⚠ Rust 侧 exe **当前还没有图标资源**（`icon.ico`/`.rc` 属 P7d 打包），
-/// `LoadIconW` 因此返回 0 并原样返回——与 Go 在「资源确实缺失」时的行为一致，
-/// 差别只在 Go 的 exe 有资源、Rust 的还没有。登记在 README 的 P7d 接手清单。
+/// P7d-2 起 Rust 侧 exe **也有**图标资源了（`rs-gui/winres.rc` 的 `1 ICON "icon.ico"`，
+/// 那份 .ico 是 `app/icon.ico` 的逐字节副本），ID 与 Go 逐字对齐 ⇒ 这里能拿到真句柄；
+/// 资源缺失时 `LoadIconW` 返回 0，本函数原样返回（与 Go 在同样缺资源时的行为一致）。
 pub fn set_window_icon(hwnd: usize) {
     const WM_SETICON: u32 = 0x0080;
     const ICON_BIG: usize = 1;

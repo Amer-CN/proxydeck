@@ -11,8 +11,9 @@
 |---|---|---|
 | P7a | 桥接层（26 个 `bind`）+ 状态聚合 + 分发骨架 + ui.html 逐字节复用 | 已提交 |
 | P7b | 插件托管（`plugins.go` 全部 + `plugin_modes.go` 剩余面）+ 4 个 `ccPlugin*` 绑定 + `OpenLog`/`StampedWriter` | 已提交 |
-| **P7c** | **宿主外壳：`main.go` flag 收口、无边框/图标/DPI、单实例（浮窗）、托盘整套、`--fax` 浮窗 + 3 个传真绑定、`rollStaleBackends` 换血、`appdir.Migrate + UpgradePlaintext`、`-headless` 两处剩余差异** | **本轮** |
-| P7d | 打包（单 exe + 图标/版本资源；多二进制取舍与 P9 合并评估） | 待做 |
+| P7c | 宿主外壳：`main.go` flag 收口、无边框/图标/DPI、单实例（浮窗）、托盘整套、`--fax` 浮窗 + 3 个传真绑定、`rollStaleBackends` 换血、`appdir.Migrate + UpgradePlaintext`、`-headless` 两处剩余差异 | 已提交 |
+| **P7d-2** | **打包形态（只做代码 mechanics）：Windows 图标 + 版本资源进 exe、根 workspace 聚合 8 crate、`build-rs.ps1` 构建脚本骨架（默认只打测试名）、非生产 bin 的发布排除口径** | **本轮**（未发版） |
+| P7d/P9 剩余 | 与 Go exe 的共存/切换方案、多二进制取舍、正式发版 | 待用户拍板 |
 
 ### P7c 改了哪些文件（逐条登记，供闸门核对）
 
@@ -237,8 +238,10 @@ Rust 侧把**同一串命令、同一套场景前置**再跑一遍，两边跑�
 ```powershell
 # 单元测试 + 行为测试（P7d-1 实测：lib 114 含插件托管 13 条 + 外壳行为 5 条；集成 5+5+9+2）
 pwsh -NoProfile -Command "& 'F:\AIXM\proxydeck\.work\p7a\_p7atest.ps1' -Targets lib,bridge_contract,ui_html,command_dispatch,shell_contract"
-# 或直接跑全量
+# 或直接跑全量（P7d-2 起 `rs-gui` 是根 workspace 成员，这条仍可用；也可在仓库根 cargo test）
 cargo test --manifest-path rs-gui/Cargo.toml --all-targets       # CARGO_TARGET_DIR=E:\cargo-target\rs-gui
+# P7d-2 新增：Windows 资源合同（图标逐字节 / 版本号与 APP_VERSION 同源 / 资源 ID 约定）
+cargo test --manifest-path rs-gui/Cargo.toml --test winres_contract
 # 突变检验（证明门禁有判别力；18 条全部必须被抓住）
 pwsh -NoProfile -File .work/p7c/_p7c-mutations.ps1
 ```
@@ -322,8 +325,10 @@ G 管「与 Go 同形」（差分 / 源码锚 / 真值表），H 管「真起进
 ### P7d + P8 仍需接手的清单（本轮结束时点）
 
 **P7d（打包）**：
-1. 单 exe 内嵌 `icon.ico` + 版本资源（Rust 侧 `.rc` + `winres`/`embed-resource`）——
-   **P7c 的窗口图标与托盘图标要等这一步才真好使**（`LoadIconW`/`LoadImageW` 现在拿不到资源）。
+1. ~~单 exe 内嵌 `icon.ico` + 版本资源（Rust 侧 `.rc` + `winres`/`embed-resource`）——
+   **P7c 的窗口图标与托盘图标要等这一步才真好使**（`LoadIconW`/`LoadImageW` 现在拿不到资源）。~~
+   **P7d-2 已收口**：资源进 exe 了（ID=1），`LoadIconW`/`LoadImageW` 现在能拿到真句柄。
+   是否"肉眼可见地好使"仍要人工看一眼（见 §8 人工验收 3/4，附注已改）。
 2. 版本串同步清单从 Go 的 8 处扩展到含 `rs-gui/src/lib.rs` 的 `APP_VERSION`（`CORE_VERSION` 同）。
 3. 多二进制（每插件一个 exe）与单 exe 的取舍，与 P9 打包合并评估。
 4. `.work/p7c/p7c-go-reference.json` **已入库**（`tests/golden/p7c-go-reference.json`，2.3KB，
@@ -347,7 +352,7 @@ G 管「与 Go 同形」（差分 / 源码锚 / 真值表），H 管「真起进
 | 简报要求 | 落地位置 | 门禁 |
 |---|---|---|
 | 无边框 `setFrameless` | `win32::set_frameless`（主窗 `webview.rs` + 浮窗 `faxwindow.rs`） | `tray::tests::set_frameless_clears_the_caption_bit`（真窗口，断言 `WS_CAPTION` 被清） |
-| 窗口图标 | `win32::set_window_icon`（`WM_SETICON` BIG+SMALL）、`tray::tray_icon_handle`（`LoadImageW` 16×16 → `LoadIconW`） | ⚠ **exe 当前还没有图标资源**（属 P7d），`LoadIconW` 返回 0 并原样返回——行为与 Go 在资源缺失时一致，差别只在 Go 的 exe 有资源 |
+| 窗口图标 | `win32::set_window_icon`（`WM_SETICON` BIG+SMALL）、`tray::tray_icon_handle`（`LoadImageW` 16×16 → `LoadIconW`） | **P7d-2 起 exe 有图标资源了**（`winres.rc` 的 `1 ICON "icon.ico"`，ID 与 Go 的 `LoadIconW(hInst, 1)` 逐字对齐）；资源缺失时仍按 Go 的行为原样返回。资源 ID 与逐字节副本由 `tests/winres_contract.rs` 锁住 |
 | DPI 感知 | `win32::set_dpi_aware`（`SetProcessDpiAwarenessContext(-4)` → 回退 `SetProcessDPIAware`），`dispatch::run` 的**第一句**（建窗之前） | `win32::tests::set_dpi_aware_is_idempotent`；位置由 `dispatch.rs` 的调用序锁定 |
 | 单实例 | `single::acquire` + `faxtool::fax_popup_mutex_guard`（`Local\ProxyDeck-FaxWindow`） | `shell_contract::single_instance_semantics_match_go_truth_table`（互斥体名/首次放行/二次挡住，与 Go 黄金同值） |
 | 托盘整套 | `tray.rs` 全部（常驻线程、挂/摘图标、`TaskbarCreated`、单击切换、右键菜单、`trayStartup`/`trayHide`/`trayQuit`） | `tray::tests::tray_thread_starts_and_mounts_icon_in_child_process`（子进程里真挂图标）+ `host::tests::no_window_host_reports_like_go`（文案） |
@@ -362,9 +367,57 @@ G 管「与 Go 同形」（差分 / 源码锚 / 真值表），H 管「真起进
 
 ### P7d（打包）
 
-- 单 exe 需内嵌 `icon.ico` + `resource.syso`（Rust 侧对应 `.rc`/`winres`）；
-  版本串同步清单要从 Go 的 8 处扩展到含 `rs-gui/src/lib.rs` 的 `APP_VERSION`；
-  多二进制与单 exe 的取舍与 P9 打包合并评估。
+- ~~单 exe 需内嵌 `icon.ico` + 版本资源（Rust 侧对应 `.rc`/`winres`）~~
+  **P7d-2 已收口**：`rs-gui/winres.rc` + `version.rc` + `icon.ico`，`build.rs` 经
+  `embed-resource` 编译进 exe（资源 ID = 1，与 `win32.rs`/`tray.rs`/Go 三处同源）。
+  见下方「P7d-2」节。
+- 版本串同步清单从 Go 的 8 处扩展到含 `rs-gui/src/lib.rs` 的 `APP_VERSION`：
+  `version.rc` 的四个数字以 `APP_VERSION` 为真源，`tests/winres_contract.rs` 拦漂移。
+- 多二进制与单 exe 的取舍与 P9 打包合并评估（仍未做，待用户拍板）。
+
+### P7d-2（打包形态 mechanics）——**本轮已做**
+
+| 简报要求 | 落地位置 | 门禁 |
+|---|---|---|
+| Windows 图标/版本资源（`winres` 或 `embed-resource` + `.rc`，与 `win32.rs`/`tray.rs` 资源 ID 对齐） | `rs-gui/winres.rc`（`1 ICON "icon.ico"` + `#include "version.rc"`）、`rs-gui/version.rc`（`1 VERSIONINFO`，FileVersion 3.20.10.0）、`rs-gui/icon.ico`（`app/icon.ico` 的逐字节副本）、`build.rs` 的 `embed_resource::compile`（`manifest_required()`：**编不进去就构建失败**，不静默降级） | `tests/winres_contract.rs` 3 条（图标逐字节 + 版本号同源 + 资源 ID/ASCII 约定）；构建期 `build.rs` 字节比对 |
+| 根 workspace `Cargo.toml`（8 crate + 版本统一口径说明，**不改各 crate 版本号**） | 仓库根 `Cargo.toml`（`members` 8 条 + `resolver = "2"` + 版本统一口径注释）+ 根 `Cargo.lock`（唯一锁文件）；8 份成员级 `Cargo.lock` 删除；8 份成员级 `[profile.release]` 上移为工作区唯一真源 | `cargo build` / `cargo test`（见下） |
+| 构建脚本骨架（`cargo build --release` + 产物改名 + SHA-256 校验，**默认只打测试名**） | 仓库根 `build-rs.ps1`（5 步：构建 → SHA-256 → 真跑 `--version` → 读 exe 版本资源 → 拷到测试名 `ProxyDeck.rs-build.exe`）；`-Final` 必须同时给 `-ConfirmOverwrite` 才可能产出 `ProxyDeck.exe` | 脚本自身把 `--version`/版本资源/哈希一致性都当闸门；见下「门禁实测」 |
+| `p8b3-diff-run` 等非生产 bin 的发布排除口径 | `rs-tuanjie/Cargo.toml`：`[[bin]] p8b3-diff-run` 加 `required-features = ["diff-runner"]`（默认不构建） | `cargo build --release` 产物清单里没有它；需要时 `--features diff-runner` 照旧可编 |
+| 更新过期文档 | 本文件 + `rs-bai/README.md` + `rs-tuanjie/README.md` + `src/win32.rs`/`src/tray.rs` 里「还没有图标资源」的注释 | — |
+
+**P7d-2 门禁实测**（命令与真实输出存档在 `.work/p7d2/`）：
+
+```powershell
+# 1) workspace 全绿（8 成员，一次 cargo test；CARGO_TARGET_DIR=E:\cargo-target\rs-gui）
+cargo build            # Finished dev profile，0 warning
+cargo test --workspace # 全绿（lib/集成/文档测试逐条见 .work/p7d2/ws-test-final2.txt）
+# 2) release 产物（测试名）能启动并过 --version + 版本资源进 exe（脚本内置 3 道）
+pwsh -File build-rs.ps1
+#   [ok] F:\AIXM\proxydeck\ProxyDeck.rs-build.exe  sha256 CC7612F8…
+#        --version → ProxyDeck v3.20.10 (proxy core v1.2.0)，exit 0
+#        VersionInfo.FileVersion → 3.20.10.0
+# 3) 版本资源工具独立复核（不靠 PowerShell 包装）
+python .work/p7d2/pe-res.py ProxyDeck.rs-build.exe
+#   RT_ICON: 7 个（16/24/32/48/64/128/256，全 PNG）
+#   RT_GROUP_ICON id=1 → icon ids [1..7]
+#   RT_VERSION id=1 → FileVersion 3.20.10.0 / ProductVersion 3.20.10.0 / FileOS 0x40004 / FileType 0x1
+```
+
+**边界（如实登记）**：
+- **没有发版、没有覆盖 `ProxyDeck.exe`**：`build-rs.ps1` 默认只产出测试名
+  `ProxyDeck.rs-build.exe`（仓库 `*.exe` 已在 `.gitignore`），`-Final` 需两道开关且本轮未跑。
+  `--version` 与 `version.rc` 的数字都取 `APP_VERSION`（v3.20.10），**本轮未升版本号**。
+- **图标不是新画的**：直接复用 `app/icon.ico`（sha256 `73CA0076…B505B7`，32,880 B）。
+  `build.rs` 与 `tests/winres_contract.rs` 双重锁「与 `app/` 侧逐字节相同」。
+- **`build-rs.ps1` 默认带 `--locked`**：workspace 的 `Cargo.lock` 已入库，锁文件漂移
+  应当报错而不是被静默重写；要放开就 `-CargoArgs @()`。
+- **workspace 进 workspace 的真实副作用（本轮实测踩到并已修）**：cargo 的 feature 解析
+  在**整个构建单元内取并集**——`serde_json` 的 `preserve_order` 一开，`Map` 就从
+  BTreeMap 变 IndexMap（键序从字典序变插入序）。`rs-bai`（黄金门禁逐字节对 Go）与
+  `rs-tuanjie`（`gojson::marshal_go_value`）都因此红过；修法是两边都**显式按字典序排键**
+  （`rs-bai::adapt::go_json_bytes` / `rs-tuanjie::gojson::write_go_value`），不再依赖 Map 实现。
+  详见根 `Cargo.toml` 的「版本统一口径」第 5 条。
+
 
 ### P7d-1（团结接线进分发器）——**本轮已做**
 
@@ -496,8 +549,8 @@ cargo run --manifest-path rs-gui\Cargo.toml            # = rs-gui 无参 → GUI
 |---|---|---|---|
 | 1 | **窗口外观** | 起窗后看顶栏 | 540×760；**没有**原生标题栏/边框（机身自绘的红黄绿灯条就是标题栏）；Win11 上窗口是**圆角**；界面渲染清晰（高 DPI 屏不糊） |
 | 2 | **无边框拖拽** | 拖机身台肩（非按钮处） | 鼠标按住能拖动窗口（`ccWindowCmd('move')` → 系统移动模态循环；拖到屏幕顶会触发 Windows 的最大化）；黄灯最小化、绿灯最大化/还原、红灯关窗 |
-| 3 | **窗口图标** | 看任务栏条目 + 窗口左上 | ⚠ **本轮拿不到图标**：Rust exe 还没有内嵌图标资源（P7d 才有 `.rc`），故显示的是系统默认图标。**这一条要等 P7d 才可能通过**，现在只确认不报错、不崩 |
-| 4 | **托盘图标常驻** | 看通知区域（可能折叠在 `^` 里） | 进程一起来图标就在（**窗口可见时也在**）；提示文字 = `ProxyDeck · 多平台代理控制台`。⚠ 同上：图标资源属 P7d，现在大概率是默认空白图标 |
+| 3 | **窗口图标** | 看任务栏条目 + 窗口左上 | **P7d-2 起资源已进 exe**（`1 ICON`，`app/icon.ico` 的逐字节副本）：预期看到 ProxyDeck 图标而不是系统默认图标。若仍空白，先查 `LoadIconW` 是否拿到句柄（那是运行时问题，不是资源没编进去） |
+| 4 | **托盘图标常驻** | 看通知区域（可能折叠在 `^` 里） | 进程一起来图标就在（**窗口可见时也在**）；提示文字 = `ProxyDeck · 多平台代理控制台`。**P7d-2 起图标资源已在 exe 内**（16×16 那档走 `LoadImageW`，取不到才退回 `LoadIconW`） |
 | 5 | **托盘单击切换** | 单击托盘图标 | 第一次：窗口藏进托盘；再点：带出并置前。**图标始终不消失** |
 | 6 | **托盘右键菜单** | 右键托盘图标 | 菜单两项：`显示界面` / `退出界面`。点菜单外部菜单要消失（`TrackPopupMenu` 前已 `SetForegroundWindow`）；点「退出界面」= 图标消失 + 进程退出 |
 | 7 | **关窗退托盘三模式** | 界面里把「关窗行为」切三档后各关一次窗 | `ask`（默认）：每次都弹问；`tray`：点红灯只藏窗、进程与后端继续活着，从托盘能带回来；`quit`：点红灯进程退出、托盘图标消失。落盘文件：`.work\p7c\manual-data\close_mode.txt`（内容 `tray`/`quit` 明文；`ask` = 文件不存在） |

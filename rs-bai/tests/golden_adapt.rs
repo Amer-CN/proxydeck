@@ -119,3 +119,41 @@ fn rust_adapt_matches_go_golden_byte_for_byte() {
         }
     );
 }
+
+/// P7d-2 回归门禁：改写后的出站必须是 **Go 的字典序**，与 `serde_json::Map` 的
+/// 实现无关（`preserve_order` 特性是构建单元内的并集，见 Cargo.toml 注释）。
+///
+/// 与上面那条黄金对照是**两条独立证据**：黄金对照锁「给定 baseline 字节相同」，
+/// 这条锁「不依赖 baseline、也不依赖构建配置」的键序合同——baseline 本身被重新
+/// 生成过（键序跟着当时那台机器的构建配置走）时，这条仍然拦得住。
+#[test]
+fn remarshal_is_sorted_like_go_regardless_of_map_impl() {
+    let input = r#"{"zebra":1,"messages":[{"role":"developer","content":"d","zz":2,"aa":3}],"max_tokens":99999}"#;
+
+    // 前置：本构建下 Map 确实是插入序（preserve_order 生效），否则本测试测不到东西
+    let parsed: serde_json::Value = serde_json::from_str(input).unwrap();
+    assert_eq!(
+        serde_json::to_string(&parsed).unwrap(),
+        input,
+        "preserve_order 未生效：Map 是 BTreeMap，`sort_keys` 那条路径没被执行到"
+    );
+
+    let out = rs_bai::adapt::adapt_quirks_body(input.as_bytes());
+    let out_str = String::from_utf8(out).unwrap();
+    assert_eq!(
+        out_str,
+        r#"{"max_tokens":8192,"messages":[{"aa":3,"content":"d","role":"system","zz":2}],"zebra":1}"#,
+        "改写后必须是 Go 的字典序（递归到嵌套对象）；键序不是字典序 = Go 会排而我们不排"
+    );
+
+    // 键序断言要**直接看字符串里三个键的先后位置**：上面那句是跟字面量比，
+    // 但字面量自己写错了（比如写成插入序）也会「通过」，所以这里按字典序复核一遍。
+    let positions = ["max_tokens", "messages", "zebra"]
+        .iter()
+        .map(|k| out_str.find(k).unwrap_or_else(|| panic!("输出里找不到 {k}")))
+        .collect::<Vec<_>>();
+    assert!(
+        positions.windows(2).all(|w| w[0] < w[1]),
+        "Go 的键序 = 字典序（max_tokens < messages < zebra），实测位置 {positions:?}，输出 {out_str}"
+    );
+}
