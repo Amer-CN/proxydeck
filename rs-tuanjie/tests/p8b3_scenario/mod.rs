@@ -171,6 +171,10 @@ struct FakeState {
     path_calls: BTreeMap<String, usize>,
     /// P8b 第五片：**按 cli_api_key 脚本的应答**（团结路径的通用形态，带自定义头）。
     unity_script: BTreeMap<String, Vec<Reply>>,
+    /// 按 cli_api_key 脚本的 `/v1/models` 应答（`/account-models` 与 `?full=true` 要
+    /// 按账号给不同模型清单；未登记的 key 回默认 [`FakeState::models_body`]）。
+    models_script: BTreeMap<String, Vec<Reply>>,
+    models_calls: BTreeMap<String, usize>,
     /// `/v1/models` 的应答体（默认 [`MODELS_JSON`]）。
     models_body: String,
     /// `/img/fetch.png` 的应答字节（远程图片预下载用）。
@@ -196,6 +200,8 @@ impl Default for FakeState {
             path_script: BTreeMap::new(),
             path_calls: BTreeMap::new(),
             unity_script: BTreeMap::new(),
+            models_script: BTreeMap::new(),
+            models_calls: BTreeMap::new(),
             models_body: MODELS_JSON.to_string(),
             image_body: Vec::new(),
             pipeline: false,
@@ -352,6 +358,18 @@ impl FakeUpstream {
         self.state.lock().unwrap().models_body = body.to_string();
     }
 
+    /// 登记某个 cli_api_key 在 `/v1/models` 上的**逐次应答**（越界后重复最后一条）。
+    ///
+    /// `/account-models` 与 `/v1/models?full=true` 要按账号返回不同清单（矩阵展开、
+    /// 「取模型最多的账号」），而默认的 [`FakeState::models_body`] 是全局一份。
+    /// 未登记的 key 仍回默认体。
+    pub fn set_models_script(&self, cli_api_key: &str, script: Vec<Reply>) {
+        let mut st = self.state.lock().unwrap();
+        st.models_calls.remove(cli_api_key);
+        st.models_script
+            .insert(cli_api_key.to_string(), script);
+    }
+
     /// 覆盖 `/img/fetch.png` 的字节。
     pub fn set_image_body(&self, body: Vec<u8>) {
         self.state.lock().unwrap().image_body = body;
@@ -363,6 +381,8 @@ impl FakeUpstream {
         st.path_script.clear();
         st.path_calls.clear();
         st.unity_script.clear();
+        st.models_script.clear();
+        st.models_calls.clear();
         st.chat_script.clear();
         st.chat_calls.clear();
         st.chat_order.clear();
@@ -534,7 +554,16 @@ fn serve_conn(mut stream: TcpStream, state: Arc<Mutex<FakeState>>) {
             }
         } else if bare == "/v1/models" {
             st.models_hits += 1;
-            (200u16, vec![], st.models_body.clone().into_bytes())
+            let key = auth.strip_prefix("Bearer ").unwrap_or(&auth).to_string();
+            if let Some(script) = st.models_script.get(&key).cloned() {
+                let n = st.models_calls.entry(key).or_insert(0);
+                let idx = *n;
+                *n += 1;
+                let rep = script[idx.min(script.len() - 1)].clone();
+                (rep.code, rep.headers, rep.body)
+            } else {
+                (200u16, vec![], st.models_body.clone().into_bytes())
+            }
         } else if bare == "/v1/chat/completions" {
             st.chat_hits += 1;
             if st.pipeline {

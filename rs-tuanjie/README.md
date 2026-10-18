@@ -105,18 +105,22 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 （`/model/info`、`/v1/models?full=true`、`/accounts` 的 `add`/`auto`）显式回
 **501 `not_implemented_in_pilot…`** —— 不假装已通、也不静默降级成假 200。
 
+> ⚠ **历史段落（2026-10-17 当时的实现状态）**：其中 `/model/info`、`/v1/models?full=true`
+> **已于 2026-10-18 补齐实现**（连同 `/account-models`），现只有 `/accounts` 的 `add`/`auto`
+> 仍回 501。别再照本段判断现状。
+
 ### 路由表对照（Go `server.go:119-138` 的 19 条注册）
 
 | # | Go 注册路径 | Rust 本片 | 说明 |
 |---|---|---|---|
 | 1 | `/health` | ✅ 已实现 | `status/service/uptimeSec/cli_api_key/backend` + judge/seed 四个告警字段（无告警形态）|
-| 2 | `/v1/models` | ⚠ 部分 | 上游 200 透传与 502 已迁；`modelsCache` 回退、`mergeProviderModels`、`staticModels` 兜底未迁；`?full=true` 显式 501 |
-| 3 | `/model/info` | ❌ 显式 501 | 别名×部署元数据聚合属后续小轮 |
+| 2 | `/v1/models` | ⚠ 部分 | 上游 200 透传与 502 已迁；`?full=true` 已实现（逐账号取模型最多的那份清单，5 分钟缓存 / `?refresh=1` 旁路）；`modelsCache` 回退、`mergeProviderModels`、`staticModels` 兜底未迁 |
+| 3 | `/model/info` | ✅ 已实现 | 别名×部署元数据聚合（1 小时缓存）；上游 `/model/info` 早已 403 ⇒ 解析失败时如实 502（**不编造费率**），有旧缓存才回缓存（门禁 `tests/p8b_models_endpoints.rs`）|
 | 4 | `/v1/stats` | ✅ 已实现 | `{"models":{…},"uptimeSec":N}` + `tuanjie-stats.json` 落盘/读回（`src/stats.rs`）|
 | 5 | `/quota` | ✅ 已实现 | 三条分支（无 uid / 不在池中 / 取 token 失败）+ 缓存口径（详见下）|
 | 6 | `/kimi-pacing` | ✅ 已实现 | GET `{"enabled","pending"}`；POST `{"enabled":bool}`，非法体 400 + `writeErr` |
 | 7 | `/accounts` | ⚠ 部分 | GET 全量已迁；POST `remove`/`toggle`/`setglm`/`setmodels`/未知 action 已迁；`add`/`auto` 显式 501 |
-| 8 | `/account-models` | ❌ 未注册 | 依赖 `cdp_browser.go` 与逐账号换 key |
+| 8 | `/account-models` | ✅ 已实现 | 逐账号换 key 拉 `/v1/models` + 5 分钟缓存 / `?refresh=1`；条目字段与 Go `accountModelsEntry` **同序同形**（含 GUI 矩阵直接读的 `count`）|
 | 9 | `/inflight` | ✅ 已实现 | `{"ok":true,"requests":[…]}`，字段**声明序**（struct）|
 | 10 | `/activity` | ✅ 已实现 | `?limit` 解析（>0 且 ≤200 才采信）+ 空数组形态 |
 | 11 | `/water-probe` | ❌ 未注册 | 依赖 `water.go` 的注水链路（P8c）；`probes.rs` 的探针集与基线内存态已迁（第五片）|
@@ -155,7 +159,7 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 ```
 ==== cases: 50, matched: 49, skipped: 1, mismatched: 0 ====
 ==== 逐字节严格要求: 25 条（/quota 与 /accounts 全量 + inflight 1 条）====
-  SKIP [model-info-501] SKIP（登记豁免）rust=501 go=502
+  SKIP [model-info-501] SKIP（登记豁免）rust=501 go=502   # 历史：2026-10-18 后该端点已实现
 两侧逐条一致（status / content-type / body / 上游观测量全部相同；豁免项见上）
 ```
 
@@ -425,11 +429,13 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
 19. **`/health` 的 `cli_api_key` 前缀按字符取**：Go 是 `key[:10]`（**字节**切片，
    少于 10 字节会 panic）；Rust 取前 10 个 `char` 且不 panic。线上 key 恒长于 10
    且是 ASCII，两条路径同值。
-20. **未迁的三条端点是显式 501（不是静默降级）**：`/model/info`、`/v1/models?full=true`、
-   `/accounts` 的 `action=add|auto`。差分脚本把 `model-info-501` 列为 SKIP 豁免并打印
-   两侧取值；`add`/`auto` 的 501 **不在**差分序列里（Go 侧会真打上游/开浏览器，
-   不放进自动化对照），由 `tests/p8b3_http_contract.rs` 的
-   `unimplemented_routes_say_so_instead_of_pretending` 锁住。
+20. **仍未迁的 `/accounts` `add`/`auto` 是显式 501（不是静默降级）**；`/model/info` 与
+   `/v1/models?full=true` 已随「模型三端点」小轮迁入（见路由表 2/3/8）。`add`/`auto` 的
+   501 **不在**差分序列里（Go 侧会真打上游/开浏览器，不放进自动化对照），由
+   `tests/p8b3_http_contract.rs` 的
+   `model_endpoints_are_implemented_and_report_upstream_failures` 锁住（同文件另锁
+   `/model/info` 的 502 与 `/account-models` 的 200）。历史上 `model-info-501` 的 SKIP
+   是 P8b 第三片当轮的记录；本轮起 Rust 与 Go 同为 502（上游 `/model/info` 403 ⇒ 解析失败）。
 21. **`/v1/models` 只迁了"上游 200 透传"与 502**：`modelsCache`（1 小时回退）、
    `mergeProviderModels`（外部账号模型条目）、`staticModels`（静态候选池兜底）未迁——
    上游非 200 时 Rust 直接 502，而 Go 会先回退缓存、再退静态池。**属后续小轮**。
@@ -497,7 +503,9 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
    `/accounts`、`/inflight`、`/activity`、`/v1/images/generations`、`/v1/videos`、`/agnesapi`。
    **【P8b 第三片已迁一部分】** 路由表/CORS/`writeJSON`/`writeErr`、`/health`、`/v1/stats`、
    `/quota`、`/kimi-pacing`、`/accounts`（GET + 五个 POST 分支）、`/inflight`、`/activity`、
-   `/v1/models`（上游 200 透传与 502）已迁；`/model/info`、`?full=true`、`add`/`auto` 显式 501；
+   `/v1/models`（上游 200 透传与 502）已迁；**「模型三端点」小轮**又迁了
+   `/account-models`、`/v1/models?full=true`、`/model/info`（`handleModelsFull` /
+   `handleModelInfo` / `handleAccountModels`）；`/accounts` 的 `add`/`auto` 仍显式 501；
    `handleChat` 与其余端点属后续小轮——见下节「P8b 第三片」。
 2. `handlers_extra.go`：账号池 HTTP 面与其余 handler。
 3. ~~`accounts.go`：账号池全量（401 标死换活号、rescan 复位、`ResumeBudgetLoop`）。~~

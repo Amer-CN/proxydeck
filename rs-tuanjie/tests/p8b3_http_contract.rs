@@ -19,6 +19,16 @@ use tower::ServiceExt;
 
 use rs_tuanjie::server::{router, AppState};
 
+/// 同一测试二进制里的用例共享进程级资源（`USERPROFILE`、`PROXYDECK_DATA_DIR`、测试缝
+/// base）。并行跑时后启动的用例会把 base 指到自己的假上游，先启动的用例再发请求就可能
+/// 连到已析构的端口——模型端点用例需要走真实网络路径后实测撞到过
+/// `error sending request`。整文件串行（共享状态在进程内只有一份）。
+static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// 造一个隔离的 `AppState`：测试缝把两个域指到假上游，环境指到临时目录。
 ///
 /// `AppState::new()` 会构造账号池与统计（读数据目录）——`PROXYDECK_DATA_DIR` 与
@@ -58,6 +68,7 @@ fn root_of(tag: &str) -> std::path::PathBuf {
 
 #[tokio::test]
 async fn cors_headers_on_every_response_and_options_short_circuits() {
+    let _g = serial();
     let root = root_of("cors");
     let up = scenario::FakeUpstream::start(vec![]);
     let st = test_state(&up, &root);
@@ -104,6 +115,7 @@ async fn cors_headers_on_every_response_and_options_short_circuits() {
 
 #[tokio::test]
 async fn method_not_allowed_is_go_http_error_shape() {
+    let _g = serial();
     let root = root_of("405");
     let up = scenario::FakeUpstream::start(vec![]);
     let st = test_state(&up, &root);
@@ -128,6 +140,7 @@ async fn method_not_allowed_is_go_http_error_shape() {
 
 #[tokio::test]
 async fn unknown_path_is_go_servemux_404() {
+    let _g = serial();
     let root = root_of("404");
     let up = scenario::FakeUpstream::start(vec![]);
     let st = test_state(&up, &root);
@@ -153,6 +166,7 @@ async fn unknown_path_is_go_servemux_404() {
 
 #[tokio::test]
 async fn write_json_shape_trailing_newline_and_no_charset() {
+    let _g = serial();
     let root = root_of("json");
     let up = scenario::FakeUpstream::start(vec![]);
     let st = test_state(&up, &root);
@@ -177,6 +191,7 @@ async fn write_json_shape_trailing_newline_and_no_charset() {
 
 #[tokio::test]
 async fn write_err_encapsulates_api_error_shape() {
+    let _g = serial();
     let root = root_of("err");
     let up = scenario::FakeUpstream::start(vec![]);
     let st = test_state(&up, &root);
@@ -212,24 +227,34 @@ async fn write_err_encapsulates_api_error_shape() {
 }
 
 #[tokio::test]
-async fn unimplemented_routes_say_so_instead_of_pretending() {
+async fn model_endpoints_are_implemented_and_report_upstream_failures() {
+    let _g = serial();
     let root = root_of("501");
     let up = scenario::FakeUpstream::start(vec![]);
     let st = test_state(&up, &root);
 
-    for path in ["/model/info", "/v1/models?full=true"] {
-        let (status, _h, body) = call(st.clone(), "GET", path).await;
-        assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{path}");
-        assert!(
-            body.contains("not_implemented_in_pilot"),
-            "{path} 应显式说明未迁：{body:?}"
-        );
-    }
-    // 未注册的端点回 404（**不**假装存在）
-    for path in ["/account-models"] {
-        let (status, _h, _b) = call(st.clone(), "GET", path).await;
-        assert_eq!(status, StatusCode::NOT_FOUND, "{path} 应回 404（本片未注册）");
-    }
+    // `/model/info` 已实现（Go `handleModelInfo` 同口径）：假上游的 `/model/info`
+    // 是 404 + 空体 ⇒ 解析失败 ⇒ 502「解析 /model/info 失败」（**不编造费率**）。
+    let (status, _h, body) = call(st.clone(), "GET", "/model/info").await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "/model/info");
+    assert!(
+        body.contains("解析 /model/info 失败"),
+        "/model/info 应如实报解析失败：{body:?}"
+    );
+
+    // `?full=true` 已实现：假上游 `/v1/models` 恒 200 ⇒ 返回 data 数组。
+    let (status, _h, body) = call(st.clone(), "GET", "/v1/models?full=true").await;
+    assert_eq!(status, StatusCode::OK, "/v1/models?full=true");
+    let v: serde_json::Value = serde_json::from_str(&body).expect("合法 JSON");
+    assert!(v["data"].is_array(), "full=true 应返回 data 数组：{body:?}");
+
+    // `/account-models` 已注册：本地合成账号一项，结构与 Go `accountModelsEntry` 同。
+    let (status, _h, body) = call(st.clone(), "GET", "/account-models").await;
+    assert_eq!(status, StatusCode::OK, "/account-models");
+    let v: serde_json::Value = serde_json::from_str(&body).expect("合法 JSON");
+    assert_eq!(v["ok"], serde_json::Value::Bool(true));
+    assert!(v["accounts"].is_array(), "{body:?}");
+
     // P8c 起 `/water-probe` 已注册：不带 `?history=1` / `?channels=1` 的 GET 回 Go 同款
     // 纯文本 405（`handlers_extra.go:442` 的 `http.Error(w,"method not allowed",405)`）。
     let (status, headers, body) = call(st.clone(), "GET", "/water-probe").await;

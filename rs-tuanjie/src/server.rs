@@ -10,9 +10,11 @@
 //! * **已注册且已实现（每条有真 Go 对照门禁）**：`/health`、`/v1/models`（上游 200 透传
 //!   与 502 两条）、`/v1/stats`、`/quota`、`/kimi-pacing`、`/accounts`（GET + `remove`/
 //!   `toggle`/`setglm`/`setmodels`/未知 action 五条 POST 分支）、`/activity`、`/inflight`、
-//!   **`/v1/chat/completions`**（P8b 第四片：池路径 + 单账号路径，见 [`crate::chat`]）。
-//! * **已注册但显式 501**（属后续小轮，**不假装已通**）：`/model/info`、
-//!   `/v1/models?full=true`、`/accounts` 的 `action=add|auto`。
+//!   **`/v1/chat/completions`**（P8b 第四片：池路径 + 单账号路径，见 [`crate::chat`]）、
+//!   **`/account-models`**（逐账号模型矩阵）、**`/v1/models?full=true`**（全池取模型最多的
+//!   那份列表）、**`/model/info`**（别名 × 部署元数据聚合）——后三条照
+//!   `server.go:523-870` 移植，缓存口径同 Go（5 分钟 / 5 分钟 / 1 小时）。
+//! * **已注册但显式 501**（属后续小轮，**不假装已通**）：`/accounts` 的 `action=add|auto`。
 //! * **本版有意删除（2026-10-18 用户裁决）**：`/vision-config`、`/media-config`、
 //!   `/v1/images/generations`、`/v1/videos*`、`/agnesapi` 不再注册 ⇒ 一律 404
 //!   （生图/生视频与识图改路由整块下线）。识图改为：目标模型不在内置多模态清单而请求
@@ -34,7 +36,7 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, State};
@@ -69,6 +71,46 @@ pub const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
 /// `/health` 里 `cli_api_key` 的前缀长度 —— `server.go:258` 的 `key[:10]`。
 pub const HEALTH_KEY_PREFIX: usize = 10;
 
+/// 三个模型端点的内存缓存 —— Go 侧是三个包级变量（`server.go:330-345` 的
+/// `accountModelsCache`/`fullModelsCache`、`:698-705` 的 `infoCache`）。
+///
+/// 值 = `(响应字节, 写入时刻)`，`None` = **从未成功拉取过**（与 Go 的
+/// `len(cache)==0` / `infoCache == nil` 同义，失败时据此决定是否回缓存）。
+/// 缓存的字节就是将要写出的响应体：`/account-models`、`?full=true` 存的是
+/// `w.Write` 的原始字节（无末尾换行），`/model/info` 存的是 `writeJSON` 的完整行
+/// （含末尾换行）。
+#[derive(Default)]
+pub struct ModelEndpointCache {
+    pub account_models: std::sync::Mutex<Option<(Vec<u8>, Instant)>>,
+    pub full_models: std::sync::Mutex<Option<(Vec<u8>, Instant)>>,
+    pub model_info: std::sync::Mutex<Option<(Vec<u8>, Instant)>>,
+}
+
+impl ModelEndpointCache {
+    /// 命中且未过期 → 克隆响应体。锁只在同步段内持有，**绝不跨 await**。
+    fn fresh(
+        slot: &std::sync::Mutex<Option<(Vec<u8>, Instant)>>,
+        ttl: std::time::Duration,
+    ) -> Option<Vec<u8>> {
+        let g = slot.lock().unwrap_or_else(|e| e.into_inner());
+        match g.as_ref() {
+            Some((body, at)) if at.elapsed() < ttl => Some(body.clone()),
+            _ => None,
+        }
+    }
+
+    /// 不论年龄，只要有上一次成功结果就取（Go 的 `cached != nil` 回退）。
+    fn cached(slot: &std::sync::Mutex<Option<(Vec<u8>, Instant)>>) -> Option<Vec<u8>> {
+        let g = slot.lock().unwrap_or_else(|e| e.into_inner());
+        g.as_ref().map(|(body, _)| body.clone())
+    }
+
+    fn store(slot: &std::sync::Mutex<Option<(Vec<u8>, Instant)>>, body: Vec<u8>) {
+        let mut g = slot.lock().unwrap_or_else(|e| e.into_inner());
+        *g = Some((body, Instant::now()));
+    }
+}
+
 /// 服务状态。
 pub struct AppState {
     pub started_at: Instant,
@@ -102,6 +144,8 @@ pub struct AppState {
     pub seed_guard: Arc<crate::seedcheck::SeedGuard>,
     /// 注水检测历史（内存环形 20 条）—— `server.go:53` 的 `waterHist`。
     pub water_history: crate::water_handler::WaterHistory,
+    /// 三个模型端点的缓存（`/account-models`、`?full=true`、`/model/info`）。
+    pub model_cache: ModelEndpointCache,
 }
 
 impl AppState {
@@ -128,6 +172,7 @@ impl AppState {
             judge_alert: crate::chat::JudgeAlert::new(),
             seed_guard: Arc::new(crate::seedcheck::SeedGuard::new()),
             water_history: crate::water_handler::WaterHistory::new(),
+            model_cache: ModelEndpointCache::default(),
         })
     }
 }
@@ -141,6 +186,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         // 挂成 `get(...)` 会让 POST 变 axum 的 405（体为空、无 nosniff），与 Go 分歧。
         .route("/health", any(handle_health))
         .route("/v1/models", any(handle_models))
+        // 账号矩阵：逐账号拉上游模型清单（5 分钟缓存 / `?refresh=1` 旁路）。
+        .route("/account-models", any(handle_account_models))
         // chat 转发（P8b 第四片）：池路径 + 单账号路径。
         .route("/v1/chat/completions", any(crate::chat::handle_chat))
         .route("/model/info", any(handle_model_info))
@@ -443,31 +490,27 @@ pub fn health_key_prefix(key: &str) -> String {
     format!("{head}...")
 }
 
-/// `GET /v1/models`（`serveModels`，`server.go:419-470`）——本片只迁**上游 200 透传**与
-/// **502** 两条；`modelsCache` 回退、`mergeProviderModels`、`staticModels` 静态池兜底
-/// 属后续小轮（`?full=true` 显式 501）。
+/// `GET /v1/models`（`handleModels` + `serveModels` 的**已迁部分**）。
+///
+/// 无 `?full=true` 时行为**逐字节保持原样**（上游 200 透传 / 502）；`?full=true`
+/// 走 [`handle_models_full`]（Go `handleModelsFull`，`server.go:523-593`）。
 async fn handle_models(State(st): State<Arc<AppState>>, uri: Uri) -> Response {
-    if query_param(uri.query().unwrap_or(""), "full").as_deref() == Some("true") {
-        return write_err(
-            StatusCode::NOT_IMPLEMENTED,
-            "not_implemented_in_pilot: /v1/models?full=true 属后续小轮（逐账号换 key 拉全量）",
-        );
+    let q = uri.query().unwrap_or("");
+    if query_param(q, "full").as_deref() == Some("true") {
+        let refresh = query_param(q, "refresh").as_deref() == Some("1");
+        return handle_models_full(&st, refresh).await;
     }
+    serve_models_plain(&st).await
+}
+
+/// 普通 `/v1/models`（`serveModels` 的 200/502 两条；与迁移时逐字节一致）。
+async fn serve_models_plain(st: &AppState) -> Response {
     match st.client.forward_get("/v1/models").await {
         Ok(resp) => {
             let status = resp.status();
             let body = resp.bytes().await.unwrap_or_default();
             if status == reqwest::StatusCode::OK {
-                // `w.Write(body)`：原样字节，**不补换行**（与 writeJSON 的差别就在这）
-                return (
-                    StatusCode::OK,
-                    [
-                        (header::CONTENT_TYPE, JSON_CONTENT_TYPE),
-                        (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
-                    ],
-                    body.to_vec(),
-                )
-                    .into_response();
+                return raw_ok(body.to_vec());
             }
             write_err(
                 StatusCode::BAD_GATEWAY,
@@ -478,12 +521,482 @@ async fn handle_models(State(st): State<Arc<AppState>>, uri: Uri) -> Response {
     }
 }
 
-/// `GET /model/info`（`handleModelInfo`，`server.go:709-…`）——**未实现**，属后续小轮。
-async fn handle_model_info() -> Response {
-    write_err(
-        StatusCode::NOT_IMPLEMENTED,
-        "not_implemented_in_pilot: /model/info 属后续小轮（别名×部署元数据聚合）",
+/// `w.Write(body)` 形态的 200：`application/json` + **原始字节**（不补换行）。
+fn raw_ok(body: Vec<u8>) -> Response {
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, JSON_CONTENT_TYPE),
+            (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+        ],
+        body,
     )
+        .into_response()
+}
+
+// ---------------------------------------------------------------- 模型三端点
+
+/// `/account-models` 与 `?full=true` 的缓存时长 —— Go 的 `5 * time.Minute`
+/// （`server.go:611`、`:548`）。
+const MODELS_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+
+/// `/model/info` 的缓存时长 —— Go 的 `time.Hour`（`server.go:726`）。
+const MODEL_INFO_CACHE_TTL: Duration = Duration::from_secs(60 * 60);
+
+/// 上游模型清单读取上限 —— Go 两处 `io.LimitReader(resp.Body, 2<<20)`。
+const MODELS_BODY_LIMIT: usize = 2 << 20;
+
+/// `ForwardDirect(ctx, http.MethodGet, path, nil, token, nil)`（`handlers_extra.go:211-226`）
+/// 的 **GET 形态**：按指定账号的 access_token 现换 key，再用**同一套**
+/// [`crate::headers::litellm_headers`]（签名凭证链）打 LiteLLM。
+///
+/// 与 chat 的 [`crate::chat::forward_direct`] 只差一点：后者写死 POST + 请求体（聊天路径
+/// 专用），这里只做读路径。**签名算法/头集合仍是同一个函数产出的**，没有第二份实现。
+async fn forward_direct_get(
+    st: &AppState,
+    path: &str,
+    access_token: &str,
+) -> Result<reqwest::Response, String> {
+    let key = st
+        .client
+        .fetch_key_with_token(access_token)
+        .await
+        .map_err(|e| go_err_text(&e))?;
+    let url = format!("{}{}", st.client.litellm_base(), path);
+    let sess = crate::session::new_uuid_v4();
+    let mut req = st.client.http().get(url);
+    for (k, v) in crate::headers::litellm_headers(
+        path,
+        &key,
+        &sess,
+        crate::client::now_unix(),
+        st.client.user_agent(),
+    ) {
+        req = req.header(k, v);
+    }
+    req.send()
+        .await
+        .map_err(|e| go_err_text(&crate::Error::Forward(e)))
+}
+
+/// `json.Unmarshal` 到结构体的 Go 语义（根是 `null` 时不报错、留零值）。
+fn decode_go_struct<T: serde::de::DeserializeOwned + Default>(
+    body: &[u8],
+) -> Result<T, serde_json::Error> {
+    let v: serde_json::Value = serde_json::from_slice(body)?;
+    if v.is_null() {
+        return Ok(T::default());
+    }
+    serde_json::from_value(v)
+}
+
+/// `GET /account-models`（`handleAccountModels`，`server.go:596-676`）。
+///
+/// 逐账号换 key 打官网 = N 账号 × 1 次官方请求，只在用户手势（开弹窗/展开/刷新）时
+/// 触发；结果缓存 5 分钟，`?refresh=1` 旁路缓存。
+///
+/// 响应字段与 Go 的 `accountModelsEntry` **声明序逐字一致**：
+/// `user_id/username(omitempty)/source(omitempty)/enabled/budget_exceeded/count/models/err(omitempty)`。
+/// `count` 恒存在（GUI 矩阵读它显示「可用模型 N 个」），`models` 恒为数组（空时为 `[]`）。
+async fn handle_account_models(State(st): State<Arc<AppState>>, uri: Uri) -> Response {
+    let refresh = query_param(uri.query().unwrap_or(""), "refresh").as_deref() == Some("1");
+    if !refresh {
+        if let Some(body) =
+            ModelEndpointCache::fresh(&st.model_cache.account_models, MODELS_CACHE_TTL)
+        {
+            return raw_ok(body);
+        }
+    }
+
+    let ids = st.pool.sorted_user_ids();
+    let mut entries: Vec<GJ> = Vec::with_capacity(ids.len());
+    for uid in ids {
+        let Some(acc) = st.pool.get(&uid) else {
+            continue;
+        };
+        let mut models: Vec<String> = Vec::new();
+        let mut err: Option<String> = None;
+        if !acc.enabled || acc.budget_exceeded {
+            err = Some("未参与调度（停用或配额用尽）".to_string());
+        } else {
+            let tok = st
+                .pool
+                .effective_access_token(&acc)
+                .ok()
+                .filter(|t| !t.is_empty());
+            match tok {
+                None => err = Some("取 token 失败".to_string()),
+                Some(tok) => match forward_direct_get(&st, "/v1/models", &tok).await {
+                    Err(e) => err = Some(e),
+                    Ok(resp) => {
+                        let status = resp.status().as_u16();
+                        if status != 200 {
+                            err = Some(format!("上游返回 {status}"));
+                        } else {
+                            let body =
+                                crate::chat::read_body_bounded(resp, MODELS_BODY_LIMIT).await;
+                            match decode_go_struct::<ModelsIdDoc>(&body) {
+                                Err(_) => err = Some("上游响应解析失败".to_string()),
+                                Ok(doc) => {
+                                    for row in doc.data.unwrap_or_default().into_iter().flatten() {
+                                        if !row.id.is_empty() {
+                                            models.push(row.id);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+        }
+
+        // Go 的 struct 声明序（不是 map 的字节序）。
+        let mut pairs: Vec<(&str, GJ)> = vec![("user_id", GJ::Str(acc.user_id.clone()))];
+        if !acc.username.is_empty() {
+            pairs.push(("username", GJ::Str(acc.username.clone())));
+        }
+        if !acc.source.is_empty() {
+            pairs.push(("source", GJ::Str(acc.source.clone())));
+        }
+        pairs.push(("enabled", GJ::Bool(acc.enabled)));
+        pairs.push(("budget_exceeded", GJ::Bool(acc.budget_exceeded)));
+        pairs.push(("count", GJ::Int(models.len() as i64)));
+        pairs.push((
+            "models",
+            GJ::Arr(models.into_iter().map(GJ::Str).collect()),
+        ));
+        if let Some(e) = err {
+            pairs.push(("err", GJ::Str(e)));
+        }
+        entries.push(gobj_ordered(pairs));
+    }
+
+    // `json.Marshal(map[string]any{...})` —— 键按字节序：accounts / fetched_at / ok。
+    let out = gobj(vec![
+        ("ok", GJ::Bool(true)),
+        ("fetched_at", GJ::Int(crate::client::now_unix())),
+        ("accounts", GJ::Arr(entries)),
+    ]);
+    let mut body = Vec::new();
+    out.write(&mut body); // `w.Write(out)`：无末尾换行
+    ModelEndpointCache::store(&st.model_cache.account_models, body.clone());
+    raw_ok(body)
+}
+
+/// `/account-models` 的 `json.Unmarshal` 目标（Go 的匿名 struct，只取 `data[].id`）。
+#[derive(Default, serde::Deserialize)]
+struct ModelsIdDoc {
+    #[serde(default)]
+    data: Option<Vec<Option<ModelIdRow>>>,
+}
+
+#[derive(Default, serde::Deserialize)]
+struct ModelIdRow {
+    #[serde(default)]
+    id: String,
+}
+
+/// `GET /v1/models?full=true`（`handleModelsFull`，`server.go:523-593`）。
+///
+/// 遍历账号池，用各账号 token 拉 `/v1/models`，**取模型数最多的那份原始响应体**；
+/// 5 分钟缓存，`?refresh=1` 旁路。所有账号都失败时回退到普通 `/v1/models` 路径
+/// （Go 是 `s.serveModels(w, r, false)`；本片只迁了 200/502 两条，见 [`serve_models_plain`]）。
+async fn handle_models_full(st: &AppState, refresh: bool) -> Response {
+    if !refresh {
+        if let Some(body) = ModelEndpointCache::fresh(&st.model_cache.full_models, MODELS_CACHE_TTL)
+        {
+            return raw_ok(body);
+        }
+    }
+
+    let ids = st.pool.sorted_user_ids();
+    let mut best: Option<Vec<u8>> = None;
+    let mut best_count: i64 = -1;
+    for uid in ids {
+        let Some(acc) = st.pool.get(&uid) else {
+            continue;
+        };
+        if !acc.enabled || acc.budget_exceeded {
+            continue;
+        }
+        let Ok(tok) = st.pool.effective_access_token(&acc) else {
+            continue;
+        };
+        if tok.is_empty() {
+            continue;
+        }
+        let Ok(resp) = forward_direct_get(st, "/v1/models", &tok).await else {
+            continue;
+        };
+        if resp.status().as_u16() != 200 {
+            continue;
+        }
+        let body = crate::chat::read_body_bounded(resp, MODELS_BODY_LIMIT).await;
+        let count = models_count(&body);
+        if count > best_count {
+            best_count = count;
+            best = Some(body);
+        }
+    }
+
+    if let Some(body) = best {
+        ModelEndpointCache::store(&st.model_cache.full_models, body.clone());
+        return raw_ok(body);
+    }
+    // 所有账号都失败 → 同 Go 的回退（普通拉取）。
+    serve_models_plain(st).await
+}
+
+/// `json.Unmarshal(body, &struct{Data []json.RawMessage})` 后 `len(Data)`：
+/// 解析失败/没有 `data` 数组时 Go 得 0，这里同样返回 0（0 > -1 仍会选中首份 body）。
+fn models_count(body: &[u8]) -> i64 {
+    match serde_json::from_slice::<serde_json::Value>(body) {
+        Ok(v) => v
+            .get("data")
+            .and_then(|d| d.as_array())
+            .map(|a| a.len() as i64)
+            .unwrap_or(0),
+        Err(_) => 0,
+    }
+}
+
+/// `GET /model/info`（`handleModelInfo`，`server.go:709-870`）。
+///
+/// 1. 实时拉上游 `/v1/models`（用户可调用别名）；2. 实时拉上游 `/model/info`
+/// （部署元数据）；3. 按去 `-internal`/`-public` 后缀的键把费率/上限/后端映射到别名。
+///
+/// **上游 `/model/info` 早已 403**（CLAUDE.md 记载）。Go 的处理是：只看传输错误，
+/// 不看状态码；`/model/info` 的 403 HTML 会在 JSON 解析处失败 → **有旧缓存用旧缓存，
+/// 否则 `writeErr(502, "解析 /model/info 失败: …")`**。这里逐条照搬——**绝不编造费率**。
+async fn handle_model_info(State(st): State<Arc<AppState>>) -> Response {
+    if let Some(body) = ModelEndpointCache::fresh(&st.model_cache.model_info, MODEL_INFO_CACHE_TTL)
+    {
+        return raw_ok(body);
+    }
+
+    // 1. 用户可调用别名（实时）
+    let mresp = match st.client.forward_get("/v1/models").await {
+        Ok(r) => r,
+        Err(e) => return model_info_cached_or_502(&st, go_err_text(&e)),
+    };
+    let mbody = match mresp.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => return model_info_cached_or_502(&st, format!("解析 /v1/models 失败: {e}")),
+    };
+    let ml: ModelsForInfoDoc = match decode_go_struct(&mbody) {
+        Ok(v) => v,
+        Err(e) => return model_info_cached_or_502(&st, format!("解析 /v1/models 失败: {e}")),
+    };
+
+    // 2. `/model/info` 部署元数据（按去后缀名索引）
+    //    注意：与 Go 相同，**不检查状态码**——403 HTML 会在下面的解析处失败。
+    let iresp = match st.client.forward_get("/model/info").await {
+        Ok(r) => r,
+        Err(e) => return model_info_cached_or_502(&st, go_err_text(&e)),
+    };
+    let ibody = match iresp.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => return model_info_cached_or_502(&st, format!("解析 /model/info 失败: {e}")),
+    };
+    let raw: ModelInfoDoc = match decode_go_struct(&ibody) {
+        Ok(v) => v,
+        Err(e) => return model_info_cached_or_502(&st, format!("解析 /model/info 失败: {e}")),
+    };
+
+    // 聚合：部署变体去掉 -internal/-public 后作为键，同名合并、字段取非空、后端去重。
+    let mut aggs: BTreeMap<String, InfoAgg> = BTreeMap::new();
+    for dep in raw.data.unwrap_or_default().into_iter().flatten() {
+        let key = strip_model_variant(&dep.model_name);
+        let a = aggs.entry(key).or_default();
+        let mi = dep.model_info.unwrap_or_default();
+        if a.max_in.is_none() {
+            a.max_in = mi.max_input_tokens;
+        }
+        if a.max_out.is_none() {
+            a.max_out = mi.max_tokens;
+        }
+        if a.input_cost.is_none() {
+            a.input_cost = mi.input_cost_per_token;
+        }
+        if a.output_cost.is_none() {
+            a.output_cost = mi.output_cost_per_token;
+        }
+        if a.cache_cost.is_none() {
+            a.cache_cost = mi.cache_read_input_token_cost;
+        }
+        if let Some(b) = dep.litellm_params.map(|p| p.model) {
+            if !b.is_empty() && !a.backends.contains(&b) {
+                a.backends.push(b);
+            }
+        }
+    }
+
+    // 3. 组装：别名（/v1/models）× 元数据（映射）+ max_model_len。
+    let mut list: Vec<GJ> = Vec::new();
+    for row in ml.data.unwrap_or_default().into_iter().flatten() {
+        let id = row.id;
+        let mut max_in = row.max_model_len;
+        let mut max_out = None;
+        let mut input_cost = None;
+        let mut output_cost = None;
+        let mut cache_cost = None;
+        let mut backends: Vec<String> = Vec::new();
+        if let Some(a) = aggs.get(&id) {
+            if max_in.is_none() {
+                max_in = a.max_in;
+            }
+            max_out = a.max_out;
+            input_cost = a.input_cost;
+            output_cost = a.output_cost;
+            cache_cost = a.cache_cost;
+            backends = a.backends.clone();
+        }
+        // `ModelInfo` 的 struct 声明序。
+        let mut pairs: Vec<(&str, GJ)> = vec![("name", GJ::Str(id.clone()))];
+        if let Some(v) = max_in {
+            pairs.push(("maxInput", GJ::Int(v)));
+        }
+        if let Some(v) = max_out {
+            pairs.push(("maxOutput", GJ::Int(v)));
+        }
+        if let Some(v) = input_cost {
+            pairs.push(("inputCost", GJ::Float(v * 1e6)));
+        }
+        if let Some(v) = output_cost {
+            pairs.push(("outputCost", GJ::Float(v * 1e6)));
+        }
+        if let Some(v) = cache_cost {
+            pairs.push(("cacheReadCost", GJ::Float(v * 1e6)));
+        }
+        if !backends.is_empty() {
+            pairs.push((
+                "backends",
+                GJ::Arr(backends.into_iter().map(GJ::Str).collect()),
+            ));
+        }
+        let reasoning = reasoning_tiers_for(&id);
+        if !reasoning.is_empty() {
+            pairs.push(("reasoning", GJ::Str(reasoning.to_string())));
+        }
+        let note = alias_note(&id);
+        if !note.is_empty() {
+            pairs.push(("note", GJ::Str(note.to_string())));
+        }
+        list.push(gobj_ordered(pairs));
+    }
+
+    let body = GJ::Arr(list).to_go_json_line(); // writeJSON：末尾带换行
+    ModelEndpointCache::store(&st.model_cache.model_info, body.clone());
+    raw_ok(body)
+}
+
+/// `/model/info` 失败时的 Go 口径：`if cached != nil` 用旧缓存，否则 502 `writeErr`。
+fn model_info_cached_or_502(st: &AppState, msg: String) -> Response {
+    match ModelEndpointCache::cached(&st.model_cache.model_info) {
+        Some(body) => raw_ok(body),
+        None => write_err(StatusCode::BAD_GATEWAY, &msg),
+    }
+}
+
+/// `/v1/models`（handleModelInfo 用）：`data[].{id,max_model_len}`。
+#[derive(Default, serde::Deserialize)]
+struct ModelsForInfoDoc {
+    #[serde(default)]
+    data: Option<Vec<Option<ModelAliasRow>>>,
+}
+
+#[derive(Default, serde::Deserialize)]
+struct ModelAliasRow {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    max_model_len: Option<i64>,
+}
+
+/// 上游 `/model/info` 的 `{"data":[…]}`。
+#[derive(Default, serde::Deserialize)]
+struct ModelInfoDoc {
+    #[serde(default)]
+    data: Option<Vec<Option<DeploymentRow>>>,
+}
+
+#[derive(Default, serde::Deserialize)]
+struct DeploymentRow {
+    #[serde(default)]
+    model_name: String,
+    #[serde(default)]
+    litellm_params: Option<LiteParamsRow>,
+    #[serde(default)]
+    model_info: Option<ModelInfoFields>,
+}
+
+#[derive(Default, serde::Deserialize)]
+struct LiteParamsRow {
+    #[serde(default)]
+    model: String,
+}
+
+#[derive(Default, serde::Deserialize)]
+struct ModelInfoFields {
+    #[serde(default)]
+    max_tokens: Option<i64>,
+    #[serde(default)]
+    max_input_tokens: Option<i64>,
+    #[serde(default)]
+    input_cost_per_token: Option<f64>,
+    #[serde(default)]
+    output_cost_per_token: Option<f64>,
+    #[serde(default)]
+    cache_read_input_token_cost: Option<f64>,
+}
+
+/// 一个去后缀名的聚合桶（Go 的匿名 `agg`）。
+#[derive(Default)]
+struct InfoAgg {
+    max_in: Option<i64>,
+    max_out: Option<i64>,
+    input_cost: Option<f64>,
+    output_cost: Option<f64>,
+    cache_cost: Option<f64>,
+    backends: Vec<String>,
+}
+
+/// `strings.TrimSuffix(strings.TrimSuffix(name, "-internal"), "-public")`。
+fn strip_model_variant(name: &str) -> String {
+    let s = name.strip_suffix("-internal").unwrap_or(name);
+    s.strip_suffix("-public").unwrap_or(s).to_string()
+}
+
+/// `reasoningTiersFor`（`server.go:878-887`）：仅这三个模型声明 `max/high/low`。
+fn reasoning_tiers_for(model: &str) -> &'static str {
+    match model {
+        "codely-core" | "KIMI-K3" | "GLM-5.3-FLASH" => "max/high/low",
+        _ => "",
+    }
+}
+
+/// `aliasNote`（`server.go:890-908`）——**逐字**照搬 Go 的实测说明。
+fn alias_note(name: &str) -> &'static str {
+    match name {
+        "codely-air" => "✓可用 · 后端: deepseek-v4-flash-0731 · ~75 积分/1M token",
+        "codely-basic" => "✓可用 · 后端: deepseek-v4-flash-0731 · ~64 积分/1M token",
+        "codely-flash" => "✓可用 · 后端: deepseek-v4-flash-0731 · ~129 积分/1M token",
+        "codely-core" => {
+            "✓可用 · 后端: glm-5-2-260617 · ~91 积分/1M token（浅推理，单日波动 47-233）"
+        }
+        "codely-vl" => "✓可用 · 后端: qwen3.5-397b-a17b · ~405 积分/1M token · 视觉模型",
+        "GLM-5.2" => "✗锁定 · 被团结后端锁定，改用 codely-core",
+        "GLM-5.3" => "✓可用 · 输入3.2/输出11.2 积分/1M · 默认推理档",
+        "KIMI-K3" => "✓可用 · ⚠高价 · 16积分/1M输入 · 输出80 · flash的10倍 · 慎用于长上下文",
+        "codely-air-public" => "✗锁定 · 公开变体被团结后端锁定",
+        "codely-basic-public" => "✗锁定 · 公开变体被团结后端锁定",
+        "codely-core-public" => "✗锁定 · 公开变体被团结后端锁定",
+        "codely-flash-public" => "✗锁定 · 公开变体被团结后端锁定",
+        "codely-vl-public" => "✗锁定 · 公开变体被团结后端锁定",
+        "deepseek-v4-flash-0731-baidu" => "✗锁定 · 百度变体被团结后端锁定",
+        _ => "",
+    }
 }
 
 /// `GET /v1/stats`（`handleStats`，`server.go:1852-1864`）——不看方法。
