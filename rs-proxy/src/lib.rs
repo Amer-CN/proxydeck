@@ -1,7 +1,7 @@
-//! # rs-proxy —— ProxyDeck 主代理的 Rust 等价实现（绞杀者路线 P6）
+//! # rs-proxy —— ProxyDeck COMMAND 代理的 Rust 等价实现（绞杀者路线 P6）
 //!
 //! 替换对象：`internal/proxy`（9 文件）+ `internal/api` + `internal/server` + `internal/appdir`。
-//! 对外是 **55990 上的主代理**：CommandCode 路线（`/alpha/generate`）+ 三条入站协议
+//! 对外是 **55990 上的COMMAND 代理**：CommandCode 路线（`/alpha/generate`）+ 三条入站协议
 //! （OpenAI chat / OpenAI Responses / Anthropic Messages）。
 //!
 //! 逐字节对齐的底线与门禁见 `rs-proxy/README.md` 与 `tests/golden_proxy.rs`：
@@ -40,7 +40,7 @@ use std::sync::Mutex;
 
 use serde_json::Value;
 
-/// `proxy.Proxy` 的等价物：主代理的进程级状态。
+/// `proxy.Proxy` 的等价物：COMMAND 代理的进程级状态。
 ///
 /// 与 Go 的字段一一对应：`APIKey` / `BaseURL` / `Client` / `Debug` / `Stats`，
 /// 外加 `/v1/usage` 的三件缓存（Go 里叫 `usageMu/usageData/usageAt`）。
@@ -55,7 +55,7 @@ pub struct Proxy {
     /// 本次请求打到上游的次数（Go 用闭包局部计数；这里是进程级原子计数，门禁读它）。
     /// **每个请求开始前由 handler 重置**。
     pub upstream_hits: AtomicUsize,
-    /// 出站 opencode.ai 的会话头（Go 在 `internal/tuanjie` 侧；主代理不用，保留字段）。
+    /// 出站 opencode.ai 的会话头（Go 在 `internal/tuanjie` 侧；COMMAND 代理不用，保留字段）。
     pub opencode_session: Option<String>,
 }
 
@@ -230,7 +230,7 @@ mod tests {
 #[derive(clap::Parser, Debug)]
 #[command(
     name = "rs-proxy",
-    about = "ProxyDeck 主代理（Rust 重写，P6；等价 internal/proxy + internal/server）",
+    about = "ProxyDeck COMMAND 代理（Rust 重写，P6；等价 internal/proxy + internal/server）",
     version
 )]
 pub struct Args {
@@ -308,7 +308,7 @@ fn exe_dir() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
 }
 
-/// 启动主代理（原 `main.rs` 里 `Args::parse()` 之后的全部逻辑，逐行原样搬入）。
+/// 启动COMMAND 代理（原 `main.rs` 里 `Args::parse()` 之后的全部逻辑，逐行原样搬入）。
 ///
 /// 返回 `Err` = 服务启动失败；调用方按原有前缀打印（单独跑 `rs-proxy` 时是
 /// `Server failed: {e}` + 退出码 1），文案与退出码零变化。

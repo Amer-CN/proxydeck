@@ -13,7 +13,7 @@
 #
 # 成员清单（8 个，与仓库目录一一对应）：
 #   rs-gui      —— 宿主外壳 + 单 exe 多子模式分发器（唯一产出 exe 的成品目标）
-#   rs-proxy    —— 主代理核心（55990）
+#   rs-proxy    —— COMMAND 代理核心（55990）
 #   rs-bai      —— B.AI 插件（8891）
 #   rs-codebuddy—— WorkBuddy 插件（8787 / 8789）
 #   rs-comate   —— Comate 插件（8786）

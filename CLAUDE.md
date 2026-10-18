@@ -20,7 +20,7 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 │   ├─ plugin_modes.go          --plugin-* 子模式（进程内直跑插件服务）
 │   └─ ui.html                  全部 UI（内嵌；COMMAND/TUANJIE/WORKBUDDY/VIBEX 四模式键＋标题栏齿轮进设置＋媒体/注水副页）
 ├─ internal/
-│   ├─ proxy + server + api     主代理核心
+│   ├─ proxy + server + api     COMMAND 代理核心
 │   ├─ tuanjie/                 团结插件后端（8788）
 │   ├─ codebuddy/               WorkBuddy 插件后端（8787）
 │   ├─ comate/                  Comate 插件后端（8786）
@@ -30,7 +30,7 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 └─ build.py                     构建脚本（单模式，python build.py）
 ```
 
-- 端口约定：主代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891 / VibeX 8790
+- 端口约定：COMMAND 代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891 / VibeX 8790
 - 插件 = spawn 本 exe 的 `--plugin-<id> --port <n>` 子进程，独立常驻，关 GUI 不中断
 - **升版本必须同步的位置**（漏一处就有地方显示旧版；2026-09-02 按实操勘误计数，
   2026-09-10 补第 8 项）：
@@ -631,7 +631,7 @@ python build.py                      # 构建正式 exe（需全停服务）
 go build -o new.exe ./app            # 不停服务构建
 go vet ./...                         # 静态检查
 node --check <js>                    # ui.html 抽取 script 后语法校验
-./ProxyDeck.exe -headless # 主代理后台模式
+./ProxyDeck.exe -headless # COMMAND 代理后台模式
 ./ProxyDeck.exe --plugin-tuanjie --port 8788   # 单独拉团结
 curl http://127.0.0.1:8788/health    # 健康检查
 curl http://127.0.0.1:8787/v1/failover   # WorkBuddy hy4 兜底状态/配置

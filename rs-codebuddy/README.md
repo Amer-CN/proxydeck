@@ -327,7 +327,7 @@ pub trait CredSource {                              // src/cred.rs
     黄金一侧的具体形状见下面「P5c-b」那节。
 34. **`codebuddy-stats.json` 每笔都落盘（**没有节流**）**：简报与本 README 早前写的「节流落盘」
     在本仓 Go 里**不存在**（`addStat` → `saveStats` 直落，`internal/proxy/stats.go` 的 ≥2s 节流
-    属主代理）。本实现如实对齐 Go 现状，**不额外加节流**（同 rs-bai/P1 的口径）。
+    属COMMAND 代理）。本实现如实对齐 Go 现状，**不额外加节流**（同 rs-bai/P1 的口径）。
 35. **【Go 侧缺陷：已随 `3d4627f` 一并修好，Rust 已对齐；无残留分歧】** 统计文件内容为 JSON `null`
     （或顶层数组/字符串/坏 JSON/文件缺失）时的两段行为：
     * **装载段（`loadStats` + `handleStats`）：Go 已修、Rust 已对齐。**

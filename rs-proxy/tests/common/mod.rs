@@ -1,6 +1,6 @@
 //! 集成测试脚手架：黄金基准加载、假上游、被测算例的真 HTTP 服务、原始 HTTP 客户端与归一化。
 //!
-//! 与 `rs-codebuddy/tests/common/mod.rs` 同族（P6 的复制件），按主代理的合同裁剪：
+//! 与 `rs-codebuddy/tests/common/mod.rs` 同族（P6 的复制件），按COMMAND 代理的合同裁剪：
 //! * 上游是**进程内假上游**（axum，按黄金里的 `upstream_spec` 回放），不出网；
 //! * 被测算例用 crate 自己的 `http::router()` 起在临时端口（`127.0.0.1:0`），
 //!   与 Go 侧采集时一样走真实 TCP（不是函数直调）；
@@ -22,7 +22,7 @@ pub const GOLDEN_FILE: &str = "golden-proxy-go.json";
 
 /// 黄金基准路径：**先本 crate 的 `tests/golden/`，缺则回落 `.work/rust-rewrite/`**。
 ///
-/// P6 的基准放在 `.work/p6/`（主代理这一阶段的采集目录），故回落路径按阶段取。
+/// P6 的基准放在 `.work/p6/`（COMMAND 代理这一阶段的采集目录），故回落路径按阶段取。
 pub fn golden_path(file: &str) -> PathBuf {
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

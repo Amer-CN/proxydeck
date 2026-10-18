@@ -428,7 +428,7 @@ pub fn router(proxy: std::sync::Arc<Proxy>) -> Router {
 pub async fn serve(proxy: std::sync::Arc<Proxy>, host: &str, port: u16) -> std::io::Result<()> {
     let addr = format!("{host}:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    println!("主代理监听 http://{addr}");
+    println!("COMMAND 代理监听 http://{addr}");
     axum::serve(listener, router(proxy)).await
 }
 

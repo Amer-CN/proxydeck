@@ -1,6 +1,6 @@
 //! Go 兼容的基础设施：Base64 URL 编码、UUID v4、Go 时间格式。
 //!
-//! 只有主代理真正用到的那部分：`json.Marshal` 的写出器在 [`crate::gjson`]，
+//! 只有COMMAND 代理真正用到的那部分：`json.Marshal` 的写出器在 [`crate::gjson`]，
 //! JSON 解析在 [`crate::godecode`]。
 
 use base64::Engine;

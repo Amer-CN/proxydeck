@@ -36,7 +36,7 @@ const fn sf(name: &'static str, credential: bool) -> StateFile {
 ///
 /// 逐条对应 Go `legacyStateFiles`（顺序也一致，迁移日志的次序因此可比）。
 pub const LEGACY_STATE_FILES: &[(&str, bool)] = &[
-    // 主代理（app）
+    // COMMAND 代理（app）
     ("api-key.txt", true),
     ("stats.json", false),
     ("keymap.json", false),

@@ -1,7 +1,7 @@
 //! Go `encoding/json` 兼容的 JSON 写出器（编码侧）。
 //!
 //! 为什么不用 serde_json 直接序列化：Go 的 `json.Marshal` 与 serde 有**三处**逐字节差异，
-//! 主代理的对外响应与出站请求体全是 Go 现拼的，任一处不同就是「看起来对、字节不对」：
+//! COMMAND 代理的对外响应与出站请求体全是 Go 现拼的，任一处不同就是「看起来对、字节不对」：
 //!
 //! 1. **浮点**：Go 走 `strconv.AppendFloat(b, f, fmt, -1, 64)`，其中 `fmt = 'f'`，
 //!    仅当 `abs != 0 && (abs < 1e-6 || abs >= 1e21)` 时用 `'e'`。`'e'` 形态下 `strconv`
@@ -233,7 +233,7 @@ pub fn to_go_bytes(v: &Value) -> Vec<u8> {
 /// 并把 `omitempty` 的判定显式写出来（`*T == nil` / `s == ""`，与 Go 同）。
 ///
 /// 为什么不直接用 serde derive：浮点会落到 serde 的形态（见模块头注释），
-/// 而主代理的响应里有 `temperature`、`cost` 这类浮点字段，必须走 [`push_go_float`]。
+/// 而COMMAND 代理的响应里有 `temperature`、`cost` 这类浮点字段，必须走 [`push_go_float`]。
 pub struct GoObj {
     out: String,
     first: bool,

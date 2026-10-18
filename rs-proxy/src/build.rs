@@ -20,7 +20,7 @@ pub const DEFAULT_BASE_URL: &str = "https://api.commandcode.ai";
 
 /// Go `defaultTimeout`（300s）：**含响应体的总超时**。
 ///
-/// ⚠ 这是主代理与 bai/vibex 那几处不同的口径——Go 这里确实设了 `http.Client{Timeout: 300s}`，
+/// ⚠ 这是COMMAND 代理与 bai/vibex 那几处不同的口径——Go 这里确实设了 `http.Client{Timeout: 300s}`，
 /// 与 `rs-bai` P2 里「Go 对上游无总超时」的结论**不是同一处**。
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
 

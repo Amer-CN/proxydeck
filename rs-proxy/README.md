@@ -1,10 +1,10 @@
-# rs-proxy —— ProxyDeck 主代理的 Rust 等价实现（绞杀者路线 P6）
+# rs-proxy —— ProxyDeck COMMAND 代理的 Rust 等价实现（绞杀者路线 P6）
 
 > **状态：测试端口可跑的试点件，未接入 GUI / 未切流。** 不动 55990，不改 `app/`，不参与发版。
 >
 > 替换对象：`internal/proxy`（9 文件）+ `internal/api`（4 文件）+ `internal/server`（1 文件）
-> + `internal/appdir` 的主代理由到的那部分 + `internal/clientcwd` + `internal/version`。
-> 对外是 **55990 上的主代理**：CommandCode 路线（出站 `/alpha/generate`）+ 三条入站协议
+> + `internal/appdir` 的COMMAND 代理由到的那部分 + `internal/clientcwd` + `internal/version`。
+> 对外是 **55990 上的COMMAND 代理**：CommandCode 路线（出站 `/alpha/generate`）+ 三条入站协议
 > （OpenAI chat / OpenAI Responses / Anthropic Messages）。
 
 ## 一、怎么跑
@@ -16,7 +16,7 @@ cd rs-proxy
 cargo run -- --port 18790            # 测试端口，别用 55990
 ```
 
-命令行（对齐 `app/plugin_modes.go` 的主代理分支）：
+命令行（对齐 `app/plugin_modes.go` 的COMMAND 代理分支）：
 
 | 参数 | 含义 |
 |---|---|
@@ -109,9 +109,9 @@ pwsh -File .work/rust-rewrite/_p6test.ps1 -Targets http_contract
 
 ## 四、已知差异（登记，不静默跟随）
 
-1. **TLS 指纹**：Go 侧 `Appdir`/主代理用的是标准 `net/http` 栈，Rust 侧是 `reqwest(default-tls)`。
+1. **TLS 指纹**：Go 侧 `Appdir`/COMMAND 代理用的是标准 `net/http` 栈，Rust 侧是 `reqwest(default-tls)`。
    两者的 JA3/JA4 不同——这是圆桌 A/C 席点名的「Rust 无 uTLS 对等物」的同一个问题，
-   本阶段不处理（主代理出站是 `api.commandcode.ai`，不在团结凭证链红线上）。
+   本阶段不处理（COMMAND 代理出站是 `api.commandcode.ai`，不在团结凭证链红线上）。
 2. **出站默认头由各自客户端生成**：`User-Agent`、`Accept-Encoding`、`Host`、`Content-Length`。
    采集侧只记**合同头**（`accept`/`authorization`/`content-type`/`x-command-code-version`/`x-cli-environment`），
    其余不进基准。Go `net/http` 会给 `Accept-Encoding: gzip`，reqwest 默认不发——**未对齐**。
@@ -119,25 +119,25 @@ pwsh -File .work/rust-rewrite/_p6test.ps1 -Targets http_contract
    Rust `Path::new("stats.json").parent() == ""`。**拼接结果相同**
    （`PathBuf::from("").join("x") == "x"`），而 `file_dir()` 只被用于拼接，故未改形态。
    生产路径永远是绝对路径。
-4. **`X-Forwarded-For` / `Host` 改写**：Go 主代理这条路径**没有**用 `httputil.ReverseProxy`
+4. **`X-Forwarded-For` / `Host` 改写**：Go COMMAND 代理这条路径**没有**用 `httputil.ReverseProxy`
    （是自己拼 `http.Request` + `Client.Do`），因此也没有 Go 那套 `X-Forwarded-For` 追加；
    两侧都不发该头，无差异。CLAUDE.md 坑 2 说的 Host 改写属于**其他插件**的反代路径。
 5. **`/v1/usage` 的 `fetched_at` / `cached` 字段**：两侧都没实现这两个字段（黄金里也没有）。
    采集与回放只覆盖实际存在的字段。
-6. **`appdir` 只迁了主代理真正用到的那部分**：数据目录判定链（含 **exe 同目录 `portable` 标记文件**，
+6. **`appdir` 只迁了COMMAND 代理真正用到的那部分**：数据目录判定链（含 **exe 同目录 `portable` 标记文件**，
    同 `appdir.go:53-55` 的 `markerExists`：是文件、不是目录）、`api-key.txt` 读取
    （**明文与 `PDAPI1` 密文两形态都支持**——`src/cred_crypt.rs` 从 `rs-bai` 逐字搬来，
-   与 `app/main.go` 经 `appdir.ReadFile` 的路径一致；此条原先写作「主代理这条路径不经过 DPAPI」，
+   与 `app/main.go` 经 `appdir.ReadFile` 的路径一致；此条原先写作「COMMAND 代理这条路径不经过 DPAPI」，
    是**错误断言**，P6 修正轮 F2 已修）。
    **仍未迁**：`appdir` 的 DPAPI **写入**、ACL 加固、日志轮转、`migrate.go` 迁移逻辑——
-   主代理这条路径不经过它们；若将来要整体替换 `appdir`，这几项必须补。
+   COMMAND 代理这条路径不经过它们；若将来要整体替换 `appdir`，这几项必须补。
 7. **未覆盖：`/v1/usage` 的 20s 缓存过期后行为**：门禁只锁「首次 1298 字节 / 缓存命中
    1297 字节」两条；「TTL 到期后重新打上游」需要真实等待 20s，未入门禁（代码路径与首次相同）。
 8. **未覆盖：真上游端到端**。所有验收都在假上游上做（不出网、不烧真额度）——这是 P0 以来
-   的一贯纪律，主代理链路与 55990 的线上实例**未做过**并发对照。
+   的一贯纪律，COMMAND 代理链路与 55990 的线上实例**未做过**并发对照。
 9. **`src/proxy.rs` 已删除**：早期草稿（`Proxy` 当初拟独立成模块，后来并入 `lib.rs`），
    不在模块树里、不参与编译；本轮收尾时删除以免与 `lib.rs` 的同名定义混淆。
-10. **`opencode_session` 字段是空壳**：Go 主代理**没有** `x-opencode-session` 这件事
+10. **`opencode_session` 字段是空壳**：Go COMMAND 代理**没有** `x-opencode-session` 这件事
     （那是 `internal/tuanjie` 的 opencode Zen 路径，`internal/proxy` 全文无 `opencode` 字样）。
     Rust 侧保留了同名字段但恒为 `None`，仅为将来留位——**不是**合同项。
 11. **孤立/边界分歧（P6 修正轮审查点名，逐条登记；影响面见备注）**：

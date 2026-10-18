@@ -4,7 +4,7 @@
 //! 形态（用户裁决）：**一个 exe 多子模式**——
 //!   * 无参                     → GUI（[`crate::webview::run_gui`]）
 //!   * `--plugin-<id> --port N` → 对应 crate 的 `run(args)`（库依赖，进程内直接跑）
-//!   * `-headless`              → `rs-proxy`（主代理核心）
+//!   * `-headless`              → `rs-proxy`（COMMAND 代理核心）
 //!   * `-version`               → 打印版本退出（Go 版同款文案）
 //!
 //! 两条实现纪律：
@@ -32,7 +32,7 @@ fn plugin_fail_log(id: &str, msg: &str) {
 pub enum Mode {
     /// 无参启动：GUI 窗口
     Gui,
-    /// `-headless`：主代理核心（rs-proxy）
+    /// `-headless`：COMMAND 代理核心（rs-proxy）
     Proxy,
     /// `--plugin-<id>`：对应插件 crate
     Plugin(&'static str),

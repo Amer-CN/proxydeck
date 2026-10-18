@@ -9,7 +9,7 @@
 //   * `/v1/stats`：`{"models":{...},"uptimeSec":N}`，每次读都回一份**副本**
 //   * 落盘时机：每笔 addStat 之后立即落盘（**未做节流**——与 Go 现状一致，如实对齐；
 //     简报提到的「节流落盘」在本仓 Go 版 `internal/bai` 里并不存在，`internal/proxy/stats.go`
-//     的 ≥2s 节流属主代理，不属 bai。此处以 Go 现状为准，不额外加节流）
+//     的 ≥2s 节流属COMMAND 代理，不属 bai。此处以 Go 现状为准，不额外加节流）
 //
 // 与 Go 的已知差异（登记在 crate README）：Go 用 `encoding/json` 的 map 序，本模块的
 // `/v1/stats` 响应**显式按 key 升序**输出（Go 的 map 序对键集合做排序，实测与升序一致，

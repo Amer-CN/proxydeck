@@ -1,7 +1,7 @@
 //! rs-gui —— ProxyDeck GUI 宿主的 Rust 重写（绞杀者路线 P7a~P7c）。
 //!
 //! 形态（用户裁决，见简报 P7 形态裁决）：**单 exe 多子模式**——`rs-gui.exe` 同时承载
-//! GUI 与各插件子模式，`-headless` 走主代理；六个 Rust crate 作为**库依赖**接入，
+//! GUI 与各插件子模式，`-headless` 走COMMAND 代理；六个 Rust crate 作为**库依赖**接入，
 //! 由 [`dispatch`] 按 flag 分发。
 //!
 //! 阶段边界：

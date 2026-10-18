@@ -1,5 +1,5 @@
 //! rs-gui 可执行入口：单 exe 多子模式（无参 → GUI；`--plugin-*` → 插件服务；
-//! `-headless` → 主代理核心）。分发实现见 [`rs_gui::dispatch`].
+//! `-headless` → COMMAND 代理核心）。分发实现见 [`rs_gui::dispatch`].
 
 //! Windows 下不带控制台窗口启动（对齐 Go 构建的 `-H windowsgui`；否则每个后端
 //! 进程都会弹一个黑窗口）。从已有控制台启动时（如 `--version` 自查）输出仍正常

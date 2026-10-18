@@ -165,9 +165,9 @@ pub struct StateFile {
 }
 
 /// 历史状态文件清单 —— `legacyStateFiles`（`migrate.go:19-59`），**顺序与条数逐条照抄**：
-/// 主代理 8 + 团结 9 + WorkBuddy 6 + VibeX 2 + B.AI 1 + 插件诊断 7 = **33 条**。
+/// COMMAND 代理 8 + 团结 9 + WorkBuddy 6 + VibeX 2 + B.AI 1 + 插件诊断 7 = **33 条**。
 pub const LEGACY_STATE_FILES: [StateFile; 33] = [
-    // 主代理（app）
+    // COMMAND 代理（app）
     StateFile { name: "api-key.txt", credential: true },
     StateFile { name: "stats.json", credential: false },
     StateFile { name: "keymap.json", credential: false },

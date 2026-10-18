@@ -46,7 +46,7 @@
 ```
 rs-gui.exe
 ├─ 无参                       → GUI（wry + tao 外壳 + 33 个 bridge 绑定 + 托盘 + 600ms 可见性自愈）
-├─ -headless                  → rs-proxy（主代理核心，库依赖直调 rs_proxy::run；
+├─ -headless                  → rs-proxy（COMMAND 代理核心，库依赖直调 rs_proxy::run；
 │                               僵死端口先清再听；失败自写数据目录 headless-error.log）
 ├─ --plugin-bai   --port N    → rs-bai     ::run
 ├─ --plugin-codebuddy --port N→ rs-codebuddy::run

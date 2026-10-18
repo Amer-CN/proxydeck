@@ -6,7 +6,7 @@
 //! * `total>0 ? total : in+out`；
 //! * **每笔 addStat 之后立即原子落盘**（tmp + rename）——Go 侧**没有节流**（简报提到的
 //!   「节流落盘」在本仓 `internal/codebuddy` 里不存在；`internal/proxy/stats.go` 的 ≥2s 节流
-//!   属主代理，不属本插件），故此处如实对齐 Go 现状，不额外加节流；
+//!   属COMMAND 代理，不属本插件），故此处如实对齐 Go 现状，不额外加节流；
 //! * 落盘结构是 `map[model]*modelStat`，字段声明序恰好等于键序（calls/inputTokens/
 //!   outputTokens/totalTokens）——所以 Go 的结构体序列化与 Rust 的键序序列化**逐字节相同**。
 //! * 读盘时字段按 Go 的 `int64` 字面量规则解（`strconv.ParseInt`：拒绝 `1e2`/`1.0`/溢出，

@@ -8052,7 +8052,7 @@ var PT_I18N = {
   }
 
   /* 键角灯：红灯=选中（CSS 按 aria-checked），蓝灯=未选中但这颗键名下
-     任一页面的插件在跑；两者皆无灭灯。cmd 主代理与各插件相位变化、
+     任一页面的插件在跑；两者皆无灭灯。cmd COMMAND 代理与各插件相位变化、
      模式切换三个时机都会调本函数重刷。 */
   /* 第 25 轮（用户裁决）：探活下沉 Go 侧——UI 不自发网络请求感知服务，点灯判据来自
      桥 ccLiveSnapshot（Go 并发实探 55990 核心 + 五插件端口，单端口失败即 false），
@@ -10191,7 +10191,7 @@ var PT_I18N = {
             return;
           }
           logInto($('logStream'), 'sys', '彻底关机：正在停止全部服务…');
-          /* 1) 主代理停堆（杀 headless，55990） */
+          /* 1) COMMAND 代理停堆（杀 headless，55990） */
           try { await call('Stop'); } catch (e) {}
           S.userStopped = true;   /* 阻断自愈看门狗在退出瞬间拉起代理 */
           /* 2) 插件进程全停——清单从 PluginList（Go 侧插件注册表）现取，不再硬编码：

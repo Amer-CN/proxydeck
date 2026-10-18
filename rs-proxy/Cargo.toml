@@ -2,7 +2,7 @@
 name = "rs-proxy"
 version = "0.1.0"
 edition = "2021"
-description = "ProxyDeck 主代理 Rust 重写（绞杀者路线 P6：等价 internal/proxy + api + server + appdir 的可迁部分；测试端口用，未接入 GUI）"
+description = "ProxyDeck COMMAND 代理 Rust 重写（绞杀者路线 P6：等价 internal/proxy + api + server + appdir 的可迁部分；测试端口用，未接入 GUI）"
 
 [[bin]]
 name = "rs-proxy"

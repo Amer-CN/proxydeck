@@ -1,4 +1,4 @@
-//! `rs-proxy` 入口：对应 `ProxyDeck.exe -headless`（主代理核心）。
+//! `rs-proxy` 入口：对应 `ProxyDeck.exe -headless`（COMMAND 代理核心）。
 //!
 //! 参数口径与 `app/main.go` 一致：`--port`（缺省 55990）/ `--host`（缺省 127.0.0.1）/
 //! `--api-key`（缺省从数据目录的 `api-key.txt` 读）/ `--debug` / `--portable`。
