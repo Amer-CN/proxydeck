@@ -5,7 +5,7 @@
 //
 // SOURCE OF TRUTH FOR THE VERSION NUMBERS: `rs-gui/src/lib.rs`
 //
-//     APP_VERSION  = "v4.2.5"   ->  FILEVERSION 4,2,5,0 / "4.2.5.0"
+//     APP_VERSION  = "v4.2.6"   ->  FILEVERSION 4,2,6,0 / "4.2.6.0"
 //     CORE_VERSION = "v1.2.0"     ->  Comments "Proxy core v1.2.0"
 //
 // Two different numbers in the two places means the exe reports two different
@@ -33,8 +33,8 @@
 // always 0 (Windows convention).
 
 1 VERSIONINFO
-  FILEVERSION     4,2,5,0
-  PRODUCTVERSION  4,2,5,0
+  FILEVERSION     4,2,6,0
+  PRODUCTVERSION  4,2,6,0
   FILEOS          0x00040004L
   FILETYPE        0x00000001L
   FILESUBTYPE     0x00000000L
@@ -45,12 +45,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName",      "ProxyDeck"
       VALUE "FileDescription",  "ProxyDeck - multi-platform proxy console"
-      VALUE "FileVersion",      "4.2.5.0"
+      VALUE "FileVersion",      "4.2.6.0"
       VALUE "InternalName",     "rs-gui"
       VALUE "LegalCopyright",   "ProxyDeck"
       VALUE "OriginalFilename", "ProxyDeck.exe"
       VALUE "ProductName",      "ProxyDeck"
-      VALUE "ProductVersion",   "4.2.5.0"
+      VALUE "ProductVersion",   "4.2.6.0"
       VALUE "Comments",         "Proxy core v1.2.0"
     END
   END
