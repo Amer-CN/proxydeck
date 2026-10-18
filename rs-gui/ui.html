@@ -2714,7 +2714,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v4.2.0</span>
+                    <span class="v ver" id="etchVer">v4.2.1</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3445,13 +3445,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v4.2.0">v4.2.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v4.2.1">v4.2.1</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v4.2.0</div>
+                    <div class="s" id="buildNo">v4.2.1</div>
                   </div>
-                  <span class="pt-val" id="verChip">v4.2.0</span>
+                  <span class="pt-val" id="verChip">v4.2.1</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -9013,29 +9013,32 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
-    { v: 'v4.2.0', date: '2026-10-18', groups: [
+    { v: 'v4.2.1', date: '2026-10-18', groups: [
+      { label: '🐛 Bug 修复', items: [
+        '闲置后滚动，音效不再延迟与爆音' ] } ] },
+    { v: 'v4.2.1', date: '2026-10-18', groups: [
       { label: '✨ 体验优化', items: [
         '移除自定义服务商与三协议适配',
         '修复滚动音效停手后仍有余响的问题' ] } ] },
-    { v: 'v4.2.0', date: '2026-10-18', groups: [
+    { v: 'v4.2.1', date: '2026-10-18', groups: [
       { label: '✨ 体验优化', items: [
         '移除生图/生视频，网上免费工具更好用',
         '发图给纯文本模型改为明确报错，不再偷偷换模型' ] } ] },
-    { v: 'v4.2.0', date: '2026-10-18', groups: [
+    { v: 'v4.2.1', date: '2026-10-18', groups: [
       { label: '✨ 体验优化', items: [
         '本地请求先查监听表，未启动的服务不再白等',
         '设置项保存不再因安全加固卡半秒' ] } ] },
-    { v: 'v4.2.0', date: '2026-10-18', groups: [
+    { v: 'v4.2.1', date: '2026-10-18', groups: [
       { label: '🐛 Bug 修复', items: [
         '探活改查系统监听表，界面不再被安全软件拖慢' ] } ] },
-    { v: 'v4.2.0', date: '2026-10-18', groups: [
+    { v: 'v4.2.1', date: '2026-10-18', groups: [
       { label: '🐛 Bug 修复', items: [
         '界面不再因探活超时而卡顿',
         '更新检查失败时给出可操作提示' ] } ] },
-    { v: 'v4.2.0', date: '2026-10-17', groups: [
+    { v: 'v4.2.1', date: '2026-10-17', groups: [
       { label: '🐛 Bug 修复', items: [
         '关窗与一键更新后不再残留旧窗口' ] } ] },
-    { v: 'v4.2.0', date: '2026-10-17', groups: [
+    { v: 'v4.2.1', date: '2026-10-17', groups: [
       { label: '🐛 Bug 修复', items: [
         '后端不再弹黑终端窗口' ] } ] },
     { v: 'v3.20.11', date: '2026-10-17', groups: [
@@ -10217,7 +10220,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v4.2.0';
+  var UI_CUR = 'v4.2.1';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   var cbQuotaUserId = ''; // WorkBuddy 积分面板选中的账号（空串=默认最新号；区域感知：切区后失效重选）
   function verCmp(a, b) {
