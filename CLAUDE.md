@@ -5,15 +5,21 @@
 
 ## 项目一句话
 
-Windows 独立 GUI 工具（单 exe，Go + WebView2 + 内嵌 HTML）：把 CommandCode /
+Windows 独立 GUI 工具（单 exe，**Rust + WebView2 + 内嵌 HTML**；v4.0.0 起主机是 Rust，
+Go 只剩历史参考实现）：把 CommandCode /
 团结 / WorkBuddy(腾讯CodeBuddy) / Comate(百度) / Qoder(阿里) / B.AI 的订阅转成
 本地 OpenAI 兼容接口，机械风控制台统一管理。完全开箱即用，无任何激活/授权机制。
 
 ## 架构速览
 
+> ⚠ **v4.0.0 起产品本体是 Rust**：`rs-gui`（宿主+桥）+ `rs-proxy`（COMMAND 代理）+
+> `rs-tuanjie` / `rs-codebuddy` / `rs-comate` / `rs-qoder` / `rs-vibex` / `rs-bai` 八个 crate，
+> 由 `rs-gui/src/dispatch.rs` 单 exe 分发。下方 Go 目录树是**历史参考实现**，
+> 除 `app/ui.html`（UI 唯一源，Rust 侧逐字节嵌入）外**不再参与构建**。
+
 ```
-ProxyDeck.exe        ← 唯一主程序，双击即用
-├─ app/                         GUI 主体（Go + go:embed ui.html）
+ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
+├─ app/                         GUI 主体（Go 历史参考；`app/ui.html` 仍是 UI 唯一源）
 │   ├─ main.go                  入口：flag 分发（GUI/headless/--plugin-*）
 │   ├─ bridge.go                WebView2 JS 桥（ccGetState/ccStart/...绑定）
 │   ├─ plugins.go               插件托管：pluginDefs 注册 + 启动/停止/健康检查
@@ -360,7 +366,8 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     同一件事在文件里出现三个数字，正是这类计数漂移的成因，别再在别处复述数字。
     漏改任一项则应用自报旧版并误弹「发现新版本」框（弹窗当前值取 ui.html UI_CUR，
     与 appVersion 不同源；v3.10.0 实测踩坑）
-18. **opencode Zen 会话头 + 测试假阴性**：出站 opencode.ai 必带
+18. ~~**opencode Zen 会话头 + 测试假阴性**~~（**已作废 2026-10-18**：Zen 上游已
+    `ModelDeprecated`，自定义服务商与 `opencode_session` 均随 v4.2.0 删除）：出站 opencode.ai 必带
     `x-opencode-session`（进程级稳定 UUID，opencode_session.go），缺头按出口
     分片随机 400 MissingSessionID；ZCode「连接测试」按钮发裸请求必报错=假阴性，
     以真实对话为准。完整定案见 CODELY.md 2026-09-07 条
@@ -396,7 +403,13 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
     上）——是后端宿主就等自然消亡，不要硬删；也不要拿改名/删除试探结论当证据。
     （v3.20.5 起更新流自动换血，此条只剩手动腾位场景。）
 
-## 自定义服务商（tuanjie-providers.json；v3.9.0 引入时叫「外部账号」，v3.10.0 改名重构）
+> ⚠ **本节描述的功能已于 v4.2.0 整体删除**（用户裁决：不再接外部端点）。删掉的是
+> `rs-tuanjie/src/providers.rs` / `anthropic_forward.rs` / `responses_forward.rs` /
+> `opencode_session.rs` 四个文件 + `/providers` 端点 + UI 的「服务商」副页。
+> 下方内容**仅作历史追溯**，不要在现版本里找这些代码。
+> 磁盘上的 `tuanjie-providers.json` 是用户数据，已不再被读取。
+
+## （历史）自定义服务商（tuanjie-providers.json；v3.9.0 引入时叫「外部账号」，v3.10.0 改名重构）
 
 - **三协议**：账号自带 `protocol` 字段——chat（/chat/completions 缺省）/
   responses（/responses，Zen muse-spark-1.3-contributor-free 只支持此协议）/
@@ -412,6 +425,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用
 - 计费徽章语义（35cf8bf 改口径）：绿点=**/models 连通**（转发真正依赖的端点）；
   计费端点的 404/超时只进状态文案（「用量未知」提示兜住），不再判不可达——
   此前 Zen 冷启动计费超时被误标红牌（2026-09-07 实测）；/models 不通才判真死
+> ⚠ **以下「媒体改路由链」与「Agnes 生图生视频合同」已于 v4.1.0 整体删除**：识图不再
+> 静默改写模型（改为明确 400 并列出可用多模态模型），生图/生视频连同 Agnes 一并移除
+> （`/v1/images/generations`、`/v1/videos*`、`/agnesapi` 全部 404）。保留的只有
+> `fetch_remote_images`（远程图片转 base64）与 `should_fallback`。以下为历史记录。
+
 - **媒体改路由链**（tuanjie-media.json）：vision 现为 codely-vl（v3.10.0 下拉
   补 GLM-5.3-FLASH / KIMI-K3 / muse-spark 可选）/ image、video 仍走 Agnes；
   识图回落链 vision→vision_fallback→codely-vl 兜尾（当前 fallback 已清空）。
