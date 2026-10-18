@@ -33,33 +33,34 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
 │   ├─ qoder/                   Qoder 插件后端（8785）
 │   ├─ bai/                     B.AI 插件后端（8891）
 │   └─ vibex/                   VibeX 插件后端（8790，REST＋WS 私有协议直译）
-└─ build.py                     构建脚本（单模式，python build.py）
+└─ build.py                     构建脚本（**Go 时代**；Rust 用 cargo，见「常用命令」）
 ```
 
 - 端口约定：COMMAND 代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891 / VibeX 8790
 - 插件 = spawn 本 exe 的 `--plugin-<id> --port <n>` 子进程，独立常驻，关 GUI 不中断
-- **升版本必须同步的位置**（漏一处就有地方显示旧版；2026-09-02 按实操勘误计数，
-  2026-09-10 补第 8 项）：
-  1. `app/main.go` `appVersion`
-  2. `app/ui.html` `id="etchVer"`（顶栏蚀刻）
-  3. `app/ui.html` `.pt-nameplate`（铭牌，含 `aria-label` 同行两处）
-  4. `app/ui.html` `id="buildNo"`
-  5. `app/ui.html` `id="verChip"`
-  6. `app/ui.html` `var UI_CUR`（更新检查比对用）
-  7. `app/ui.html` **`var CHANGELOG_DATA`**（甲板内「更新日志」浮层的**独立副本**，不读 `CHANGELOG.md`！
-     只改仓库文件不改这里，浮层就还是旧版——v3.6.2 / v3.6.3 两次都栽在这里）
-  8. `README.md` 版本徽章（shields.io 的 `Version-vX.Y.Z`）——**不在 `app/` 下，历次发版
-     最容易漏**：v3.10.1~v3.10.3 连发三版全漏、徽章停在 v3.10.0，根因就是清单里从来没
-     列过它（2026-09-10 发现并修）
-  外加 `CHANGELOG.md` 顶条 + GitHub Release（正文＝CHANGELOG 顶条逐字，标题＝`vX.Y.Z · 主题 · 主题`，
+- **升版本必须同步的位置**（**Rust 时代清单，2026-10-18 重写**；Go 时代的
+  `app/main.go appVersion` 已不参与构建，只剩历史参考）：
+  1. `app/ui.html` `id="etchVer"`（顶栏蚀刻）
+  2. `app/ui.html` `.pt-nameplate`（铭牌，含 `aria-label` 同行两处）
+  3. `app/ui.html` `id="buildNo"`
+  4. `app/ui.html` `id="verChip"`
+  5. `app/ui.html` `var UI_CUR`（更新检查比对用）
+  6. `app/ui.html` **`var CHANGELOG_DATA` 首条**（浮层是 `CHANGELOG.md` 的独立副本；
+     ⚠ **只插一条新记录，绝不动历史条目**——2026-10-18 事故：脚本对整文件做
+     `replace(旧版本, 新版本)`，把 12 条历史条目全改成了同一个版本号）
+  7. `rs-gui/src/lib.rs` `APP_VERSION`
+  8. `rs-gui/version.rc` 四处：`APP_VERSION` + `FILEVERSION` + `PRODUCTVERSION` + 字符串 `"x.y.z.0"`
+  9. `rs-gui/ui.html` ← `app/ui.html` 的**逐字节副本**（`Copy-Item` 复制，**不许手改**）
+  10. `rs-gui/src/uihtml.rs` `UI_HTML_SHA256` + `UI_HTML_LEN`（改完 UI 必重算）
+  11. `README.md` 版本徽章（shields.io 的 `Version-vX.Y.Z`）
+  外加 `CHANGELOG.md` 顶条 + GitHub Release（正文＝CHANGELOG 顶条逐字，标题＝`vX.Y.Z · 主题`，
   **必须附 `ProxyDeck.exe` 附件**——那是一键更新的下载源，漏传 = 用户点更新 404；
-  附件名必须逐字叫 `ProxyDeck.exe`（后端只认此名找直链，`ProxyDeck-vX.Y.Z.exe` 会被无视、
-  前端退回打开网页下载——v3.20.0 亲手犯过、事后补传）；
-  2026-09-04 发 v3.8.5 时曾漏、事后补传）。
-  改完用旧版本串 grep `app/ README.md` 复核一遍（应只剩 CHANGELOG_DATA 历史条目）。
-  `CHANGELOG_DATA` 的 `date` 用**本机发布日**——跨零点发版最容易差一天（v3.10.5 于
-  09-11 01:19 发布却写成 09-10）。历史条目**不回改**（会牵动 tag 与附件对应关系），
-  下次发版顺手校正即可。
+  附件名必须逐字叫 `ProxyDeck.exe`，改成 `ProxyDeck-vX.Y.Z.exe` 后端找直链会无视）。
+  `CHANGELOG_DATA` 的 `date` 用**本机发布日**——跨零点发版最容易差一天。
+  历史条目**不回改**（会牵动 tag 与附件对应关系）。
+  **现存三道自动门禁**（改坏会直接红，别再靠人眼）：
+  `rs-gui/tests/ui_html.rs` 的 ① 逐字节副本 ② 版本号唯一+严格降序 ③ v4 段不许跳版
+  + 浮层与 `CHANGELOG.md` 同集合；以及 `build.rs` 的构建期字节比对。
 
 ## 版本号三段位规则（2026-08-31 定，用户裁决）
 
@@ -91,30 +92,15 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
 
 并行会话纪律（每个会话各自遵守，不需要互相协调）：
 - **只提交代码，不发版**：改完 → 跑测试 → `git commit` → 停。**不升版本号、不动
-  `CHANGELOG.md`、不打 tag、不做 GitHub Release、不跑 `python build.py` 覆盖
-  `ProxyDeck.exe`**（那五处升版本清单见上文，全部属于发版动作）。
+  `CHANGELOG.md`、不打 tag、不做 GitHub Release、不用新包覆盖 `ProxyDeck.exe`**
+  （升版本清单见上文，全部属于发版动作）。
 - **不自行换装运行中的服务**：换装要断服务，须用户确认（见「运行服务管理规矩」）。
-  测试构建用临时名（`go build -o 临时名.exe ./app`）或测试端口（`--port 18788`），
-  不碰 8788。
+  测试构建直接跑 `cargo build` 的产物、或换测试端口（`--port 18788`），不碰 8788。
 - **改完在提交信息里写清「属哪一版待办」**，方便发版时汇总。
 - 用户说「发版」时，才由那个会话统一执行：重估段位（按最高档现算）→ 升版本号
   → 补 CHANGELOG 顶条 → 构建 → 打 tag → 发 Release（附 exe 附件）。
 
-**发版积压（发版时逐条核对，改完划掉）**：
-1. ~~种子卫兵双轨道扫描（`d0fd5c1`，2026-09-13）——npm + 桌面端两条版本轨道都盯，
-   修掉「官方只在桌面端轮换种子会漏报」的盲区。~~ ✅ 已随 v3.14.0 发布，且用户当日
-   彻底关机重启全量换装，后端已生效。
-2. hy4 键盘可达性（拨杆同位置同问题，用户未要求补，先记账）。
-3. ~~本地文件夹改名 `F:\AIXM\command` → `F:\AIXM\proxydeck`。~~ ✅ 已完成（2026-09-13
-   20:13，计划任务链条：handle.exe 揪出 Comate 残留锁主 → 改名成功 → 新路径拉起反代
-   6/6 health 全绿 → ZCode 重启）。全库路径引用已同步（cwd_test 3 用例 6 处 +
-   fidelity-audit 1 处）。坑入册：ZCode 残留工具进程（Comate zulu-cli）的 CWD 是
-   隐形锁，CommandLine 匹配抓不到，须 handle.exe 扫句柄属主再精准清除。
-4. 更新后后端自动换血（`639bdec`，2026-10-14，本会话）：新 GUI 凭换血标记把旧后端
-   逐个换血＋杀后复验；8790 上 E2E 实测（旧包进程被换掉、残留文件被清）。
-5. 拉杆停堆诚实报错（`be3a3fb`，2026-10-14，本会话）：`pluginStop` 杀后复验端口，
-   杀不掉如实报错而不是弹回 running。
-6. 换血注释校正＋`.workbuddy-ai/` ignore（`618acf9`，2026-10-14，本会话）。
+> 发版积压：v3 时代的逐条流水已清理（对应内容要么已发布，要么并入「当前状态 → 已知遗留」）。
 
 ## CHANGELOG 行文规范（2026-08-31 定，用户裁决）
 
@@ -133,12 +119,12 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
 
 | 操作 | 是否断服务 |
 |---|---|
-| python build.py（os.replace 被运行中 exe 锁定必败） | 换装改走腾位法：ren 旧 exe 腾位 → 新 exe 落位 → 只重启 GUI，**后端不断** |
+| 覆盖运行中的 `ProxyDeck.exe`（文件被锁，直接覆盖必败） | 换装走腾位法：ren 旧 exe 腾位 → 新 exe 落位 → **只重启 GUI**，后端不断 |
 | taskkill ProxyDeck 进程 | **断**，先打招呼 |
 | 改代码后要生效 | **断**（要重启对应服务） |
 | 改 ui.html / git 提交 / push / 查日志 | 不断 |
 
-不停服务的构建技巧：`go build -o 新文件名.exe ./app`（不锁运行中的 exe）。
+不停服务的构建技巧：`cargo build` 的产物不锁运行中的 exe，先 `Copy-Item` 到新名字；真正的换装仍走腾位法。
 
 ## 模型情报（实测结论，血泪换来的）
 
@@ -328,10 +314,12 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
    允许改名）→ 新 exe 落位原路径 → 只需关掉并重启 GUI；插件是独立常驻子进程
    （关 GUI 不死），**后端完全不用停**。旧的 .old 文件等进程自然退出后删
 7. **流式响应转发**：FlushInterval 50ms 保 SSE 及时；stream_options.include_usage 补 usage
-8. **协作流程**：见 ~/.zcode/AGENTS.md（子智能体 executor/code-reviewer 四步流程），
-   简报写 .work/current-task.md
-9. **python build.py 静默失败**：exe 被运行中进程锁定时 os.replace 报错走 stderr、
-   输出缓冲乱序会把错误吞掉——务必字节校验产物（grep 版本串）再部署
+8. **协作流程**：见 `~/.dsh/AGENTS.md` + `dsh-collab-mode` 插件的规则段（子智能体
+   executor/code-reviewer 四步流程）；简报写 `.work/current-task.md`。
+   ~~`~/.zcode/AGENTS.md`~~ 已于 2026-09-13 退役，别再引用。
+9. ~~**python build.py 静默失败**~~（**Go 时代**，Rust 已无此脚本）：教训保留——
+   构建工具静默失败会让人把旧产物当新产物部署，**发版后必须字节校验产物**（现在由
+   `--version` 输出 + 与 Release digest 比对完成）。
 10. **GitHub 匿名 API 限额按出口 IP 计**（60/h）：共享 NAT/Clash 出口必撞墙；
     更新检查类功能优先走 gh CLI 认证通道
 11. **升版日志必须从 git 提交清单倒推**（git log 上版..HEAD），不能凭工作记忆——
@@ -361,9 +349,8 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
 16. **故障时间线陷阱**：判定"持续故障"前先拉逐分钟成败统计——两次测试之间
     的空白期 ≠ 故障持续期（2026-09-06 曾把 6.5 分钟的上游间歇故障误判成
     "连接钉死 85 分钟"，靠逐分钟数据翻案撤回）
-17. **版本串清单以文首「升版本必须同步的位置」为唯一权威（现 8 处）**：本坑旧文写「6 处」、
-    漏列 `CHANGELOG_DATA`；「当前状态」节旧文写「7 处」、又漏列 `README.md` 徽章——
-    同一件事在文件里出现三个数字，正是这类计数漂移的成因，别再在别处复述数字。
+17. **版本串清单以文首「升版本必须同步的位置」为唯一权威**：本坑旧文曾写「6 处」/「7 处」/
+    「8 处」三个互相矛盾的数字——正是计数漂移的成因，**别在任何地方复述处数**，需要时直接看清单。
     漏改任一项则应用自报旧版并误弹「发现新版本」框（弹窗当前值取 ui.html UI_CUR，
     与 appVersion 不同源；v3.10.0 实测踩坑）
 18. ~~**opencode Zen 会话头 + 测试假阴性**~~（**已作废 2026-10-18**：Zen 上游已
@@ -375,13 +362,12 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
     （收到的是同一句「接手这个会话的任务」）同时改 `internal/codebuddy/server.go`
     与 `sse_cleaner_test.go`，互写工作树、各自把对方的改动当成越界，其中一个
     未打招呼就 `taskkill` 了 8787 后端配合换装（正是本文件明令要先问的那种操作）。
-    接手前先 `git status` + 看 `~/.zcode/cli/hooks/activity-*.log`（PostToolUse
-    钩子逐条记录 Edit/Write/Bash 与时间戳，可反查是谁在几点改了哪个文件）确认
-    没有别的会话在动同一批文件；commit / push / Release 这类不可逆且对外的动作
+    接手前先 `git status` 确认没有别的会话在动同一批文件（ZCode 时代还可查
+    `~/.zcode/cli/hooks/activity-*.log` 反查谁在几点改了哪个文件；该工具已于
+    2026-09-13 退役，DSH 侧暂无对等日志）；commit / push / Release 这类不可逆且对外的动作
     尤其必须串行，且推送前先 `git ls-remote <remote> refs/heads/main` 复核远端
     有没有被别人推进过
-20. **编译输入 = 工作区当前内容**：`python build.py` / `go build ./app` 编的是磁盘上
-    的源码，**并行会话的未提交改动会被静默编进 exe**——2026-09-11 发 v3.10.5 时中招：
+20. **编译输入 = 工作区当前内容**：`cargo build` 编的是磁盘上的源码，**并行会话的未提交改动会被静默编进 exe**——2026-09-11 发 v3.10.5 时中招：
     另一个会话 01:09 改的 `internal/tuanjie/reqshape.go`（未提交、无 CHANGELOG）已混入
     产物，靠比对 mtime 才发现，最后改用 `git worktree add --detach <目标提交>` 在干净树
     上重编并 amend。**发版编译前必须确认 `git status` 没有他人改动**，或直接走 worktree
@@ -449,160 +435,36 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-10-14，v3.20.7 已发布；639bdec/be3a3fb/618acf9 待攒版）
+## 当前状态（2026-10-18，v4.2.7 已发布）
 
-> **发版节奏自 2026-09-13 起改为攒版**（用户裁决，见上文「攒版发布」节）：
-> 各会话只提交不发版，待用户说「发版」时由那个会话统一升版本号并发。
-> 本节下方各版本条目保留作历史记录；**「下版（vX.Y.Z）」类预测已失效**——
-> 实际版本号在发版时按「本版内容最高档」现算。
->
-> DSH 侧说明（非本仓库，不在本节版本条目内）：2026-10-14 在用户配置
-> `cordis.patch.yml` 里补了 7 个模型的档位声明（tuanjie/KIMI-K3、vibex 等）
-> ＋撤了 command 路线默认档；排障时先分清是哪一边（2026-10-14 曾把 K3
-> 11133 误判成档位改动，实为 `$ref` 真凶，见 v3.20.7 条）。
+> **逐版历史只在 `CHANGELOG.md`**（唯一权威）。本节只保留「现在什么状态、下一步注意什么」，
+> 不再复制版本流水账——2026-10-18 洁癖收尾时删掉了约 200 行重复条目。
 
-- **未发版（待攒版，HEAD `618acf9`）**：`639bdec` 更新后后端自动换血（新 GUI
-  凭换血标记把旧后端逐个换血，8790 上 E2E 实测通过；镜像名判定有 Windows 改名
-  盲区，只作手动腾位兜底）＋`be3a3fb` 拉杆停堆杀后复验（杀不掉如实报错，
-  不再先假装关掉再弹回 running）＋`618acf9` 注释校正与 `.workbuddy-ai/` ignore。
-- **v3.20.7 已发布（2026-10-14）**：K3 工具 `$ref` 内联（`7d9cba6`：腾讯不解析
-  引用→整单 11133，转发前无损展开；158 工具二分到单工具实证）＋国内版
-  workbuddy.cn 多后缀（并行会话 `2e56071`）。段位=修订号。发版链 `c503f6d`→
-  `6cffb2b`（干净树，digest 与 API 一致）；磁盘 exe 经核验与 Release 逐字节一致。
-- **v3.20.6 已发布（2026-10-14）**：11133 自动退避重试（`44bbcc9`，上限 2 次）
-  ＋失败现场取证（`diag-11133-*.json` 落数据目录、上限 10 份）。段位=修订号。
-  ⚠ 当时记为"上游抖动"系误诊（事后真凶定位为 `$ref`，见上条），重试保留作兜底。
-- **v3.20.5 已发布（2026-10-14）**：更新后后端自动换血初版（`3c04ded`：镜像名
-  判定＋杀后复验；Windows 改名盲区由未发版 `639bdec` 的换血标记补齐）。段位=修订号。
-- **v3.20.4 已发布（2026-10-14）**：手动检查强制刷新（`3af1337`：发版后
-  30 分钟缓存窗口内即点可查）。段位=修订号。
-- **v3.20.3 已发布（2026-10-14）**：一键更新腾位名唯一化（`da0f290`：二次更新
-  不再 Access denied）＋失败指引（`17b44ab` 拉杆退出监视：后端秒退后状态复位，
-  不再卡"启动中"）。段位=修订号。
-- **v3.20.2 已发布（2026-10-14）**：程序/数据目录分离（`25b9d7a`：默认
-  `%APPDATA%\ProxyDeck`＋便携模式＋DPAPI＋日志轮转）。段位=修订号。
-- **v3.20.1 已发布（2026-10-14）**：at-rest 解密（`54c80a8`，国内版恢复可用）＋
-  keymap 落盘（`aa3fa89`）。段位=修订号。
-- **v3.20.0 已发布（2026-10-14）**：键位供应商自由组合＋B.AI 默认退役隐藏。
-  段位=次版本（新功能＋界面变化）。细则见 `CHANGELOG.md`。
-
-- **v3.19.0 已发布（2026-09-17）**：VIBEX 反代插件＋账号自动探测＋扩展甲板系 UI。
-  段位=次版本（新功能＋界面变化）。发版链 `17d4cdf`（版本串 8 处＋CHANGELOG 双处）
-  → `3efa413`（exe，worktree 干净树 @ 17d4cdf，sha256 18beb1d7…）；tag 打在 17d4cdf
-  ＋ Release 带 exe 已核验（API digest 与本地构建逐字节一致）。换装：腾位法＋只重启
-  GUI，7 后端零重启全绿；旧包锁残留彻底退出后已清，单轨。完整 B 类流程，
-  reviewer 驳回 1 处（流式中断哨兵泄漏，engine.go）已修。
-  后端 `internal/vibex`（8790）：REST＋WS 私有协议直译（base_url 缺省补 `/vc`），
-  OpenAI 兼容；多 token 池同号以新换旧（内存＋落盘双收敛）；`/v1/models` 5 分钟缓存；
-  `/v1/stats` 真 usage 入账；token 经自动探测（CDP 读 cookie，照抄团结）或手动粘贴入池，
-  `vibex-config.json` 0600 且 gitignore。UI：第 4 键 VIBEX＋标题栏齿轮进设置＋鼓轮终态
-  10 格（第 8 格预留，注水下鼓轮）＋矩阵只收 lite 档按厂家分＋token/免费双灯。
-  链路诊断整套删除（270 行删减，UI＋Go 后端，顺手）。
-- **v3.18.0 已发布（2026-09-16）**：关窗退托盘 + 图标常驻。段位=次版本。
-  发版链 `59ea872`（版本串 8 处+CHANGELOG 双处+`.gitignore` 补 `close_mode.txt`）
-  → `dabbe1e`（exe，干净树 @ 59ea872，sha256 442b3099…）；tag 打在 59ea872
-  （源码提交，已推送故不再移动，构建输入即该树，对应关系完整）+ Release 带 exe
-  已核验（digest 一致）。换装：腾位法 + GUI 重启 + 6 后端逐个换包全绿；`.old`
-  与临时文件已清。executor 连挂三次，本版由主智能体亲执行、code-reviewer 照审通过。
-- **v3.17.0 已发布（2026-09-15；commit db8dff1+exe 07d3ac1、tag+Release 已核验）**：团结矩阵去轮询 +
-  按账号看模型 + 矩阵只显示官方可调名 + 识图加 DeepSeek-V4.1-Flash +
-  B.AI 补消耗统计 + token 显示中文。段位=次版本（新功能+界面变化）。
-  ① 矩阵去 3 秒轮询（点火拉一次 + 点「↻ 刷新」才现拉，`/account-models`
-  只在开弹窗/点展开时触发，后端 5 分钟缓存可 `refresh=1` 旁路）② 账号矩阵
-  每卡「可用模型 N 个 + 展开」（实测 78363 免费号 5 个、另两号 8 个）
-  ③ 矩阵与按账号列表只认官方 id（忽略上游 display_name，如 codely-core→GLM-5.3）
-  ④ 团结识图下拉加 `DeepSeek-V4.1-Flash`（media.go 视觉白名单 + ui 下拉同批）
-  ⑤ B.AI 甲板补消耗统计（`internal/bai/server.go` 按模型累计 + `/stats` +
-  `bai-stats.json` 落盘，结构同 tuanjie/codebuddy）⑥ 全甲板 token 显示改中文
-  直读（`fmtTok`：1e4→万、1e8→亿，替换 K/M 缩写）。
-  版本串 8 处 + CHANGELOG 双处同源已齐；exe 已重编（含 v3.17.0×8）。
-  ⚠ 上游同期变化（2026-09-15 实测）：`?full=true` 新增原生 `DeepSeek-V4.1-Flash`、
-  裸 `GLM-5.3` 不在可调 id 内（`?full=true` 8 个以 id 为准）；`/model/info`
-  上游回非 JSON（模型指南链路断，待上游恢复）。
-- **v3.16.0 已发布（2026-09-15）**：额度耗尽自动换号 + 工具调用修复
-  （`30ef636` + 并行会话 `8901c9d` 11129 诊断 + `9c267c7` 脱敏修误删工具参数）。
-  14018（Credits exhausted）原两边不沾（非 401/非 429）如实透传炸客户端 →
-  现标耗尽 + 同请求轮完池直到成功（上限池大小），耗尽标红 + 「额度恢复」按钮。
-  段位=次版本（新功能）。发版链 `b746b0d` → `5c162bf`（exe，干净树 @ b746b0d，
-  sha256 74c1a7d0…）；tag + Release 带 exe 已核验。换装时 0 GUI 进程、6 后端存活，
-  腾位完成后端不断；**后端换包须逐个熄火再点火**（14018 修复在后端里）。
-  ① **v3.15.1** 全链路性能优化两批（`0390e15`+`2343b25`）：UI 线程阻塞绑定清零
-  （插件点火 15s/存储 key 探活 10s/延迟测试分钟级 → 全部后台化+缓存）、轮询去重
-  门控与内容键防重建、隐藏窗停摆、里程表就地更新、tuanjie token 指纹缓存、stats
-  节流落盘（≥2s+读时兜底）。
-  ② **v3.15.2** 更新下载提速（`c4ae6f4`）：镜像链重排 gh-proxy.com 置前（ghfast.top
-  无梯子直连已死）。**镜像实测方法论**：curl `--noproxy "*"` + `--max-time` 逐源测
-  ——gh-fast 类公共镜像随时会死，发版前顺手测一遍首选源。
-  ③ **v3.15.3** 修更新检查跨发版失明（`c70500d`）：成功缓存原永久有效 + 拉取
-  goroutine 一次性 → 30 分钟保鲜 + 常驻拉取循环（断网限频 30s）。
-  ④ **v3.15.4** 修彻底关机漏停（`63f5b3c`）：停堆清单原硬编码 3 个插件，后加的
-  bai/comate/qoder 永远停不掉 → 改从 PluginList（Go 侧注册表）现取全量 + 兜底六项。
-  四版发版链与哈希见 git log；每版 tag+Release 带 exe 均已核验（API digest 与本地
-  构建一致）。回滚副本 `.work/ProxyDeck.prev-v3153.exe`（上一版，稳定后删）。
-
-- **v3.14.0 已发布（2026-09-13）**：攒版内容一次带上——seedguard 桌面端双轨道
-  （`d0fd5c1`，并行会话）+ 全量测试修复批（`d9fda75`：团结单账号 402 熔断/设置甲板
-  i18n 七语/切甲板滚动回顶/自检层 pointer-events/重拉去抖/origLabel 缓存修复）+
-  `c16d086`（账号池拨杆键盘重拉）+ `0087ab2`（删 hy4 兜底行/脱敏展示行）。
-  发版链 `1b85281`（版本串 8 处+CHANGELOG）→ `d97c304`（exe，worktree 干净树 @
-  1b85281，官方旗子）；推送 `7f4a2c5..d97c304`；Release v3.14.0 带 exe 附件已核验。
-  段位=次版本（攒版含新功能，用户裁决 v3.14.0）；CHANGELOG 5 行与浮层逐字同源。
-- **c16d086（已随 v3.14.0 发布）**：账号池区补拨杆 keydown 重拉（键盘路径走引擎
-  gearSelect 不派发 click，故与 click 并列监听，引擎代码未动）；连按去抖后补于
-  `d9fda75`。
-- **v3.13.1 已发布**：账号池长条行固化——把 v3.13.0 后的三处热修复正式收口：
-  ① 添加提示改 pt-notice（原 pt-silk 装饰小字被截断）② 卡片兼容旧后端快照
-  （字段缺失按启用）+ 删登录文件行 ③ 账号池区改用团结主列表 acc-row 长条行。
-  纯 UI 返工 → 修订号（v3.13.0 → v3.13.1）。
-  提交链 `16af821`/`7008a3b`/`a98640c`（三处修复）→ `f6d9a28`（发版）→
-  `e43968d`（exe，干净树 @ f6d9a28）
-- **v3.13.0**：账号矩阵三批——① 积分按账号切换（`/quota?uid=`、缓存按区+号分键、
-  GUI 下拉选号、零轮询纪律）② 凭据失效治理（401 标死换活号、rescan 复位、红徽章）
-  ③ 矩阵对齐团结（停用/移除/恢复落 `codebuddy-pool(-intl).json`、进行中/调用统计、
-  添加提示、积分 401 显示凭据失效）。独立审查通过（-race 40/40）。
-  提交链 `82c3e3d`（后端）→ `31a60ab`（ui）→ `2184a10`（发版）→ `bd24737`
- （exe，干净树 @ 2184a10）
-- **v3.12.1**：账号池区卡片化返工（复用团结 mx-card）。**v3.12.0**：WorkBuddy 双区
-  账号池 + 注水检测两轮（两批分别来自账号池会话与并行注水会话，代为入库归属见提交）。
-  v3.11.0：脱敏扩全角色。更早细节见 `CHANGELOG.md`
+- **产品本体**：Rust（`rs-gui` + 六个插件 crate + `rs-proxy`），单 exe 约 18MB。
+- **已删除的功能**（别再找代码）：生图/生视频 + Agnes（v4.1.0）、自定义服务商与三协议
+  （v4.2.0）。详见上文两处「（历史）」小节。
+- **今日主线（2026-10-18）**：v4.1.0 → v4.2.7 连发 8 版，主题是「删功能 + 修手感」：
+  删生图生视频、删自定义服务商、修界面探活卡顿（查系统监听表绕开杀软对 connect 的 2s 拖挂）、
+  修闲置后滚动音效延迟/爆音、修 COMATE 码表、修黑窗（5 处缺 `CREATE_NO_WINDOW`）、
+  修"每请求重设权限"（ACL 改目录级一次）、修更新日志版本号被脚本改坏。
+  要点：**群友反馈的黑窗问题根因是后端（GUI 子系统）spawn `icacls`/`reg` 时没隐藏窗口**；
+  `accounts.rs::pick()` 每请求落盘 → 每请求一次 `icacls`，已改为每目录一次。
+- **服务现状**（2026-10-18 17:22 实测）：GUI + 8787/8788/8789 三后端均 v4.2.7/v4.2.6，
+  health 全绿；8785/8786/8790/8891 未在运行（用哪个拉哪个）。
+  后端是独立常驻子进程，关 GUI 不死；**重启 GUI 不会自动点火**，需逐个拉杆。
+- **账号池内存态**：Dead/冷却/调用计数只在内存（重启清零），只有 Enabled/Removed 落盘；
+  上游 reset 时点不落盘，重启丢一次无害。`codebuddy-pool(-intl).json` 已 gitignore。
+- **已知遗留**（低优先，未做）：
+  ① 错误响应格式不统一（404/405/双重包装）；
+  ② 插件端口无鉴权（仅绑 127.0.0.1 缓解）；
+  ③ Comate usage 恒 0；
+  ④ 账号区无障碍标注缺失；
+  ⑤ hy4 拨杆键盘可达性。
+- **`p8b5` 金标**：当前跑 3 步 HTTP 用例 + 探针/基线（provider 与媒体场景按版本有意跳过，
+  跳过清单见测试文件与 `rs-tuanjie/README.md` 差异表 #46/#47）。
 - 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck（remote 名 `myrepo`，
   不是 origin；`push_api.py` 里的 `REPO` 写的是改名前旧名 `command-code-proxy-tools`，
   GitHub 会重定向，能用但名字陈旧）
-- 服务现状（2026-10-14 19:00 实测；6 进程，8785/8787/8788/8789/8790 全绿，
-  8786/8891 未在运行；磁盘 exe 即 v3.20.7，与 Release digest 逐字节一致）：
-  运行中进程早于本次换装文件（改名不改上报路径，版本以磁盘文件为准）；K3 带
-  241 工具大上下文 17:45 实测 200（`$ref` 内联已生效）。后端是独立常驻子进程，
-  关 GUI 不死；换血逻辑（v3.20.5＋换血标记）只在"跑旧包"时触发，平时拉杆只接管。
-  ⚠ 账号池 **Dead/冷却/调用计数是进程内存态**（重启清零），只有 Enabled/Removed 落盘；
-  上游 reset 时点不落盘，重启丢一次无害。`codebuddy-pool(-intl).json` 现已 gitignore。
-  **GUI 不持久化插件启动状态**（`plugins.go` 无写盘），
-  **重启 GUI 不会自动点火、需逐个拉杆**——跨会话常驻只能 GUI 点火（坑 4）
-- **已知遗留（2026-09-13 全量测试实测；①②③ 已随 v3.15.0 发布，④ 待办，⑤ 已销账）**：
-  ① `api-key.txt` 存储的 CommandCode key 已失效（55990 三协议实测全 401），待用户
-  换 key；候选改进：GUI 对存储 key 做探活提示。**已随 v3.15.0 发布**（2026-09-13 修）：
-  `internal/proxy/probe.go` 新增 `ProbeKey`（打 whoami，免费端点），`app/bridge.go`
-  新增 `ccProbeKey` 绑定（只回状态字，不回 key 与响应体），`app/ui.html` 三处触发
-  （初始化 / 保存 key 后 / 30 分钟周期），状态不变静默、401 才 ERR+toast、恢复写 OK。
-  用户换新 key 后即自愈，无需再动代码。
-  ② 8787 上游不支持对象式 `tool_choice`（强制工具 400 Unmarshal failed；字符串式
-  auto/required 正常，8788 两种都支持）——候选修复：代理层降级转发。**已入库**
-  （`normalizeToolChoice` 现行在位，`server_test.go` 4 例；2026-10-14 同文件追加
-  `$ref` 内联 `sanitizeToolRefs`，见"当前状态" v3.20.7 条）。
-  白名单拷贝后归一——`type` 为 auto/none/required 取该字符串、强制指定式降级
-  `"required"`（保住必须调工具语义，模型自选函数）、字符串原样、无 tools 则删除；
-  单测 `internal/codebuddy/server_test.go`（4 例）。
-  ③ 团结甲板「积分消耗 TOP」每 ~3s 刷一条 NET 日志，冲刷有效事件——候选降噪。
-  **已随 v3.15.0 发布**（2026-09-13 修）：`app/ui.html` renderTuanjieQuota 内恢复
-  v2.5.4（`97680fc`）的内容键防抖 `V.lastTopKey`（来源+积分），同内容不写日志；
-  与渲染层 `lastBarsKey` 独立。
-  ④ 低优攒办：错误响应格式不统一（404/405/双重包装）、插件端口无鉴权（127.0.0.1
-  缓解）、Comate usage 恒 0、账号区无障碍标注缺失。
-  ⑤ 点火拉杆「拉回熄火」在自动化环境 4 次未触发（疑似前台竞争假象），**人工未复核**
-  ——本次用户走的是「彻底关机」路径，不经拉杆回拉；下次手动拉一次即可定谳。
-  **已销账（2026-09-13 用户人工拉杆确认可用）**：此前自动化未触发是前台竞争假象，
-  非产品 bug，代码不动。
-  测试全记录：2026-09-13 三轮全量（后端 API→深挖→GUI 副页），tool_calls/流式终止/
-  媒体改路由/并发选号/三协议错误封装/更新检查均实测通过
 - 服务治理：**GUI 管得住外部拉起的后端**——靠的不是
   进程归属，而是 `plugins.go` 的 `pluginStart` 先探活端口、健康就「接管复用，不杀不
   重启」（`pluginList` 的 `healthy` 也无条件查端口，`stop` 按端口杀）。所以旧文
@@ -613,9 +475,6 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
   `os.Executable()`（`bridge.go`）而非硬编码路径。v3.20.3 起腾位名唯一
   （`ProxyDeck.exe.old-<纳秒>`，不再撞残留锁）；v3.20.5 起新 GUI 凭换血标记
   把旧后端自动换血（改名不改上报路径，靠名字认不出，只能靠标记）。
-- 发版坑：版本串清单以文首「升版本必须同步的位置」为唯一权威（**8 处**，含
-  2026-09-10 补的 `README.md` 徽章），本文件不再复述处数；`CHANGELOG_DATA` 是内嵌 JS，
-  改完用 node 实解一次验语法（改坏会白屏）
 - **⚠ 发版脚本禁止对 ui.html 做「全局版本串替换」**（2026-10-18 事故）：
   用 `t.replace(旧版本, 新版本)` 改整个 ui.html，会把 `CHANGELOG_DATA` 里的**历史条目
   一起改名**——连发几版后更新日志浮层出现一排同样的版本号（当时连出 12 个 `v4.2.5`）。
@@ -625,15 +484,11 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
   （版本号必须唯一且严格降序），改坏会直接红。
 - `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
-- `.work/` 现状：构建中间产物已清（2026-09-10 清掉 `pd3103*.exe`、`ProxyDeck.new/stripped.exe`），
-  exe 回滚副本按 `ProxyDeck.prev*.exe` 命名累积（政策是不留备份就地修；但每次换装腾位
-  仍会落一个，现已累积 12 个约 200MB，另有 `.work/` 内构建残留约 100MB——见本轮
-  neat-freak 汇报候选清单，等用户确认再清）；
-  另有已完成任务的简报（`current-task.md`、`task-*.md`）、探测语料与临时脚本等，
-  全部 gitignore，可随时清；**清场需用户确认**（并发会话可能仍在用同名简报）
-  简报 `current-task.md` 由下一任务重写；**并行会话改用 `task-<关键词>.md`**（已核
-  `enforce-flow.ps1` 第 49 行对 `current-task.md` 与 `task-*.md` 同等识别为简报；
-  2026-09-10 实测用 `task-*.md` 连改 6 个文件全程未被闸门拦截）
+- `.work/` 现状（2026-10-18 实测 467 文件 / 72.9MB，全部 gitignore；占大头的是两个 exe
+  残留 49MB 与几份 html 快照 17MB）：已完成任务的简报
+  （`task-*.md`、`current-task.md`）、一次性脚本、构建残留。**清场需用户确认**
+  （并发会话可能仍在用同名简报）。简报 `current-task.md` 由下一任务重写；
+  并行会话用 `task-<关键词>.md`（`enforce-flow.ps1` 对两者同等识别为简报）。
 - **已清理（用户 2026-09-12 明确要求删）**：`.probe/`（24MB 探测草稿）、
   `docs/glm53flash-litellm-probe-report.md`、`docs/reasoning-effort-verification.md`
   均已删除（代码零引用；此前 09-10 不入库裁决的执行）。
@@ -645,22 +500,30 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
   按惯例入册
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
   出口 IP 计，共享网络易撞墙，撞后负缓存 10 分钟）
-- ZCode 侧模型配置：tuanjie provider（8788）配了 codely 系（core 即 GLM-5.3
-  承载入口）；子智能体 executor 用团结模型、code-reviewer 用 WorkBuddy
-  （依赖服务在跑；WorkBuddy 的 hy4-preview 撞配额时代理自动切 deepseek-v4-pro）
+- 客户端侧模型配置：tuanjie provider（8788）用 codely 系（core 即 GLM-5.3 承载入口）。
+  2026-09-13 起主用 DSH（ZCode 已退役），模型席位以 `dsh-collab-mode` 插件设置面板为准。
 
 ## 常用命令
 
-```bash
-python build.py                      # 构建正式 exe（需全停服务）
-go build -o new.exe ./app            # 不停服务构建
-go vet ./...                         # 静态检查
-node --check <js>                    # ui.html 抽取 script 后语法校验
-./ProxyDeck.exe -headless # COMMAND 代理后台模式
-./ProxyDeck.exe --plugin-tuanjie --port 8788   # 单独拉团结
-curl http://127.0.0.1:8788/health    # 健康检查
-curl http://127.0.0.1:8787/v1/failover   # WorkBuddy hy4 兜底状态/配置
-git push myrepo HEAD:main            # 推送（remote 名是 myrepo 不是 origin）
+```powershell
+# 构建（发版走干净树：git worktree add --detach <tag>，别在脏树上编）
+cargo build --release -p rs-gui --locked
+
+# 单 crate 构建/测试（各 crate 用独立 target 目录，别共用）
+cd rs-tuanjie; $env:CARGO_TARGET_DIR='E:\cargo-target\rs-tuanjie'; cargo test
+
+# 界面合同门禁（3 条：逐字节副本 / 版本号唯一降序 / v4 不跳版 + 与 CHANGELOG 同集合）
+cd rs-gui; cargo test --test ui_html
+
+# ui.html 内联 JS 语法校验（改完 UI 必做，改坏会白屏）
+node --check <抽取出的 js>
+
+# 换装：腾位法（后端不断，只重启 GUI）
+#   ren ProxyDeck.exe ProxyDeck.exe.old-<时间戳> → 新包落位 → 重启 GUI
+
+./ProxyDeck.exe --plugin-tuanjie --port 8788   # 单拉团结（测试用 18788，别碰 8788）
+curl http://127.0.0.1:8788/health              # 健康检查
+git push myrepo HEAD:main                      # 推送（remote 名 myrepo 不是 origin）
 ```
 
 ## 🔴 红线：团结凭证链（2026-08-27 官方客服实证）
