@@ -484,11 +484,13 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
   （版本号必须唯一且严格降序），改坏会直接红。
 - `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
-- `.work/` 现状（2026-10-18 实测 467 文件 / 72.9MB，全部 gitignore；占大头的是两个 exe
-  残留 49MB 与几份 html 快照 17MB）：已完成任务的简报
-  （`task-*.md`、`current-task.md`）、一次性脚本、构建残留。**清场需用户确认**
-  （并发会话可能仍在用同名简报）。简报 `current-task.md` 由下一任务重写；
-  并行会话用 `task-<关键词>.md`（`enforce-flow.ps1` 对两者同等识别为简报）。
+- `.work/` 现状（2026-10-18 已清场，只剩 `task-rust-rewrite.md` 一份工作记录 ≈0.5MB）：
+  下一任务重写 `current-task.md`；**并行会话用 `task-<关键词>.md`**
+  （`enforce-flow.ps1` 对两者同等识别为简报）。
+- **构建缓存不要放进仓库盘**：Rust 的 `CARGO_TARGET_DIR` 曾散落在 `E:\cargo-target`
+  累积到 **115.5GB**（`rs-gui` 一个目录 40.9GB），2026-10-18 清场回收 102GB。
+  以后每次 `--release` 构建用完即删；`target/` 已在 `.gitignore`，
+  但**仓库内误留的 `rs-*/target/` 也会长到 1GB+**，发版后顺手看一眼。
 - **已清理（用户 2026-09-12 明确要求删）**：`.probe/`（24MB 探测草稿）、
   `docs/glm53flash-litellm-probe-report.md`、`docs/reasoning-effort-verification.md`
   均已删除（代码零引用；此前 09-10 不入库裁决的执行）。
