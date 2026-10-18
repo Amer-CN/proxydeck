@@ -500,44 +500,28 @@ async fn rust_p1_endpoints_match_go_golden() {
 // ---------- 跨语言 DPAPI 往返 ----------
 
 /// 磁盘上的渠道配置是 **DPAPI 密文**（`PDAPI1\n` + base64），只有解开才拿得到 B.AI 的
-/// Bearer。Go 用 `internal/appdir` 的 `CryptUnprotectData` 读它；Rust 侧自己 FFI 装
-/// crypt32.dll 做同一件事。这条用例验的就是「**Go 加密的文件，Rust 能解开**」——
-/// 用真密文夹具（`.work/cli/dpapiwrite.exe`，`appdir.WriteFile` 现产，哨兵 key 不是真 key），
-/// 不是拿明文冒充。
+/// Bearer。这条用例验的是**生产路径**：`channel_key` 读真密文 → 解 DPAPI → 取 key。
 ///
-/// 依赖缺失时**失败**而不是跳过：这条是 P1「同源取 key」的关键证据，静默跳过等于没验。
-/// 前置：`go build -o .work/cli/dpapiwrite.exe ./.work/cli/dpapiwrite`
+/// ⚠ 2026-10-18 变更：原先靠 Go 写的 `dpapiwrite.exe` 产出夹具（证明「Go 加密、Rust 解密」）。
+/// Go 实现已整体移除，改为**本用例自己用同一个 Windows API 造密文**——DPAPI 是系统 API，
+/// 跨语言兼容由操作系统保证，那一半不需要我们自己验；这里守住的是**落盘形态与解密路径**
+/// （前缀、标准 base64、CryptUnprotectData 三个环节），这才是会随我们的代码改坏的部分。
+/// 明文兼容、密文损坏回空串两条对照仍在下文。
 #[cfg(windows)]
 #[test]
-fn reads_go_dpapi_ciphertext() {
+fn reads_dpapi_ciphertext() {
     const SENTINEL: &str = "sk-sentinel-dpapi-roundtrip";
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("rs-bai 应有父目录")
-        .to_path_buf();
-    let tool = root.join(".work/cli/dpapiwrite.exe");
-    assert!(
-        tool.exists(),
-        "缺 DPAPI 夹具产出工具 {}（先跑 go build -o .work/cli/dpapiwrite.exe ./.work/cli/dpapiwrite）",
-        tool.display()
-    );
 
     let dir = std::env::temp_dir().join(format!("rs-bai-dpapi-rt-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let cfg_path = dir.join("tuanjie-water-channels.json");
 
-    let out = std::process::Command::new(&tool)
-        .arg("--out")
-        .arg(&cfg_path)
-        .output()
-        .expect("跑不通 dpapiwrite");
-    assert!(
-        out.status.success(),
-        "dpapiwrite 失败: {} / {}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
+    // 自己造密文：与生产落盘同形（`PDAPI1\n` + 标准 base64(CryptProtectData(json))）
+    let json = format!(r#"[{{"id":"bai","key":"{SENTINEL}"}}]"#);
+    let mut on_disk = b"PDAPI1\n".to_vec();
+    on_disk.extend_from_slice(dpapi_protect_b64(json.as_bytes()).as_bytes());
+    std::fs::write(&cfg_path, &on_disk).unwrap();
 
     // 夹具本身必须是密文（否则这条用例测的还是明文路径，没有意义）
     let raw = std::fs::read(&cfg_path).unwrap();
@@ -570,4 +554,99 @@ fn reads_go_dpapi_ciphertext() {
     );
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/* ───────── 测试用 DPAPI 造密文（与 rs-bai/src/crypto.rs 同一套系统 API） ───────── */
+
+#[cfg(windows)]
+mod dpapi_test_ffi {
+    use std::ffi::c_void;
+
+    #[repr(C)]
+    struct DataBlob {
+        cb_data: u32,
+        pb_data: *mut c_void,
+    }
+
+    /// 失败即报错，绝不弹系统对话框（与生产同值）。
+    const UI_FORBIDDEN: u32 = 0x1;
+
+    #[link(name = "crypt32")]
+    extern "system" {
+        fn CryptProtectData(
+            p_data_in: *const DataBlob,
+            sz_data_descr: *const u16,
+            p_optional_entropy: *const DataBlob,
+            pv_reserved: *mut c_void,
+            p_prompt_struct: *mut c_void,
+            dw_flags: u32,
+            p_data_out: *mut DataBlob,
+        ) -> i32;
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn LocalFree(h_mem: *mut c_void) -> *mut c_void;
+    }
+
+    pub fn protect(plain: &[u8]) -> Vec<u8> {
+        let mut input = DataBlob {
+            cb_data: plain.len() as u32,
+            pb_data: plain.as_ptr() as *mut c_void,
+        };
+        let mut out = DataBlob {
+            cb_data: 0,
+            pb_data: std::ptr::null_mut(),
+        };
+        let ok = unsafe {
+            CryptProtectData(
+                &mut input,
+                std::ptr::null(),
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                UI_FORBIDDEN,
+                &mut out,
+            )
+        };
+        assert_eq!(ok, 1, "CryptProtectData 失败（GetLastError={}）", unsafe {
+            GetLastError()
+        });
+        let bytes = unsafe { std::slice::from_raw_parts(out.pb_data as *const u8, out.cb_data as usize) }.to_vec();
+        unsafe { LocalFree(out.pb_data) };
+        bytes
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetLastError() -> u32;
+    }
+}
+
+/// 标准 base64（`+/` 表、要填充），与生产解码器的严格度对齐。
+#[cfg(windows)]
+fn base64_std(input: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    for c in input.chunks(3) {
+        let (b0, b1, b2) = (c[0], *c.get(1).unwrap_or(&0), *c.get(2).unwrap_or(&0));
+        out.push(T[(b0 >> 2) as usize] as char);
+        out.push(T[(((b0 & 0x03) << 4) | (b1 >> 4)) as usize] as char);
+        out.push(if c.len() > 1 {
+            T[(((b1 & 0x0f) << 2) | (b2 >> 6)) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            T[(b2 & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+#[cfg(windows)]
+fn dpapi_protect_b64(plain: &[u8]) -> String {
+    base64_std(&dpapi_test_ffi::protect(plain))
 }

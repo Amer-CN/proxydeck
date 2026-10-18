@@ -45,7 +45,7 @@ mod plugin_hosting_tests;
 #[cfg(test)]
 mod shell_tests;
 
-/// 应用版本（v4.0.0 起 Rust 即产品本体；Go 侧冻结在 v3.20.11）。
+/// 应用版本（v4.0.0 起 Rust 即产品本体；Go 实现已移除，其版本基准冻结在 v3.20.11）。
 pub const APP_VERSION: &str = "v4.2.7";
 /// 代理核心版本（与 Go `coreVersion` 同值）。
 pub const CORE_VERSION: &str = "v1.2.0";

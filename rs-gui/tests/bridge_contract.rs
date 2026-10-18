@@ -75,7 +75,8 @@ impl Normalizer {
         out = replace_digits(&out, "\"port\":\"", "$PORT");
         out = replace_digits(&out, "-port ", "$PORT");
         // `version` 是**有意分道**的字段：v4.0.0 起 Rust 即产品本体（v4.x），
-        // Go 侧冻结在 v3.20.11，两侧同形不同值。归一成哨兵后，差分的其余字节照比。
+        // 基准（采收自 Go 实现，该实现已于 2026-10-18 移除）冻结在 v3.20.11，两侧同形不同值。
+// 归一成哨兵后，差分的其余字节照比。
         out = replace_quoted(&out, "\"version\":", "$VER");
         out
     }

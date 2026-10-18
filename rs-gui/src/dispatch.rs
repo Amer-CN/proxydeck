@@ -243,9 +243,9 @@ pub fn run(argv: Vec<String>) -> i32 {
         Mode::Plugin(id) => {
             let Some(krate) = plugin_crate(id) else {
                 let msg = format!(
-                    "rs-gui: --plugin-{id} 尚无 Rust 实现（该插件仍由 Go 侧 internal/{id} 承载），本 exe 无法提供该子模式"
+                    "rs-gui: --plugin-{id} 无对应 Rust 实现（本 exe 只提供已迁移的插件），无法提供该子模式"
                 );
-                // 与 Go 侧同源：子模式起不来就把原因写进诊断文件，GUI 的退出监视读它，
+                // 沿用历史行为：子模式起不来就把原因写进诊断文件，GUI 的退出监视读它，
                 // 界面显示「启动失败：…」而不是停在「启动中」。
                 plugin_fail_log(id, &msg);
                 eprintln!("{msg}");

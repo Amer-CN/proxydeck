@@ -5,35 +5,30 @@
 
 ## 项目一句话
 
-Windows 独立 GUI 工具（单 exe，**Rust + WebView2 + 内嵌 HTML**；v4.0.0 起主机是 Rust，
-Go 只剩历史参考实现）：把 CommandCode /
+Windows 独立 GUI 工具（单 exe，**纯 Rust + WebView2 + 内嵌 HTML**；v4.0.0 起是 Rust，
+2026-10-18 起 Go 实现已全部移除）：把 CommandCode /
 团结 / WorkBuddy(腾讯CodeBuddy) / Comate(百度) / Qoder(阿里) / B.AI 的订阅转成
 本地 OpenAI 兼容接口，机械风控制台统一管理。完全开箱即用，无任何激活/授权机制。
 
 ## 架构速览
 
-> ⚠ **v4.0.0 起产品本体是 Rust**：`rs-gui`（宿主+桥）+ `rs-proxy`（COMMAND 代理）+
-> `rs-tuanjie` / `rs-codebuddy` / `rs-comate` / `rs-qoder` / `rs-vibex` / `rs-bai` 八个 crate，
-> 由 `rs-gui/src/dispatch.rs` 单 exe 分发。下方 Go 目录树是**历史参考实现**，
-> 除 `app/ui.html`（UI 唯一源，Rust 侧逐字节嵌入）外**不再参与构建**。
+> **2026-10-18：Go 参考实现已整体移除**（42,274 行 / 151 文件）。仓库里只剩 Rust。
+> `app/` 目录保留两个原件：`ui.html`（UI 唯一源，Rust 侧逐字节嵌入）与
+> `icon.ico`（`winres_contract` 要求与 `rs-gui/icon.ico` 逐字节相同）。
+> 历史基准（采收自 Go 的 golden JSON）仍在各 crate 的 `tests/golden/` 里，照常守门。
 
 ```
-ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
-├─ app/                         GUI 主体（Go 历史参考；`app/ui.html` 仍是 UI 唯一源）
-│   ├─ main.go                  入口：flag 分发（GUI/headless/--plugin-*）
-│   ├─ bridge.go                WebView2 JS 桥（ccGetState/ccStart/...绑定）
-│   ├─ plugins.go               插件托管：pluginDefs 注册 + 启动/停止/健康检查
-│   ├─ plugin_modes.go          --plugin-* 子模式（进程内直跑插件服务）
-│   └─ ui.html                  全部 UI（内嵌；COMMAND/TUANJIE/WORKBUDDY/VIBEX 四模式键＋标题栏齿轮进设置＋媒体/注水副页）
-├─ internal/
-│   ├─ proxy + server + api     COMMAND 代理核心
-│   ├─ tuanjie/                 团结插件后端（8788）
-│   ├─ codebuddy/               WorkBuddy 插件后端（8787）
-│   ├─ comate/                  Comate 插件后端（8786）
-│   ├─ qoder/                   Qoder 插件后端（8785）
-│   ├─ bai/                     B.AI 插件后端（8891）
-│   └─ vibex/                   VibeX 插件后端（8790，REST＋WS 私有协议直译）
-└─ build.py                     构建脚本（**Go 时代**；Rust 用 cargo，见「常用命令」）
+ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即用
+├─ rs-gui/                    宿主：WebView2 + tao/wry 窗口、JS 桥、插件托管、更新、托盘
+├─ rs-proxy/                  COMMAND 代理（55990，三条入站协议）
+├─ rs-tuanjie/                团结插件（8788）
+├─ rs-codebuddy/              WorkBuddy 插件（8787 + 国际版 8789）
+├─ rs-comate/                 Comate 插件（8786；托管 zulu serve 8792）
+├─ rs-qoder/                  Qoder 插件（8785）
+├─ rs-vibex/                  VibeX 插件（8790）
+├─ rs-bai/                    B.AI 插件（8891）
+├─ app/                       只剩两个原件：ui.html（UI 唯一源）+ icon.ico
+└─ Cargo.toml                 工作区（8 个 crate）
 ```
 
 - 端口约定：COMMAND 代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891 / VibeX 8790
@@ -442,7 +437,8 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
 
 - **产品本体**：Rust（`rs-gui` + 六个插件 crate + `rs-proxy`），单 exe 约 18MB。
 - **已删除的功能**（别再找代码）：生图/生视频 + Agnes（v4.1.0）、自定义服务商与三协议
-  （v4.2.0）。详见上文两处「（历史）」小节。
+  （v4.2.0）、**Go 参考实现整体移除（2026-10-18，155 文件 / 42,274 行）**。
+  详见上文架构节与两处「（历史）」小节。
 - **今日主线（2026-10-18）**：v4.1.0 → v4.2.7 连发 8 版，主题是「删功能 + 修手感」：
   删生图生视频、删自定义服务商、修界面探活卡顿（查系统监听表绕开杀软对 connect 的 2s 拖挂）、
   修闲置后滚动音效延迟/爆音、修 COMATE 码表、修黑窗（5 处缺 `CREATE_NO_WINDOW`）、

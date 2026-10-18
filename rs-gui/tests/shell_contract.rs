@@ -65,8 +65,8 @@ fn repo_file(rel: &str) -> String {
     let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(rel);
     let raw = std::fs::read_to_string(&p)
         .unwrap_or_else(|e| panic!("读不到 {}（{e}）", p.display()));
-    // 仓库里的 Go 源码是 **CRLF**（`git` 的 autocrlf 产物）；锚按 `\n` 写，
-    // 故读进来先归一化行尾（只影响断言文本，不改磁盘上的文件一个字节）。
+    // 读到的可能是 **CRLF**（Go 源码当年是 autocrlf 产物、冻结快照也沿用它）；
+    // 锚按 `\n` 写，故读进来先归一化行尾（只影响断言文本，不改磁盘上的文件一个字节）。
     raw.replace("\r\n", "\n")
 }
 
@@ -162,9 +162,16 @@ fn cc_open_fax_existing_popup_matches_go_byte_for_byte() {
 /// 改动这两段（换调用、换命令字、改句柄判据）都会让本条红。
 ///
 /// 断言的是 `app/main.go` 的原文（**只读**，本条不修改它一个字节）。
+/// 传真三绑定（ccFaxWin / ccFaxClose / ccOpenFax）的 **Rust 实现必须与当年 Go 的
+/// 实现形态一致**。
+///
+/// ⚠ 2026-10-18 Go 参考实现整体移除后，本用例改读**冻结快照**
+/// `tests/golden/fax-bindings-go-reference.txt`（就是删除前的 `app/main.go` 原文）。
+/// 这样「当年确实是照这个形态移植的」这条证据永久留在仓库里，不随源码删除而丢失；
+/// 代价是快照不会再更新——它本来也只用来证明**历史移植**，不参与现役行为判定。
 #[test]
 fn fax_bindings_are_anchored_to_go_source() {
-    let src = repo_file("app/main.go");
+    let src = repo_file("rs-gui/tests/golden/fax-bindings-go-reference.txt");
 
     // ccFaxWin：`_ = w.Bind("ccFaxWin", func(cmd string) { if h := w.Window(); h != nil { windowCmd(uintptr(h), cmd) } })`
     // 原文用 tab 缩进；逐字照抄（用显式转义拼，避免编辑器把 tab 换成空格）
