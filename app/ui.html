@@ -2054,17 +2054,6 @@ body.pt-try { background: var(--pt-paper); }
 .ibtn2.accent { color: var(--pt-paper); background: var(--pt-accent); border-color: var(--pt-accent);
   box-shadow: 0 1px 0 color-mix(in srgb, var(--pt-accent) 45%, var(--pt-ink)); }
 .ibtn2.accent:hover { background: color-mix(in srgb, var(--pt-accent) 88%, var(--pt-ink)); }
-/* 识图引擎开关（acc-row 同款胶囊行：左侧去向小字，右侧两档按钮组） */
-.vis-row { display: flex; align-items: center; gap: 10px;
-  padding: 7px 10px; border: 1px solid var(--pt-hairline); border-radius: 8px;
-  background: linear-gradient(var(--pt-hi-40), transparent 35%), var(--pt-hatch); }
-.vis-row .v-meta { flex: 1; min-width: 0; font-size: 9.5px; line-height: 1.5; color: var(--pt-ink2); }
-.vis-row .v-meta b { color: var(--pt-ink); font-weight: 650; }
-.vis-row .v-sel {
-  font-family: inherit; font-size: 10px; color: var(--pt-ink);
-  background: var(--pt-hi-40); border: 1px solid var(--pt-hairline);
-  border-radius: 7px; padding: 4px 6px; max-width: 150px; cursor: pointer; }
-
 /* ———— 延迟测试结果行 ———— */
 .pt-lat { display: flex; flex-direction: column; gap: 3px; margin-top: 4px;
   font-family: var(--pt-font-disp); font-size: 10px; color: var(--pt-ink2); min-height: 14px; }
@@ -2308,7 +2297,7 @@ body.pt-try { background: var(--pt-paper); }
 /* 宽版模态（账号矩阵/自定义服务商子页面） */
 .modal-box.wide { width: 92%; max-width: 780px; }
 
-/* ════════════ 子页面模式（注水检测 / 媒体转路由）════════════
+/* ════════════ 子页面模式（注水检测 / 媒体副页）════════════
    外壳里的独立模式：黑屏 = 信息区（读数），甲板 = 操作区（选择/填写），
    四颗模式键与屏体都保留，靠 Mode 鼓轮显示当前在哪一页。
    这两页内容密度高，行字在 .pt-deck.sub 作用域内放大一档，
@@ -2614,7 +2603,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <!-- 第 8 供应商预留格（未映射任何 mode，路过时鼓轮保持上一位置） -->
                   <i><span>···</span></i>
                   <i data-mode="set"><span data-i18n="app.settings">设置</span></i>
-                  <i data-mode="media"><span data-i18n="app.key.mediaDrum">媒体路由</span></i>
+                  <i data-mode="media"><span data-i18n="app.key.mediaDrum">服务商</span></i>
                 </span>
               </span>
             </div>
@@ -2788,19 +2777,15 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
               </div>
 
-              <!-- 媒体转路由 屏体 = 信息区：三路媒体请求当前生效去向 + 自定义服务商健康 -->
+              <!-- 媒体副页 屏体 = 信息区：自定义服务商健康与累计用量 -->
               <div class="pt-sc-body media" data-body="media">
                 <div class="sc-unified">
                   <div class="run-line">
-                    <span class="pt-dot grn" data-dot="mrExt"><span class="run-name">媒体转路由 · MEDIA REROUTE</span><b></b></span>
+                    <span class="pt-dot grn" data-dot="mrExt"><span class="run-name">自定义服务商 · CUSTOM PROVIDERS</span><b></b></span>
                   </div>
                   <div class="sh-rows">
-                    <span class="sh-k">识图</span><span class="sh-v" id="mrScVis">团结 codely-vl</span>
-                    <span class="sh-k">生图</span><span class="sh-v" id="mrScImg">不指定</span>
-                    <span class="sh-k">生视频</span><span class="sh-v" id="mrScVid">不指定</span>
                     <span class="sh-k">自定义服务商</span><span class="sh-v" id="mrScExt">0 个</span>
                     <span class="sh-k">累计用量</span><span class="sh-v" id="mrScUsage">—</span>
-                    <span class="sh-k" id="mrHintK" style="display:none">提示</span><span class="sh-v" id="mrHintV" style="display:none"></span>
                   </div>
                 </div>
               </div>
@@ -2949,7 +2934,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm">账号池 · Accounts</span>
-                  <span class="pt-val" id="tjReroute" style="display:none" title="媒体改路由：不识图模型收到识图请求时自动改写为识图模型转发的累计次数">改路由 <b>0</b> 次</span>
                   <button type="button" class="ibtn2" id="tjMatrixBtn" title="全屏查看账号矩阵（每账号一张信息卡）">▦ 账号矩阵</button></div>
                 <div class="acc-list" id="tjAccList"><div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号启用多账号轮换</div></div>
 
@@ -3405,16 +3389,16 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                <div class="pt-deck-scroll"><div class="inner fill">
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.settings">设置 · Settings</span></div>
 
-                <!-- 媒体转路由：引擎级功能，识图请求自动改路由到识图模型（当前生效于团结链路）。
-                     收成单入口：识图模型选择/自定义服务商/模型管理都进子页面（openMediaReroutePage）。 -->
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.media.head">媒体转路由 · Media Reroute</span>
-                  <span class="pt-val" data-i18n="app.media.headVal">识图请求自动改路由到识图模型 · 当前生效于团结链路</span></div>
+                <!-- 媒体副页：旧的三路媒体配置与识图改路由已按用户裁决删除（2026-10-18），
+                     该副页只保留「自定义服务商」管理（openMediaReroutePage 入口不变）。 -->
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.media.head">自定义服务商 · Custom Providers</span>
+                  <span class="pt-val" data-i18n="app.media.headVal">自定义服务商与模型管理 · 命中的模型由该源直接转发</span></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
-                    <div class="t" data-i18n="app.media.head">媒体转路由</div>
-                    <div class="s" data-i18n="app.media.desc">识图模型选择 · 自定义服务商与模型管理 · 识图请求自动改路由到识图模型（团结 codely-vl 或自定义服务商里配置的模型）· 生效于团结链路</div>
+                    <div class="t" data-i18n="app.media.head">自定义服务商</div>
+                    <div class="s" data-i18n="app.media.desc">OpenAI 兼容第三方源 · 模型管理 · 命中的模型由该源直接转发（静态 Bearer，不占团结账号池）</div>
                   </div>
-                  <button type="button" class="ibtn2" id="tjMediaBtn" data-i18n="app.media.manage" title="媒体转路由：识图模型选择 + 自定义服务商/模型管理（OpenAI 兼容第三方源）"> ⇗ 管理…</button>
+                  <button type="button" class="ibtn2" id="tjMediaBtn" data-i18n="app.media.manage" title="媒体副页：自定义服务商与模型管理（OpenAI 兼容第三方源）"> ⇗ 管理…</button>
                 </div></div>
                 <div class="pt-div"></div>
 
@@ -3674,39 +3658,15 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                </div></div>
               </div>
 
-              <!-- —————— 媒体转路由 甲板 = 操作区（生效去向在上屏）—————— -->
+              <!-- —————— 媒体副页 甲板 = 操作区（自定义服务商；旧媒体生成与改路由配置已删）—————— -->
               <div class="pt-deck sub" data-deck="media">
                <div class="pt-deck-scroll"><div class="inner fill">
                 <div class="pt-row"><div class="pt-rowline">
                   <button type="button" class="ibtn2" id="mrBack" title="返回设置页（直接按「设置」键或 Esc 同样可退）">← 返回</button>
                   <div class="pt-label">
-                    <div class="t">媒体转路由 · MEDIA REROUTE</div>
-                    <div class="s">三路媒体请求当前生效去向看上屏；这里选模型、管自定义服务商（改完立即生效）</div>
+                    <div class="t">自定义服务商 · CUSTOM PROVIDERS</div>
+                    <div class="s">管理 OpenAI 兼容第三方源与模型；命中的模型由该源直接转发（改完立即生效）</div>
                   </div>
-                </div></div>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t">识图请求</div>
-                    <div class="s">团结 codely-vl / GLM-5.3-FLASH / KIMI-K3 / DeepSeek-V4.1-Flash 或自定义服务商的 chat 类模型</div>
-                  </div>
-                  <select class="ibtn2" id="tjVisSel" title="识图请求改路由到的识图模型"></select>
-                </div></div>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t">生图请求</div>
-                    <div class="s">自定义服务商的 image 类 · 不指定 = 客户端名直传</div>
-                  </div>
-                  <select class="ibtn2" id="tjImgSel" title="生图请求统一改写到的模型"></select>
-                </div></div>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t">生视频请求</div>
-                    <div class="s">自定义服务商的 video 类 · 不指定 = 客户端名直传</div>
-                  </div>
-                  <select class="ibtn2" id="tjVidSel" title="生视频请求统一改写到的模型"></select>
                 </div></div>
                 <div class="pt-div"></div>
 
@@ -3731,7 +3691,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                       <button type="button" class="ibtn2" id="pvModelAddBtn" style="flex:none">＋ 添加模型</button>
                     </div>
                   </div></div>
-                  <p class="acc-f-help">OpenAI 兼容第三方源：订阅/用量取自其计费接口，不支持的端点会如实标注；模型留空 = 仅信息展示，填写的模型命中请求时由该源直接转发（静态 Bearer，不占团结账号池）；模型的增删在保存后的卡片上进行。API 格式决定出站端点：Chat Completions=/chat/completions、Responses=/responses（如 Zen muse-spark 只支持此协议）、Anthropic Messages=/v1/messages（原生 x-api-key 认证），旧配置无此字段按原行为兼容。</p>
+                  <p class="acc-f-help">OpenAI 兼容第三方源：订阅/用量取自其计费接口，不支持的端点会如实标注；模型留空 = 仅信息展示，填写的模型命中请求时由该源直接转发（静态 Bearer，不占团结账号池）；模型的增删在保存后的卡片上进行。API 格式决定出站端点：Chat Completions=/chat/completions、Responses=/responses、Anthropic Messages=/v1/messages（原生 x-api-key 认证）；旧配置无此字段按 Chat 转发，需要 Responses 的条目请在此显式选择。</p>
                   <div class="acc-f-actions"><button type="button" class="ibtn2 accent" id="pvAdd">添加供应商</button></div>
                 </div>
                </div></div>
@@ -4841,7 +4801,7 @@ var PT_I18N = {
     noteFace(m);
     paint();
     /* 切甲板滚动回顶：.pt-deck-scroll 的 scrollTop 是 DOM 残留（无刻意记忆设计），
-       二次进入停在上次位置会让甲板头部区块（媒体转路由/链路诊断等）整屏不可见 */
+       二次进入停在上次位置会让甲板头部区块（媒体副页/链路诊断等）整屏不可见 */
     var dk = document.querySelector('.pt-deck[data-deck="' + m + '"] .pt-deck-scroll');
     if (dk) dk.scrollTop = 0;
     play('modeChange');
@@ -5680,12 +5640,6 @@ var PT_I18N = {
     if (!box) return;
     try {
       var d = await tjAccounts();
-      var rr = $('tjReroute');
-      if (rr) {
-        var n = d.media_reroutes || 0;
-        rr.style.display = n ? '' : 'none';
-        rr.querySelector('b').textContent = n;
-      }
       /* 上屏「账号矩阵」灯：多账号池模式亮（N/M 在线/总数）；单账号不亮 */
       if (d.ok && d.accounts && d.accounts.length) {
         var online = d.accounts.filter(function (a) { return a.enabled && !a.budget_exceeded; }).length;
@@ -5744,27 +5698,11 @@ var PT_I18N = {
       });
     } catch (e) { /* 插件未启动：保持上次显示 */ }
   }
-  /* ================= 识图引擎切换（团结 codely-vl ⇄ Agnes agnes-2.5-flash） ================= */
-  /* GET/POST /vision-config（立即生效 + tuanjie-vision.json 持久化）；
-     Agnes 档仅当 /providers 有 provider 的 config_models 含 agnes-2.5-flash 时可用。
-     不进 3 秒轮询：只在页面加载和点击切换后刷新。 */
-  var TJ_VIS_TJ = 'codely-vl';
-  /* 团结池内原生识图模型（对齐后端 builtinVisionCapable）：可作识图改路由目标的池内模型 */
-  var TJ_VIS_POOL = ['GLM-5.3-FLASH', 'KIMI-K3', 'DeepSeek-V4.1-Flash'];
-  var TJ_VIS_LABELS = { 'codely-vl': '团结 codely-vl', 'GLM-5.3-FLASH': '团结 GLM-5.3-FLASH', 'KIMI-K3': '团结 KIMI-K3', 'DeepSeek-V4.1-Flash': '团结 DeepSeek-V4.1-Flash' };
-  var tjVisBusy = false;
-  var tjVisModel = ''; /* 当前生效识图模型（loadTuanjieVision 刷新，renderProviders 同步下拉选项时复用） */
-  var tjMediaBusy = false; /* 生图/生视频下拉的 POST 防抖（与识图各自独立） */
-  /* 前端模型分类（与后端 ModelKind 同规则）：名字含 image → image 类、
-     含 video → video 类、其余 chat 类，不区分大小写。 */
-  function modelKind(m) {
-    m = (m || '').toLowerCase();
-    if (m.indexOf('image') >= 0) return 'image';
-    if (m.indexOf('video') >= 0) return 'video';
-    return 'chat';
-  }
+  /* ================= 媒体副页：自定义服务商 ================= */
+  /* 旧的媒体生成链路与识图改路由已按用户裁决删除（2026-10-18）：媒体副页只保留
+     自定义服务商管理；后端 /vision-config、/media-config 与生成端点均不再注册。 */
   /* 屏体信息区键值写入：文本 + 语义色（ok 绿 / warn 琥珀 / crit 红，空=默认白）。
-     子页面（注水检测 / 媒体转路由）的读数一律看上屏，甲板只放选择与操作。 */
+     子页面（注水检测 / 媒体副页）的读数一律看上屏，甲板只放选择与操作。 */
   function setScReadout(id, text, cls) {
     var el = $(id);
     if (!el) return;
@@ -5790,44 +5728,7 @@ var PT_I18N = {
     var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
     return (d.getMonth() + 1) + '-' + d.getDate() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
   }
-  /* 渲染识图下拉选项：团结池识图模型（codely-vl / GLM-5.3-FLASH / KIMI-K3 / DeepSeek-V4.1-Flash，对齐后端
-     builtinVisionCapable）+ 各 provider 的 chat 类 config_models（去重）。
-     当前生效模型不在选项里时（如旧配置的模型已删）也保留为选项，可见即可切走。 */
-  function renderTuanjieVision(model, providerModels) {
-    var sel = $('tjVisSel');
-    if (!sel) return;
-    var opts = [TJ_VIS_TJ].concat(TJ_VIS_POOL);
-    (providerModels || []).forEach(function (m) {
-      if (m && modelKind(m) === 'chat' && opts.indexOf(m) < 0) opts.push(m);
-    });
-    if (model && opts.indexOf(model) < 0) opts.push(model);
-    sel.innerHTML = opts.map(function (m) {
-      var label = TJ_VIS_LABELS[m] || m;
-      return '<option value="' + escHtml(m) + '"' + (m === model ? ' selected' : '') + '>' + escHtml(label) + '</option>';
-    }).join('');
-    setScReadout('mrScVis', TJ_VIS_LABELS[model] || model || TJ_VIS_TJ,
-      model && model !== TJ_VIS_TJ ? 'warn' : 'ok');
-  }
-  /* 渲染生图/生视频下拉：provider 对应类模型 + 「不指定」默认项（空值=不改写）。 */
-  function renderMediaSel(selId, scId, model, providerModels, kind) {
-    var sel = $(selId);
-    if (!sel) return;
-    var opts = [''].concat((providerModels || []).filter(function (m) {
-      return m && modelKind(m) === kind;
-    }));
-    if (model && opts.indexOf(model) < 0) opts.push(model);
-    sel.innerHTML = opts.map(function (m) {
-      return '<option value="' + escHtml(m) + '"' + (m === model ? ' selected' : '') + '>' +
-        escHtml(m || '不指定（用客户端模型名）') + '</option>';
-    }).join('');
-    setScReadout(scId, model || '不指定 · 客户端名直传', model ? 'warn' : '');
-  }
-  function renderMediaSelectors(cfg, providerModels) {
-    renderTuanjieVision(cfg.vision || '', providerModels);
-    renderMediaSel('tjImgSel', 'mrScImg', cfg.image || '', providerModels, 'image');
-    renderMediaSel('tjVidSel', 'mrScVid', cfg.video || '', providerModels, 'video');
-  }
-  /* GET /providers 单一入口：打开媒体转路由时，自定义服务商卡片与三个模型下拉需要同一份数据，
+  /* GET /providers 单一入口：自定义服务商卡片与增删改共用同一份数据，
      合并在途请求避免打两次远端计费查询（冷启动时那一下翻倍就是用户感到的卡顿）。
      增删改之后调用方传 force=true 跳过在途复用，拿到含本次改动的最新列表。 */
   var pvInflight = null;
@@ -5842,90 +5743,6 @@ var PT_I18N = {
     pvInflight = p;
     p.then(function () { if (pvInflight === p) pvInflight = null; });
     return p;
-  }
-  async function loadTuanjieVision() {
-    var cfg = null, provModels = [];
-    var live = false;
-    try {
-      cfg = await (await fetch("http://127.0.0.1:8788/media-config")).json() || {};
-      live = true;
-    } catch (e) { /* 插件未启动：走缓存 */ }
-    if (live) {
-      try { localStorage.setItem('mediaCfgCache', JSON.stringify(cfg)); } catch (e) {}
-      var d = await fetchProviders();
-      if (d) d.forEach(function (p) {
-        (p.config_models || []).forEach(function (m) { provModels.push(m); });
-      });
-      setScHint('mrHint', '');
-    } else {
-      /* 未启动：上次数据立刻上屏（SWR 口径），启动后有变化自动覆盖 */
-      try { cfg = JSON.parse(localStorage.getItem('mediaCfgCache') || 'null'); } catch (e) {}
-      var pc = null, cachedProvs = null;
-      try { pc = JSON.parse(localStorage.getItem('mediaProvsCache') || 'null'); } catch (e) {}
-      if (pc && pc.provs) {
-        cachedProvs = pc.provs;
-        cachedProvs.forEach(function (p) {
-          (p.config_models || []).forEach(function (m) { provModels.push(m); });
-        });
-      }
-      if (cfg || cachedProvs) {
-        setScHint('mrHint', '团结插件未启动 · 显示上次数据' + (pc && pc.at ? '（' + fmtCacheAt(pc.at) + ' 记录）' : '') + '，操作前请拉动拉杆');
-      } else {
-        setScHint('mrHint', '团结插件未启动 · 拉动拉杆后这里显示媒体转路由配置');
-      }
-      renderProvidersData(cachedProvs);
-    }
-    renderMediaSelectors(cfg || {}, provModels);
-  }
-  /* 识图/生图/生视频三个下拉的绑定：DOM 常驻媒体转路由甲板，程序初始化时绑一次
-     （bindMediaVision，见 bindMatrixAndProviders）。数据拉取随进入该模式走（loadMediaPage）。 */
-  function bindMediaVision() {
-    var sel = $('tjVisSel');
-    if (!sel) return;
-    sel.onchange = function () {
-      var model = sel.value;
-      if (tjVisBusy || !model) return;
-      tjVisBusy = true;
-      (async function () {
-        try {
-          var r = await (await fetch("http://127.0.0.1:8788/vision-config", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model: model })
-          })).json();
-          if (r.model !== model) throw new Error(r.msg || '返回值与请求不一致');
-          plog(PV.tj, 'ok', '识图引擎已切到 ' + r.model);
-          toast('ok', '识图引擎', '识图请求 → ' + r.model);
-        } catch (e) {
-          toast('err', '识图引擎', '切换失败（插件未启动？）');
-          loadTuanjieVision(); /* 失败回滚为服务端实际值 */
-        } finally { tjVisBusy = false; }
-      })();
-    };
-    /* 生图/生视频下拉：POST /media-config 只传变化项，空串=清空回默认 */
-    [['tjImgSel', 'image', '生图模型'], ['tjVidSel', 'video', '生视频模型']].forEach(function (pair) {
-      var msel = $(pair[0]);
-      if (!msel) return;
-      msel.onchange = function () {
-        var model = msel.value;
-        if (tjMediaBusy) return;
-        tjMediaBusy = true;
-        var field = pair[1];
-        (async function () {
-          try {
-            var body = {}; body[field] = model;
-            var r = await (await fetch("http://127.0.0.1:8788/media-config", {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body)
-            })).json();
-            if ((r[field] || '') !== model) throw new Error('返回值与请求不一致');
-            toast('ok', pair[2], model ? (pair[2] + '已统一为 ' + model) : (pair[2] + '已回到不指定（客户端模型名直传）'));
-          } catch (e) {
-            toast('err', pair[2], '切换失败（插件未启动？）');
-            loadTuanjieVision(); /* 失败回滚为服务端实际值 */
-          } finally { tjMediaBusy = false; }
-        })();
-      };
-    });
   }
   /* 账号矩阵子页面（学群友 acc-card 全字段卡：LED/徽章/次数/剩余/进度条/到期） */
   function wideModal(html) {
@@ -6153,7 +5970,7 @@ var PT_I18N = {
   }
 
   /* 自定义服务商子页面（学群友 providers：管理 + 计费信息展示；models 命中的模型参与转发）。
-     并入媒体转路由子页面后由 openMediaReroutePage 打开（openProvidersPage 保留为入口别名）。 */
+     并入媒体副页后由 openMediaReroutePage 打开（openProvidersPage 保留为入口别名）。 */
   function pvCardHtml(p) {
     var host = (p.base_url || "").replace(/^https?:\/\//, "");
     var usageUnknown = !(p.usage && typeof p.usage.total_usage === "number");
@@ -6201,7 +6018,7 @@ var PT_I18N = {
       (!p.ok && p.error ? '<p class="acc-f-help" style="margin:0;color:var(--pt-accent)">' + escHtml(p.error) + '</p>' : '') +
       '</div>';
   }
-  /* 自定义服务商卡列表 + 新增表单常驻媒体转路由甲板（静态标记见 ui-src.html data-deck="media"），
+  /* 自定义服务商卡列表 + 新增表单常驻媒体副页甲板（静态标记见 ui-src.html data-deck="media"），
      这里只渲染卡片网格。 */
   /* 渲染自定义服务商卡 + 上屏读数 + 重绑卡片事件（给什么画什么：live 数据 / 缓存数据 / null=失败） */
   /* 当前正在编辑的账号名（""=非编辑态，添加表单按新增走）；与 bindPvAdd 同作用域共享 */
@@ -6246,7 +6063,7 @@ var PT_I18N = {
           if (p && !p.protocol) {
             // 旧配置（磁盘无 protocol 字段）：插入临时空值项并选中，提交时不改动
             var o = document.createElement('option');
-            o.value = ""; o.textContent = "旧配置·自动（不改动）";
+            o.value = ""; o.textContent = "旧配置·空值（按 Chat 转发）";
             sel.insertBefore(o, sel.firstChild);
           }
           sel.value = (p && p.protocol) || "";
@@ -6302,10 +6119,9 @@ var PT_I18N = {
     if (busy) busy.hidden = true;
     renderProvidersData(provs);
   }
-  /* 增删改后的统一刷新：force 保证拿到含本次改动的列表，下拉与卡片共用这一趟请求 */
+  /* 增删改后的统一刷新：force 保证拿到含本次改动的列表 */
   function refreshProviders() {
     renderProviders(true);
-    loadTuanjieVision();
   }
   /* 上屏信息区：自定义服务商可达数 + 累计用量（金额取自各源计费接口，单位美分） */
   function renderMediaScreen(provs) {
@@ -6325,7 +6141,7 @@ var PT_I18N = {
     setScReadout('mrScUsage', hasUsage ? '$' + (usage / 100).toFixed(2) : '用量未知', '');
     PTApp.dot('mrExt', okN > 0, false, provs.length ? (okN + '/' + provs.length) : '');
   }
-  /* 新增自定义服务商表单：DOM 常驻媒体转路由甲板且默认折叠，程序初始化时绑一次 */
+  /* 新增自定义服务商表单：DOM 常驻媒体副页甲板且默认折叠，程序初始化时绑一次 */
   function bindPvAdd() {
     var add = $('pvAdd');
     if (!add) return;
@@ -6401,16 +6217,15 @@ var PT_I18N = {
       refreshProviders();
     };
   }
-  /* 媒体转路由 = 外壳子页面模式：上屏看三路媒体请求的当前去向与自定义服务商健康，
-     甲板做选择与增删。入口在设置甲板，返回 = 按「设置」键（或「← 返回」/ Esc）。 */
+  /* 媒体副页 = 外壳子页面模式：上屏看自定义服务商健康与累计用量，甲板做增删改。
+     入口在设置甲板，返回 = 按「设置」键（或「← 返回」/ Esc）。 */
   function enterMediaPage() {
     PTApp.selectMode('media');
   }
-  /* 进入 media 模式时的数据刷新（模式切换回调驱动，三个进入入口共用）：
-     /providers 与 /media-config 各一趟，自定义服务商与下拉共用同一次 providers 请求 */
+  /* 进入 media 模式时的数据刷新（模式切换回调驱动）：
+     /providers 一趟，自定义服务商卡片与增删改共用同一次请求 */
   function loadMediaPage() {
     renderProviders();
-    loadTuanjieVision();
   }
 
   // 进行中请求（学群友完整版：LED 三档 + 账号 + 流式 + 字节 + 静默 + 计数 + 负载摘要）
@@ -6512,7 +6327,7 @@ var PT_I18N = {
     };
   }
 
-  /* 子页面入口：注水检测 / 媒体转路由都是外壳模式页（切模式即进入；都从设置甲板进入，
+  /* 子页面入口：注水检测 / 媒体副页都是外壳模式页（切模式即进入；都从设置甲板进入，
      返回也回设置）。两个甲板的 DOM 常驻，一次性绑定随初始化完成，不再随浮窗创建销毁。 */
   (function bindMatrixAndProviders() {
     var mx = $('tjMatrixBtn');
@@ -6528,7 +6343,6 @@ var PT_I18N = {
     });
     bindWaterBtn();
     bindPvAdd();
-    bindMediaVision();
   })();
 
   // 添加账号：机械风模态窗（pt-field 输入框，与链路配置的输入框同款）
@@ -7821,11 +7635,11 @@ var PT_I18N = {
     }, { passive: false });
   })();
 
-  // 注水检测 / 媒体转路由是常驻外壳子页面：一次性绑定在初始化做，进入模式时刷数据。
+  // 注水检测 / 媒体副页是常驻外壳子页面：一次性绑定在初始化做，进入模式时刷数据。
   // 注水检测属主动低频操作，不进 3 秒轮询（被动观测随下面这组 /accounts 轮询顺带更新）。
   // 3 秒轮询（进行中面板要跟手；矩阵子页面开着时一并刷新它的进行中徽章；
   // tjMatrix 上屏灯数据只认 /accounts，随本组轮询走）
-  // 门控：消费方只在团结甲板（tjAccList/tjReroute/tjMatrix 灯）、注水子页
+  // 门控：消费方只在团结甲板（tjAccList/tjMatrix 灯）、注水子页
   // （wtPassive/wtScPassive）或矩阵弹窗（mxGrid）可见时才有意义——其余甲板整组跳过，
   // 插件未启动时也不再白打 3 个失败请求；进甲板/子页时由 onModeChange 即时刷一轮。
   var _tjPollBusy = false;
@@ -9348,11 +9162,11 @@ var PT_I18N = {
     'app.s.changelog': { zh: '本版本改了什么，一目了然', 'zh-hant': '本版本改了什麼，一目瞭然', en: 'What changed in this version', de: 'Was sich in dieser Version geändert hat', ja: 'このバージョンの変更点', fr: 'Les changements de cette version', es: 'Los cambios de esta versión' },
     'app.btn.changelog': { zh: '查看…', 'zh-hant': '查看…', en: 'View…', de: 'Ansehen…', ja: '見る…', fr: 'Voir…', es: 'Ver…' },
     'app.upd.title':     { zh: '尚未检查', 'zh-hant': '尚未檢查', en: 'Not checked yet', de: 'Noch nicht geprüft', ja: '未チェック', fr: 'Non vérifié', es: 'Sin comprobar' },
-    'app.key.mediaDrum': { zh: '媒体路由', 'zh-hant': '媒體路由', en: 'Media Route', de: 'Medienroute', ja: 'メディアルーティング', fr: 'Route média', es: 'Ruta de medios' },
+    'app.key.mediaDrum': { zh: '服务商', 'zh-hant': '服務商', en: 'Provider', de: 'Anbieter', ja: 'プロバイダ', fr: 'Fournisseur', es: 'Proveedor' },
     'app.key.waterDrum': { zh: '注水检测', 'zh-hant': '注水檢測', en: 'Canary Probe', de: 'Kanarien-Test', ja: 'カナリア検査', fr: 'Sonde canari', es: 'Prueba canaria' },
-    'app.media.head':    { zh: '媒体转路由', 'zh-hant': '媒體轉路由', en: 'Media Reroute', de: 'Medien-Umleitung', ja: 'メディア振り分け', fr: 'Redirection média', es: 'Redirección de medios' },
-    'app.media.headVal': { zh: '识图请求自动改路由到识图模型 · 当前生效于团结链路', 'zh-hant': '識圖請求自動改路由到識圖模型 · 當前生效於團結鏈路', en: 'Vision requests auto-reroute to the vision model · Active on the Tuanjie link', de: 'Bildanfragen werden automatisch zum Bildmodell umgeleitet · Aktiv auf der Tuanjie-Verbindung', ja: '画像リクエストを画像モデルへ自動振り分け・現在は団結リンクが対象', fr: 'Les requêtes vision sont reroutées vers le modèle vision · Actif sur le lien Tuanjie', es: 'Las peticiones de visión se redirigen al modelo de visión · Activo en el enlace Tuanjie' },
-    'app.media.desc':    { zh: '识图模型选择 · 自定义服务商与模型管理 · 识图请求自动改路由到识图模型（团结 codely-vl 或自定义服务商里配置的模型）· 生效于团结链路', 'zh-hant': '識圖模型選擇 · 自定義服務商與模型管理 · 識圖請求自動改路由到識圖模型（團結 codely-vl 或自定義服務商裡配置的模型）· 生效於團結鏈路', en: 'Vision model picker · Custom providers and model management · Vision requests auto-reroute to the vision model (Tuanjie codely-vl or a custom provider model) · Active on the Tuanjie link', de: 'Bildmodell-Wahl · Eigene Anbieter und Modellverwaltung · Bildanfragen werden automatisch zum Bildmodell umgeleitet (Tuanjie codely-vl oder Modell eines eigenen Anbieters) · Aktiv auf der Tuanjie-Verbindung', ja: '画像モデル選択・カスタムプロバイダとモデル管理・画像リクエストを画像モデルへ自動振り分け（団結 codely-vl またはカスタムプロバイダのモデル）・団結リンクが対象', fr: 'Choix du modèle vision · Fournisseurs et gestion de modèles personnalisés · Les requêtes vision sont reroutées vers le modèle vision (codely-vl Tuanjie ou modèle dun fournisseur personnalisé) · Actif sur le lien Tuanjie', es: 'Elección del modelo de visión · Proveedores personalizados y gestión de modelos · Las peticiones de visión se redirigen al modelo de visión (codely-vl de Tuanjie o modelo de un proveedor personalizado) · Activo en el enlace Tuanjie' },
+    'app.media.head':    { zh: '自定义服务商', 'zh-hant': '自訂服務商', en: 'Custom Providers', de: 'Eigene Anbieter', ja: 'カスタムプロバイダ', fr: 'Fournisseurs personnalisés', es: 'Proveedores personalizados' },
+    'app.media.headVal': { zh: '自定义服务商与模型管理 · 命中的模型由该源直接转发', 'zh-hant': '自訂服務商與模型管理 · 命中的模型由該源直接轉發', en: 'Custom providers and model management · matching models are forwarded to that source directly', de: 'Eigene Anbieter und Modellverwaltung · passende Modelle werden direkt an die Quelle weitergeleitet', ja: 'カスタムプロバイダとモデル管理・一致したモデルはその提供元へ直接転送', fr: 'Fournisseurs et gestion de modèles personnalisés · les modèles correspondants sont transmis directement à cette source', es: 'Proveedores y gestión de modelos personalizados · los modelos coincidentes se reenvían directamente a esa fuente' },
+    'app.media.desc':    { zh: 'OpenAI 兼容第三方源 · 模型管理 · 命中的模型由该源直接转发（静态 Bearer，不占团结账号池）', 'zh-hant': 'OpenAI 相容第三方源 · 模型管理 · 命中的模型由該源直接轉發（靜態 Bearer，不佔團結賬號池）', en: 'OpenAI-compatible third-party sources · model management · matching models are forwarded to that source directly (static Bearer, no Tuanjie account pool)', de: 'OpenAI-kompatible Drittanbieter · Modellverwaltung · passende Modelle werden direkt an die Quelle weitergeleitet (statischer Bearer, kein Tuanjie-Accountpool)', ja: 'OpenAI 互換の外部ソース・モデル管理・一致したモデルはその提供元へ直接転送（静的 Bearer、団結アカウントプール不使用）', fr: 'Sources tierces compatibles OpenAI · gestion des modèles · les modèles correspondants sont transmis directement à cette source (Bearer statique, sans pool de comptes Tuanjie)', es: 'Fuentes de terceros compatibles con OpenAI · gestión de modelos · los modelos coincidentes se reenvían directamente a esa fuente (Bearer estático, sin pool de cuentas Tuanjie)' },
     'app.media.manage':  { zh: ' ⇗ 管理…', 'zh-hant': ' ⇗ 管理…', en: ' ⇗ Manage…', de: ' ⇗ Verwalten…', ja: ' ⇗ 管理…', fr: ' ⇗ Gérer…', es: ' ⇗ Gestionar…' },
     'app.water.title':   { zh: '注水检测', 'zh-hant': '注水檢測', en: 'Canary Probe', de: 'Kanarien-Test', ja: 'カナリア検査', fr: 'Sonde canari', es: 'Prueba canaria' },
     'app.water.desc':    { zh: '金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型 · 检测团结账号池 · 生效于团结链路', 'zh-hant': '金絲雀探針：指紋漂移+答題，識別上游是否換便宜模型 · 檢測團結賬號池 · 生效於團結鏈路', en: 'Canary probe: fingerprint drift + quiz to detect upstream model swaps · checks the Tuanjie account pool · active on the Tuanjie link', de: 'Kanarien-Test: Fingerabdruck-Drift und Quiz erkennen Upstream-Modelltausch · prüft den Tuanjie-Accountpool · aktiv auf der Tuanjie-Verbindung', ja: 'カナリア探針：指紋ドリフト+クイズで上流の安いモデルへの差し替えを検出・団結アカウントプールを検査・団結リンクが対象', fr: 'Sonde canari : derive d empreinte et quiz pour detecter un remplacement du modele amont · verifie le pool de comptes Tuanjie · actif sur le lien Tuanjie', es: 'Sonda canaria: deriva de huella y cuestionario detectan cambios de modelo aguas arriba · comprueba el pool de cuentas Tuanjie · activo en el enlace Tuanjie' },
@@ -10160,7 +9974,7 @@ var PT_I18N = {
     '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（伴随自检仪式）；运行中<b>拉回最左</b>熄火。三个代理甲板（COMMAND 55990 / TUANJIE 8788 / WORKBUDDY 8787 / 国际版 8789）各有独立拉杆。<br>' +
     '<b>【后台常驻】</b> 平时关窗（红灯 / 系统关闭）<b>不停后台代理</b>，重开面板自动识别运行中；只有设置页的「彻底关机」拨杆会连后台一起停。<br>' +
     '<b>【接入】</b> 任意 OpenAI 兼容客户端：Base URL 填各甲板显示的地址（如 <code>http://127.0.0.1:55990/v1</code>）；API Key 用 CommandCode Studio 生成的 Key（点火前填好，程序记住）。<br>' +
-    '<b>【甲板】</b> 四颗模式键：<b>COMMAND / TUANJIE / WORKBUDDY / 设置</b>；键盘方向键也能切换。<b>COMMAND 键再点一次翻到 B.AI</b>（键帽副行 ⇄ 提示，再点翻回）。<b>注水检测</b>与<b>媒体转路由</b>是子页面：上屏（黑屏）看信息、甲板做操作，返回按 <b>设置</b> 键或「← 返回」，Esc 也可以。<br>' +
+    '<b>【甲板】</b> 四颗模式键：<b>COMMAND / TUANJIE / WORKBUDDY / 设置</b>；键盘方向键也能切换。<b>COMMAND 键再点一次翻到 B.AI</b>（键帽副行 ⇄ 提示，再点翻回）。<b>注水检测</b>与<b>媒体副页</b>是子页面：上屏（黑屏）看信息、甲板做操作，返回按 <b>设置</b> 键或「← 返回」，Esc 也可以。<br>' +
     '<b>【模型】</b> 悬停任意模型键帽 1 秒 → 上屏显示价格 / 上下文详情；点击键帽复制模型名；COMMAND 甲板支持 <b>GO / 全部</b> 筛选。<br>' +
     '<b>【消耗统计】</b> 各甲板「消耗 TOP」条形图自动统计（TUANJIE 显示官方积分口径）。<br>' +
     '<b>【窗口】</b> 顶部台肩（红绿灯条）空白处按住<b>拖动窗口</b>、双击最大化；红灯=关面板 · 黄灯=最小化 · 绿灯=最大化/还原。<br>' +
@@ -10213,7 +10027,7 @@ var PT_I18N = {
       '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8788/v1</code>（甲板上点击即复制）；登录态自动读取 <code>~/.codely-cli/oauth_creds.json</code>。<br>' +
       '<b>【账号池】</b>添加账号即启用多号轮换，单账号模式读桌面端登录态；「▦ 账号矩阵」全屏查看每账号一张信息卡。<br>' +
       '<b>【K3 限流护航】</b>开启后 KIMI-K3 撞限流先自动换号重试，全池撞墙再按上游 Retry-After 排队等待（缺省 60s，总预算 30 分钟）；关闭时 429 直接透传。<br>' +
-      '<b>【媒体转路由】</b>不识图模型收到识图请求时自动改路由到识图模型（团结 codely-vl 或外部账号配置的模型），改路由累计次数显示在「账号池」标题旁；识图模型与外部账号在 设置 → 媒体转路由 管理。<br>' +
+      '<b>【多模态】</b>团结原生多模态模型（codely-vl / KIMI-K3 / GLM-5.3-FLASH / DeepSeek-V4.1-Flash）可直接收图片/音频；其它模型收到带图片/音频的请求会明确返回 400 并列出可用模型，不再自动改写模型。自定义服务商模型原样转发（不参与此判断），在 设置 → 自定义服务商 管理。<br>' +
       '<b>【注水检测】</b>设置 → 注水检测：金丝雀探针（指纹漂移+答题）识别上游是否换便宜模型，生效于团结链路。<br>' +
       '<b>【积分统计】</b>官方积分口径：积分总额 / 今日已用 / 今日剩余（24:00 重置）/ 月度积分 / 赠送池+日赠；点火后自动拉一次，之后点「↻ 刷新」手动拉（官网 429 保护）。<br>' +
       '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>',
@@ -10902,7 +10716,7 @@ var PT_I18N = {
   PTApp.onModeChange(function (m) {
     hideModelTip();
     curMode = m;
-    /* 子页面模式（注水检测 / 媒体转路由 / 键位组合）不是插件甲板，进页面时刷自己的数据 */
+    /* 子页面模式（注水检测 / 媒体副页 / 键位组合）不是插件甲板，进页面时刷自己的数据 */
     if (m === 'water') { loadWaterPage(); loadTuanjieAccounts(); return; } /* 被动观测数据同源 /accounts，即时刷一轮 */
     if (m === 'media') { loadMediaPage(); return; }
     if (m === 'keymap') { try { window.renderKeymapPage(); } catch (e) {} return; }

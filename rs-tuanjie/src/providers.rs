@@ -9,7 +9,8 @@
 //!   落盘 `tuanjie-providers.json`（经 `crypto::read_file`/`write_file`，与 Go 的
 //!   `appdir.ReadFile`/`WriteFile` 同源：旧明文读兼容 + DPAPI 密文自动解密）。
 //! * **协议分流**：`ProviderProtocol`（trim+小写归一到 chat/responses/anthropic）、
-//!   `externalProtocolRoute`（protocol 字段优先，空值走 `isZenResponsesModel` 白名单兜底）。
+//!   `externalProtocolRoute`（只看 `protocol` 字段；空值一律 chat —— 2026-10-18 起
+//!   删除了 Zen 专用硬编码 `isZenResponsesModel`）。
 //! * **转发**：`forward_external`（分流 + 出站 `/chat/completions` 的 OpenAI 兼容路径）、
 //!   `external_base_url`（去尾斜杠 + 补 `/v1`）。
 //!
@@ -43,9 +44,6 @@ pub const PROVIDER_FETCH_TIMEOUT: Duration = Duration::from_millis(2500);
 
 /// 配置文件（数据目录）—— `providers.go:74`。
 pub const PROVIDERS_FILE: &str = "tuanjie-providers.json";
-
-/// Zen Responses 协议模型名 —— `responses_forward.go:34`。
-pub const ZEN_RESPONSES_MODEL: &str = "muse-spark-1.3-contributor-free";
 
 /// 外部出站统一超时（Go `http.Client{Timeout: 120s}`）—— `server.go:1470`。
 pub const EXTERNAL_TIMEOUT: Duration = Duration::from_secs(120);
@@ -172,25 +170,15 @@ pub fn provider_protocol(p: &ExternalProvider) -> String {
     }
 }
 
-/// Zen 老配置白名单 —— `isZenResponsesModel`（`responses_forward.go:40-42`）：
-/// 模型正是那一个且 base_url 含 `opencode.ai/zen`。
-pub fn is_zen_responses_model(p: &ExternalProvider, model: &str) -> bool {
-    model == ZEN_RESPONSES_MODEL && p.base_url.contains("opencode.ai/zen")
-}
-
 /// 出站协议分流 —— `externalProtocolRoute`（`responses_forward.go:47-59`）。
-/// `protocol` 字段为空（旧配置）时走 [`is_zen_responses_model`] 兜底。
-pub fn external_protocol_route(p: &ExternalProvider, model: &str) -> String {
+///
+/// 2026-10-18 用户裁决：Zen 专用硬编码（`isZenResponsesModel` 白名单）已删除，
+/// `protocol` 为空（旧配置）时一律按 `chat` 转发。需要 Responses 的条目必须在
+/// 配置里写明 `protocol: "responses"`（界面「API 格式」下拉）。
+pub fn external_protocol_route(p: &ExternalProvider, _model: &str) -> String {
     match p.protocol.as_str() {
         "responses" => "responses".to_string(),
         "anthropic" => "anthropic".to_string(),
-        "" => {
-            if is_zen_responses_model(p, model) {
-                "responses".to_string()
-            } else {
-                "chat".to_string()
-            }
-        }
         _ => "chat".to_string(),
     }
 }
@@ -1199,27 +1187,15 @@ mod tests {
             external_protocol_route(&prov("p", "u", "anthropic"), "m"),
             "anthropic"
         );
-        // 空值走 Zen 白名单兜底
-        assert_eq!(
-            external_protocol_route(
-                &prov("zen", "https://x/opencode.ai/zen", ""),
-                ZEN_RESPONSES_MODEL
-            ),
-            "responses"
-        );
+        // 空值一律 chat（Zen 白名单兜底已于 2026-10-18 删除）
         assert_eq!(
             external_protocol_route(&prov("zen", "https://x/opencode.ai/zen", ""), "other"),
             "chat"
         );
-        // 模型对但 base 不对 ⇒ 不兜底（`strings.Contains` 大小写敏感）
-        assert_eq!(
-            external_protocol_route(&prov("zen", "https://x/other", ""), ZEN_RESPONSES_MODEL),
-            "chat"
-        );
         assert_eq!(
             external_protocol_route(
-                &prov("zen", "https://x/OPENCODE.AI/ZEN", ""),
-                ZEN_RESPONSES_MODEL
+                &prov("zen", "https://x/opencode.ai/zen", ""),
+                "muse-spark-1.3-contributor-free"
             ),
             "chat"
         );

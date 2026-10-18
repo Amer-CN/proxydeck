@@ -12,7 +12,8 @@
 //! `stats`（按模型累计 + 落盘）/ `server`（服务骨架与路由表）/ `chat`（**`handleChat`
 //! 的池路径与单账号路径**，P8b 第四片）/ `providers`（外部账号 + 三协议分流）/
 //! `responses_forward`（`/responses` 转发与翻回）/ `anthropic_forward`（`/v1/messages`）/
-//! `media`（识图改路由 + Agnes 生图生视频合同）/ `probes`（探针集 + 基线内存态）
+//! `media`（多模态能力判定 + schema 修复 + 远程图片预下载；生图/生视频与识图改路由
+//! 已于 2026-10-18 按用户裁决删除）/ `probes`（探针集 + 基线内存态）
 //! —— 后五个模块属 **P8b 第五片**；
 //! 剩余面（`water.go` 的注水链路、`seedcheck.go`、`cdp_browser.go`、`model/info` 聚合）
 //! 见 `README.md` 的未覆盖清单。

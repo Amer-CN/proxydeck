@@ -4,13 +4,18 @@
 //!
 //! * **媒体改路由 / 远程图片预下载**：含图请求改写 model、识图模型与用户扩展清单放行、
 //!   远程 URL 图片转 base64（下游响应 + 出站体逐字节）。
+//!   **2026-10-18 更新**：改路由与生图/生视频/媒体配置已按用户裁决删除，对应 Go 金标
+//!   场景**有意跳过**（见 `REMOVED_MEDIA_SCENARIOS`）；保留并继续覆盖三条：
+//!   「多模态模型直收」一条行为不变；两条远程图片场景按 [`scenario_step`] 把**输入**
+//!   模型改成 `codely-vl`（金标出站体本来就是这个模型），继续覆盖
+//!   `fetch_remote_images` 的下载 → data URI 成功分支。
 //! * **外部 provider 三条转发路径**：OpenAI 兼容 chat（200/流式/4xx/5xx→空 200/
 //!   tool_call_id 修复）、`/responses`（非流式回填 + 流式逐事件翻译 + 异常形态 + 4xx）、
 //!   `/v1/messages`（非流式 + 流式 + 5xx），**出站转换体逐字节比对**。
 //! * **`/providers` 管理端点**：GET（冷启动同步拉取 + 缓存）、六个 action、
 //!   各类错误形态与 405。
-//! * **`/media-config` + `/vision-config`**：三个选择器的读写与类型校验。
-//! * **`/v1/images/generations` + `/v1/videos` + `/v1/videos/{id}` + `/agnesapi`**。
+//! * ~~`/media-config` + `/vision-config`~~、~~`/v1/images/generations` + `/v1/videos` +
+//!   `/v1/videos/{id}` + `/agnesapi`~~：**本版有意删除**（端点 404、改动见 README 差异表）。
 //! * **探针**：`probeCall` 的 max_tokens 自适应名单（出站体逐字节）+ 整轮
 //!   `RunPipelineProbes` 的结果列表。
 //! * **基线内存态**：同一份 `tuanjie-baselines.json` fixture 下的加载/迁移/回写字节。
@@ -68,8 +73,6 @@ struct ScenarioIn {
     name: String,
     #[serde(default)]
     providers: String,
-    #[serde(default)]
-    media: String,
     /// Go 的 nil 切片 marshal 成 `null`。
     #[serde(default)]
     accounts: Option<Vec<String>>,
@@ -262,9 +265,37 @@ fn mask_created(s: &str) -> String {
     out
 }
 
+/// 生成的 tool_call id（`call_` + 12 位小写十六进制）归一化。
+///
+/// `next_rid` 是**进程级全局计数器**：删掉媒体场景后，同一条 `ext-chat-sanitize`
+/// 用例拿到的序号必然变化（本次实测 Go=…0b / Rust=…06）。序号不是行为合同——
+/// 12 位零填充小写十六进制的形态由 `inflight::rid_from_n` 的单测锁死——故这里归一化。
+fn mask_rid(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0usize;
+    while i < s.len() {
+        if s[i..].starts_with("call_") {
+            let rest = &s[i + 5..];
+            let hex: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || ('a'..='f').contains(c))
+                .collect();
+            if hex.len() == 12 {
+                out.push_str("call_<RID>");
+                i += 5 + 12;
+                continue;
+            }
+        }
+        let ch = s[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
 /// 下游响应体的归一化（见文件头「归一化」1~3）。
 fn norm_downstream(s: &str) -> String {
-    mask_created(&mask_chunk_id(&mask_up(s)))
+    mask_rid(&mask_created(&mask_chunk_id(&mask_up(s))))
 }
 
 /// 团结域出站体的会话层键（每请求随机）。
@@ -272,7 +303,7 @@ const VOLATILE_KEYS: [&str; 3] = ["metadata", "litellm_session_id", "prompt_cach
 
 /// 出站体归一化：含会话层键时摘掉再规范化比对，否则**逐字节**比对。
 fn norm_upstream_body(s: &str) -> (String, bool) {
-    let masked = mask_up(s);
+    let masked = mask_rid(&mask_up(s));
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&masked) else {
         return (masked, false);
     };
@@ -398,6 +429,43 @@ fn p8b5_diff_against_go_golden() {
     );
 }
 
+/// 2026-10-18 用户裁决删除的 Go 金标场景：生图/生视频、三路媒体配置、识图改路由。
+/// 这些端点在 Rust 侧已不注册、`codely-core` + 图片已改为 400 ——
+/// **有意差异，非漂移**（README 差异表 #46）。
+///
+/// 注意：`media-fetch-remote-image` / `-sniff` **不在此列**——它们覆盖的是**保留**的
+/// `fetch_remote_images` 下载成功分支；做法见 [`scenario_step`]（输入模型改成
+/// `codely-vl`，与金标出站体本来就一致的 `codely-vl` 对齐）。
+const REMOVED_MEDIA_SCENARIOS: [&str; 7] = [
+    "media-reroute-image-to-vision",
+    "media-no-reroute-extra-capable",
+    "media-reroute-configured-vision",
+    "media-config-get-post",
+    "images-generations",
+    "images-generations-rewrite-and-errors",
+    "videos-create-and-query",
+];
+
+/// 金标场景输入的就地修正（只改**输入**，不改期望）。
+///
+/// 两条远程图片场景的 Go 金标里，出站体与响应本来就是 `"model":"codely-vl"`
+/// （旧行为把 `codely-core` 改路由成 `codely-vl`）。Rust 的改路由已删，若继续用
+/// `codely-core` 会命中新的 400 分支；把输入模型换成 `codely-vl` 后，Go 侧
+/// （vision-capable，不改写）与 Rust 侧行为一致，而 `fetch_remote_images` 的
+/// 下载 → data URI 成功分支仍被完整覆盖。
+fn scenario_step(name: &str, step: &StepIn) -> StepIn {
+    let mut out = step.clone();
+    if matches!(
+        name,
+        "media-fetch-remote-image" | "media-fetch-remote-image-sniff"
+    ) {
+        out.body = out
+            .body
+            .replace("\"model\":\"codely-core\"", "\"model\":\"codely-vl\"");
+    }
+    out
+}
+
 async fn run_all(g: Golden) -> Vec<String> {
     let up = shared_upstream();
     let mut stats = DiffStats::default();
@@ -411,12 +479,17 @@ async fn run_all(g: Golden) -> Vec<String> {
 
     // ---------------- HTTP 场景
     for sc in &g.scenario {
+        // 已删除功能对应的 Go 金标：跳过（有意差异，见常量注释与 README #46）。
+        if REMOVED_MEDIA_SCENARIOS.contains(&sc.name.as_str()) {
+            continue;
+        }
         // 一个场景 = 一个隔离环境 + 一个 AppState + 一个真 HTTP 服务；
         // 场景内所有步骤**共享状态**（Go 侧也是同一个 `Server` 跑完整串步骤——
         // providers/media 的跨步骤语义靠这一点才可比）。
         let sess = ScenarioRun::start(up, sc, &upstream_base).await;
         for step in sc.steps() {
-            let got = sess.step(up, step, &upstream_base).await;
+            let step = scenario_step(&sc.name, step);
+            let got = sess.step(up, &step, &upstream_base).await;
             let name = format!("{}/{}", sc.name, step.name);
             let Some(want) = by_name.get(&name) else {
                 stats.fail(format!("[{name}] 金标里没有这条用例"));
@@ -650,16 +723,23 @@ impl ScenarioRun {
         .expect("写合成账号池");
     }
     if !sc.providers.is_empty() {
-        let providers = sc.providers.replace("{UP}", upstream_base);
+        // Zen 专用硬编码（`isZenResponsesModel`）已于 2026-10-18 按用户裁决删除：
+        // 金标 `responses-*` 场景原靠「空 protocol + opencode.ai/zen」自动走 Responses，
+        // 现在必须在配置里显式写 `"protocol":"responses"`。改写后的输入与 Go 侧
+        // 「显式 protocol=responses」等价，金标响应/出站体仍逐字节可比。
+        // 其他场景的 providers 可能是**换行分隔的多个对象**（原样写盘），故只改 responses-*。
+        let mut providers = sc.providers.replace("{UP}", upstream_base);
+        if sc.name.starts_with("responses-") {
+            let mut pv: serde_json::Value =
+                serde_json::from_str(&providers).expect("解析场景 provider 配置");
+            pv["protocol"] = serde_json::json!("responses");
+            providers = serde_json::to_string(&pv).expect("序列化场景 provider 配置");
+        }
         std::fs::write(
             data.join("tuanjie-providers.json"),
             format!("[{providers}]"),
         )
         .expect("写 provider 配置");
-    }
-    if !sc.media.is_empty() {
-        std::fs::write(data.join("tuanjie-media.json"), sc.media.as_bytes())
-            .expect("写媒体配置");
     }
 
     up.reset_scripts();

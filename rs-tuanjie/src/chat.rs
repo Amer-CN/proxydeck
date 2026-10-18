@@ -24,9 +24,10 @@
 //!    `reshapeChatBody` **之前**对 system 消息里的 `You are <竞品名>` 做零宽空格改写
 //!    （`server.go:988-991`），Rust 侧同位调用 [`crate::reqshape::desensitize_agent_identity`]，
 //!    55 条 Go 真函数采收向量逐字节一致。
-//!    【P8b 第五片更新】媒体改路由（`RerouteIfMedia`）/远程图片预下载（`FetchRemoteImages`）
-//!    与外部 provider 分支**已迁**（见 [`crate::media`] / [`crate::providers`]），
-//!    `handle_chat` 开头按 Go 的同一顺序调用。
+//!    【2026-10-18 更新】识图「静默改写模型」已按用户裁决删除：请求含图片/音频而目标
+//!    模型不在内置多模态清单时直接回 400（列出可用模型）；远程图片预下载
+//!    （`FetchRemoteImages`）与外部 provider 分支保留（见 [`crate::media`] /
+//!    [`crate::providers`]）。自定义服务商模型**不参与**多模态拦截，命中即直接转发。
 //! 4. **别名解析观测（`water.RecordResolution`）/被动注水（`water.RecordPassive`）未迁**：
 //!    注水面（P8c）。
 //! 5. **单账号路径 200 的 `defer activity.Add("ok", …)` 未迁**：Go 那条恒写（`:1379-1381`），
@@ -1280,30 +1281,32 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
         return write_err(StatusCode::BAD_REQUEST, INVALID_UTF8_BODY_MESSAGE);
     }
 
-    let (mut model, wants_stream) = parse_model_and_stream(&body);
+    let (model, wants_stream) = parse_model_and_stream(&body);
     let mut body = body;
     // 诊断：入站请求结构摘要（**重排前的原始形态**）—— `server.go:960`。
     crate::logf(&request_shape_line(&model, &body));
 
-    // 远程 URL 图片预下载转 base64（Agnes / 团结上游下载远程图片经常超时挂死）
+    // 自定义服务商模型先认出来：命中即**整段绕过**下面的多模态拒绝判断，按既有路由
+    // 直接转发（用户配置的源可能自己就支持识图，代理不做假设）。只看 `model` 字符串，
+    // 与后面的 body 重排无关，故提前算一次、转发时复用。
+    let external_prov = st.providers.match_model(&model);
+
+    // 团结自己的模型：请求含图片/音频等非文本块而目标模型不在内置多模态清单 ⇒ 明确 400，
+    // **不再静默改写 model 后继续请求**（旧 `RerouteIfMedia` 已按用户裁决删除）。
+    if external_prov.is_none() {
+        if let Some(msg) = crate::media::multimodal_reject_message(&body, &model) {
+            crate::logf(&format!("[tuanjie] media-reject model={model}: {msg}"));
+            st.activity.add("error", &msg, &model, "", 0, 0, 400);
+            return write_err(StatusCode::BAD_REQUEST, &msg);
+        }
+    }
+
+    // 远程 URL 图片预下载转 base64（团结上游下载远程图片经常超时挂死）
     // —— `server.go:961-965`。
     let (nb, n) = crate::media::fetch_remote_images(&st.fetch_img_client, &body).await;
     if n > 0 {
         body = nb;
         crate::logf(&format!("[tuanjie] fetched {n} remote image(s) to base64"));
-    }
-
-    // 媒体改路由：含图片/音频且目标模型不识图 → 改写为视觉模型（防上游 400）
-    // —— `server.go:966-975`。
-    let mut media_rerouted = false;
-    let (nb, note) = st.media.reroute_if_media(&body);
-    if !note.is_empty() {
-        body = nb;
-        model = st.media.vision();
-        media_rerouted = true;
-        crate::logf(&format!("[tuanjie] media-reroute {note}"));
-        st.media_reroutes.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        st.activity.add("info", &format!("媒体改路由 {note}"), &model, "", 0, 0, 0);
     }
 
     // 会话租借（对齐官方 CLI「一个窗口一个 session、窗口内复用」）：
@@ -1323,116 +1326,44 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
     crate::logf(&request_shape_line(&model, &body));
 
     // 外部 provider 模型：直接转发（静态 Bearer key，不占账号池、不做团结签名）。
-    // 媒体改路由后目标命中 provider 也走这里（识图转 Agnes）；识图改路由场景失败时
-    // 沿回落链重试（vision → vision_fallback… → codely-vl 兜尾）—— `server.go:995-1046`。
-    if let Some(prov) = st.providers.match_model(&model) {
-        if !media_rerouted {
-            let out = crate::providers::forward_external(
-                &st,
-                body,
-                &model,
-                wants_stream,
-                &prov,
-                "/chat/completions",
-            )
-            .await;
-            return match out {
-                Ok(resp) => resp,
-                Err(code) => {
-                    if code == -1 {
-                        // 网络错（forwardExternal 未写响应，回落场景之外由这里写终态）
-                        write_json(&gobj(vec![(
-                            "error",
-                            gobj(vec![
-                                (
-                                    "message",
-                                    GJ::Str(format!(
-                                        "{} 请求失败（网络错误，详见实时动态）",
-                                        prov.name
-                                    )),
-                                ),
-                                ("type", GJ::Str("server_error".to_string())),
-                            ]),
-                        )]))
-                    } else {
-                        // **如实复刻 Go 的既有行为**：5xx/429 时 forwardExternal 不写任何字节，
-                        // 而 handleChat 直接 return ⇒ Go 兜底一个 **200 空响应**（不是 bug 修复点，
-                        // 见 README「Go 侧可疑项」）。Rust 侧同样回空 200，差分金标锁住它。
-                        StatusCode::OK.into_response()
-                    }
-                }
-            };
-        }
-        let chain = st.media.vision_fallback_chain();
-        let mut idx = 0usize;
-        while idx < chain.len() {
-            let target = chain[idx].clone();
-            let Some(tp) = st.providers.match_model(&target) else {
-                idx += 1;
-                continue; // 链中非 provider 模型（codely-vl 等）：跳出循环走团结路径
-            };
-            match crate::providers::forward_external(
-                &st,
-                body.clone(),
-                &target,
-                wants_stream,
-                &tp,
-                "/chat/completions",
-            )
-            .await
-            {
-                Ok(resp) => return resp, // 成功或已写客户端，不重试
-                Err(code) => {
-                    if !crate::media::should_fallback(code) {
-                        return write_err(StatusCode::BAD_GATEWAY, &format!("上游 {code}"));
-                    }
-                    // 网络错(-1)或 5xx/429：试链上下一个节点
-                    if idx + 1 < chain.len() {
-                        st.activity.add(
-                            "info",
-                            &format!(
-                                "识图回落 {target} → {}（上游 {code}）",
-                                chain[idx + 1]
+    // 命中即转发——多模态拦截在上面按 `external_prov.is_none()` 已经整段绕过，
+    // 自定义服务商模型不参与团结侧的多模态判定 —— `server.go:995-1046`。
+    if let Some(prov) = external_prov {
+        let out = crate::providers::forward_external(
+            &st,
+            body,
+            &model,
+            wants_stream,
+            &prov,
+            "/chat/completions",
+        )
+        .await;
+        return match out {
+            Ok(resp) => resp,
+            Err(code) => {
+                if code == -1 {
+                    // 网络错（forwardExternal 未写响应，由这里写终态）
+                    write_json(&gobj(vec![(
+                        "error",
+                        gobj(vec![
+                            (
+                                "message",
+                                GJ::Str(format!(
+                                    "{} 请求失败（网络错误，详见实时动态）",
+                                    prov.name
+                                )),
                             ),
-                            &target,
-                            "",
-                            0,
-                            0,
-                            code as i32,
-                        );
-                        crate::logf(&format!(
-                            "[tuanjie] vision fallback {target} -> {} (upstream {code})",
-                            chain[idx + 1]
-                        ));
-                    } else {
-                        st.activity.add(
-                            "info",
-                            &format!("识图回落 {target} → 团结路径（上游 {code}）"),
-                            &target,
-                            "",
-                            0,
-                            0,
-                            code as i32,
-                        );
-                        crate::logf(&format!(
-                            "[tuanjie] vision fallback {target} -> tuanjie (upstream {code})"
-                        ));
-                    }
+                            ("type", GJ::Str("server_error".to_string())),
+                        ]),
+                    )]))
+                } else {
+                    // **如实复刻 Go 的既有行为**：5xx/429 时 forwardExternal 不写任何字节，
+                    // 而 handleChat 直接 return ⇒ Go 兜底一个 **200 空响应**（不是 bug 修复点，
+                    // 见 README「Go 侧可疑项」）。Rust 侧同样回空 200，差分金标锁住它。
+                    StatusCode::OK.into_response()
                 }
             }
-            idx += 1;
-        }
-        // 链尾模型：改写 model 走下方账号池/单账号路径（`server.go:1037-1045`）。
-        if let Some(last) = chain.last().cloned() {
-            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
-                if let Some(obj) = v.as_object() {
-                    let mut m = obj.clone();
-                    m.insert("model".to_string(), serde_json::Value::String(last.clone()));
-                    body = crate::gojson::marshal_go_value(&serde_json::Value::Object(m));
-                    model = last;
-                }
-            }
-        }
+        };
     }
 
     // KIMI-K3 429 兜底：开启且 model 含 "KIMI" 才启用（`server.go:1050`）。

@@ -13,10 +13,10 @@
 //!   **`/v1/chat/completions`**（P8b 第四片：池路径 + 单账号路径，见 [`crate::chat`]）。
 //! * **已注册但显式 501**（属后续小轮，**不假装已通**）：`/model/info`、
 //!   `/v1/models?full=true`、`/accounts` 的 `action=add|auto`。
-//! * **未注册**（依赖 `providers.go`/`media.go`/`probes.go`/`cdp_browser.go`）：
-//!   `/account-models`、`/water-probe`、`/providers`、
-//!   `/vision-config`、`/media-config`、`/v1/images/generations`、`/v1/videos*`、
-//!   `/agnesapi`——未注册即 404，不会让下游误以为端点已就绪。
+//! * **本版有意删除（2026-10-18 用户裁决）**：`/vision-config`、`/media-config`、
+//!   `/v1/images/generations`、`/v1/videos*`、`/agnesapi` 不再注册 ⇒ 一律 404
+//!   （生图/生视频与识图改路由整块下线）。识图改为：目标模型不在内置多模态清单而请求
+//!   含图片/音频时直接回 400，不再改写模型。
 //!
 //! ## 骨架本身的合同（与 Go 逐条对齐）
 //!
@@ -82,14 +82,13 @@ pub struct AppState {
     pub registry: Arc<RequestRegistry>,
     pub activity: Arc<ActivityLog>,
     pub quota_cache: Arc<QuotaCache>,
-    /// 媒体改路由累计次数（`server.go:48` 的 `mediaReroutes`）。
+    /// 历史字段：媒体改路由已删（2026-10-18），该值恒 0；仅保留 `/accounts` 的既有
+    /// JSON 合同（`media_reroutes` 键）不破坏下游。
     pub media_reroutes: AtomicI64,
     /// chat 路径的可注入时序（池路径 429 兜底的换号退避）。
     pub chat_timing: crate::chat::ChatTiming,
     /// 外部账号（`server.go:46` 的 `providers`）——管理 + 信息展示 + 三协议转发。
     pub providers: Arc<crate::providers::ProviderStore>,
-    /// 媒体模型状态（`media.go` 的四处包级全局）——识图/生图/生视频 + 回落链。
-    pub media: Arc<crate::media::MediaState>,
     /// 绝对基准库（`server.go:47` 的 `baselines`）——**启动时加载进内存**，
     /// 改/删条目必须重启才生效（CLAUDE.md 坑 15）。
     pub baselines: Arc<crate::probes::BaselineStore>,
@@ -126,7 +125,6 @@ impl AppState {
             media_reroutes: AtomicI64::new(0),
             chat_timing: crate::chat::ChatTiming::default(),
             providers: Arc::new(crate::providers::ProviderStore::new()),
-            media: Arc::new(crate::media::MediaState::new()),
             baselines: Arc::new(crate::probes::BaselineStore::new()),
             fetch_img_client: reqwest::Client::builder()
                 .timeout(crate::media::FETCH_IMG_TIMEOUT)
@@ -162,23 +160,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/inflight", any(handle_inflight))
         // 注水检测（P8c）：history/channels/quick 已实现，其余动作显式 501。
         .route("/water-probe", any(crate::water_handler::handle_water_probe))
-        // 外部账号（管理 + 信息展示）与媒体三选择器 —— `server.go:131-133`。
+        // 外部账号（管理 + 信息展示）—— `server.go:131`。
         .route("/providers", any(crate::providers::handle_providers))
-        .route("/vision-config", any(crate::media::handle_vision_config))
-        .route("/media-config", any(crate::media::handle_media_config))
-        // 生图 / 生视频（Agnes 合同）—— `server.go:135-138`。
-        .route(
-            "/v1/images/generations",
-            any(crate::media::handle_images_generations),
-        )
-        .route("/v1/videos", any(crate::media::handle_video_create))
-        // Go 的 mux 注册的是**前缀** `/v1/videos/`；axum 需要两条：
-        // 尾斜杠本身（`/v1/videos/`）与带段的通配（`/v1/videos/{*rest}`）——
-        // 后者带 `a/b` 时进同一个 handler，由它自己判 400（与 Go 的
-        // `strings.Contains(videoID,"/")` 同款）。
-        .route("/v1/videos/", any(crate::media::handle_video_query))
-        .route("/v1/videos/{*rest}", any(crate::media::handle_video_query))
-        .route("/agnesapi", any(crate::media::handle_video_query))
+        // 生图/生视频与识图改路由已按用户裁决删除（2026-10-18）：不注册即 404。
         // 未匹配路径：Go `http.ServeMux` 的 404 体（`http.NotFound` → `http.Error` 的
         // `"404 page not found\n"` + `text/plain; charset=utf-8` + nosniff）。
         // axum 默认回**空体**，不补就对不上。**未迁**：ServeMux 的路径清洗 307

@@ -121,13 +121,13 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 | 10 | `/activity` | ✅ 已实现 | `?limit` 解析（>0 且 ≤200 才采信）+ 空数组形态 |
 | 11 | `/water-probe` | ❌ 未注册 | 依赖 `water.go` 的注水链路（P8c）；`probes.rs` 的探针集与基线内存态已迁（第五片）|
 | 12 | `/providers` | ✅ 已实现 | **P8b 第五片**：GET（SWR 缓存 + 冷启动同步拉取）/ POST 六个 action |
-| 13 | `/vision-config` | ✅ 已实现 | 同上（旧兼容层，内部走 media 机制）|
-| 14 | `/media-config` | ✅ 已实现 | 同上（三选择器 + 类型校验）|
-| 15 | `/v1/chat/completions` | ✅ 已实现 | `handleChat` 本体（P8b 第四片）：池路径 + 单账号路径；**第五片**补媒体改路由/远程图片/外部 provider 分支 |
-| 16 | `/v1/images/generations` | ✅ 已实现 | **P8b 第五片**（Agnes 合同 + 统一改写 + 错误终态）|
-| 17 | `/v1/videos` | ✅ 已实现 | 同上（生视频任务创建）|
-| 18 | `/v1/videos/` | ✅ 已实现 | 同上（任务查询；axum 侧用 `/v1/videos/` 与 `/v1/videos/{*rest}` 两条路由覆盖 Go 的前缀注册）|
-| 19 | `/agnesapi` | ✅ 已实现 | 同上（Agnes 推荐的查询形态）|
+| 13 | `/vision-config` | ❌ **本版删除** | 2026-10-18 用户裁决：识图改路由整块下线，路由不再注册 ⇒ 404（见差异 #46）|
+| 14 | `/media-config` | ❌ **本版删除** | 同上（三路媒体配置整块删除）|
+| 15 | `/v1/chat/completions` | ✅ 已实现 | `handleChat` 本体（P8b 第四片）：池路径 + 单账号路径；**第五片**补远程图片/外部 provider 分支；2026-10-18 起识图不再改写模型（非内置多模态 ⇒ 400）|
+| 16 | `/v1/images/generations` | ❌ **本版删除** | 生图整块下线，路由不再注册 ⇒ 404（见差异 #46）|
+| 17 | `/v1/videos` | ❌ **本版删除** | 生视频整块下线（见差异 #46）|
+| 18 | `/v1/videos/` | ❌ **本版删除** | 同上（含 `/v1/videos/{id}` 查询）|
+| 19 | `/agnesapi` | ❌ **本版删除** | 同上 |
 
 **骨架自身的四处合同**（与 Go 逐条对齐，有单测 + 差分双重门禁）：
 
@@ -305,15 +305,16 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 
 **目标（简报原话）**：补 `responses_forward.rs`（`/responses` 转发与翻回）+
 `anthropic_forward.rs`（`/v1/messages` 转发与翻回）+ `providers.rs`（三协议 + 白名单兜底）+
-`media.rs`（识图改路由 + Agnes 生图/生视频合同）+ `probes.rs`（注水探针 + max_tokens 自适应
-名单 + 基线内存态）；`handleChat` 开头的 `RerouteIfMedia`/`FetchRemoteImages` 与外部 provider
+`media.rs`（**2026-10-18 起**只剩多模态判定 + schema 修复 + 远程图片预下载；原先的
+识图改路由与 Agnes 生图/生视频合同已按用户裁决删除，见差异 #46）+ `probes.rs`（注水探针 + max_tokens 自适应
+名单 + 基线内存态）；`handleChat` 开头的 `FetchRemoteImages` 与外部 provider
 分支随 media/providers 一起打通。
 
 ### 落地对照（Go 行号 → Rust 落点）
 
 | 面 | Go | Rust | 门禁 |
 |---|---|---|---|
-| 三协议分流 | `responses_forward.go:40-59` / `providers.go:154-163` | `providers.rs::{provider_protocol, is_zen_responses_model, external_protocol_route, route_of}` | 单测 3 条 + 金标 `ext-chat-unormalized-protocol` |
+| 三协议分流 | `responses_forward.go:40-59` / `providers.go:154-163` | `providers.rs::{provider_protocol, external_protocol_route, route_of}` | 单测 3 条 + 金标 `ext-chat-unormalized-protocol` |
 | `/responses` 转换 | `responses_forward.go:64-305` | `responses_forward.rs::{chat_to_responses_request, chat_tools_to_responses, chat_tool_choice_to_responses, message_item}` | 单测（逐字节期望串）+ 金标 `responses-nonstream` 的**出站体** |
 | Responses → chat | `responses_forward.go:318-403` | `responses_to_chat_completion` | 单测 + 金标 `responses-nonstream` 响应体 |
 | Responses 流式 | `responses_forward.go:417-546` | `ResponsesStreamTranslator`（增量状态机） | 单测（分片不变性 + 空串 finish_reason）+ 金标 `responses-stream` 下游逐字节 |
@@ -322,11 +323,11 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 | Anthropic 流式 | `anthropic_forward.go:386-542` | `AnthropicStreamTranslator` | 单测 + 金标 `anthropic-stream` 下游逐字节 |
 | 通用外部转发 | `server.go:1450-1567` | `providers.rs::{forward_external, forward_external_chat}` | 金标 `ext-chat-200/stream/400/500/sanitize` |
 | 外部账号管理 | `providers.go` 全文 + `handlers_extra.go:228-292` | `providers.rs::{ProviderStore, handle_providers}` | 单测 + 金标 `providers-*`（12 步） |
-| 媒体配置 | `media.go:59-236` + `handlers_extra.go:294-374` | `media.rs::{MediaState, handle_vision_config, handle_media_config}` | 单测（落盘字节）+ 金标 `media-config-get-post`（10 步） |
-| 识图改路由 | `media.go:328-355` / `media.go:120-170` | `MediaState::{reroute_if_media, vision_capable, vision_fallback_chain}` | 单测 + 金标 `media-reroute-*` / `media-no-reroute-*` 四条 |
-| 远程图片预下载 | `media.go:440-530` | `media.rs::{fetch_remote_images, download_as_data_uri, sniff_image_mime}` | 金标 `media-fetch-remote-image`（PNG 头）+ `…-sniff`（无 image/* 头 ⇒ 走魔术字节） |
+| 媒体配置 | `media.go:59-236` + `handlers_extra.go:294-374` | **本版有意删除**（差异 #46）：`/vision-config`、`/media-config` 与 `MediaState` 均已移除 | ~~单测（落盘字节）+ 金标 `media-config-get-post`~~（金标场景已跳过）|
+| 识图改路由 | `media.go:328-355` / `media.go:120-170` | **本版替换**：`media.rs::multimodal_reject_message`（非内置多模态 ⇒ 400，不再改写 model）；旧 `reroute_if_media`/`vision_fallback_chain` 删除 | 单测 + `p8b3_http_contract`（端点 404）|
+| 远程图片预下载 | `media.go:440-530` | `media.rs::{fetch_remote_images, download_as_data_uri, sniff_image_mime}` | 金标 `media-fetch-remote-image`（PNG 头）+ `…-sniff`（无 `image/*` 头 ⇒ 魔术字节）；**2026-10-18 起输入模型改为 `codely-vl`**（金标出站体本就如此），下载成功分支继续覆盖 |
 | schema 修复 | `media.go:363-431` | `sanitize_for_external` | 单测 + 金标 `ext-chat-sanitize-toolids` |
-| 生图/生视频 | `server.go:1574-1763` | `media.rs::{handle_images_generations, handle_video_create, handle_video_query}` | 金标 `images-*`（4 步）+ `videos-create-and-query`（9 步） |
+| 生图/生视频 | `server.go:1574-1763` | **本版有意删除**（差异 #46）：三个 handler 与路由均已移除 | ~~金标 `images-*`（4 步）+ `videos-create-and-query`（9 步）~~（已跳过）|
 | 探针集 | `probes.go:177-472` | `probes.rs::{probe_call, run_pipeline_probes, probe_max_tokens}` | 单测 + 金标 9 条出站体 + 整轮 `RunPipelineProbes` 结果列表 |
 | 基线内存态 | `baseline.go:26-233` | `probes.rs::{BaselineStore, normalize_model_name, baseline_quality_ok, migrate_legacy_keys, to_bytes}` | 单测 + 金标基线组（键集合 / 内存态条目 / 回写文件字节） |
 
@@ -341,6 +342,11 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
   外部 provider 三条路径 13 条（chat 6 / responses 4 / anthropic 3）、`/providers` 16 步、
   媒体配置 10 步、生图生视频 15 步（合计 60 步；此前分组数字 chat 6/responses 5/anthropic 4、
   providers 14、生图 13 加总对不上，已按金标实数更正——P8b 第五片审查 #11）。
+  **2026-10-18 更新**：媒体改路由 6 条中 3 条（`media-reroute-*` 与用户扩展识图那条）、
+  媒体配置 10 步、生图生视频 15 步已因用户裁决删除而跳过（差异 #46）；保留并继续覆盖
+  3 条：「`media-no-reroute-vision-capable`」行为未变；两条远程图片场景把**输入模型**
+  改成 `codely-vl`（金标出站体本来就是 `codely-vl`），继续覆盖
+  `fetch_remote_images` 的下载 → data URI（PNG 头 + 魔术字节嗅探）成功分支。
 * **出站体 21 条逐字节**（responses/anthropic 的**转换体**、`/providers` 的上游探测、
   探针体）；**12 条规范化**——团结域/外部 chat 的体里带 `metadata`/`litellm_session_id`/
   `prompt_cache_key`（每请求随机 uuid、`cwd` 还是各自进程的 exe 目录），这三键先摘掉再比；
@@ -487,10 +493,13 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
    **【P8b 第二片已迁】** 见下节「P8b 第二片」（`src/accounts.rs`）。
 4. ~~`quota.go`：`/quota?uid=`、缓存分键、积分 TOP。~~
    **【P8b 第二片已迁】** 见下节（`src/quota.rs`）；仅 HTTP 端点装配仍归 server 骨架。
-5. `providers.go`：三协议（chat/responses/anthropic）+ 白名单兜底 + `x-opencode-session` 接线
+5. `providers.go`：三协议（chat/responses/anthropic）+ ~~白名单兜底~~（Zen 专用硬编码
+   已于 2026-10-18 删除，差异 #46）+ `x-opencode-session` 接线
    （本轮的 `opencode_session.rs` 是它的前置件，尚未接进转发路径）。
 6. `responses_forward.go` / `anthropic_forward.go`：两条协议的转发与翻回。
-7. `media.go`：识图改路由链（vision→fallback→codely-vl）+ Agnes 生图/生视频合同。
+7. `media.go`：~~识图改路由链（vision→fallback→codely-vl）+ Agnes 生图/生视频合同~~ ——
+   **2026-10-18 用户裁决整块删除**（差异 #46，有意差异非漂移）；Rust 只保留
+   「非内置多模态 ⇒ 400」判定、`sanitize_for_external` 与远程图片预下载。
 8. `probes.go`：注水探针、`max_tokens` 自适应名单、基线内存态；`dist.rs` 里
    `collect_dist_samples` 依赖的 `probe_call`/`probe_target`/`rate_limit_storm` 也在此。
 9. `channels.go` 的网络面（`build_channels`/`fetch_local_models`/`channel_target`）与
@@ -621,6 +630,25 @@ Rust 侧由 `p8c_diff.rs` 解出同一结果。内容全是合成串（`SYNTHETI
     `std::fs::File` 没有取路径接口，故提供带路径的 `StampedWriterAt`（生产入口
     `open_log`/`run_data_dir_init` 用它）；`StampedWriter`（无路径版）不退化为
     「不轮转」的静默差异——它只服务显式给路径的调用方。
+46. **本版有意删除：生图/生视频 + 识图改路由 + 三路媒体配置（2026-10-18 用户裁决，
+    「本版有意删除，非漂移」）**——Go 侧仍然存在、Rust 侧按用户要求整块下线：
+    * `/v1/images/generations`、`/v1/videos`、`/v1/videos/{id}`、`/agnesapi`、
+      `/vision-config`、`/media-config` **不再注册**（404）；`MediaState` 与
+      `tuanjie-media.json`/`tuanjie-vision.json` 的读写一并删除。
+    * **识图不再静默改写模型**：`handleChat` 里请求含图片/音频等非文本块、目标模型
+      不在内置多模态清单（`codely-vl` / `KIMI-K3` / `GLM-5.3-FLASH` /
+      `DeepSeek-V4.1-Flash`）时**直接回 400** 并在消息里列出可用模型。旧的
+      `RerouteIfMedia` / `vision_fallback` 回落链删除。
+    * **自定义服务商优先**：`match_model` 命中时整段绕过上述 400 判定、照旧直接转发
+      （用户配置的源可能自己支持识图，代理不做假设）。
+    * **Zen 专用硬编码删除**：`ZEN_RESPONSES_MODEL` / `isZenResponsesModel` 删除；
+      `protocol` 为空的旧配置一律按 `chat` 转发（需要 Responses 的条目须在界面
+      「API 格式」里显式选择）。
+    * 受影响的 Go 金标场景（改路由、媒体配置、生图/生视频）在 `p8b5_diff.rs` 的
+      `REMOVED_MEDIA_SCENARIOS` 里**有意跳过**；两条**远程图片**场景保留，输入模型在
+      测试里改成 `codely-vl`（金标出站体本来就是该模型），继续覆盖下载成功分支。
+      `responses-*` 场景的输入在测试里补 `"protocol":"responses"`（与 Go 侧显式配置
+      等价，出站体仍逐字节比对）。
 
 ## P7d-1：接进 rs-gui 分发器（2026-10-17）
 
