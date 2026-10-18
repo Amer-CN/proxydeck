@@ -120,10 +120,10 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 | 9 | `/inflight` | ✅ 已实现 | `{"ok":true,"requests":[…]}`，字段**声明序**（struct）|
 | 10 | `/activity` | ✅ 已实现 | `?limit` 解析（>0 且 ≤200 才采信）+ 空数组形态 |
 | 11 | `/water-probe` | ❌ 未注册 | 依赖 `water.go` 的注水链路（P8c）；`probes.rs` 的探针集与基线内存态已迁（第五片）|
-| 12 | `/providers` | ✅ 已实现 | **P8b 第五片**：GET（SWR 缓存 + 冷启动同步拉取）/ POST 六个 action |
+| 12 | `/providers` | ❌ **本版删除** | 2026-10-18 用户裁决：自定义服务商（含三协议转发）整块下线，路由不再注册 ⇒ 404（见差异 #47）|
 | 13 | `/vision-config` | ❌ **本版删除** | 2026-10-18 用户裁决：识图改路由整块下线，路由不再注册 ⇒ 404（见差异 #46）|
 | 14 | `/media-config` | ❌ **本版删除** | 同上（三路媒体配置整块删除）|
-| 15 | `/v1/chat/completions` | ✅ 已实现 | `handleChat` 本体（P8b 第四片）：池路径 + 单账号路径；**第五片**补远程图片/外部 provider 分支；2026-10-18 起识图不再改写模型（非内置多模态 ⇒ 400）|
+| 15 | `/v1/chat/completions` | ✅ 已实现 | `handleChat` 本体（P8b 第四片）：池路径 + 单账号路径；**第五片**补远程图片预下载；2026-10-18 起识图不再改写模型（非内置多模态 ⇒ 400），外部 provider 分支随自定义服务商删除 |
 | 16 | `/v1/images/generations` | ❌ **本版删除** | 生图整块下线，路由不再注册 ⇒ 404（见差异 #46）|
 | 17 | `/v1/videos` | ❌ **本版删除** | 生视频整块下线（见差异 #46）|
 | 18 | `/v1/videos/` | ❌ **本版删除** | 同上（含 `/v1/videos/{id}` 查询）|
@@ -262,13 +262,14 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 30. ~~**`desensitizeAgentIdentity`（反竞品身份脱敏）未迁**~~ **【P8d-3 已迁】**：
     见本文件「P8d-3」节（55 条 Go 真函数向量金标 + `go_regex` ASCII 还原 + 接线位次）。
     原文保留作历史：Go 在 `reshapeChatBody` 之前改写，未迁时含声明的请求出站体不同。
-31. **网络级错误的文案**：`/providers` 的 `/models` 探测失败时，Go 写
+31. ~~**网络级错误的文案**：`/providers` 的 `/models` 探测失败时，Go 写
     `Get "http://…": dial tcp …`，Rust 写 reqwest 的 `error sending request for url (…)`。
-    只进 `error` 字段与日志，**不进差分金标**（金标只覆盖 `HTTP <code>` 与可复现的解码错文案）。
-32. **JSON 解码错的文案**：`/providers` 的 `/models` 返回非法 JSON 时，Go 是
+    只进 `error` 字段与日志，**不进差分金标**（金标只覆盖 `HTTP <code>` 与可复现的解码错文案）。~~
+    —— `/providers` 已删（#47），本项不再适用。
+32. ~~**JSON 解码错的文案**：`/providers` 的 `/models` 返回非法 JSON 时，Go 是
     `encoding/json` 的 `SyntaxError` 文案（`invalid character 'x' looking for beginning of value`），
     Rust 是 serde_json 的措辞；**类型不符**（array/number/string/bool）与**空体**（`EOF`）
-    两侧已逐字对齐并被金标锁住。
+    两侧已逐字对齐并被金标锁住。~~ —— `/providers` 已删（#47），本项不再适用。
 33. **`Accept` 头的一处平台差异**：Rust（reqwest）对未显式设 `Accept` 的请求自动补 `*/*`，
     Go 的 `net/http` 不补——差分对「Go 空 ↔ Rust `*/*`」视为同一条（已在测试注释与本节登记）。
 34. **`fetchImgClient` 的 UA**：Go 的 `http.Client` 会带 `Go-http-client/1.1`，reqwest 带
@@ -305,28 +306,31 @@ P8 生态级红线、跨 P8a~P8c 的面；且 P8a 验收要求 `cargo test` 在*
 
 **目标（简报原话）**：补 `responses_forward.rs`（`/responses` 转发与翻回）+
 `anthropic_forward.rs`（`/v1/messages` 转发与翻回）+ `providers.rs`（三协议 + 白名单兜底）+
-`media.rs`（**2026-10-18 起**只剩多模态判定 + schema 修复 + 远程图片预下载；原先的
+`media.rs`（**2026-10-18 起**只剩多模态判定 + 远程图片预下载；原先的
 识图改路由与 Agnes 生图/生视频合同已按用户裁决删除，见差异 #46）+ `probes.rs`（注水探针 + max_tokens 自适应
 名单 + 基线内存态）；`handleChat` 开头的 `FetchRemoteImages` 与外部 provider
 分支随 media/providers 一起打通。
+> **2026-10-18 后续裁决**：`providers.rs` / `responses_forward.rs` /
+> `anthropic_forward.rs` 与 `opencode_session.rs` 已整文件删除，`handleChat` 的外部
+> provider 分支一并移除（差异 #47）；本节保留作删除前的历史对照。
 
 ### 落地对照（Go 行号 → Rust 落点）
 
 | 面 | Go | Rust | 门禁 |
 |---|---|---|---|
-| 三协议分流 | `responses_forward.go:40-59` / `providers.go:154-163` | `providers.rs::{provider_protocol, external_protocol_route, route_of}` | 单测 3 条 + 金标 `ext-chat-unormalized-protocol` |
-| `/responses` 转换 | `responses_forward.go:64-305` | `responses_forward.rs::{chat_to_responses_request, chat_tools_to_responses, chat_tool_choice_to_responses, message_item}` | 单测（逐字节期望串）+ 金标 `responses-nonstream` 的**出站体** |
-| Responses → chat | `responses_forward.go:318-403` | `responses_to_chat_completion` | 单测 + 金标 `responses-nonstream` 响应体 |
-| Responses 流式 | `responses_forward.go:417-546` | `ResponsesStreamTranslator`（增量状态机） | 单测（分片不变性 + 空串 finish_reason）+ 金标 `responses-stream` 下游逐字节 |
-| Anthropic 转换 | `anthropic_forward.go:43-288` | `anthropic_forward.rs::{chat_to_anthropic_request, content_blocks_to_anthropic, anthropic_image_block, anthropic_tool_input, chat_tools_to_anthropic, chat_tool_choice_to_anthropic}` | 单测 + 金标 `anthropic-nonstream` 出站体 |
-| Anthropic → chat | `anthropic_forward.go:298-375` | `anthropic_to_chat_completion` | 单测 + 金标响应体 |
-| Anthropic 流式 | `anthropic_forward.go:386-542` | `AnthropicStreamTranslator` | 单测 + 金标 `anthropic-stream` 下游逐字节 |
-| 通用外部转发 | `server.go:1450-1567` | `providers.rs::{forward_external, forward_external_chat}` | 金标 `ext-chat-200/stream/400/500/sanitize` |
-| 外部账号管理 | `providers.go` 全文 + `handlers_extra.go:228-292` | `providers.rs::{ProviderStore, handle_providers}` | 单测 + 金标 `providers-*`（12 步） |
+| 三协议分流 | `responses_forward.go:40-59` / `providers.go:154-163` | **本版删除**（#47）：`providers.rs` 整文件移除 | ~~单测 3 条 + 金标 `ext-chat-unormalized-protocol`~~（已跳过）|
+| `/responses` 转换 | `responses_forward.go:64-305` | **本版删除**（#47）：`responses_forward.rs` 整文件移除 | ~~单测 + 金标 `responses-nonstream` 出站体~~（已跳过）|
+| Responses → chat | `responses_forward.go:318-403` | **本版删除**（#47） | ~~单测 + 金标响应体~~（已跳过）|
+| Responses 流式 | `responses_forward.go:417-546` | **本版删除**（#47） | ~~单测 + 金标 `responses-stream`~~（已跳过）|
+| Anthropic 转换 | `anthropic_forward.go:43-288` | **本版删除**（#47）：`anthropic_forward.rs` 整文件移除 | ~~单测 + 金标 `anthropic-nonstream` 出站体~~（已跳过）|
+| Anthropic → chat | `anthropic_forward.go:298-375` | **本版删除**（#47） | ~~单测 + 金标响应体~~（已跳过）|
+| Anthropic 流式 | `anthropic_forward.go:386-542` | **本版删除**（#47） | ~~单测 + 金标 `anthropic-stream`~~（已跳过）|
+| 通用外部转发 | `server.go:1450-1567` | **本版删除**（#47）：`forward_external`/`forward_external_chat` 移除 | ~~金标 `ext-chat-*`~~（已跳过）|
+| 外部账号管理 | `providers.go` 全文 + `handlers_extra.go:228-292` | **本版删除**（#47）：`ProviderStore`/`handle_providers` 移除，`/providers` 404 | ~~单测 + 金标 `providers-*`~~（已跳过）|
 | 媒体配置 | `media.go:59-236` + `handlers_extra.go:294-374` | **本版有意删除**（差异 #46）：`/vision-config`、`/media-config` 与 `MediaState` 均已移除 | ~~单测（落盘字节）+ 金标 `media-config-get-post`~~（金标场景已跳过）|
 | 识图改路由 | `media.go:328-355` / `media.go:120-170` | **本版替换**：`media.rs::multimodal_reject_message`（非内置多模态 ⇒ 400，不再改写 model）；旧 `reroute_if_media`/`vision_fallback_chain` 删除 | 单测 + `p8b3_http_contract`（端点 404）|
 | 远程图片预下载 | `media.go:440-530` | `media.rs::{fetch_remote_images, download_as_data_uri, sniff_image_mime}` | 金标 `media-fetch-remote-image`（PNG 头）+ `…-sniff`（无 `image/*` 头 ⇒ 魔术字节）；**2026-10-18 起输入模型改为 `codely-vl`**（金标出站体本就如此），下载成功分支继续覆盖 |
-| schema 修复 | `media.go:363-431` | `sanitize_for_external` | 单测 + 金标 `ext-chat-sanitize-toolids` |
+| schema 修复 | `media.go:363-431` | **本版删除**（#47）：`sanitize_for_external` 随三协议转发一起移除 | ~~单测 + 金标 `ext-chat-sanitize-toolids`~~（已跳过）|
 | 生图/生视频 | `server.go:1574-1763` | **本版有意删除**（差异 #46）：三个 handler 与路由均已移除 | ~~金标 `images-*`（4 步）+ `videos-create-and-query`（9 步）~~（已跳过）|
 | 探针集 | `probes.go:177-472` | `probes.rs::{probe_call, run_pipeline_probes, probe_max_tokens}` | 单测 + 金标 9 条出站体 + 整轮 `RunPipelineProbes` 结果列表 |
 | 基线内存态 | `baseline.go:26-233` | `probes.rs::{BaselineStore, normalize_model_name, baseline_quality_ok, migrate_legacy_keys, to_bytes}` | 单测 + 金标基线组（键集合 / 内存态条目 / 回写文件字节） |
@@ -338,6 +342,11 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
 1 轮探针 + 1 组基线；失败 0 条
 ```
 
+> **2026-10-18 后续裁决**：上面的 60 步是**删除前**的采收记录。自定义服务商
+> （16 个场景 / 29 步）与已删媒体场景（28 步）现已跳过（差异 #46 / #47），
+> 当前门禁实际跑 **3 步 HTTP**（3 条保留的媒体场景）+ 9 条探针体 + 1 轮探针
+> + 1 组基线，全部通过。
+
 * 场景覆盖：媒体改路由 6 条（含一条无 `image/*` 头、逼出魔术字节嗅探的远程图片）、
   外部 provider 三条路径 13 条（chat 6 / responses 4 / anthropic 3）、`/providers` 16 步、
   媒体配置 10 步、生图生视频 15 步（合计 60 步；此前分组数字 chat 6/responses 5/anthropic 4、
@@ -347,8 +356,10 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
   3 条：「`media-no-reroute-vision-capable`」行为未变；两条远程图片场景把**输入模型**
   改成 `codely-vl`（金标出站体本来就是 `codely-vl`），继续覆盖
   `fetch_remote_images` 的下载 → data URI（PNG 头 + 魔术字节嗅探）成功分支。
-* **出站体 21 条逐字节**（responses/anthropic 的**转换体**、`/providers` 的上游探测、
-  探针体）；**12 条规范化**——团结域/外部 chat 的体里带 `metadata`/`litellm_session_id`/
+  同日后一批裁决：外部 provider 13 条 + `/providers` 16 步（共 16 个场景）跳过（差异 #47）。
+* **出站体 21 条逐字节**（删除前的采收：responses/anthropic 的**转换体**、`/providers`
+  的上游探测、探针体；前两组随 #47 跳过，当前探针体仍逐字节）；**12 条规范化**——
+  团结域/外部 chat 的体里带 `metadata`/`litellm_session_id`/
   `prompt_cache_key`（每请求随机 uuid、`cwd` 还是各自进程的 exe 目录），这三键先摘掉再比；
   它们的逐字节合同由 P8a / P8b 第三片的 `go-outbound-wire` 金标覆盖。
 * 反向验证（`.work/p8b5/mut-p8b5*.ps1`，输出落 `.work/p8b5/mut.log`）：
@@ -472,7 +483,7 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
 |---|---|---|
 | `src/pacing.rs` | `pacing.go` 全量 | `PACING_RETRY_DEFAULT_SECS=60` / `PACING_MAX_WAIT_SECS=1800`、`is_pacing_model`（**不分大小写**找 `KIMI`）、`retry_wait_secs`（`TrimSpace`+整数秒、>0 才采信；12 例真值表）、`Pacer` 的 `{"enabled":…}` 落盘形态 + tmp→rename + 读回、`pending` 计数；另含数据目录判定链（`PROXYDECK_DATA_DIR` → 便携标记 → `%APPDATA%\ProxyDeck\`，`appdir.go:84-98`） |
 | `src/inflight.rs` | `inflight.go` 全量 | `RequestRegistry`（容量 500、FIFO 淘汰、`Finish` 摘链、耗时降序快照、`LoadOf`）、`next_rid`（12 位零填充小写十六进制，纯格式面拆出 `rid_from_n` 供门禁逐值锁死）、`ActivityLog`（环形 200、新的在前、`seq` 单调、`omitzero` 字段省略口径）、`local_hms`（Windows `GetLocalTime`，对齐 Go 本机时区） |
-| `src/opencode_session.rs` | `opencode_session.go` 全量 | 进程级稳定 UUID v4、`x-opencode-session` 头、`base_url` 含 `opencode.ai` 的**大小写敏感**判定（7 例真值表） |
+| ~~`src/opencode_session.rs`~~ | ~~`opencode_session.go` 全量~~ | **本版删除**（#47）：该头只为 opencode/Zen 存在，随自定义服务商下线 |
 | `src/dist.rs` | `dist.go` 纯函数面 | `parse_dist_answer`（25 例真值表）、`dist_stats_of`（mean/median/stdDev/mode，6 例）、`compare_dist`（余弦 + JS 散度 + 众数分，4 例；含「Cosine 取 round4、jsDiv 取未取整」这条 Go 细节）、`dist_verdict`/`dist_verdict_label`、`fmt_dist_sample_progress`、`round2/round4/abs`（half-away-from-zero 口径） |
 | `src/channels.rs` | `channels.go` 静态面 | 八渠道表（顺序/端口/base_url/bearer_from 逐字段）、`is_strong_channel`、`channel_name_of`、`channel_def` |
 
@@ -493,13 +504,13 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
    **【P8b 第二片已迁】** 见下节「P8b 第二片」（`src/accounts.rs`）。
 4. ~~`quota.go`：`/quota?uid=`、缓存分键、积分 TOP。~~
    **【P8b 第二片已迁】** 见下节（`src/quota.rs`）；仅 HTTP 端点装配仍归 server 骨架。
-5. `providers.go`：三协议（chat/responses/anthropic）+ ~~白名单兜底~~（Zen 专用硬编码
-   已于 2026-10-18 删除，差异 #46）+ `x-opencode-session` 接线
-   （本轮的 `opencode_session.rs` 是它的前置件，尚未接进转发路径）。
-6. `responses_forward.go` / `anthropic_forward.go`：两条协议的转发与翻回。
+5. ~~`providers.go`：三协议（chat/responses/anthropic）+ 白名单兜底 + `x-opencode-session`
+   接线~~ —— **2026-10-18 用户裁决整块删除**（差异 #47）。
+6. ~~`responses_forward.go` / `anthropic_forward.go`：两条协议的转发与翻回~~ ——
+   **2026-10-18 同批删除**（差异 #47）。
 7. `media.go`：~~识图改路由链（vision→fallback→codely-vl）+ Agnes 生图/生视频合同~~ ——
    **2026-10-18 用户裁决整块删除**（差异 #46，有意差异非漂移）；Rust 只保留
-   「非内置多模态 ⇒ 400」判定、`sanitize_for_external` 与远程图片预下载。
+   「非内置多模态 ⇒ 400」判定与远程图片预下载（`sanitize_for_external` 随 #47 删除）。
 8. `probes.go`：注水探针、`max_tokens` 自适应名单、基线内存态；`dist.rs` 里
    `collect_dist_samples` 依赖的 `probe_call`/`probe_target`/`rate_limit_storm` 也在此。
 9. `channels.go` 的网络面（`build_channels`/`fetch_local_models`/`channel_target`）与
@@ -566,7 +577,7 @@ P8b 第五片差分对照：60 步 HTTP 用例（出站体逐字节 21 / 规范�
 | `src/water_handler.rs` | `handlers_extra.go:387-507` | `/water-probe`：`GET ?history=1`（环形 20，旧→新）、`GET ?channels=1`（八渠道静态清单）、`POST action=quick`（金丝雀 + 第一层管道探针；quick 也记一条 history——Go 只在 check 路径入列，用户可见的行为增量，P8c 审查后登记）；`check`/`deep`/`baseline`/`setkey` 显式 501（不假装已通） |
 | `src/appdir.rs` | `internal/appdir/` 全量 + `app/main.go:192-208` | 判定链（`PROXYDECK_DATA_DIR` → 便携标记 → `%APPDATA%\ProxyDeck\`）、`Init`/`PortableArgs`/`ExeDir`/`DataDir`/`Path`、`Migrate`（33 条清单、目标优先、`*.migrated`、目录、删不掉就改名让位）、`UpgradePlaintext`（DPAPI 升级 + ACL）、日志轮转（1 MiB × 3、`StampedWriter` 按行加时间戳）、`run_data_dir_init` 启动收口 |
 | `src/pacing.rs` | `appdir.go:84-98` | 数据目录判定链**改为转出** `appdir`（去掉 P8b 的重复实现） |
-| `src/server.rs` | `server.go:248-278` / `handlers_extra.go:19-86` | `/health` 的 `judgment_*`/`seed_*` 八字段接**真状态**（不再是恒「无告警」）、`/accounts` 的 `passive` 接真被动事件、`/water-probe` 挂路由、`AppState` 增 `water`/`water_scratch`/`probe_cost`/`judge_alert`/`seed_guard`/`water_history` |
+| `src/server.rs` | `server.go:248-278` / `handlers_extra.go:19-86` | `/health` 的 `judgment_*`/`seed_*` 八字段接**真状态**（不再是恒「无告警」）、`/accounts` 的 `passive` 接真被动事件、`/water-probe` 挂路由、`AppState` 增 `water`/`probe_cost`/`judge_alert`/`seed_guard`/`water_history`（`water_scratch` 曾随外部 provider 分支存在，已于 2026-10-18 删除，见 #47） |
 | `src/chat.rs` | `server.go:280-322` / `:960,:993,:1193,:1198,:1239-1248,:1357,:1361,:1365,:1379-1381,:1808-1818,:2212-2266` | `noteUpstreamError`/`noteUpstreamOK` 判定告警计数（401「请升级」/`x-codely-signature` 立即置位、连续 3 次 401 置位、200 清零）、`logRequestShape` 两次（重排前/后）、单账号 200 的 `defer ok` 事件、别名解析观测接进 `UsageScanner` 与 `record_usage`、被动事件接进池路径非流式 |
 | `src/transport.rs` | `client.go:92-137` | 代理自探测（环境变量交给 reqwest 内建，**仅无环境变量时**追加注册表那条判定；日志只报来源名，绝不打印代理 URL） |
 | `src/main.rs` | `app/main.go:210-215` | 薄入口：`Args::parse()` → [`rs_tuanjie::run`] → 按退出码报错（**P7d-1 起启动主体搬进 `lib.rs`**，与 `rs-vibex`/`rs-proxy` 同形） |
@@ -620,9 +631,11 @@ Rust 侧由 `p8c_diff.rs` 解出同一结果。内容全是合成串（`SYNTHETI
     `special` 列表）逐字对齐；`c=...`/`clen` 与 `system=<n>B` 用**字节**长度（Go 的 `len()`）。
 42. **单账号 200 的 `ok` 事件时机**：Go 是 `defer`（handler 返回时写），Rust 在写响应**之前**
     记账——同一事件同一内容，差异只在极短窗口内的 `/activity` 快照。
-43. **`water_scratch`**：Go 的外部 provider 分支不走团结的 `usageScanner`（无 water 记账），
+43. ~~**`water_scratch`**：Go 的外部 provider 分支不走团结的 `usageScanner`（无 water 记账），
     Rust 的流式复用了同一个扫描器，故把那条路径的 water 副作用导向一只**分离实例**
-    （`AppState::water_scratch`，不落盘、不污染生产表）。**Go 没有这个对象**。
+    （`AppState::water_scratch`，不落盘、不污染生产表）。**Go 没有这个对象**。~~
+    —— 外部 provider 分支已按用户裁决删除（2026-10-18，差异 #47），`water_scratch`
+    随之移除。
 44. **`/water-probe` 未迁动作**：`check` / `deep` / `baseline` / `setkey` 显式 501
     （报告组装、分布采样与建锚编排、渠道密钥 DPAPI 落盘）；`channels` 的 `models`
     字段恒空数组 + `note` 如实标注（Go 要逐渠道打 `/v1/models`）。
@@ -639,16 +652,38 @@ Rust 侧由 `p8c_diff.rs` 解出同一结果。内容全是合成串（`SYNTHETI
       不在内置多模态清单（`codely-vl` / `KIMI-K3` / `GLM-5.3-FLASH` /
       `DeepSeek-V4.1-Flash`）时**直接回 400** 并在消息里列出可用模型。旧的
       `RerouteIfMedia` / `vision_fallback` 回落链删除。
-    * **自定义服务商优先**：`match_model` 命中时整段绕过上述 400 判定、照旧直接转发
-      （用户配置的源可能自己支持识图，代理不做假设）。
-    * **Zen 专用硬编码删除**：`ZEN_RESPONSES_MODEL` / `isZenResponsesModel` 删除；
-      `protocol` 为空的旧配置一律按 `chat` 转发（需要 Responses 的条目须在界面
-      「API 格式」里显式选择）。
+    * ~~**自定义服务商优先**：`match_model` 命中时整段绕过上述 400 判定、照旧直接转发~~
+      —— **2026-10-18 后续裁决把自定义服务商整体删除，本项作废，见差异 #47**。
+    * ~~**Zen 专用硬编码删除**：`ZEN_RESPONSES_MODEL` / `isZenResponsesModel` 删除；
+      `protocol` 为空的旧配置一律按 `chat` 转发~~ —— 三协议转发整体删除后，`protocol`
+      与旧配置兜底一并消失（见 #47）。
     * 受影响的 Go 金标场景（改路由、媒体配置、生图/生视频）在 `p8b5_diff.rs` 的
       `REMOVED_MEDIA_SCENARIOS` 里**有意跳过**；两条**远程图片**场景保留，输入模型在
       测试里改成 `codely-vl`（金标出站体本来就是该模型），继续覆盖下载成功分支。
-      `responses-*` 场景的输入在测试里补 `"protocol":"responses"`（与 Go 侧显式配置
-      等价，出站体仍逐字节比对）。
+47. **本版有意删除：自定义服务商（含三协议转发 + `/providers` 管理端点）
+    （2026-10-18 用户裁决，「本版有意删除，非漂移」）**——Go 侧仍然存在、Rust 侧按用户
+    要求整块下线：
+    * 删文件：`providers.rs`（外部账号管理 + `forward_external` 分流 + 通用 chat 转发）、
+      `responses_forward.rs`（`/responses` 转发与翻回）、`anthropic_forward.rs`
+      （`/v1/messages`）、`opencode_session.rs`（`x-opencode-session` 头只为 opencode/Zen
+      存在，Zen 已废弃）。四者不再编译进 crate。
+    * `/providers` **不再注册**（404，Go `http.NotFound` 形态）。`/v1/models` 的
+      `mergeProviderModels` 本 crate 从未迁，故无行为变化。
+    * `handleChat` 的 `external_prov` 分支删除；**图片 400 判定改为无条件执行**
+      （不再有「外部服务商可能要识图」这条豁免）。
+    * `media.rs::sanitize_for_external`（补 `tool_call_id`）删除；同文件
+      `fetch_remote_images` 与 `should_fallback` **保留且函数体未改**
+      （后者已无生产调用方，保留公开 API 与单测）。
+    * UI「服务商」副页整页删除（鼓轮键、页面、`MODES`/`DRUM_IDX` 项、设置页入口、
+      i18n 与 CSS）。鼓轮删的是尾格，其余格下标不位移；传送带的 water/keymap 槽位
+      相应前移一位（`TRACK_IDX` 同步）。
+    * 数据兼容：`tuanjie-providers.json`（DPAPI 密文）与 `tuanjie-media.json` /
+      `tuanjie-vision.json` **留在磁盘上不动**，`appdir.rs` 的迁移/ACL 登记保留并注明
+      「历史文件，现已不读」。
+    * 受影响的 Go 金标场景（`ext-chat-*`、`responses-*`、`anthropic-*`、`providers-*`，
+      共 16 个场景）在 `p8b5_diff.rs` 的 `REMOVED_PROVIDER_SCENARIOS` 里**有意跳过**；
+      保留的 3 条媒体场景继续跑（远程图片下载仍覆盖）。`p8b3_http_contract` 的
+      `/providers` 合同改为断言 404。
 
 ## P7d-1：接进 rs-gui 分发器（2026-10-17）
 

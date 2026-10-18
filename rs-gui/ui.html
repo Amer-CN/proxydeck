@@ -2294,7 +2294,7 @@ body.pt-try { background: var(--pt-paper); }
 .acc-tag.budget { background: var(--pt-stamp-bg); color: var(--pt-stamp-ink); }
 .acc-tag.expired { background: var(--pt-ink2); }
 
-/* 宽版模态（账号矩阵/自定义服务商子页面） */
+/* 宽版模态（账号矩阵子页面） */
 .modal-box.wide { width: 92%; max-width: 780px; }
 
 /* ════════════ 子页面模式（注水检测 / 媒体副页）════════════
@@ -2322,23 +2322,16 @@ body.pt-try { background: var(--pt-paper); }
 .pt-deck.sub .pt-label .s { font-size: 11.5px; line-height: 1.6; }
 .pt-deck.sub .pt-subhead .pt-silk { font-size: 11.5px; }
 
-/* 自定义服务商紧凑卡（仅 media 甲板作用域，矩阵弹窗里的同名类不受影响）：
-   第一行 LED·名称·host·用量·删除，第二行状态+模型徽章+内联加模型；
-   双列放不下，单列铺满甲板 */
-.pt-deck.sub .mx-grid { grid-template-columns: 1fr; gap: 7px; }
+/* 子页面紧凑卡（媒体副页已删，键位组合子页仍复用 pv-line / pv-host / pv-models）：
+   单列铺满甲板；键位组合卡首行是「第N键 · 页数 + 页名 + 删键」 */
 .pt-deck.sub .mx-card { display: flex; flex-direction: column; gap: 5px; padding: 8px 12px; }
 .pt-deck.sub .pv-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.pt-deck.sub .pv-line .mx-led { flex: none; }
 .pt-deck.sub .pv-line .mx-name { flex: none; font-size: 12px; }
 .pt-deck.sub .pv-host { max-width: none; margin-left: 0; flex: 1 1 auto; min-width: 48px; font-size: 10.5px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
-.pt-deck.sub .pv-usage { flex: none; font-family: var(--pt-font-disp); font-size: 11.5px; color: var(--pt-ink2); }
-.pt-deck.sub .pv-usage b { font-weight: 650; color: var(--pt-ink); }
 .pt-deck.sub .pv-line .ibtn2 { flex: none; padding: 4px 9px; }
 .pt-deck.sub .pv-models { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .pt-deck.sub .pv-models .acc-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.pt-deck.sub .pv-model-add { display: inline-flex; gap: 5px; margin-left: auto; min-width: 208px; }
-.pt-deck.sub .pv-model-add .pt-field { flex: 1 1 auto; width: auto; min-width: 0; font-size: 11.5px; padding: 4px 8px; }
 
 /* 屏体信息区：复用悬停层同款 LCD 键值版式（.sh-rows/.sh-k/.sh-v），读数按结果着色 */
 .pt-sc-body .sh-rows { gap: 4px 16px; }
@@ -2347,15 +2340,9 @@ body.pt-try { background: var(--pt-paper); }
 .pt-sc-body .sh-v.ok { color: var(--pt-sc-green); }
 .pt-sc-body .sh-v.warn { color: #F2A61B; }
 .pt-sc-body .sh-v.crit { color: var(--pt-sc-accent); }
-.pt-drum i:nth-child(7) { --y: 6; } /* B.AI/媒体路由/注水检测接在绕接格与 COMMAND 真格之后（B.AI 紧挨真格） */
+.pt-drum i:nth-child(7) { --y: 6; } /* B.AI/注水检测接在绕接格与 COMMAND 真格之后（B.AI 紧挨真格） */
 .pt-drum i:nth-child(8) { --y: 7; } /* 无物理键的副页也要在 Mode 鼓轮上有一格 */
-.pt-drum i:nth-child(9) { --y: 8; } /* 末格：VIBEX（注水检测是独立窗口，不上鼓轮） */
-.pt-drum i:nth-child(10) { --y: 9; } /* 鼓轮终态 10 格：8=设置，9=媒体路由（第 8 格为第 8 供应商预留） */
-
-/* 自定义服务商刷新指示：/providers 冷启动要现查订阅与用量，给一条呼吸提示而不是空白等待 */
-.pv-busy { margin-left: 10px; font-family: var(--pt-font-ui); font-size: 11px; font-weight: 500;
-  letter-spacing: .3px; color: var(--pt-warn-ink); animation: pvbreathe 1.2s ease-in-out infinite; }
-@keyframes pvbreathe { 50% { opacity: .3; } }
+.pt-drum i:nth-child(9) { --y: 8; } /* 末格：设置（注水检测是独立窗口，不上鼓轮） */
 
 /* 账号矩阵子页面头部（自动探测/手动添加一行；注水检测已独立成子页面） */
 .mx-head { display: flex; justify-content: flex-end; gap: 8px; margin: 10px 0; }
@@ -2389,16 +2376,13 @@ body.pt-try { background: var(--pt-paper); }
 .mx-mmodels .mm { font-family: var(--pt-font-disp); font-size: 9.5px; color: var(--pt-ink2);
   border: 1px solid var(--pt-hairline); border-radius: 3px; padding: 1px 4px; }
 
-/* 自定义服务商卡片（学群友 renderProviderCard 口径） */
+/* 子页面卡片 host 文本（键位组合页复用） */
 .pv-host { font-size: 10px; color: var(--pt-ink2); margin-left: auto; max-width: 110px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 卡片模型管理：徽章内 ✕ 删模型 + 卡底小输入框加模型 */
+/* 卡片模型管理：徽章内 ✕ 删模型（账号矩阵与键位组合共用） */
 .pv-x { border: 0; background: none; color: inherit; font: inherit; line-height: 1;
   cursor: pointer; padding: 0 0 0 3px; opacity: .65; }
 .pv-x:hover { opacity: 1; }
-.pv-model-add { display: flex; gap: 6px; margin-top: 8px; }
-.pv-model-add .pt-field { flex: 1; min-width: 0; padding: 3px 8px; font-size: 11px; }
-.pv-model-add .ibtn2 { padding: 3px 10px; }
 .acc-act { display: flex; gap: 5px; }
 .acc-act .ibtn2 { padding: 3px 8px; font-size: 9.5px; }
 /* 进行中请求面板 */
@@ -2603,7 +2587,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <!-- 第 8 供应商预留格（未映射任何 mode，路过时鼓轮保持上一位置） -->
                   <i><span>···</span></i>
                   <i data-mode="set"><span data-i18n="app.settings">设置</span></i>
-                  <i data-mode="media"><span data-i18n="app.key.mediaDrum">服务商</span></i>
                 </span>
               </span>
             </div>
@@ -2773,19 +2756,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="vibexToken"><span>token 就绪</span><b></b></span>
                       <span class="pt-dot" data-dot="vibexFree"><span>限时免费</span><b></b></span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 媒体副页 屏体 = 信息区：自定义服务商健康与累计用量 -->
-              <div class="pt-sc-body media" data-body="media">
-                <div class="sc-unified">
-                  <div class="run-line">
-                    <span class="pt-dot grn" data-dot="mrExt"><span class="run-name">自定义服务商 · CUSTOM PROVIDERS</span><b></b></span>
-                  </div>
-                  <div class="sh-rows">
-                    <span class="sh-k">自定义服务商</span><span class="sh-v" id="mrScExt">0 个</span>
-                    <span class="sh-k">累计用量</span><span class="sh-v" id="mrScUsage">—</span>
                   </div>
                 </div>
               </div>
@@ -3389,19 +3359,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                <div class="pt-deck-scroll"><div class="inner fill">
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.settings">设置 · Settings</span></div>
 
-                <!-- 媒体副页：旧的三路媒体配置与识图改路由已按用户裁决删除（2026-10-18），
-                     该副页只保留「自定义服务商」管理（openMediaReroutePage 入口不变）。 -->
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.media.head">自定义服务商 · Custom Providers</span>
-                  <span class="pt-val" data-i18n="app.media.headVal">自定义服务商与模型管理 · 命中的模型由该源直接转发</span></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t" data-i18n="app.media.head">自定义服务商</div>
-                    <div class="s" data-i18n="app.media.desc">OpenAI 兼容第三方源 · 模型管理 · 命中的模型由该源直接转发（静态 Bearer，不占团结账号池）</div>
-                  </div>
-                  <button type="button" class="ibtn2" id="tjMediaBtn" data-i18n="app.media.manage" title="媒体副页：自定义服务商与模型管理（OpenAI 兼容第三方源）"> ⇗ 管理…</button>
-                </div></div>
-                <div class="pt-div"></div>
-
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.water.title">注水检测</div>
@@ -3655,45 +3612,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
                   <button type="button" class="ibtn2" id="comateClearLog" data-i18n="app.btn.clear">清空</button></div>
                 <div class="pt-log" id="comateLog"></div>
-               </div></div>
-              </div>
-
-              <!-- —————— 媒体副页 甲板 = 操作区（自定义服务商；旧媒体生成与改路由配置已删）—————— -->
-              <div class="pt-deck sub" data-deck="media">
-               <div class="pt-deck-scroll"><div class="inner fill">
-                <div class="pt-row"><div class="pt-rowline">
-                  <button type="button" class="ibtn2" id="mrBack" title="返回设置页（直接按「设置」键或 Esc 同样可退）">← 返回</button>
-                  <div class="pt-label">
-                    <div class="t">自定义服务商 · CUSTOM PROVIDERS</div>
-                    <div class="s">管理 OpenAI 兼容第三方源与模型；命中的模型由该源直接转发（改完立即生效）</div>
-                  </div>
-                </div></div>
-                <div class="pt-div"></div>
-
-                <div class="pt-subhead pt-section-gap"><span class="pt-silk sm">自定义服务商 · CUSTOM PROVIDERS</span><span class="pv-busy" id="pvBusy" hidden></span></div>
-                <div class="mx-grid" id="pvGrid" style="margin:8px 0 10px"><div class="if-empty" style="grid-column:1/-1">// 读取中…</div></div>
-                <!-- 添加表单默认折叠：列表在上、添加入口在下，点开才占地方 -->
-                <div class="acc-f-actions"><button type="button" class="ibtn2" id="pvFormToggle">＋ 添加自定义服务商</button></div>
-                <div id="pvFormBody" hidden>
-                  <div class="acc-f-row"><div id="pvFormTitle" style="flex:1;font-weight:650">添加自定义服务商</div></div>
-                  <div class="acc-f-row"><label>名称</label><input class="pt-field" id="pvName" placeholder="如：智谱 GLM" spellcheck="false" autocomplete="off"></div>
-                  <div class="acc-f-row"><label>Base URL</label><input class="pt-field" id="pvUrl" placeholder="https://api.example.com/v1" spellcheck="false" autocomplete="off"></div>
-                  <div class="acc-f-row"><label>API Key</label><input class="pt-field" id="pvKey" type="password" placeholder="Bearer key" spellcheck="false" autocomplete="off"></div>
-                  <div class="acc-f-row"><label>API 格式</label><select class="pt-field" id="pvProtocol" title="该服务商的出站协议，决定转发到哪个端点">
-                    <option value="chat" selected>Chat Completions（/chat/completions）</option>
-                    <option value="responses">Responses（/responses）</option>
-                    <option value="anthropic">Anthropic Messages（/v1/messages）</option>
-                  </select></div>
-                  <div class="acc-f-row" id="pvModelRow"><label>模型</label><div style="flex:1;min-width:0">
-                    <div id="pvModelChips" style="display:flex;flex-wrap:wrap;gap:4px"></div>
-                    <div style="display:flex;gap:6px">
-                      <input class="pt-field" id="pvModelInput" placeholder="模型名 · 回车或点右侧按钮添加" spellcheck="false" autocomplete="off">
-                      <button type="button" class="ibtn2" id="pvModelAddBtn" style="flex:none">＋ 添加模型</button>
-                    </div>
-                  </div></div>
-                  <p class="acc-f-help">OpenAI 兼容第三方源：订阅/用量取自其计费接口，不支持的端点会如实标注；模型留空 = 仅信息展示，填写的模型命中请求时由该源直接转发（静态 Bearer，不占团结账号池）；模型的增删在保存后的卡片上进行。API 格式决定出站端点：Chat Completions=/chat/completions、Responses=/responses、Anthropic Messages=/v1/messages（原生 x-api-key 认证）；旧配置无此字段按 Chat 转发，需要 Responses 的条目请在此显式选择。</p>
-                  <div class="acc-f-actions"><button type="button" class="ibtn2 accent" id="pvAdd">添加供应商</button></div>
-                </div>
                </div></div>
               </div>
 
@@ -4396,15 +4314,15 @@ var PT_I18N = {
 
   /* ══════════════════ 3. 状态与模式 ══════════════════ */
   var st = { mode: 'cmd', soundSet: 1 };
-  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'ext', 'media', 'water', 'keymap'];
+  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'ext', 'water', 'keymap'];
   /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；tj 的副页是 COMATE；cb 的副页是 Qoder） */
   var ALT_MODE = { cmd: 'bai', bai: 'cmd', tj: 'comate', comate: 'tj', cb: 'qoder', qoder: 'cb' };
   /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
   var ALT_LABEL = { cmd: 'B.AI', tj: 'COMATE', cb: 'QODER' };
-  /* 鼓轮 10 格 DOM [cmd,bai,tj,comate,cb,qoder,ext,预留,set,media]；居中格 = children[--i]（CSS 按 --y−--i 定位，
+  /* 鼓轮 9 格 DOM [cmd,bai,tj,comate,cb,qoder,ext,预留,set]；居中格 = children[--i]（CSS 按 --y−--i 定位，
      cell 的 --y 与 children 序号一致）。顺序即终态：主页 COMMAND 开头，第 8 格（idx7）为第 8 供应商预留
-     （无 mode 映射，路过保持上一位置），设置 idx8，媒体路由 idx9；后来者只填预留格，不调顺序。 */
-  var DRUM_IDX = { cmd: 0, bai: 1, tj: 2, comate: 3, cb: 4, qoder: 5, ext: 6, set: 8, media: 9 };
+     （无 mode 映射，路过保持上一位置），设置 idx8；后来者只填预留格，不调顺序。 */
+  var DRUM_IDX = { cmd: 0, bai: 1, tj: 2, comate: 3, cb: 4, qoder: 5, ext: 6, set: 8 };
   /* 实体键面子记忆：每物理键记住离开时的那张脸（1-4 键动态，索引记忆；
      单脸键恒显示该脸，多脸键在离开时的那张脸上保持键名）。 */
   var keyFace = { cmd: 'cmd', tj: 'tj', cb: 'cb' };
@@ -4539,8 +4457,8 @@ var PT_I18N = {
     paint();
     return true;
   };
-  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, comate: 7, media: 8, water: 9, keymap: 10 };
-  /* 上屏 Wheel 音量条只亮着六个主页可见；set/water/media 里它挡住屏体右侧读数 */
+  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, comate: 7, water: 8, keymap: 9 };
+  /* 上屏 Wheel 音量条只亮着六个主页可见；set/water 里它挡住屏体右侧读数 */
   var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate', 'qoder'];
   /* lx（灵犀+设置）与 no 共用第 4 颗键：已停在 no 时再点该键进 lx（双职责），
      鼓轮/传送带各自有独立位；键盘方向键沿 MODES 全链可达。 */
@@ -4703,7 +4621,7 @@ var PT_I18N = {
     if (vuWrap) vuWrap.style.display = VU_HOME.indexOf(m) >= 0 ? '' : 'none';
     var drum = $('.pt-drum');
     if (drum) {
-      /* 居中格 = children[--i]（顺序见 DRUM_IDX 注释：cmd→0 … ext→6，预留格 idx7 无映射，set→8，media→9）；
+      /* 居中格 = children[--i]（顺序见 DRUM_IDX 注释：cmd→0 … ext→6，预留格 idx7 无映射，set→8）；
          没有专属格的 mode 保持鼓轮上一位置，不能把 --i 设成 undefined（calc 失效，格子会叠成一坨） */
       var di = DRUM_IDX[m];
       if (di != null) {
@@ -4721,7 +4639,7 @@ var PT_I18N = {
       d.toggleAttribute('inert', !on);
       d.setAttribute('aria-hidden', on ? 'false' : 'true');
       /* B类供应商显隐：甲板禁止 display:none——传送带按 TRACK_IDX 固定槽位平移，
-         抽掉一格后面全串位（comate 格跑出 media 内容即此因）；禁用页由 selectMode
+         抽掉一格后面全串位（comate 格跑出相邻页内容即此因）；禁用页由 selectMode
          门控根本进不去，槽位留着也永远不会居中显示 */
     });
     $$('.pt-sc-body').forEach(function (b) {
@@ -5698,11 +5616,8 @@ var PT_I18N = {
       });
     } catch (e) { /* 插件未启动：保持上次显示 */ }
   }
-  /* ================= 媒体副页：自定义服务商 ================= */
-  /* 旧的媒体生成链路与识图改路由已按用户裁决删除（2026-10-18）：媒体副页只保留
-     自定义服务商管理；后端 /vision-config、/media-config 与生成端点均不再注册。 */
   /* 屏体信息区键值写入：文本 + 语义色（ok 绿 / warn 琥珀 / crit 红，空=默认白）。
-     子页面（注水检测 / 媒体副页）的读数一律看上屏，甲板只放选择与操作。 */
+     子页面（注水检测）的读数一律看上屏，甲板只放选择与操作。 */
   function setScReadout(id, text, cls) {
     var el = $(id);
     if (!el) return;
@@ -5727,22 +5642,6 @@ var PT_I18N = {
     var d = new Date(at);
     var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
     return (d.getMonth() + 1) + '-' + d.getDate() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
-  }
-  /* GET /providers 单一入口：自定义服务商卡片与增删改共用同一份数据，
-     合并在途请求避免打两次远端计费查询（冷启动时那一下翻倍就是用户感到的卡顿）。
-     增删改之后调用方传 force=true 跳过在途复用，拿到含本次改动的最新列表。 */
-  var pvInflight = null;
-  function fetchProviders(force) {
-    if (!force && pvInflight) return pvInflight;
-    var p = (async function () {
-      try {
-        var d = await (await fetch("http://127.0.0.1:8788/providers")).json();
-        return d.providers || [];
-      } catch (e) { return null; }
-    })();
-    pvInflight = p;
-    p.then(function () { if (pvInflight === p) pvInflight = null; });
-    return p;
   }
   /* 账号矩阵子页面（学群友 acc-card 全字段卡：LED/徽章/次数/剩余/进度条/到期） */
   function wideModal(html) {
@@ -5969,265 +5868,6 @@ var PT_I18N = {
     })();
   }
 
-  /* 自定义服务商子页面（学群友 providers：管理 + 计费信息展示；models 命中的模型参与转发）。
-     并入媒体副页后由 openMediaReroutePage 打开（openProvidersPage 保留为入口别名）。 */
-  function pvCardHtml(p) {
-    var host = (p.base_url || "").replace(/^https?:\/\//, "");
-    var usageUnknown = !(p.usage && typeof p.usage.total_usage === "number");
-    var usageTxt = usageUnknown
-      ? "用量未知"
-      : "$" + (p.usage.total_usage / 100).toFixed(2);
-    /* 悬停提示只在"用量未知"时挂：查询成功时"用量查询未成功"字样会自相矛盾 */
-    var usageTitle = usageUnknown
-      ? ' title="用量查询未成功（' + escHtml(p.usage_status || "无数据") + '）；不影响账号连接与模型转发"'
-      : '';
-    /* 紧凑两行卡：首行 LED·名称·host·用量·删除；次行状态+模型徽章+内联加模型。
-       原五段堆叠（头部/徽章/限额/操作/加模型各占一行）一张卡吃掉半屏 */
-    var limitTxt = p.sub
-      ? (p.sub.hard_limit_usd != null && p.sub.hard_limit_usd < 1e8 ? ' / 限 $' + escHtml(String(p.sub.hard_limit_usd)) : ' / 限额不限')
-      : "";
-    // 模型徽章：配置的 models（参与转发）带 ✕ 可删；没配置时回退计费接口 /models 拉到的列表（仅展示，不可删）
-    var configured = p.config_models && p.config_models.length;
-    var modelList = configured ? p.config_models : (p.models || []);
-    var models = modelList.map(function (m) {
-      return '<span class="acc-tag expired">' + escHtml(m) +
-        (configured ? ' <button type="button" class="pv-x" data-pv-mdel="' + escHtml(p.name) + '" data-pv-mname="' + escHtml(m) + '" title="删除模型 ' + escHtml(m) + '">✕</button>' : '') +
-        '</span>';
-    }).join(" ");
-    // 协议徽章：responses/anthropic 才显示（chat 缺省不显示，省地方）；旧数据无 protocol 字段同样不显示
-    var protoTag = p.protocol === "responses" ? '<span class="acc-tag glm" title="出站协议 Responses（/responses）">Responses</span> '
-      : p.protocol === "anthropic" ? '<span class="acc-tag glm" title="出站协议 Anthropic Messages（/v1/messages）">Anthropic</span> '
-      : '';
-    return '<div class="mx-card' + (p.ok ? '' : ' off') + '">' +
-      '<div class="pv-line"><span class="mx-led' + (p.ok ? '' : ' off') + '"></span>' +
-      '<span class="mx-name">' + escHtml(p.name) + '</span>' +
-      '<span class="pv-host" title="' + escHtml(host) + '">' + escHtml(host) + '</span>' +
-      '<span class="pv-usage"' + usageTitle + '><b>' + usageTxt + '</b>' + limitTxt + '</span>' +
-      '<button type="button" class="ibtn2" data-pv-edit="' + escHtml(p.name) + '" title="修改该服务商的 Base URL / API Key / API 格式（模型在卡片上增删）">改</button>' +
-      '<button type="button" class="ibtn2" data-pv-del="' + escHtml(p.name) + '" title="删除该自定义服务商">删</button></div>' +
-      '<div class="pv-models">' +
-      (p.ok ? '<span class="acc-tag" style="background:#3ecf8e;color:#0B3D26">已连接</span>'
-            : '<span class="acc-tag budget">不可达</span>') + ' ' +
-      protoTag +
-      (p.sub && p.sub.has_payment_method ? '<span class="acc-tag glm">已绑支付</span> ' : '') +
-      models +
-      '<span class="pv-model-add">' +
-      '<input class="pt-field" placeholder="+ 模型名" spellcheck="false" autocomplete="off">' +
-      '<button type="button" class="ibtn2 accent" data-pv-madd="' + escHtml(p.name) + '" title="添加模型（POST /providers action=addmodel）">＋</button></span>' +
-      '</div>' +
-      (!p.ok && p.error ? '<p class="acc-f-help" style="margin:0;color:var(--pt-accent)">' + escHtml(p.error) + '</p>' : '') +
-      '</div>';
-  }
-  /* 自定义服务商卡列表 + 新增表单常驻媒体副页甲板（静态标记见 ui-src.html data-deck="media"），
-     这里只渲染卡片网格。 */
-  /* 渲染自定义服务商卡 + 上屏读数 + 重绑卡片事件（给什么画什么：live 数据 / 缓存数据 / null=失败） */
-  /* 当前正在编辑的账号名（""=非编辑态，添加表单按新增走）；与 bindPvAdd 同作用域共享 */
-  var pvEditName = "";
-  function renderProvidersData(provs) {
-    var grid = $('pvGrid');
-    if (!grid) return;
-    grid.innerHTML = !provs
-      ? '<div class="if-empty" style="grid-column:1/-1">// 读取失败（代理未启动？）</div>'
-      : provs.length ? provs.map(pvCardHtml).join("") : '<div class="if-empty" style="grid-column:1/-1">// 未配置自定义服务商 · 下方添加</div>';
-    renderMediaScreen(provs);
-    // 动态 DOM 事件重挂（每次 render 后全量重绑）：删账号 / 删模型 / 加模型
-    grid.querySelectorAll('[data-pv-del]').forEach(function (b) {
-      b.onclick = async function () {
-        try {
-          await fetch("http://127.0.0.1:8788/providers", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "remove", name: b.dataset.pvDel })
-          });
-        } catch (e) { toast('err', '自定义服务商', '删除失败（团结插件未启动？）'); }
-        refreshProviders();
-      };
-    });
-    grid.querySelectorAll('[data-pv-edit]').forEach(function (b) {
-      b.onclick = function () {
-        var p = (provs || []).find(function (x) { return x.name === b.dataset.pvEdit; });
-        var nameI = $('pvName'), urlI = $('pvUrl'), keyI = $('pvKey'), sel = $('pvProtocol');
-        if (!nameI) return;
-        pvEditName = b.dataset.pvEdit;
-        var fbody = $('pvFormBody'), tgl = $('pvFormToggle');
-        if (fbody) fbody.hidden = false;
-        if (tgl) tgl.textContent = '− 收起编辑';
-        var ft = $('pvFormTitle');
-        if (ft) ft.textContent = '编辑自定义服务商 · ' + pvEditName;
-        nameI.value = pvEditName;
-        nameI.readOnly = true;
-        if (urlI) urlI.value = (p && p.base_url) || "";
-        if (keyI) { keyI.value = ""; keyI.placeholder = "留空 = 保持原 key"; }
-        if (sel) {
-          var tmp = sel.querySelector('option[value=""]'); // 上一次编辑残留的临时项
-          if (tmp) tmp.remove();
-          if (p && !p.protocol) {
-            // 旧配置（磁盘无 protocol 字段）：插入临时空值项并选中，提交时不改动
-            var o = document.createElement('option');
-            o.value = ""; o.textContent = "旧配置·空值（按 Chat 转发）";
-            sel.insertBefore(o, sel.firstChild);
-          }
-          sel.value = (p && p.protocol) || "";
-        }
-        var mrow = $('pvModelRow'); if (mrow) mrow.hidden = true; // 模型的增删仍在卡片上做，编辑表单不收模型
-        var abtn = $('pvAdd');
-        if (abtn) abtn.textContent = "保存修改";
-      };
-    });
-    grid.querySelectorAll('[data-pv-mdel]').forEach(function (b) {
-      b.onclick = async function () {
-        var r = null;
-        try {
-          r = await (await fetch("http://127.0.0.1:8788/providers", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "removemodel", name: b.dataset.pvMdel, model: b.dataset.pvMname })
-          })).json();
-        } catch (e) { toast('err', '模型管理', '删除失败（团结插件未启动？）'); refreshProviders(); return; }
-        toast(r.ok ? "ok" : "err", "模型管理", r.ok ? "已删除 " + b.dataset.pvMname : (r.msg || "删除失败"));
-        refreshProviders();
-      };
-    });
-    grid.querySelectorAll('[data-pv-madd]').forEach(function (b) {
-      b.onclick = async function () {
-        var inp = b.parentNode ? b.parentNode.querySelector('input') : null;
-        var model = ((inp && inp.value) || "").trim();
-        if (!model) { toast("err", "模型管理", "模型名不能为空"); return; }
-        var r = null;
-        try {
-          r = await (await fetch("http://127.0.0.1:8788/providers", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "addmodel", name: b.dataset.pvMadd, model: model })
-          })).json();
-        } catch (e) { toast('err', '模型管理', '添加失败（团结插件未启动？）'); return; }
-        toast(r.ok ? "ok" : "err", "模型管理", r.ok ? "已添加 " + model : (r.msg || "添加失败"));
-        if (r.ok && inp) inp.value = "";
-        refreshProviders();
-      };
-    });
-  }
-  async function renderProviders(force) {
-    var grid = $('pvGrid');
-    if (!grid) return;
-    var busy = $('pvBusy');
-    if (busy) { busy.hidden = false; busy.textContent = '自定义服务商刷新中…'; }
-    var provs = await fetchProviders(force);
-    if (provs) {
-      try { localStorage.setItem('mediaProvsCache', JSON.stringify({ at: Date.now(), provs: provs })); } catch (e) {}
-    } else {
-      /* 插件未启动：上次数据立刻上屏，整板不再空白 */
-      try { var pc = JSON.parse(localStorage.getItem('mediaProvsCache') || 'null'); if (pc && pc.provs) provs = pc.provs; } catch (e) {}
-    }
-    if (busy) busy.hidden = true;
-    renderProvidersData(provs);
-  }
-  /* 增删改后的统一刷新：force 保证拿到含本次改动的列表 */
-  function refreshProviders() {
-    renderProviders(true);
-  }
-  /* 上屏信息区：自定义服务商可达数 + 累计用量（金额取自各源计费接口，单位美分） */
-  function renderMediaScreen(provs) {
-    if (!provs) {
-      setScReadout('mrScExt', '读取失败（插件未启动？）', 'crit');
-      setScReadout('mrScUsage', '—', '');
-      PTApp.dot('mrExt', false, false, '');
-      return;
-    }
-    var okN = provs.filter(function (p) { return p.ok; }).length;
-    var usage = 0, hasUsage = false;
-    provs.forEach(function (p) {
-      if (p.usage && typeof p.usage.total_usage === 'number') { usage += p.usage.total_usage; hasUsage = true; }
-    });
-    setScReadout('mrScExt', provs.length ? okN + '/' + provs.length + ' 可达' : '未配置',
-      provs.length ? (okN ? (okN === provs.length ? 'ok' : 'warn') : 'crit') : '');
-    setScReadout('mrScUsage', hasUsage ? '$' + (usage / 100).toFixed(2) : '用量未知', '');
-    PTApp.dot('mrExt', okN > 0, false, provs.length ? (okN + '/' + provs.length) : '');
-  }
-  /* 新增自定义服务商表单：DOM 常驻媒体副页甲板且默认折叠，程序初始化时绑一次 */
-  function bindPvAdd() {
-    var add = $('pvAdd');
-    if (!add) return;
-    var tgl = $('pvFormToggle'), body = $('pvFormBody');
-    /* 重置回干净「添加态」：清全部输入/chip、退出编辑态、移除协议临时项、恢复标题与按钮文案 */
-    function resetPvForm() {
-      pvEditName = "";
-      var nameI = $('pvName'), urlI = $('pvUrl'), keyI = $('pvKey'), sel = $('pvProtocol');
-      if (nameI) { nameI.value = ""; nameI.readOnly = false; }
-      if (urlI) urlI.value = "";
-      if (keyI) { keyI.value = ""; keyI.placeholder = "Bearer key"; }
-      if (sel) {
-        var tmp = sel.querySelector('option[value=""]'); // 旧配置临时项
-        if (tmp) tmp.remove();
-        sel.value = "chat";
-      }
-      var chips = $('pvModelChips'); if (chips) chips.innerHTML = "";
-      var mi = $('pvModelInput'); if (mi) mi.value = "";
-      var mrow = $('pvModelRow'); if (mrow) mrow.hidden = false;
-      var ft = $('pvFormTitle'); if (ft) ft.textContent = '添加自定义服务商';
-      add.textContent = '添加供应商';
-    }
-    /* 打开/收起一律先重置回添加态（修复：编辑过某账号后收起再点「＋ 添加」会残留其内容） */
-    if (tgl && body) tgl.onclick = function () {
-      body.hidden = !body.hidden;
-      resetPvForm();
-      tgl.textContent = body.hidden ? '＋ 添加自定义服务商' : '− 收起';
-    };
-    /* 模型 chip 编辑器：单行输入回车/按钮添加，chip 带 × 可删，提交时收集为数组 */
-    function addModelChip() {
-      var mi = $('pvModelInput'), box = $('pvModelChips');
-      if (!mi || !box) return;
-      var name = (mi.value || "").trim();
-      if (!name) return;
-      var sp = document.createElement('span');
-      sp.className = 'acc-tag';
-      sp.setAttribute('data-chip', name);
-      sp.innerHTML = escHtml(name) + ' <button type="button" class="pv-x" data-chipdel="' + escHtml(name) + '" title="移除该模型">×</button>';
-      box.appendChild(sp);
-      mi.value = "";
-    }
-    var madd = $('pvModelAddBtn');
-    if (madd) madd.onclick = addModelChip;
-    var minput = $('pvModelInput');
-    if (minput) minput.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); addModelChip(); } };
-    var chips = $('pvModelChips');
-    if (chips) chips.onclick = function (e) {
-      var x = e.target && e.target.closest ? e.target.closest('[data-chipdel]') : null;
-      if (x && x.parentNode) x.parentNode.remove();
-    };
-    add.onclick = async function () {
-      var name = ($('pvName').value || "").trim(), url = ($('pvUrl').value || "").trim(), key = ($('pvKey').value || "").trim();
-      var models = $('pvModelChips') ? Array.prototype.map.call($('pvModelChips').querySelectorAll('[data-chip]'), function (el) { return el.getAttribute('data-chip'); }) : [];
-      var proto = ($('pvProtocol') && !$('pvProtocol').disabled && $('pvProtocol').value) || "chat";
-      var editing = !!pvEditName;
-      // 编辑态只要求 base_url（key 留空 = 保持原 key）；protocol 传下拉现值（临时项即 ""，后端保留原值）
-      if (editing ? !url : (!name || !url || !key)) { toast("err", "自定义服务商", editing ? "Base URL 不能为空" : "名称 / Base URL / API Key 都不能为空"); return; }
-      var payload = editing
-        ? { action: "edit", name: pvEditName, base_url: url, api_key: key, protocol: ($('pvProtocol') && $('pvProtocol').value) || "" }
-        : { action: "add", name: name, base_url: url, api_key: key, models: models, protocol: proto };
-      var r = null;
-      try {
-        r = await (await fetch("http://127.0.0.1:8788/providers", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        })).json();
-      } catch (e) { toast("err", "自定义服务商", "保存失败（团结插件未启动？）"); return; }
-      toast(r.ok ? "ok" : "err", "自定义服务商", r.msg || "");
-      if (r.ok) {
-        resetPvForm(); // 成功后重置回干净添加态（标题 / toggle 文案 / chip 区一并恢复）
-        if (tgl && body && !body.hidden) tgl.textContent = '− 收起';
-      }
-      refreshProviders();
-    };
-  }
-  /* 媒体副页 = 外壳子页面模式：上屏看自定义服务商健康与累计用量，甲板做增删改。
-     入口在设置甲板，返回 = 按「设置」键（或「← 返回」/ Esc）。 */
-  function enterMediaPage() {
-    PTApp.selectMode('media');
-  }
-  /* 进入 media 模式时的数据刷新（模式切换回调驱动）：
-     /providers 一趟，自定义服务商卡片与增删改共用同一次请求 */
-  function loadMediaPage() {
-    renderProviders();
-  }
-
   // 进行中请求（学群友完整版：LED 三档 + 账号 + 流式 + 字节 + 静默 + 计数 + 负载摘要）
   var ifCount = null;
   async function loadTuanjieInflight() {
@@ -6327,22 +5967,18 @@ var PT_I18N = {
     };
   }
 
-  /* 子页面入口：注水检测 / 媒体副页都是外壳模式页（切模式即进入；都从设置甲板进入，
-     返回也回设置）。两个甲板的 DOM 常驻，一次性绑定随初始化完成，不再随浮窗创建销毁。 */
-  (function bindMatrixAndProviders() {
+  /* 子页面入口：注水检测是外壳模式页（切模式即进入；从设置甲板进入，返回也回设置）。
+     甲板 DOM 常驻，一次性绑定随初始化完成，不再随浮窗创建销毁。 */
+  (function bindMatrixAndWater() {
     var mx = $('tjMatrixBtn');
     if (mx) mx.onclick = openTuanjieMatrix;
-    var md = $('tjMediaBtn');
-    if (md) md.onclick = enterMediaPage;
     var wt = $('tjWaterBtn');
     if (wt) wt.onclick = enterWaterPage;
     /* tjRefresh 的绑定在 bindStatic 的 pfx+Refresh 统一循环里（强制实时拉积分），
        这里不再重复绑——重复绑会被后执行的循环覆盖 */
-    [$('wtBack'), $('mrBack')].forEach(function (b) {
-      if (b) b.onclick = function () { PTApp.selectMode('set'); };
-    });
+    var wtBack = $('wtBack');
+    if (wtBack) wtBack.onclick = function () { PTApp.selectMode('set'); };
     bindWaterBtn();
-    bindPvAdd();
   })();
 
   // 添加账号：机械风模态窗（pt-field 输入框，与链路配置的输入框同款）
@@ -9162,12 +8798,7 @@ var PT_I18N = {
     'app.s.changelog': { zh: '本版本改了什么，一目了然', 'zh-hant': '本版本改了什麼，一目瞭然', en: 'What changed in this version', de: 'Was sich in dieser Version geändert hat', ja: 'このバージョンの変更点', fr: 'Les changements de cette version', es: 'Los cambios de esta versión' },
     'app.btn.changelog': { zh: '查看…', 'zh-hant': '查看…', en: 'View…', de: 'Ansehen…', ja: '見る…', fr: 'Voir…', es: 'Ver…' },
     'app.upd.title':     { zh: '尚未检查', 'zh-hant': '尚未檢查', en: 'Not checked yet', de: 'Noch nicht geprüft', ja: '未チェック', fr: 'Non vérifié', es: 'Sin comprobar' },
-    'app.key.mediaDrum': { zh: '服务商', 'zh-hant': '服務商', en: 'Provider', de: 'Anbieter', ja: 'プロバイダ', fr: 'Fournisseur', es: 'Proveedor' },
     'app.key.waterDrum': { zh: '注水检测', 'zh-hant': '注水檢測', en: 'Canary Probe', de: 'Kanarien-Test', ja: 'カナリア検査', fr: 'Sonde canari', es: 'Prueba canaria' },
-    'app.media.head':    { zh: '自定义服务商', 'zh-hant': '自訂服務商', en: 'Custom Providers', de: 'Eigene Anbieter', ja: 'カスタムプロバイダ', fr: 'Fournisseurs personnalisés', es: 'Proveedores personalizados' },
-    'app.media.headVal': { zh: '自定义服务商与模型管理 · 命中的模型由该源直接转发', 'zh-hant': '自訂服務商與模型管理 · 命中的模型由該源直接轉發', en: 'Custom providers and model management · matching models are forwarded to that source directly', de: 'Eigene Anbieter und Modellverwaltung · passende Modelle werden direkt an die Quelle weitergeleitet', ja: 'カスタムプロバイダとモデル管理・一致したモデルはその提供元へ直接転送', fr: 'Fournisseurs et gestion de modèles personnalisés · les modèles correspondants sont transmis directement à cette source', es: 'Proveedores y gestión de modelos personalizados · los modelos coincidentes se reenvían directamente a esa fuente' },
-    'app.media.desc':    { zh: 'OpenAI 兼容第三方源 · 模型管理 · 命中的模型由该源直接转发（静态 Bearer，不占团结账号池）', 'zh-hant': 'OpenAI 相容第三方源 · 模型管理 · 命中的模型由該源直接轉發（靜態 Bearer，不佔團結賬號池）', en: 'OpenAI-compatible third-party sources · model management · matching models are forwarded to that source directly (static Bearer, no Tuanjie account pool)', de: 'OpenAI-kompatible Drittanbieter · Modellverwaltung · passende Modelle werden direkt an die Quelle weitergeleitet (statischer Bearer, kein Tuanjie-Accountpool)', ja: 'OpenAI 互換の外部ソース・モデル管理・一致したモデルはその提供元へ直接転送（静的 Bearer、団結アカウントプール不使用）', fr: 'Sources tierces compatibles OpenAI · gestion des modèles · les modèles correspondants sont transmis directement à cette source (Bearer statique, sans pool de comptes Tuanjie)', es: 'Fuentes de terceros compatibles con OpenAI · gestión de modelos · los modelos coincidentes se reenvían directamente a esa fuente (Bearer estático, sin pool de cuentas Tuanjie)' },
-    'app.media.manage':  { zh: ' ⇗ 管理…', 'zh-hant': ' ⇗ 管理…', en: ' ⇗ Manage…', de: ' ⇗ Verwalten…', ja: ' ⇗ 管理…', fr: ' ⇗ Gérer…', es: ' ⇗ Gestionar…' },
     'app.water.title':   { zh: '注水检测', 'zh-hant': '注水檢測', en: 'Canary Probe', de: 'Kanarien-Test', ja: 'カナリア検査', fr: 'Sonde canari', es: 'Prueba canaria' },
     'app.water.desc':    { zh: '金丝雀探针：指纹漂移+答题，识别上游是否换便宜模型 · 检测团结账号池 · 生效于团结链路', 'zh-hant': '金絲雀探針：指紋漂移+答題，識別上游是否換便宜模型 · 檢測團結賬號池 · 生效於團結鏈路', en: 'Canary probe: fingerprint drift + quiz to detect upstream model swaps · checks the Tuanjie account pool · active on the Tuanjie link', de: 'Kanarien-Test: Fingerabdruck-Drift und Quiz erkennen Upstream-Modelltausch · prüft den Tuanjie-Accountpool · aktiv auf der Tuanjie-Verbindung', ja: 'カナリア探針：指紋ドリフト+クイズで上流の安いモデルへの差し替えを検出・団結アカウントプールを検査・団結リンクが対象', fr: 'Sonde canari : derive d empreinte et quiz pour detecter un remplacement du modele amont · verifie le pool de comptes Tuanjie · actif sur le lien Tuanjie', es: 'Sonda canaria: deriva de huella y cuestionario detectan cambios de modelo aguas arriba · comprueba el pool de cuentas Tuanjie · activo en el enlace Tuanjie' },
     'app.water.btn':     { zh: '☌ 注水检测', 'zh-hant': '☌ 注水檢測', en: '☌ Canary Probe', de: '☌ Kanarien-Test', ja: '☌ カナリア検査', fr: '☌ Sonde canari', es: '☌ Prueba canaria' },
@@ -10031,7 +9662,7 @@ var PT_I18N = {
       '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8788/v1</code>（甲板上点击即复制）；登录态自动读取 <code>~/.codely-cli/oauth_creds.json</code>。<br>' +
       '<b>【账号池】</b>添加账号即启用多号轮换，单账号模式读桌面端登录态；「▦ 账号矩阵」全屏查看每账号一张信息卡。<br>' +
       '<b>【K3 限流护航】</b>开启后 KIMI-K3 撞限流先自动换号重试，全池撞墙再按上游 Retry-After 排队等待（缺省 60s，总预算 30 分钟）；关闭时 429 直接透传。<br>' +
-      '<b>【多模态】</b>团结原生多模态模型（codely-vl / KIMI-K3 / GLM-5.3-FLASH / DeepSeek-V4.1-Flash）可直接收图片/音频；其它模型收到带图片/音频的请求会明确返回 400 并列出可用模型，不再自动改写模型。自定义服务商模型原样转发（不参与此判断），在 设置 → 自定义服务商 管理。<br>' +
+      '<b>【多模态】</b>团结原生多模态模型（codely-vl / KIMI-K3 / GLM-5.3-FLASH / DeepSeek-V4.1-Flash）可直接收图片/音频；其它模型收到带图片/音频的请求会明确返回 400 并列出可用模型，不再自动改写模型。<br>' +
       '<b>【注水检测】</b>设置 → 注水检测：金丝雀探针（指纹漂移+答题）识别上游是否换便宜模型，生效于团结链路。<br>' +
       '<b>【积分统计】</b>官方积分口径：积分总额 / 今日已用 / 今日剩余（24:00 重置）/ 月度积分 / 赠送池+日赠；点火后自动拉一次，之后点「↻ 刷新」手动拉（官网 429 保护）。<br>' +
       '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>',
@@ -10447,7 +10078,7 @@ var PT_I18N = {
           if (location.hash === '#fax' && typeof window.ccFaxClose === 'function') { ccFaxClose(); return; }   /* 独立浮窗：Esc=关窗 */
           closeFaxOverlay(); return; }   /* 传真机子页：Esc 关层回原甲板（设置 / 注水） */
         if (document.querySelector('.modal-mask')) { closeModal(); return; }
-        if (curMode === 'water' || curMode === 'media' || curMode === 'keymap') { PTApp.selectMode('set'); return; }
+        if (curMode === 'water' || curMode === 'keymap') { PTApp.selectMode('set'); return; }
         if (curMode !== 'cmd') PTApp.selectMode('cmd');
       }
     });
@@ -10720,9 +10351,8 @@ var PT_I18N = {
   PTApp.onModeChange(function (m) {
     hideModelTip();
     curMode = m;
-    /* 子页面模式（注水检测 / 媒体副页 / 键位组合）不是插件甲板，进页面时刷自己的数据 */
+    /* 子页面模式（注水检测 / 键位组合）不是插件甲板，进页面时刷自己的数据 */
     if (m === 'water') { loadWaterPage(); loadTuanjieAccounts(); return; } /* 被动观测数据同源 /accounts，即时刷一轮 */
-    if (m === 'media') { loadMediaPage(); return; }
     if (m === 'keymap') { try { window.renderKeymapPage(); } catch (e) {} return; }
     if (m === 'tj') { loadTuanjieAccounts(); loadTuanjieInflight(); loadTuanjieActivity(); } /* 进甲板即时刷，不等 3s tick */
     if (m !== 'cmd') refreshPluginView(m);

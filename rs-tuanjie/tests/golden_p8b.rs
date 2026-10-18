@@ -4,8 +4,9 @@
 //! （跑完即删，留档 `.work/p8b/zz_p8b_collect_test.go`；再生成口径见 `tests/golden/README.md`）。
 //! 加载顺序：先入库副本 `tests/golden/`，缺则回落 `.work/p8b/`。
 //!
-//! 覆盖本切片：`pacing.go` / `inflight.go` / `opencode_session.go` /
+//! 覆盖本切片：`pacing.go` / `inflight.go` /
 //! `dist.go`（纯函数）/ `channels.go`（静态表）。
+//! `opencode_session.go` 的对照随自定义服务商三协议转发一并删除（2026-10-18 用户裁决）。
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -255,41 +256,7 @@ fn pacing_matches_go() {
     eprintln!("pacing 对照：RetryWait 12 例 / IsPacingModel 10 例 / 落盘与读回全一致");
 }
 
-// ---------------------------------------------------------------- 3. opencode
-
-#[test]
-fn opencode_session_matches_go() {
-    use rs_tuanjie::opencode_session::*;
-
-    let g = load_golden();
-    let want = &g["opencode"];
-    assert_eq!(want["header_name"].as_str().unwrap(), OPENCODE_SESSION_HEADER);
-
-    let a = opencode_session();
-    let b = opencode_session();
-    assert_eq!(a == b, want["stable"].as_bool().unwrap());
-    let u = uuid::Uuid::parse_str(a).expect("UUID");
-    assert_eq!(
-        (u.get_version_num() == 4),
-        want["uuid_v4_ok"].as_bool().unwrap()
-    );
-
-    for row in want["apply_table"].as_array().unwrap() {
-        let base = row["base"].as_str().unwrap();
-        let mut h = reqwest::header::HeaderMap::new();
-        apply_opencode_session(base, &mut h);
-        let set = h.contains_key(OPENCODE_SESSION_HEADER);
-        assert_eq!(set, row["set"].as_bool().unwrap(), "base={base:?}");
-        let same = h
-            .get(OPENCODE_SESSION_HEADER)
-            .map(|v| v.to_str().unwrap() == a)
-            .unwrap_or(false);
-        assert_eq!(same, row["same_as_id"].as_bool().unwrap(), "base={base:?} 取值");
-    }
-    eprintln!("opencode 对照：UUID v4 / 进程级稳定 / 7 条 base 判定全一致");
-}
-
-// ---------------------------------------------------------------- 4. dist
+// ---------------------------------------------------------------- 3. dist
 
 #[test]
 fn dist_pure_functions_match_go() {

@@ -178,6 +178,8 @@ pub const LEGACY_STATE_FILES: [StateFile; 33] = [
     StateFile { name: "calibration.json", credential: false },
     // 团结 8788
     StateFile { name: "tuanjie-accounts.json", credential: true },
+    // 历史文件，现已不读：自定义服务商与三协议转发、生图/生视频与识图改路由已按用户
+    // 裁决删除（2026-10-18），但用户数据留在磁盘上不动，升级时仍按原凭据策略迁移/收紧 ACL。
     StateFile { name: "tuanjie-providers.json", credential: true },
     StateFile { name: "tuanjie-media.json", credential: false },
     StateFile { name: "tuanjie-vision.json", credential: false },

@@ -26,8 +26,9 @@
 //!    55 条 Go 真函数采收向量逐字节一致。
 //!    【2026-10-18 更新】识图「静默改写模型」已按用户裁决删除：请求含图片/音频而目标
 //!    模型不在内置多模态清单时直接回 400（列出可用模型）；远程图片预下载
-//!    （`FetchRemoteImages`）与外部 provider 分支保留（见 [`crate::media`] /
-//!    [`crate::providers`]）。自定义服务商模型**不参与**多模态拦截，命中即直接转发。
+//!    （`FetchRemoteImages`）保留（见 [`crate::media`]）。自定义服务商与三协议转发
+//!    同批整体删除（`providers` / `responses_forward` / `anthropic_forward` 模块已移除），
+//!    不再有「外部 provider 模型绕过多模态判定」这条分支。
 //! 4. **别名解析观测（`water.RecordResolution`）/被动注水（`water.RecordPassive`）未迁**：
 //!    注水面（P8c）。
 //! 5. **单账号路径 200 的 `defer activity.Add("ok", …)` 未迁**：Go 那条恒写（`:1379-1381`），
@@ -56,7 +57,7 @@ use futures_util::StreamExt;
 
 use crate::client::now_unix;
 use crate::pacing::{is_pacing_model, retry_wait_secs, PACING_MAX_WAIT_SECS};
-use crate::server::{gobj, go_err_text, write_err, write_json, AppState, GJ};
+use crate::server::{go_err_text, write_err, AppState};
 use crate::session::{acquire, LitellmSession};
 
 /// 池路径「上游瞬时错误」重发上限 —— `server.go:1103` 的 `attempt < 3`。
@@ -1286,19 +1287,13 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
     // 诊断：入站请求结构摘要（**重排前的原始形态**）—— `server.go:960`。
     crate::logf(&request_shape_line(&model, &body));
 
-    // 自定义服务商模型先认出来：命中即**整段绕过**下面的多模态拒绝判断，按既有路由
-    // 直接转发（用户配置的源可能自己就支持识图，代理不做假设）。只看 `model` 字符串，
-    // 与后面的 body 重排无关，故提前算一次、转发时复用。
-    let external_prov = st.providers.match_model(&model);
-
-    // 团结自己的模型：请求含图片/音频等非文本块而目标模型不在内置多模态清单 ⇒ 明确 400，
-    // **不再静默改写 model 后继续请求**（旧 `RerouteIfMedia` 已按用户裁决删除）。
-    if external_prov.is_none() {
-        if let Some(msg) = crate::media::multimodal_reject_message(&body, &model) {
-            crate::logf(&format!("[tuanjie] media-reject model={model}: {msg}"));
-            st.activity.add("error", &msg, &model, "", 0, 0, 400);
-            return write_err(StatusCode::BAD_REQUEST, &msg);
-        }
+    // 团结模型：请求含图片/音频等非文本块而目标模型不在内置多模态清单 ⇒ 明确 400，
+    // **不再静默改写 model 后继续请求**（旧 `RerouteIfMedia` 已按用户裁决删除；
+    // 自定义服务商已整体删除，本判定无条件执行）。
+    if let Some(msg) = crate::media::multimodal_reject_message(&body, &model) {
+        crate::logf(&format!("[tuanjie] media-reject model={model}: {msg}"));
+        st.activity.add("error", &msg, &model, "", 0, 0, 400);
+        return write_err(StatusCode::BAD_REQUEST, &msg);
     }
 
     // 远程 URL 图片预下载转 base64（团结上游下载远程图片经常超时挂死）
@@ -1324,47 +1319,6 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
     body = crate::reqshape::reshape_chat_body(&body, Some(sess.session()));
     // 重排后的 shape（验证字段序效果）—— `server.go:993`。
     crate::logf(&request_shape_line(&model, &body));
-
-    // 外部 provider 模型：直接转发（静态 Bearer key，不占账号池、不做团结签名）。
-    // 命中即转发——多模态拦截在上面按 `external_prov.is_none()` 已经整段绕过，
-    // 自定义服务商模型不参与团结侧的多模态判定 —— `server.go:995-1046`。
-    if let Some(prov) = external_prov {
-        let out = crate::providers::forward_external(
-            &st,
-            body,
-            &model,
-            wants_stream,
-            &prov,
-            "/chat/completions",
-        )
-        .await;
-        return match out {
-            Ok(resp) => resp,
-            Err(code) => {
-                if code == -1 {
-                    // 网络错（forwardExternal 未写响应，由这里写终态）
-                    write_json(&gobj(vec![(
-                        "error",
-                        gobj(vec![
-                            (
-                                "message",
-                                GJ::Str(format!(
-                                    "{} 请求失败（网络错误，详见实时动态）",
-                                    prov.name
-                                )),
-                            ),
-                            ("type", GJ::Str("server_error".to_string())),
-                        ]),
-                    )]))
-                } else {
-                    // **如实复刻 Go 的既有行为**：5xx/429 时 forwardExternal 不写任何字节，
-                    // 而 handleChat 直接 return ⇒ Go 兜底一个 **200 空响应**（不是 bug 修复点，
-                    // 见 README「Go 侧可疑项」）。Rust 侧同样回空 200，差分金标锁住它。
-                    StatusCode::OK.into_response()
-                }
-            }
-        };
-    }
 
     // KIMI-K3 429 兜底：开启且 model 含 "KIMI" 才启用（`server.go:1050`）。
     let pacing = st.pacer.enabled() && is_pacing_model(&model);
@@ -1690,31 +1644,14 @@ async fn finish_pool(
 /// 流收尾守卫：流尽时由收尾逻辑显式 `done()` 配平 `Finish`；若客户端中途断开导致
 /// 响应流被提前丢弃，`Drop` 兜底配平（Go 靠 handler 返回时的 `defer Finish` 覆盖
 /// 同种情形；不兜底则 inflight 残留死条目）。
-///
-/// `on_done` 供外部转发路径挂 `defer` 的第二件事（Go 里 `registry.Finish` 先注册、
-/// `activity.Add("ok")` 后注册 ⇒ 返回时**先跑 activity 再 Finish**，这里同序）。
 pub(crate) struct StreamGuard {
     inner: Option<(Arc<crate::inflight::RequestRegistry>, String)>,
-    on_done: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl StreamGuard {
     fn new(registry: Arc<crate::inflight::RequestRegistry>, rid: String) -> Self {
         StreamGuard {
             inner: Some((registry, rid)),
-            on_done: None,
-        }
-    }
-
-    /// 带收尾回调的构造（外部转发路径的 `ok` 事件 + `Finish`）。
-    pub(crate) fn with_callback(
-        registry: Arc<crate::inflight::RequestRegistry>,
-        rid: String,
-        cb: impl FnOnce() + Send + 'static,
-    ) -> Self {
-        StreamGuard {
-            inner: Some((registry, rid)),
-            on_done: Some(Box::new(cb)),
         }
     }
 
@@ -1723,10 +1660,6 @@ impl StreamGuard {
     }
 
     pub(crate) fn done(&mut self) {
-        // Go 的 defer 是 LIFO：后注册的 activity 先跑，先注册的 Finish 后跑
-        if let Some(cb) = self.on_done.take() {
-            cb();
-        }
         if let Some((reg, rid)) = self.inner.take() {
             reg.finish(&rid);
         }

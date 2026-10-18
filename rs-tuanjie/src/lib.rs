@@ -7,19 +7,17 @@
 //! 出站 TLS 指纹的取舍见 `README.md`「uTLS 路线取证结论」（P8a 用 rustls，差异已登记）。
 //!
 //! **P8b 切片（本轮）**已迁入 `pacing`（KIMI-K3 429 兜底）/ `inflight`（进行中注册表 +
-//! 实时动态）/ `opencode_session`（`x-opencode-session`）/ `dist`（分布指纹纯函数）/
+//! 实时动态）/ `dist`（分布指纹纯函数）/
 //! `channels`（注水渠道静态表）/ `accounts`（账号池）/ `quota`（积分）/
 //! `stats`（按模型累计 + 落盘）/ `server`（服务骨架与路由表）/ `chat`（**`handleChat`
-//! 的池路径与单账号路径**，P8b 第四片）/ `providers`（外部账号 + 三协议分流）/
-//! `responses_forward`（`/responses` 转发与翻回）/ `anthropic_forward`（`/v1/messages`）/
-//! `media`（多模态能力判定 + schema 修复 + 远程图片预下载；生图/生视频与识图改路由
-//! 已于 2026-10-18 按用户裁决删除）/ `probes`（探针集 + 基线内存态）
-//! —— 后五个模块属 **P8b 第五片**；
+//! 的池路径与单账号路径**，P8b 第四片）/
+//! `media`（多模态能力判定 + 远程图片预下载；生图/生视频、识图改路由与外部服务商
+//! 三协议转发已于 2026-10-18 按用户裁决删除）/ `probes`（探针集 + 基线内存态）
+//! —— 后四个模块属 **P8b 第五片**；
 //! 剩余面（`water.go` 的注水链路、`seedcheck.go`、`cdp_browser.go`、`model/info` 聚合）
 //! 见 `README.md` 的未覆盖清单。
 
 pub mod accounts;
-pub mod anthropic_forward;
 pub mod appdir;
 pub mod baseline;
 pub mod cdp_browser;
@@ -34,13 +32,10 @@ pub mod gziptar;
 pub mod headers;
 pub mod inflight;
 pub mod media;
-pub mod opencode_session;
 pub mod pacing;
 pub mod probes;
-pub mod providers;
 pub mod quota;
 pub mod reqshape;
-pub mod responses_forward;
 pub mod seedcheck;
 pub mod server;
 pub mod session;

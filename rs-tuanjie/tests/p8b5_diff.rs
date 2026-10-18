@@ -9,11 +9,9 @@
 //!   「多模态模型直收」一条行为不变；两条远程图片场景按 [`scenario_step`] 把**输入**
 //!   模型改成 `codely-vl`（金标出站体本来就是这个模型），继续覆盖
 //!   `fetch_remote_images` 的下载 → data URI 成功分支。
-//! * **外部 provider 三条转发路径**：OpenAI 兼容 chat（200/流式/4xx/5xx→空 200/
-//!   tool_call_id 修复）、`/responses`（非流式回填 + 流式逐事件翻译 + 异常形态 + 4xx）、
-//!   `/v1/messages`（非流式 + 流式 + 5xx），**出站转换体逐字节比对**。
-//! * **`/providers` 管理端点**：GET（冷启动同步拉取 + 缓存）、六个 action、
-//!   各类错误形态与 405。
+//! * **外部 provider 三条转发路径**（OpenAI 兼容 chat / `/responses` / `/v1/messages`）与
+//!   **`/providers` 管理端点**：**本版有意删除**（2026-10-18 用户裁决，自定义服务商整体
+//!   下线），对应 Go 金标场景全部跳过（见 `REMOVED_PROVIDER_SCENARIOS` 与 README 差异 #47）。
 //! * ~~`/media-config` + `/vision-config`~~、~~`/v1/images/generations` + `/v1/videos` +
 //!   `/v1/videos/{id}` + `/agnesapi`~~：**本版有意删除**（端点 404、改动见 README 差异表）。
 //! * **探针**：`probeCall` 的 max_tokens 自适应名单（出站体逐字节）+ 整轮
@@ -28,7 +26,7 @@
 //! 4. **团结域出站体**里的会话层键（`metadata`/`litellm_session_id`/`prompt_cache_key`，
 //!    每请求随机 uuid、`cwd` 还是各自进程的 exe 目录）先摘掉再**规范化比对**；
 //!    这些键的逐字节合同已由 P8a / P8b 第三片的 `go-outbound-wire` 金标覆盖。
-//!    外部 provider 的转换体（responses/anthropic）**没有**会话层键 ⇒ 逐字节比对。
+//!    （外部 provider 的 responses/anthropic 转换体已随自定义服务商删除。）
 //!
 //! ## 纪律
 //!
@@ -71,8 +69,6 @@ struct StepIn {
 #[derive(serde::Deserialize, Debug, Clone)]
 struct ScenarioIn {
     name: String,
-    #[serde(default)]
-    providers: String,
     /// Go 的 nil 切片 marshal 成 `null`。
     #[serde(default)]
     accounts: Option<Vec<String>>,
@@ -446,6 +442,36 @@ const REMOVED_MEDIA_SCENARIOS: [&str; 7] = [
     "videos-create-and-query",
 ];
 
+/// 2026-10-18 用户裁决删除的 Go 金标场景：自定义服务商（三协议转发 + `/providers` 管理）。
+///
+/// 逐条核对过 golden，这些场景**只**覆盖被删功能：
+/// * `ext-chat-*` / `ext-chat-unormalized-protocol`：出站 OpenAI 兼容 `/chat/completions`
+///   （鉴权 Bearer 静态 key、`tool_call_id` 修复、4xx 透传 / 5xx→空 200）；
+/// * `responses-*`：`/responses` 出站转换与翻回（含流式与异常形态）；
+/// * `anthropic-*`：`/v1/messages` 出站转换与翻回（含流式与 5xx）；
+/// * `providers-*`：`/providers` 管理端点（GET / 六个 action / 错误形态 / 405）。
+///
+/// 其中没有一条同时覆盖保留功能（远程图片下载、chat 主路径、探针、基线），故整条跳过；
+/// README 差异 #47 登记为**有意差异，非漂移**。
+const REMOVED_PROVIDER_SCENARIOS: [&str; 16] = [
+    "ext-chat-200",
+    "ext-chat-stream",
+    "ext-chat-400-passthrough",
+    "ext-chat-500-empty-200",
+    "ext-chat-sanitize-toolids",
+    "ext-chat-unormalized-protocol",
+    "responses-nonstream",
+    "responses-stream",
+    "responses-unexpected-shape",
+    "responses-400-passthrough",
+    "anthropic-nonstream",
+    "anthropic-stream",
+    "anthropic-500-empty-200",
+    "providers-get-cold",
+    "providers-post-actions",
+    "providers-models-error-shapes",
+];
+
 /// 金标场景输入的就地修正（只改**输入**，不改期望）。
 ///
 /// 两条远程图片场景的 Go 金标里，出站体与响应本来就是 `"model":"codely-vl"`
@@ -479,14 +505,15 @@ async fn run_all(g: Golden) -> Vec<String> {
 
     // ---------------- HTTP 场景
     for sc in &g.scenario {
-        // 已删除功能对应的 Go 金标：跳过（有意差异，见常量注释与 README #46）。
-        if REMOVED_MEDIA_SCENARIOS.contains(&sc.name.as_str()) {
+        // 已删除功能对应的 Go 金标：跳过（有意差异，见常量注释与 README #46 / #47）。
+        if REMOVED_MEDIA_SCENARIOS.contains(&sc.name.as_str())
+            || REMOVED_PROVIDER_SCENARIOS.contains(&sc.name.as_str())
+        {
             continue;
         }
         // 一个场景 = 一个隔离环境 + 一个 AppState + 一个真 HTTP 服务；
-        // 场景内所有步骤**共享状态**（Go 侧也是同一个 `Server` 跑完整串步骤——
-        // providers/media 的跨步骤语义靠这一点才可比）。
-        let sess = ScenarioRun::start(up, sc, &upstream_base).await;
+        // 场景内所有步骤**共享状态**（媒体场景的跨步骤语义靠这一点才可比）。
+        let sess = ScenarioRun::start(up, sc).await;
         for step in sc.steps() {
             let step = scenario_step(&sc.name, step);
             let got = sess.step(up, &step, &upstream_base).await;
@@ -682,7 +709,7 @@ struct ScenarioRun {
 }
 
 impl ScenarioRun {
-    async fn start(up: &scenario::FakeUpstream, sc: &ScenarioIn, upstream_base: &str) -> ScenarioRun {
+    async fn start(up: &scenario::FakeUpstream, sc: &ScenarioIn) -> ScenarioRun {
     // 每个场景一个全新的隔离环境（临时 HOME + 临时数据目录）——与 Go 采集器的
     // 「每场景清空数据目录 + 复位媒体全局」等价。
     let root = std::env::temp_dir().join(format!(
@@ -722,25 +749,6 @@ impl ScenarioRun {
         )
         .expect("写合成账号池");
     }
-    if !sc.providers.is_empty() {
-        // Zen 专用硬编码（`isZenResponsesModel`）已于 2026-10-18 按用户裁决删除：
-        // 金标 `responses-*` 场景原靠「空 protocol + opencode.ai/zen」自动走 Responses，
-        // 现在必须在配置里显式写 `"protocol":"responses"`。改写后的输入与 Go 侧
-        // 「显式 protocol=responses」等价，金标响应/出站体仍逐字节可比。
-        // 其他场景的 providers 可能是**换行分隔的多个对象**（原样写盘），故只改 responses-*。
-        let mut providers = sc.providers.replace("{UP}", upstream_base);
-        if sc.name.starts_with("responses-") {
-            let mut pv: serde_json::Value =
-                serde_json::from_str(&providers).expect("解析场景 provider 配置");
-            pv["protocol"] = serde_json::json!("responses");
-            providers = serde_json::to_string(&pv).expect("序列化场景 provider 配置");
-        }
-        std::fs::write(
-            data.join("tuanjie-providers.json"),
-            format!("[{providers}]"),
-        )
-        .expect("写 provider 配置");
-    }
 
     up.reset_scripts();
     up.set_image_body(FAKE_IMAGE.to_vec());
@@ -765,7 +773,7 @@ impl ScenarioRun {
         }
     }
 
-    rs_tuanjie::client::set_test_bases(upstream_base.to_string(), upstream_base.to_string());
+    rs_tuanjie::client::set_test_bases(up.base(), up.base());
     let st = Arc::new(AppState::new().expect("构造 AppState"));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -882,7 +890,7 @@ async fn run_probe_call(
         None,
         &cost,
         &backoff,
-        rs_tuanjie::responses_forward::now_unix(),
+        rs_tuanjie::client::now_unix(),
     )
     .await;
     let seen = up.seen();
@@ -890,7 +898,7 @@ async fn run_probe_call(
         .first()
         .map(|s| s.body.clone())
         .unwrap_or_default();
-    let headers = target.request_headers("/v1/chat/completions", rs_tuanjie::responses_forward::now_unix());
+    let headers = target.request_headers("/v1/chat/completions", rs_tuanjie::client::now_unix());
     (
         body,
         call,
@@ -921,7 +929,7 @@ async fn run_pipeline(up: &scenario::FakeUpstream) -> Vec<rs_tuanjie::probes::Pr
         &cost,
         &backoff,
         rs_tuanjie::probes::RATE_LIMIT_STORM_THRESHOLD,
-        rs_tuanjie::responses_forward::now_unix(),
+        rs_tuanjie::client::now_unix(),
     )
     .await;
     up.set_pipeline_mode(false);

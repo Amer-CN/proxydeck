@@ -1,12 +1,11 @@
-//! media.rs —— 多模态能力判定 + schema 修复 + 远程图片预下载。
+//! media.rs —— 多模态能力判定 + 远程图片预下载。
 //!
-//! 2026-10-18 用户裁决：**删除**生图/生视频（Agnes 两条链路）与「识图改路由」。
-//! 本模块只保留仍被其它路径复用的纯函数：
+//! 2026-10-18 用户裁决：**删除**生图/生视频（Agnes 两条链路）、「识图改路由」与
+//! 外部服务商三协议转发。本模块只保留仍被其它路径复用的纯函数：
 //!
 //! * [`multimodal_reject_message`]：请求含非文本内容块（图片/音频等）而目标模型不在
 //!   [`BUILTIN_VISION_CAPABLE`] 里 → 给出明确 400 文案（列出可用多模态模型）。
 //!   **不再改写 model 后继续请求**（旧 `RerouteIfMedia` 已删）。
-//! * [`sanitize_for_external`]：补 `tool_call_id`（学群友 `_sanitize_for_external`）。
 //! * [`fetch_remote_images`] + `data:` URI 转换 + 魔术字节嗅探。
 //!
 //! 端点 `/vision-config`、`/media-config`、`/v1/images/generations`、`/v1/videos*`、
@@ -36,7 +35,8 @@ pub const MAX_IMAGE_BYTES: usize = 10 << 20;
 /// 是否值得回落重试 —— `shouldFallback`（`media.go:175-177`）：
 /// 网络错（-1）/ 5xx / 429 是瞬时故障；4xx 配置错原样透传。
 ///
-/// 生图/生视频链路删除后，本函数仍被 [`crate::providers`] 与三条转换转发路径复用。
+/// 原调用方（外部服务商三协议转发路径）已随自定义服务商整体删除（2026-10-18），
+/// 函数**保留**（公开 API + 单测），行为不变。
 pub fn should_fallback(status: i32) -> bool {
     status == -1 || status >= 500 || status == 429
 }
@@ -93,109 +93,6 @@ pub fn detect_media_type(body: &[u8]) -> String {
         }
     }
     String::new()
-}
-
-/// 修复客户端历史消息里缺失的 `tool_call_id` —— `sanitizeForExternal`（`media.go:363-431`）。
-/// 无 messages 或解析失败时原样返回。
-pub fn sanitize_for_external(body: &[u8]) -> Vec<u8> {
-    let Ok(v) = serde_json::from_slice::<serde_json::Value>(body) else {
-        return body.to_vec();
-    };
-    let Some(obj) = v.as_object() else {
-        return body.to_vec();
-    };
-    let Some(msgs) = obj.get("messages").and_then(|m| m.as_array()).cloned() else {
-        return body.to_vec();
-    };
-    let mut pending_ids: Vec<String> = Vec::new();
-    let mut out_msgs: Vec<serde_json::Value> = Vec::with_capacity(msgs.len());
-    for raw in msgs {
-        let Some(msg) = raw.as_object() else {
-            out_msgs.push(raw);
-            continue;
-        };
-        let mut msg = msg.clone();
-        let role = msg
-            .get("role")
-            .and_then(|r| r.as_str())
-            .unwrap_or("")
-            .to_string();
-        if role == "assistant" {
-            let Some(tcs) = msg.get("tool_calls").and_then(|t| t.as_array()).cloned() else {
-                out_msgs.push(serde_json::Value::Object(msg));
-                continue;
-            };
-            let mut new_tcs: Vec<serde_json::Value> = Vec::with_capacity(tcs.len());
-            for raw_tc in tcs {
-                let Some(tc) = raw_tc.as_object() else {
-                    new_tcs.push(raw_tc);
-                    continue;
-                };
-                let mut tc = tc.clone();
-                let mut cid = tc
-                    .get("id")
-                    .and_then(|i| i.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                if cid.is_empty() {
-                    cid = format!("call_{}", crate::inflight::next_rid());
-                    tc.insert("id".to_string(), serde_json::Value::String(cid.clone()));
-                }
-                pending_ids.push(cid);
-                new_tcs.push(serde_json::Value::Object(tc));
-            }
-            msg.insert("tool_calls".to_string(), serde_json::Value::Array(new_tcs));
-            out_msgs.push(serde_json::Value::Object(msg));
-        } else if role == "tool" {
-            let tcid = msg
-                .get("tool_call_id")
-                .and_then(|t| t.as_str())
-                .unwrap_or("")
-                .to_string();
-            if !tcid.is_empty() {
-                out_msgs.push(serde_json::Value::Object(msg));
-                continue;
-            }
-            if !pending_ids.is_empty() {
-                let id = pending_ids.remove(0);
-                msg.insert("tool_call_id".to_string(), serde_json::Value::String(id));
-                out_msgs.push(serde_json::Value::Object(msg));
-                continue;
-            }
-            // 无对应调用：降级为 user 文本消息
-            let text = match msg.get("content") {
-                Some(serde_json::Value::Array(parts)) => {
-                    let texts: Vec<String> = parts
-                        .iter()
-                        .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
-                        .filter(|t| !t.is_empty())
-                        .map(|t| t.to_string())
-                        .collect();
-                    texts.join(" ")
-                }
-                Some(serde_json::Value::String(s)) => s.clone(),
-                _ => String::new(),
-            };
-            msg.insert(
-                "role".to_string(),
-                serde_json::Value::String("user".to_string()),
-            );
-            msg.insert(
-                "content".to_string(),
-                serde_json::Value::String(format!("[tool result] {text}")),
-            );
-            msg.remove("tool_call_id");
-            out_msgs.push(serde_json::Value::Object(msg));
-        } else {
-            out_msgs.push(serde_json::Value::Object(msg));
-        }
-    }
-    let mut root = obj.clone();
-    root.insert(
-        "messages".to_string(),
-        serde_json::Value::Array(out_msgs),
-    );
-    crate::gojson::marshal_go_value(&serde_json::Value::Object(root))
 }
 
 // ---------------------------------------------------------------- 远程图片
@@ -361,32 +258,6 @@ mod tests {
         assert_eq!(detect_media_type(br#"{"messages":[{"content":[{"type":"text"}]}]}"#), "");
         assert_eq!(detect_media_type(br#"{"messages":[]}"#), "");
         assert_eq!(detect_media_type(b"oops"), "");
-    }
-
-    #[test]
-    fn sanitize_for_external_fills_and_degrades_tool_ids() {
-        // 缺 id 的 tool_call 补齐；后面的 tool 消息按序回填
-        let body = br#"{"messages":[{"role":"assistant","tool_calls":[{"type":"function","function":{"name":"f","arguments":"{}"}}]},{"role":"tool","content":"r"}]}"#;
-        let out = sanitize_for_external(body);
-        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
-        let cid = v["messages"][0]["tool_calls"][0]["id"].as_str().unwrap().to_string();
-        assert!(cid.starts_with("call_"), "{cid}");
-        assert_eq!(v["messages"][1]["tool_call_id"], serde_json::json!(cid));
-        // 无对应调用 ⇒ 降级为 user 文本
-        let body = br#"{"messages":[{"role":"tool","content":[{"type":"text","text":"a"},{"type":"text","text":"b"}]}]}"#;
-        let v: serde_json::Value = serde_json::from_slice(&sanitize_for_external(body)).unwrap();
-        assert_eq!(v["messages"][0]["role"], serde_json::json!("user"));
-        assert_eq!(v["messages"][0]["content"], serde_json::json!("[tool result] a b"));
-        assert!(v["messages"][0].get("tool_call_id").is_none());
-        // 已有 id / 无 messages / 非 JSON：原样
-        // 已有 id：不改语义，但会走 Go 的「解成 map 再 Marshal」⇒ 键排序后的形态
-        let ok = br#"{"messages":[{"role":"tool","tool_call_id":"x","content":"r"}]}"#;
-        assert_eq!(
-            String::from_utf8(sanitize_for_external(ok)).unwrap(),
-            r#"{"messages":[{"content":"r","role":"tool","tool_call_id":"x"}]}"#
-        );
-        assert_eq!(sanitize_for_external(b"{not json"), b"{not json");
-        assert_eq!(sanitize_for_external(br#"{"other":1}"#), br#"{"other":1}"#);
     }
 
     #[test]

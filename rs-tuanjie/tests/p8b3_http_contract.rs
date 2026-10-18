@@ -242,8 +242,7 @@ async fn unimplemented_routes_say_so_instead_of_pretending() {
         Some("text/plain; charset=utf-8")
     );
 
-    // `/v1/chat/completions` 已在 P8b 第四片迁入（池路径 + 单账号路径）；
-    // `/providers` 已在 P8b 第五片迁入 —— 都不再是 404。
+    // `/v1/chat/completions` 已在 P8b 第四片迁入（池路径 + 单账号路径）。
     // GET `/v1/chat/completions` 走 Go 同款的 `http.Error(w,"method not allowed",405)`。
     let (status, headers, body) = call(st.clone(), "GET", "/v1/chat/completions").await;
     assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED, "GET chat 应回 405");
@@ -254,16 +253,11 @@ async fn unimplemented_routes_say_so_instead_of_pretending() {
             .and_then(|v| v.to_str().ok()),
         Some("text/plain; charset=utf-8")
     );
-    // `/providers`：GET 是**本地应答**（不是 axum 的 404/405）
-    let (status, _h, body) = call(st.clone(), "GET", "/providers").await;
-    assert_eq!(status, StatusCode::OK, "/providers 的 GET 应本地应答：{body:?}");
-    assert!(
-        !body.contains("not_implemented_in_pilot"),
-        "/providers 不该再报未迁：{body:?}"
-    );
-    // **2026-10-18 有意删除**：生图/生视频与三路媒体配置端点不再注册 ⇒ Go `http.NotFound`
-    // 形态的 404（不假装已通，也不返回 405/501）。四种方法都验一遍。
+    // **2026-10-18 有意删除**：自定义服务商（含 `/providers`）与生图/生视频、三路媒体配置
+    // 端点不再注册 ⇒ Go `http.NotFound` 形态的 404（不假装已通，也不返回 405/501）。
+    // 四种方法都验一遍。
     for path in [
+        "/providers",
         "/vision-config",
         "/media-config",
         "/v1/images/generations",

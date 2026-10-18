@@ -87,8 +87,6 @@ pub struct AppState {
     pub media_reroutes: AtomicI64,
     /// chat 路径的可注入时序（池路径 429 兜底的换号退避）。
     pub chat_timing: crate::chat::ChatTiming,
-    /// 外部账号（`server.go:46` 的 `providers`）——管理 + 信息展示 + 三协议转发。
-    pub providers: Arc<crate::providers::ProviderStore>,
     /// 绝对基准库（`server.go:47` 的 `baselines`）——**启动时加载进内存**，
     /// 改/删条目必须重启才生效（CLAUDE.md 坑 15）。
     pub baselines: Arc<crate::probes::BaselineStore>,
@@ -96,10 +94,6 @@ pub struct AppState {
     pub fetch_img_client: reqwest::Client,
     /// 注水检测器（被动观测 + 别名解析 + 金丝雀基线）—— `server.go:43` 的 `water`。
     pub water: Arc<crate::water::WaterCheck>,
-    /// 外部 provider 转发路径用的**丢弃式**注水实例：Go 的 `external` 分支不经团结
-    /// 的 `usageScanner`（没有 water 记账），Rust 侧流式复用了同一个扫描器，
-    /// 故把它的 water 副作用导向这里（不落盘、不污染生产表）。**不是** Go 有的东西。
-    pub water_scratch: Arc<crate::water::WaterCheck>,
     /// 探针成本/限流计数器 —— `probes.go:28-52` 的四个包级 atomic。
     pub probe_cost: crate::probes::ProbeCost,
     /// 疑似官方判定变更告警 —— `server.go:49` 的 `judgeAlert`（`noteUpstreamError/OK` 更新）。
@@ -124,14 +118,12 @@ impl AppState {
             quota_cache: Arc::new(QuotaCache::new()),
             media_reroutes: AtomicI64::new(0),
             chat_timing: crate::chat::ChatTiming::default(),
-            providers: Arc::new(crate::providers::ProviderStore::new()),
             baselines: Arc::new(crate::probes::BaselineStore::new()),
             fetch_img_client: reqwest::Client::builder()
                 .timeout(crate::media::FETCH_IMG_TIMEOUT)
                 .build()
                 .map_err(crate::Error::Forward)?,
             water: Arc::new(crate::water::WaterCheck::new()),
-            water_scratch: Arc::new(crate::water::WaterCheck::detached()),
             probe_cost: crate::probes::ProbeCost::new(),
             judge_alert: crate::chat::JudgeAlert::new(),
             seed_guard: Arc::new(crate::seedcheck::SeedGuard::new()),
@@ -160,9 +152,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/inflight", any(handle_inflight))
         // 注水检测（P8c）：history/channels/quick 已实现，其余动作显式 501。
         .route("/water-probe", any(crate::water_handler::handle_water_probe))
-        // 外部账号（管理 + 信息展示）—— `server.go:131`。
-        .route("/providers", any(crate::providers::handle_providers))
-        // 生图/生视频与识图改路由已按用户裁决删除（2026-10-18）：不注册即 404。
+        // 自定义服务商（`/providers`）与生图/生视频、识图改路由及三路媒体配置均已按
+        // 用户裁决删除（2026-10-18）：不注册即 404（见 README 差异 #46 / #47）。
         // 未匹配路径：Go `http.ServeMux` 的 404 体（`http.NotFound` → `http.Error` 的
         // `"404 page not found\n"` + `text/plain; charset=utf-8` + nosniff）。
         // axum 默认回**空体**，不补就对不上。**未迁**：ServeMux 的路径清洗 307
