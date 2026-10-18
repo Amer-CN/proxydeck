@@ -738,6 +738,41 @@ fn single_account_always_empty_returns_502_with_go_message() {
     })
 }
 
+/// 单账号路径的上游错误体也必须人性化。
+///
+/// 2026-10-18 收尾任务①的**第二个调用点**：池路径先修，单账号路径后补——
+/// 原来 `finish_non_200` 把上游 body 整串塞进我们的 `error.message`，客户端拿到
+/// `{"error":{"message":"{\"error\":{\"message\":\"…\"}}"}}` 这种转义 JSON。
+/// 单账号又是多数用户的默认路径，所以必须单独钉一条。
+///
+/// 同时守住：**判定告警仍按原始 body 计数**（人性化只影响回给客户端的文案，
+/// 不能把 judge 的模式匹配喂成半截人话）。
+#[test]
+fn single_account_upstream_json_error_body_is_humanized() {
+    run_locked(|| async {
+        let run = Run::new("humanize-single", &["uid-a"]);
+        run.force_single_account();
+        let up = shared_upstream();
+        let key_a = run.key_of("uid-a");
+        let upstream_body =
+            r#"{"error":{"message":"team not allowed to access model","type":"auth_error"}}"#;
+        up.set_chat_script(&key_a, vec![(400, "", upstream_body)]);
+
+        let (status, text) = post_chat(run.st.clone(), KIMI_REQ.as_bytes().to_vec()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "上游 400 原样透传状态码");
+
+        let v: serde_json::Value = serde_json::from_str(&text).expect("合法 JSON");
+        assert_eq!(
+            v["error"]["message"], "team not allowed to access model",
+            "单账号路径必须抽出内层人话"
+        );
+        assert!(
+            !text.contains("\\\"error\\\""),
+            "响应里不应再出现转义的 error 片段：{text}"
+        );
+    })
+}
+
 // ---------------------------------------------------------------- 瞬时错误重发（≤3）
 
 /// 上游 5xx（可重试报文）：**清 key 缓存 + 800ms + 重发**，上限 3 次
@@ -759,10 +794,10 @@ fn transient_5xx_is_retried_up_to_three_times_then_passed_through() {
         assert_eq!(status, StatusCode::BAD_GATEWAY);
         assert_eq!(
             text,
-            // 池里只有 1 个号（= 本地号）⇒ 走**单账号路径**：`writeErr` 包装上游错误体
-            // （Go `server.go:1362` 同一形态）。
-            "{\"error\":{\"message\":\"{\\\"error\\\":{\\\"message\\\":\\\"bad gateway\\\"}}\",\
-             \"type\":\"api_error\"}}\n"
+            // 池路径非 200 ⇒ `write_err(reply.status, humanize_upstream_error(body))`：
+            // 上游 `{"error":{"message":"bad gateway"}}` 抽出内层人话，不再整串转义
+            // （2026-10-18 收尾任务①）。
+            "{\"error\":{\"message\":\"bad gateway\",\"type\":\"api_error\"}}\n"
         );
         assert_eq!(
             up.chat_calls(&key_a),

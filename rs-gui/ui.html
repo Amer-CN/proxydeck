@@ -2905,7 +2905,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
 
                 <div class="pt-subhead"><span class="pt-silk sm">账号池 · Accounts</span>
                   <button type="button" class="ibtn2" id="tjMatrixBtn" title="全屏查看账号矩阵（每账号一张信息卡）">▦ 账号矩阵</button></div>
-                <div class="acc-list" id="tjAccList"><div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号启用多账号轮换</div></div>
+                <div class="acc-list" id="tjAccList" role="list"><div class="if-empty">// 单账号模式（读桌面端登录态）· 添加账号启用多账号轮换</div></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm">进行中请求 · Inflight</span></div>
                 <div class="if-list" id="tjInflight"><div class="if-empty">// 流式请求进行时实时显示</div></div>
@@ -3033,7 +3033,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <span class="pt-val" id="cbAccCount"></span>
                   <button type="button" class="ibtn2" id="cbAccRescan">↻ 重新扫描</button></div>
                 <p class="pt-notice" id="cbAccHint" style="margin-bottom:6px">添加账号：在 WorkBuddy 桌面端登录该账号，然后点「↻ 重新扫描」自动入池。停用/移除 只影响代理轮换，不动桌面端的登录文件。</p>
-                <div id="cbAccounts"><div class="pt-models-empty">// 插件启动后自动拉取</div></div>
+                <div id="cbAccounts" role="list"><div class="pt-models-empty">// 插件启动后自动拉取</div></div>
                 <script>
                 /* WorkBuddy 账号池区（第三期）：看池 / 重新扫描 / 提前恢复 / 停用启用 / 移除恢复。
                    自包含块——本文件的引擎与业务层脚本都在其后解析，绑定一律推迟到
@@ -3116,13 +3116,19 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                         (load > 0 ? ' · <b class="warn">进行中 ' + load + '</b>' : '') +
                         ((a.cooling && !a.dead) ? ' · 冷却至 ' + accEsc(accFmt(a.limited_until)) : '') +
                         (a.last_used ? ' · 最近 ' + accEsc(String(a.last_used).slice(5, 16).replace('T', ' ')) : '');
+                      /* 无障碍：把该行关键信息串成一句话（用户名 + 状态 + 调用次数），
+                         供读屏软件整行播报；纯属性，不改布局/样式/交互。 */
+                      var accName = a.nickname || a.uid_short || '?';
+                      var ariaState = isOff ? '已移除' : a.dead ? '凭据失效' : isExh ? '额度耗尽'
+                        : isDisabled ? '已停用' : a.cooling ? ('冷却至 ' + accFmt(a.limited_until)) : '可用';
+                      var rowAria = accEsc(accName + '，' + ariaState + '，用 ' + (a.use_count || 0) + ' 次');
                       var acts = isOff
-                        ? '<button type="button" class="ibtn2" data-acc-restore="' + accEsc(a.uid) + '">恢复</button>'
-                        : '<button type="button" class="ibtn2" data-acc-toggle="' + accEsc(a.uid) + '" data-on="' + (isDisabled ? '0' : '1') + '">' + (isDisabled ? '启用' : '停用') + '</button>' +
-                          '<button type="button" class="ibtn2" data-acc-remove="' + accEsc(a.uid) + '">移除</button>' +
-                          ((a.cooling && !a.dead) ? '<button type="button" class="ibtn2" data-acc-cool="' + accEsc(a.uid) + '">提前恢复</button>' : '') +
-                          (isExh ? '<button type="button" class="ibtn2" data-acc-exh="' + accEsc(a.uid) + '">额度恢复</button>' : '');
-                      return '<div class="acc-row' + (off ? ' off' : '') + '">' +
+                        ? '<button type="button" class="ibtn2" data-acc-restore="' + accEsc(a.uid) + '" aria-label="恢复账号 ' + accEsc(accName) + '">恢复</button>'
+                        : '<button type="button" class="ibtn2" data-acc-toggle="' + accEsc(a.uid) + '" data-on="' + (isDisabled ? '0' : '1') + '" aria-label="' + (isDisabled ? '启用账号 ' : '停用账号 ') + accEsc(accName) + '">' + (isDisabled ? '启用' : '停用') + '</button>' +
+                          '<button type="button" class="ibtn2" data-acc-remove="' + accEsc(a.uid) + '" aria-label="移除账号 ' + accEsc(accName) + '">移除</button>' +
+                          ((a.cooling && !a.dead) ? '<button type="button" class="ibtn2" data-acc-cool="' + accEsc(a.uid) + '" aria-label="提前恢复账号 ' + accEsc(accName) + '">提前恢复</button>' : '') +
+                          (isExh ? '<button type="button" class="ibtn2" data-acc-exh="' + accEsc(a.uid) + '" aria-label="额度恢复账号 ' + accEsc(accName) + '">额度恢复</button>' : '');
+                      return '<div class="acc-row' + (off ? ' off' : '') + '" role="listitem" aria-label="' + rowAria + '">' +
                         '<div><div class="a-name">' + accEsc(a.nickname || a.uid_short || '?') + '</div><div class="a-meta">' + meta + '</div></div>' +
                         '<div>' + tag + '</div>' +
                         '<div class="acc-act">' + acts + '</div></div>';
@@ -5582,12 +5588,15 @@ var PT_I18N = {
         var meta = (a.username ? escHtml(a.username) + ' · ' : '') + '用 ' + (a.use_count || 0) + ' 次' +
           (a.inflight ? ' · <b class="warn">进行中 ' + a.inflight + '</b>' : '') +
           (a.token_expires && a.token_expires !== '未知' ? ' · token 至 ' + a.token_expires : '');
-        h += '<div class="acc-row' + (a.enabled ? '' : ' off') + '">' +
+        /* 无障碍：整行一句话播报（账号 + 状态 + 调用次数）；纯属性，不改布局/样式/交互。 */
+        var accState = !a.enabled ? '已停用' : a.budget_exceeded ? '配额用尽' : '可用';
+        var rowAria = escHtml(a.user_id + '，' + accState + '，用 ' + (a.use_count || 0) + ' 次');
+        h += '<div class="acc-row' + (a.enabled ? '' : ' off') + '" role="listitem" aria-label="' + rowAria + '">' +
           '<div><div class="a-name">' + escHtml(a.user_id) + '</div><div class="a-meta">' + meta + '</div></div>' +
           '<div>' + tags + '</div>' +
           '<div class="acc-act">' +
-          '<button type="button" class="ibtn2" data-acc-toggle="' + escHtml(a.user_id) + '" data-on="' + a.enabled + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
-          '<button type="button" class="ibtn2" data-acc-del="' + escHtml(a.user_id) + '">删</button>' +
+          '<button type="button" class="ibtn2" data-acc-toggle="' + escHtml(a.user_id) + '" data-on="' + a.enabled + '" aria-label="' + (a.enabled ? '停用账号 ' : '启用账号 ') + escHtml(a.user_id) + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
+          '<button type="button" class="ibtn2" data-acc-del="' + escHtml(a.user_id) + '" aria-label="删除账号 ' + escHtml(a.user_id) + '">删</button>' +
           '</div></div>';
       });
       /* 内容键没变（绝大多数 tick）跳过整块重建与按钮重挂——账号多时每 3s
@@ -5714,7 +5723,10 @@ var PT_I18N = {
       modelLine = '<span style="color:var(--pt-silk);font-style:italic;font-size:12px">兜底（接未认领模型）</span>' +
         '<button type="button" class="ibtn2" data-mx-madd="' + escHtml(a.user_id) + '" style="margin-left:auto">模型分配</button>';
     }
-    return '<div class="mx-card' + (a.enabled ? '' : ' off') + '">' +
+    /* 无障碍：账号矩阵卡片与甲板里的 .acc-row 同口径，整卡一句话播报。 */
+    var mxState = !a.enabled ? '已停用' : a.budget_exceeded ? '配额用尽' : '可用';
+    var mxAria = escHtml((a.username || a.user_id) + '，' + mxState + '，用 ' + (a.use_count || 0) + ' 次');
+    return '<div class="mx-card' + (a.enabled ? '' : ' off') + '" role="listitem" aria-label="' + mxAria + '">' +
       '<div class="mx-top"><span class="mx-led' + (a.enabled && !a.budget_exceeded ? '' : ' off') + '"></span>' +
       '<span class="mx-name">' + escHtml(a.username || a.user_id) + '</span>' +
       '<span class="mx-uid">#' + escHtml(a.user_id) + '</span></div>' +
@@ -5788,6 +5800,7 @@ var PT_I18N = {
         return;
       }
       grid.className = 'mx-grid';
+    grid.setAttribute('role', 'list');
       var gridHtml = accs.map(function (a) { return mxCardHtml(a); }).join('');
       /* 内容键没变跳过整块重建与重绑（卡片上的进行中徽章/状态全部来自 d，sig 已覆盖） */
       if (grid.__sig !== 'mx-grid|' + gridHtml) {

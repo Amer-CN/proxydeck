@@ -387,7 +387,22 @@ fn chat_pool_path_matches_the_go_golden() {
                 "[{}] content-type 分歧",
                 g.name
             );
-            assert_eq!(got.body, g.body, "[{}] 响应体逐字节分歧", g.name);
+            // 2026-10-18 收尾任务①：上游非 200 的错误体现在会抽出 `error.message`
+            // （人话），不再整串转义进我们的 message。金标是 Go 旧行为的逐字节记录，
+            // **故意保留原件**；这两条显式断言新的期望体，其余场景仍逐字节对照。
+            let humanized = match g.name.as_str() {
+                "chat-retry-5xx" => Some(
+                    "{\"error\":{\"message\":\"bad gateway\",\"type\":\"api_error\"}}\n",
+                ),
+                "chat-noretry-400" => Some(
+                    "{\"error\":{\"message\":\"Invalid model name passed in model=None\",\"type\":\"api_error\"}}\n",
+                ),
+                _ => None,
+            };
+            match humanized {
+                Some(want) => assert_eq!(got.body, want, "[{}] 人性化后的响应体", g.name),
+                None => assert_eq!(got.body, g.body, "[{}] 响应体逐字节分歧", g.name),
+            }
             assert_eq!(
                 got.retry_after, g.retry_after,
                 "[{}] Retry-After 分歧",
@@ -437,6 +452,16 @@ fn golden_files_exist() {
             && x.body.contains("data: [DONE]")),
         "流式场景必须带着 stream 请求与 SSE 体"
     );
+    // 金标是 Go 旧行为：两条上游错误场景仍记录着「整串转义」的 message。
+    // 收尾任务① 之后 Rust 侧故意人性化，差异由 `chat_pool_path_matches_the_go_golden`
+    // 显式断言（金标原件不改）。
+    for name in ["chat-retry-5xx", "chat-noretry-400"] {
+        let g = g.iter().find(|x| x.name == name).expect("金标场景存在");
+        assert!(
+            g.body.contains("\\\"error\\\":"),
+            "[{name}] 金标应仍是 Go 旧行为（整串转义）"
+        );
+    }
     // 基准里的 200 场景必须带 `Cache-Control: no-cache`（否则那条断言形同虚设——
     // 采集器第一版用 `rec.Result().Header` 取到的是空串，正是这么漏过去的）。
     assert!(

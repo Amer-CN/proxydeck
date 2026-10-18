@@ -358,6 +358,129 @@ pub fn retriable_upstream(body: &str) -> bool {
     .any(|s| low.contains(s))
 }
 
+/// 上游错误体人性化：把 `{"error":{"message":"…"}}` / `{"error":"…"}` 里的人话取出来，
+/// 不再把整串 JSON 转义进我们自己的 `error.message`。
+///
+/// 取不到（非 JSON / 结构不符 / message 为空）时退回原文，按**字符**截断到 600
+/// （防上游整页 HTML 之类把响应撑爆）。**抽出来的 `error.message` 也走同一个上限**
+/// ——上游那个字段理论无上限。空 body 返回空串（`write_err` 会照常包一层空 message，
+/// 与改动前行为一致，不是「调用方另有兜底」）。
+pub fn humanize_upstream_error(body: &[u8]) -> String {
+    // 退回原文时的字符上限（不是字节，避免切碎 UTF-8）。
+    const MAX_CHARS: usize = 600;
+    if let Ok(v) = serde_json::from_slice::<serde_json::Value>(body) {
+        // 1) 标准 OpenAI 形态：{"error":{"message":"…"}}
+        // 抽出来的人话同样要限长：上游 `error.message` 理论无上限
+        //（池体上限 64MB / 单账号 1MB），不截断就等于把响应撑爆。
+        let clip = |m: &str| -> String { m.chars().take(MAX_CHARS).collect() };
+        if let Some(msg) = v
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+        {
+            if !msg.trim().is_empty() {
+                return clip(msg);
+            }
+        }
+        // 2) 简化形态：{"error":"…"}
+        if let Some(msg) = v.get("error").and_then(|e| e.as_str()) {
+            if !msg.trim().is_empty() {
+                return clip(msg);
+            }
+        }
+    }
+    String::from_utf8_lossy(body)
+        .chars()
+        .take(MAX_CHARS)
+        .collect()
+}
+
+#[cfg(test)]
+mod humanize_error_tests {
+    use super::humanize_upstream_error;
+
+    #[test]
+    fn extracts_nested_error_message() {
+        assert_eq!(
+            humanize_upstream_error(
+                br#"{"error":{"message":"team not allowed","type":"auth_error"}}"#
+            ),
+            "team not allowed"
+        );
+    }
+
+    #[test]
+    fn extracts_plain_error_string() {
+        assert_eq!(
+            humanize_upstream_error(br#"{"error":"upstream exploded"}"#),
+            "upstream exploded"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_raw_text_when_not_json() {
+        assert_eq!(
+            humanize_upstream_error(b"<html>502 Bad Gateway</html>"),
+            "<html>502 Bad Gateway</html>"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_raw_text_when_error_shape_mismatch() {
+        assert_eq!(
+            humanize_upstream_error(br#"{"detail":"nope"}"#),
+            r#"{"detail":"nope"}"#
+        );
+    }
+
+    #[test]
+    fn falls_back_when_message_is_empty() {
+        assert_eq!(
+            humanize_upstream_error(br#"{"error":{"message":"  "}}"#),
+            r#"{"error":{"message":"  "}}"#
+        );
+    }
+
+    #[test]
+    fn empty_body_yields_empty_string() {
+        assert_eq!(humanize_upstream_error(b""), "");
+    }
+
+    #[test]
+    fn truncates_extracted_message_too() {
+        // 抽出的 error.message 同样不能整段塞进响应
+        let long = "长".repeat(5000);
+        let body = format!(r#"{{"error":{{"message":"{long}"}}}}"#);
+        let out = humanize_upstream_error(body.as_bytes());
+        assert_eq!(out.chars().count(), 600, "抽出的 message 必须也截到 600 字符");
+        assert!(long.starts_with(&out), "截断必须是原文前缀");
+    }
+
+    #[test]
+    fn odd_error_shapes_do_not_panic() {
+        // error 是数组 / 数字 / 对象 / 布尔，都应退回原文而不是 panic
+        for body in [
+            br#"{"error":[1,2,3]}"#.as_slice(),
+            br#"{"error":42}"#,
+            br#"{"error":true}"#,
+            br#"{"error":{"code":1}}"#,
+            b"{bad json",
+            &[0xff, 0xfe, 0x00],
+        ] {
+            let out = humanize_upstream_error(body);
+            assert!(!out.is_empty() || body.is_empty(), "异常形态应退回原文");
+        }
+    }
+
+    #[test]
+    fn truncates_raw_text_to_600_chars() {
+        let raw = "错".repeat(700);
+        let out = humanize_upstream_error(raw.as_bytes());
+        assert_eq!(out.chars().count(), 600);
+        assert!(raw.starts_with(&out), "截断必须是原文前缀");
+    }
+}
+
 /// `hasStreamDataLine`（`server.go:2133-2135`）：首段以 `data:` 开头，或含 `\ndata:`。
 pub fn has_stream_data_line(head: &[u8]) -> bool {
     head.starts_with(b"data:") || contains(head, b"\ndata:")
@@ -1616,7 +1739,7 @@ async fn finish_pool(
                 // 判定告警计数 —— `server.go:1193`。
                 st.judge_alert
                     .note_upstream_error(reply.status.as_u16(), &String::from_utf8_lossy(&reply.body));
-                return write_err(reply.status, &String::from_utf8_lossy(&reply.body));
+                return write_err(reply.status, &humanize_upstream_error(&reply.body));
             }
             // 上游 200：告警计数清零 —— `server.go:1198`。
             st.judge_alert.note_upstream_ok();
@@ -1774,10 +1897,15 @@ async fn finish_non_200(
     ));
     // 单账号路径 402：标记本地账号配额用尽（选号自动绕过、GUI 出 402 徽章），
     // 返回可读中文；上游原始报错拼在尾部供排查（`server.go:1332-1359`）。
-    let mut msg = String::from_utf8_lossy(&err_body).into_owned();
+    //
+    // 2026-10-18：`msg` 改为走 `humanize_upstream_error`——原来把上游 body 整串
+    // 塞进我们的 `error.message`，客户端拿到的是转义 JSON（与池路径同一个毛病）。
+    // 判定告警仍吃**原始 body**（它要做模式匹配），故单独留一份 `raw_msg`。
+    let raw_msg = String::from_utf8_lossy(&err_body).into_owned();
+    let mut msg = humanize_upstream_error(&err_body);
     // 判定告警计数 —— `server.go:1357`（402 分支）/`:1361`（其余非 200）。
     st.judge_alert
-        .note_upstream_error(status.as_u16(), &msg);
+        .note_upstream_error(status.as_u16(), &raw_msg);
     if status == reqwest::StatusCode::PAYMENT_REQUIRED {
         if let Some(acc) = st.pool.local_account() {
             let uid = acc.user_id.clone();

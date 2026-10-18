@@ -384,6 +384,15 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
     上）——是后端宿主就等自然消亡，不要硬删；也不要拿改名/删除试探结论当证据。
     （v3.20.5 起更新流自动换血，此条只剩手动腾位场景。）
 
+23. **`Copy-Item` 会保留源文件 mtime → cargo 跳过重建，人会看到"假失败"**（2026-10-18
+    两次踩中）：用 `Copy-Item a.rs a.rs.bak` 备份、改文件、再 `Copy-Item a.rs.bak a.rs`
+    还原时，**还原后的文件带着备份时的旧 mtime**；cargo 认为"没变过"，复用上一次编译的
+    object/rlib —— 于是代码明明改对了，测试却报旧行为（当天表现为一条本该通过的用例连续
+    失败，加调试打印才发现运行的是回退版）。
+    两条规避：①**每次还原后 `(Get-Item <file>).LastWriteTime = Get-Date`**；
+    ②更可靠的是 `git checkout -- <file>` 还原（mtime 会更新），或改完直接重编一个全新
+    `CARGO_TARGET_DIR`。**排查"代码对但行为旧"时，先怀疑这个，别怀疑逻辑。**
+
 > ⚠ **本节描述的功能已于 v4.2.0 整体删除**（用户裁决：不再接外部端点）。删掉的是
 > `rs-tuanjie/src/providers.rs` / `anthropic_forward.rs` / `responses_forward.rs` /
 > `opencode_session.rs` 四个文件 + `/providers` 端点 + UI 的「服务商」副页。
@@ -450,12 +459,19 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   后端是独立常驻子进程，关 GUI 不死；**重启 GUI 不会自动点火**，需逐个拉杆。
 - **账号池内存态**：Dead/冷却/调用计数只在内存（重启清零），只有 Enabled/Removed 落盘；
   上游 reset 时点不落盘，重启丢一次无害。`codebuddy-pool(-intl).json` 已 gitignore。
-- **已知遗留**（低优先，未做）：
-  ① 错误响应格式不统一（404/405/双重包装）；
-  ② 插件端口无鉴权（仅绑 127.0.0.1 缓解）；
-  ③ Comate usage 恒 0；
-  ④ 账号区无障碍标注缺失；
-  ⑤ hy4 拨杆键盘可达性。
+- **已知遗留**（2026-10-18 收尾后现状）：
+  ① 错误响应格式不统一：**池路径 + 单账号路径**的上游错误体都已改为抽 `error.message`
+     （人话，不再整串转义；抽出的文本与退回原文都按字符截 600）；判定告警仍吃**原始 body**。
+     404/405 保持 Go `http.NotFound`/`http.Error` 逐字节原形（金标锁死，**不要统一**）。
+  ② 插件端口无鉴权（仅绑 127.0.0.1 缓解）——**用户裁决不做**：加鉴权会破坏 GUI/客户端
+     零配置直连，回环绑定是已接受的缓解面。
+  ③ Comate usage 恒 0——**用户裁决不做**：上游 SSE 不回 usage，本地算不出可靠 token 数，
+     留 0 比编数字诚实。
+  ④ 账号区无障碍标注——已补：甲板 `.acc-row` 与矩阵弹窗 `.mx-card` 都加
+     `role="listitem"` + `aria-label`（账号+状态+调用次数），行内按钮补 `aria-label`，
+     两处容器 `role="list"`。纯属性，未动布局/样式/交互。
+  ⑤ hy4/各拨杆键盘可达性——**早就是已实现状态**：`.pt-gear` 带 `role="slider"`、
+     `tabindex="0"`、方向键经引擎 `gearSelect`，`aria-valuenow` 随档位同步（本次只验证）。
 - **`p8b5` 金标**：当前跑 3 步 HTTP 用例 + 探针/基线（provider 与媒体场景按版本有意跳过，
   跳过清单见测试文件与 `rs-tuanjie/README.md` 差异表 #46/#47）。
 - 远程 main 与本地同步；仓库 github.com/Amer-CN/proxydeck（remote 名 `myrepo`，
