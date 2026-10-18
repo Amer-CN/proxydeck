@@ -44,7 +44,22 @@ pub fn unprotect_file_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
     unprotect(&ct).map_err(|e| format!("密文解密失败: {e}"))
 }
 
+/// 已经把 ACL 收紧过的目录（进程内缓存，见 [`write_file`] 的说明）。
+fn acl_done_dirs() -> &'static std::sync::Mutex<std::collections::HashSet<std::path::PathBuf>> {
+    static C: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashSet<std::path::PathBuf>>,
+    > = std::sync::OnceLock::new();
+    C.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+}
+
 /// 写数据文件：DPAPI 加密 + ACL 收紧 + tmp→rename。明文绝不落盘。
+///
+/// **ACL 每个目录只收紧一次（进程内）**：原来每次写都对目标文件跑一遍 `icacls`，
+/// 而 `accounts.rs::pick()`（**每个请求都调**）会走到这里——等于每请求起一个
+/// `icacls.exe` 子进程：既会弹黑窗（v4.2.4 已用 CREATE_NO_WINDOW 藏掉），又是
+/// 30~50ms 的纯浪费，用户侧看到的是"ProxyDeck 在不停地设置权限"。
+/// 现在改为：首次写某目录时对该**目录**设一次 `(OI)(CI)` 继承授权，之后同目录的
+/// 新文件自动继承，不再调子进程。DPAPI 密文仍是本体保护，ACL 只是纵深防御。
 pub fn write_file(path: &Path, plain: &[u8]) -> Result<(), String> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("建目录失败: {e}"))?;
@@ -52,15 +67,33 @@ pub fn write_file(path: &Path, plain: &[u8]) -> Result<(), String> {
     let enc = protect_file_bytes(plain)?;
     let tmp = std::path::PathBuf::from(format!("{}.tmp", path.display()));
     std::fs::write(&tmp, &enc).map_err(|e| format!("写临时文件失败: {e}"))?;
-    if let Err(e) = acl_user_only(&tmp) {
-        // ACL 收紧失败不阻断写入（数据本体仍然加密），但如实留痕。
-        crate::logf(&format!(
-            "ACL 收紧失败（文件仍为密文）：{}: {}",
-            path.file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default(),
-            e
-        ));
+    // 该目录还没收紧过 → 对目录设一次带继承的授权（子文件自动继承）
+    let dir_key = path.parent().map(|d| d.to_path_buf());
+    let need_acl = match &dir_key {
+        Some(d) => !acl_done_dirs().lock().unwrap().contains(d),
+        None => true,
+    };
+    if need_acl {
+        let target = dir_key.clone().unwrap_or_else(|| tmp.clone());
+        match acl_dir_user_only(&target) {
+            Ok(()) => {
+                if let Some(d) = dir_key {
+                    acl_done_dirs().lock().unwrap().insert(d);
+                }
+            }
+            Err(e) => {
+                // 目录级失败 → 退回单文件收紧（保持旧行为，只是这一次）
+                crate::logf(&format!("目录 ACL 收紧失败，退回单文件：{e}"));
+                if let Err(e2) = acl_user_only(&tmp) {
+                    // 收紧失败不阻断写入（数据本体仍然加密），但如实留痕。
+                    let name = path
+                        .file_name()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    crate::logf(&format!("ACL 收紧失败（文件仍为密文）：{name}: {e2}"));
+                }
+            }
+        }
     }
     if let Err(e) = std::fs::rename(&tmp, path) {
         let _ = std::fs::remove_file(&tmp);
@@ -230,6 +263,46 @@ fn acl_user_only(path: &Path) -> Result<(), String> {
 
 #[cfg(not(windows))]
 fn acl_user_only(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+/// 目录级授权（带 `(OI)(CI)` 继承）：**只需调一次**，之后该目录下新建的文件自动继承。
+/// 用于替代"每次写文件都跑一遍 `icacls`"——`accounts.rs::pick()` 每个请求都会写盘，
+/// 原来等于每请求起一个子进程（30~50ms + 黑窗），用户侧表现为"ProxyDeck 不停设置权限"。
+#[cfg(windows)]
+fn acl_dir_user_only(dir: &Path) -> Result<(), String> {
+    let user = std::env::var("USERNAME").unwrap_or_default();
+    if user.is_empty() {
+        return Err("USERNAME 环境变量为空，无法收紧 ACL".into());
+    }
+    let user = match (std::env::var("USERDOMAIN"), std::env::var("COMPUTERNAME")) {
+        (Ok(dom), Ok(comp)) if !dom.is_empty() && dom != comp => format!("{dom}\\{user}"),
+        _ => user,
+    };
+    let mut acl_cmd = std::process::Command::new("icacls");
+    acl_cmd
+        .arg(dir)
+        .arg("/grant:r")
+        .arg(format!("{user}:(OI)(CI)F"));
+    // CREATE_NO_WINDOW：本进程是 GUI 子系统，spawn 控制台程序会新建黑窗。
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        acl_cmd.creation_flags(0x0800_0000);
+    }
+    let out = acl_cmd
+        .output()
+        .map_err(|e| format!("icacls 调用失败: {e}"))?;
+    if !out.status.success() {
+        let text = String::from_utf8_lossy(&out.stdout);
+        let text: String = text.chars().take(300).collect();
+        return Err(format!("icacls 失败: {} ({})", out.status, text));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn acl_dir_user_only(_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
