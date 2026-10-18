@@ -451,7 +451,10 @@ const REMOVED_MEDIA_SCENARIOS: [&str; 7] = [
 /// * `anthropic-*`：`/v1/messages` 出站转换与翻回（含流式与 5xx）；
 /// * `providers-*`：`/providers` 管理端点（GET / 六个 action / 错误形态 / 405）。
 ///
-/// 其中没有一条同时覆盖保留功能（远程图片下载、chat 主路径、探针、基线），故整条跳过；
+    /// 这 16 条的期望结果只属于被删协议；其中 anthropic 三条输入含远程图片 URL，
+    /// 会顺带触发保留的 `fetch_remote_images` **失败**分支（golden 里各有一次
+    /// `GET /img/notfound.png`），但整条金标绑死已删的 Anthropic 转换，无法在保留路径
+    /// 复现，故只能跳过。`fetch_remote_images` 的成功分支由 media-fetch-* 两条继续覆盖。
 /// README 差异 #47 登记为**有意差异，非漂移**。
 const REMOVED_PROVIDER_SCENARIOS: [&str; 16] = [
     "ext-chat-200",

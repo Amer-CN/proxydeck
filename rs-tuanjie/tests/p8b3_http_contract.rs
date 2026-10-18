@@ -255,7 +255,7 @@ async fn unimplemented_routes_say_so_instead_of_pretending() {
     );
     // **2026-10-18 有意删除**：自定义服务商（含 `/providers`）与生图/生视频、三路媒体配置
     // 端点不再注册 ⇒ Go `http.NotFound` 形态的 404（不假装已通，也不返回 405/501）。
-    // 四种方法都验一遍。
+    // 两种方法都验一遍。
     for path in [
         "/providers",
         "/vision-config",

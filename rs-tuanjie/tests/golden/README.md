@@ -80,6 +80,7 @@ P8a 门禁（`../golden_p8a.rs`）优先读本目录，缺则回落 `.work/p8a/`
 ## P8b 切片的基准（`golden-p8b-go.json`）
 
 覆盖 `pacing.go` / `inflight.go` / `opencode_session.go` / `dist.go`（纯函数）/
+（注：`opencode_session` 对照用例已随「自定义服务商删除」一并移除，v4.2.0；数据键保留在 golden JSON 中不动。）
 `channels.go`（静态表）。采集器留档 `.work/p8b/zz_p8b_collect_test.go`。
 
 **再生成链**（把留档的采集器拷回 `internal/tuanjie/`，跑完立即删除）：
