@@ -156,4 +156,38 @@ fn changelog_versions_are_unique_and_strictly_descending() {
             w[1]
         );
     }
+
+    // ---- v4 段：不许跳版，且必须与仓库 CHANGELOG.md 同集合 ----
+    //
+    // 2026-10-18 追加：除了重复，还发现过**整条丢失**（v4.0.0 那条被改名链吃掉）。
+    // 所以再钉两条：① v4.* 版本号只降不跳；② 浮层里每个 v4.* 都必须在
+    // 仓库 `CHANGELOG.md` 里有同名小节（两边集合必须完全一致）。
+    let v4: Vec<(u32, u32, u32)> = versions
+        .iter()
+        .copied()
+        .filter(|v| v.0 == 4)
+        .collect();
+    assert!(v4.len() >= 5, "v4 段条目太少（{}）", v4.len());
+    for w in v4.windows(2) {
+        let (a1, b1, c1) = w[0];
+        let (a2, b2, c2) = w[1];
+        let ok = if (a1, b1) == (a2, b2) {
+            c1 - c2 == 1 // 同主.次：修订号恰好 -1
+        } else {
+            a1 - a2 == 1 || (a1 == a2 && b1 - b2 == 1) // 主/次版本进位
+        };
+        assert!(ok, "v4 版本序列跳版：{:?} 之后直接是 {:?}", w[0], w[1]);
+    }
+
+    let changelog_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("CHANGELOG.md");
+    let changelog = std::fs::read_to_string(&changelog_path).expect("读 CHANGELOG.md");
+    for v in &v4 {
+        let tag = format!("## v{}.{}.{}", v.0, v.1, v.2);
+        assert!(
+            changelog.contains(&tag),
+            "浮层里有 {tag}，但 CHANGELOG.md 里没有同名小节（两边必须同集合）"
+        );
+    }
 }
