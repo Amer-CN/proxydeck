@@ -819,10 +819,15 @@ pub fn read_cowork_install_location_with(program: &str) -> String {
 /// 普通查询本来就列子键——每个子键一行全路径、**无**前导空白（值行才有前导空白），
 /// 首行是被查的键自身。只收**直接**子键（ deeper 的要加 `/s` 才列出来，这里不处理）。
 pub fn subkeys_of(program: &str, key: &str) -> Vec<String> {
-    let Ok(out) = std::process::Command::new(program)
-        .args(["query", key])
-        .output()
-    else {
+    let mut cmd = std::process::Command::new(program);
+    cmd.args(["query", key]);
+    // CREATE_NO_WINDOW：种子卫兵每小时探一次注册表，不加就会定时弹黑窗。
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let Ok(out) = cmd.output() else {
         return Vec::new();
     };
     if !out.status.success() {

@@ -206,10 +206,18 @@ fn acl_user_only(path: &Path) -> Result<(), String> {
         (Ok(dom), Ok(comp)) if !dom.is_empty() && dom != comp => format!("{dom}\\{user}"),
         _ => user,
     };
-    let out = std::process::Command::new("icacls")
+    let mut acl_cmd = std::process::Command::new("icacls");
+    acl_cmd
         .arg(path)
         .arg("/grant:r")
-        .arg(format!("{user}:(F)"))
+        .arg(format!("{user}:(F)"));
+    // CREATE_NO_WINDOW：写状态文件（stats/pool）会走这里，每写一次弹一个黑窗。
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        acl_cmd.creation_flags(0x0800_0000);
+    }
+    let out = acl_cmd
         .output()
         .map_err(|e| format!("icacls 调用失败: {e}"))?;
     if !out.status.success() {

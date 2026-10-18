@@ -224,6 +224,13 @@ pub fn fetch_atrest_secret(exe: &str) -> Result<String, String> {
         .env("ELECTRON_RUN_AS_NODE", "1")
         .stdin(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
+    // CREATE_NO_WINDOW：codely.exe 以 Node 身份跑解密助手，是控制台程序；
+    // 本进程无控制台，spawn 它会弹黑窗（WorkBuddy 甲板读写凭据时触发）。
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
     let out = run_with_timeout(cmd, Duration::from_secs(20))
         .map_err(|e| format!("{}: {}", exe, e))?;
     let payload: serde_json::Value = serde_json::from_slice(&out)

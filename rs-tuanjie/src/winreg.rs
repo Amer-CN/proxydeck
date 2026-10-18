@@ -59,7 +59,15 @@ pub fn query_value(key: &str, name: &str) -> Option<RegValue> {
 }
 
 fn query_values_cmd(program: &str, args: &[&str]) -> Vec<(String, RegValue)> {
-    let Ok(out) = Command::new(program).args(args).output() else {
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    // CREATE_NO_WINDOW：GUI 子系统进程 spawn 控制台程序（reg.exe）会新建黑窗闪一下。
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let Ok(out) = cmd.output() else {
         return Vec::new();
     };
     if !out.status.success() {
