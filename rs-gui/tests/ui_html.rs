@@ -109,3 +109,51 @@ fn ui_html_bridge_surface_is_covered_by_our_bindings() {
         "统一调用入口的形态变了：桥的返回值约定（串/Promise 皆可）需重新核对"
     );
 }
+
+/// 更新日志浮层的版本号必须**唯一且严格降序**。
+///
+/// 为什么要有这条：2026-10-18 用户发现浮层里连着一排同样的 `v4.2.5`——根因是发版脚本
+/// 对 ui.html 做了全局 `replace(旧版本 → 新版本)`，把 `CHANGELOG_DATA` 里的**历史条目**
+/// 也一起改了名。每发一版，所有旧条目都被改成当版版本号。
+/// 发版脚本只能替换那 6 个固定位置的版本串，**不得对整文件做版本串替换**。
+#[test]
+fn changelog_versions_are_unique_and_strictly_descending() {
+    let app_ui = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("app")
+        .join("ui.html");
+    let text = std::fs::read_to_string(&app_ui).expect("读 app/ui.html");
+
+    let start = text.find("var CHANGELOG_DATA").expect("找不到 CHANGELOG_DATA");
+    let body = &text[start..];
+    let end = body.find("\n  ];").expect("CHANGELOG_DATA 数组没闭合");
+    let body = &body[..end];
+
+    let mut versions: Vec<(u32, u32, u32)> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for chunk in body.split("{ v: '").skip(1) {
+        let v = chunk.split('\'').next().unwrap_or("");
+        let digits: Vec<u32> = v
+            .trim_start_matches('v')
+            .split('.')
+            .filter_map(|x| x.parse::<u32>().ok())
+            .collect();
+        assert_eq!(digits.len(), 3, "版本号形态不对：{v}");
+        assert!(
+            !seen.iter().any(|s| s == v),
+            "更新日志里出现重复版本 {v}（典型成因：发版脚本对 ui.html 做了全局版本串替换）"
+        );
+        seen.push(v.to_string());
+        versions.push((digits[0], digits[1], digits[2]));
+    }
+
+    assert!(versions.len() >= 10, "更新日志条目太少（{}）", versions.len());
+    for w in versions.windows(2) {
+        assert!(
+            w[0] > w[1],
+            "更新日志必须严格降序（新→旧），但 {:?} 之后是 {:?}",
+            w[0],
+            w[1]
+        );
+    }
+}

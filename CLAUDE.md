@@ -616,6 +616,13 @@ ProxyDeck.exe        ← 唯一主程序，双击即用（Rust 构建）
 - 发版坑：版本串清单以文首「升版本必须同步的位置」为唯一权威（**8 处**，含
   2026-09-10 补的 `README.md` 徽章），本文件不再复述处数；`CHANGELOG_DATA` 是内嵌 JS，
   改完用 node 实解一次验语法（改坏会白屏）
+- **⚠ 发版脚本禁止对 ui.html 做「全局版本串替换」**（2026-10-18 事故）：
+  用 `t.replace(旧版本, 新版本)` 改整个 ui.html，会把 `CHANGELOG_DATA` 里的**历史条目
+  一起改名**——连发几版后更新日志浮层出现一排同样的版本号（当时连出 12 个 `v4.2.5`）。
+  正确做法：只替换那 6 个固定位置的版本串（`etchVer` / `.pt-nameplate`（含 aria-label 同行两处）/
+  `buildNo` / `verChip` / `UI_CUR` / `CHANGELOG_DATA` **首条**），历史条目一个字都不动。
+  已加门禁 `rs-gui/tests/ui_html.rs::changelog_versions_are_unique_and_strictly_descending`
+  （版本号必须唯一且严格降序），改坏会直接红。
 - `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
 - `.work/` 现状：构建中间产物已清（2026-09-10 清掉 `pd3103*.exe`、`ProxyDeck.new/stripped.exe`），
