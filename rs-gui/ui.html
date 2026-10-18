@@ -4172,10 +4172,10 @@ var PT_I18N = {
 
 
   /* ══════════════════ 2. 甲板滚动棘轮声（甲板内滚动时）══════════════════ */
-  var WHEEL_GAIN = 0.010, WHEEL_MAX = 2.4, DAMP = 0.95;
+  var WHEEL_GAIN = 0.010;
   var TICK_STEP = Math.PI * 2 / 24, MIN_GAP = 0.018, IDLE_MUTE = 4;
   var TRIM_TICK = 1.60;             /* 滚动棘轮音量：官网原值 2.4697 太抢耳，按用户反馈降至约 65% */
-  var sfxVel = 0, sfxAccum = 0, sfxSimT = 0;
+  var sfxAccum = 0, sfxSimT = 0;
   var sfxLastInteract = -Infinity, sfxLastTick = -1, sfxLastY = null, sfxRaf = 0, sfxLastFrame = 0;
   function sfxNoiseBuf(c) {
     if (!c.__pommeNoise) {
@@ -4227,31 +4227,28 @@ var PT_I18N = {
     og.gain.exponentialRampToValueAtTime(0.001, when + 0.009);
     osc.connect(og).connect(g); osc.start(when); osc.stop(when + 0.014);
   }
-  function sfxEmit(dAngle, dt) {
-    var mag = Math.abs(dAngle);
-    if (mag <= 1e-6) return;
-    if (sfxSimT - sfxLastInteract > IDLE_MUTE) { sfxAccum = 0; return; }
-    var speed = mag / Math.max(dt, 1e-3);
-    sfxAccum += mag;
+  /* 齿积累**只由滚轮事件即时喂入**（`onScrollDelta` 的 immediate 分支）。
+     2026-10-18 之前这里还额外把「速度积分」出来的角度累加进同一个 sfxAccum——
+     同一段滚动被算两遍：声音比滚动密，且停手后还在继续吐齿。
+     实测证据（CDP 打 12 格滚轮）：26 次发声 / 每格约 2.2 声；只滚 1 格时
+     三声落在 1ms、25ms、**391ms**——最后那声余响就是用户感知的「音效延迟」。
+     惯性积分整段删除：响度改为定值 0.95（原公式区间 0.68~1.0 之内）。 */
+  function sfxEmit() {
     if (sfxAccum < TICK_STEP) return;
-    sfxAccum = Math.min(sfxAccum, TICK_STEP * 2);
+    if (sfxSimT - sfxLastInteract > IDLE_MUTE) { sfxAccum = 0; return; }
     if (sfxSimT - sfxLastTick < MIN_GAP) return;
     sfxLastTick = sfxSimT;
-    sfxAccum -= TICK_STEP;
-    sfxTick(1.00 * Math.max(0.68, Math.min(1, 1 - speed * 0.016)));
+    sfxAccum = Math.min(sfxAccum, TICK_STEP * 2) - TICK_STEP;
+    sfxTick(0.95);
   }
-  var sfxAngle = 0;
   function sfxFrame(t) {
     sfxRaf = 0;
     var dt = Math.min(0.05, sfxLastFrame ? (t - sfxLastFrame) / 1000 : 0.016);
     sfxLastFrame = t;
     sfxSimT += dt;
-    var prev = sfxAngle;
-    sfxAngle += sfxVel * dt;
-    sfxVel *= Math.pow(DAMP, dt * 60);
-    if (Math.abs(sfxVel) < 0.01) sfxVel = 0;
-    sfxEmit(sfxAngle - prev, dt);
-    if (sfxVel !== 0) sfxSchedule(); else sfxLastFrame = 0;
+    sfxEmit();
+    /* 还有没吐完的齿就继续排帧（一帧最多一齿，受 MIN_GAP 约束） */
+    if (sfxAccum >= TICK_STEP) sfxSchedule(); else sfxLastFrame = 0;
   }
   function sfxSchedule() { if (!sfxRaf) sfxRaf = requestAnimationFrame(sfxFrame); }
   /* Wheel 音量活动条（原版 §9 VU 照搬：每格 +0.22，1.65/s 衰减） */
@@ -4284,7 +4281,6 @@ var PT_I18N = {
     if (waCtx && waCtx.state === 'suspended') {
       waCtx.resume().then(function () { tickFlush(); }).catch(function () {});
     }
-    sfxVel = Math.max(-WHEEL_MAX, Math.min(WHEEL_MAX, sfxVel + dy * WHEEL_GAIN));
     sfxLastInteract = sfxSimT;
     /* immediate：滚轮一格的行程直接计入齿积累——出声不再等速度积分
        （积分路径慢滚要 ~260ms 才攒满一齿，是延迟的根源） */
@@ -4295,7 +4291,6 @@ var PT_I18N = {
      内容已在顶/底且继续朝端外滚 → 静音并刹停虚拟轮（页面滚不动，
      轮子撞墙立即停转——不清惯性会余响 1~2 齿） */
   function scrollWheelStop() {
-    sfxVel = 0;
     sfxAccum = 0;
   }
   $$('.pt-deck-scroll').forEach(function (el) {
