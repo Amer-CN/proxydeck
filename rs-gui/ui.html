@@ -4090,6 +4090,7 @@ var PT_I18N = {
   };
   var lastSpoken = {};
   var gestureReady = false;
+  var waKeepAlive = null;
 
   var MASTER_VOL = 0.50;
   var waCtx = null, waMaster = null;
@@ -4112,6 +4113,17 @@ var PT_I18N = {
       }
       shaper.curve = curve; shaper.oversample = 'none';
       waMaster.connect(pre).connect(shaper).connect(waCtx.destination);
+      /* 静音保活（gain 恒 0，用户听不到）：Windows 音频端点闲置会进低功耗，
+         恢复首声要等设备唤醒——这是「隔久了突然滚动，第一声明显滞后」的
+         物理层原因。挂一个常开静音源让流保持渲染，端点不掉电。 */
+      try {
+        var ka = waCtx.createOscillator();
+        var kag = waCtx.createGain();
+        kag.gain.value = 0;
+        ka.connect(kag).connect(waCtx.destination);
+        ka.start();
+        waKeepAlive = ka;
+      } catch (e) {}
       ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
         window.addEventListener(ev, function () {
           if (waCtx && waCtx.state === 'suspended') waCtx.resume();
@@ -4187,23 +4199,16 @@ var PT_I18N = {
     }
     return c.__pommeNoise;
   }
-  /* ctx 挂起（浏览器闲置自动 suspend）期间待发声入队；
-     resume 完成后 flush——消除「隔一阵再滚首声延迟」。
-     flush 逐齿错开 20ms 排队（when+i*0.02）：多齿同刻 start 的波形
-     叠加会把软限幅器顶到持续削波——「闲置后再滚声音炸裂」的根因。 */
-  var tickPending = [], tickFlushTk = 0;
-  function tickFlush() {
-    if (!waCtx || waCtx.state !== 'running') return;
-    var q = tickPending; tickPending = [];
-    /* 只补最近 2 齿：挂起期间积压的老齿无意义（用户听不到对应动作了） */
-    q.slice(-2).forEach(function (lv, i) { sfxTickNow(lv, i * 0.02); });
-  }
+  /* ctx 挂起（浏览器/WebView2 闲置会 suspend）时**直接丢弃**这一齿，不补播。
+     为什么不再排队补播（2026-10-18 用户报「闲置一阵后突然滚动，音效延迟、
+     有时伴随急促爆音」）：补播只是在挂起恢复后把**已经过期**的齿集中放出来——
+     时间上必然滞后于手指，而且两齿挤在 20ms 内叠进软限幅器就是那声"炸"。
+     用户的动作已经过去了，此刻静音才是对的；下一齿是新的位移，自然会有声。
+     同时 proactive resume：先尝试恢复，恢复成功后下一次滚轮就能正常发声。 */
   function sfxTick(level) {
     if (!waCtx) return;
     if (waCtx.state !== 'running') {
-      if (tickPending.length < 24) tickPending.push(level);   /* 防积压无限增长 */
-      clearTimeout(tickFlushTk);
-      tickFlushTk = setTimeout(tickFlush, 60);
+      try { waCtx.resume().catch(function () {}); } catch (e) {}
       return;
     }
     sfxTickNow(level);
@@ -4278,8 +4283,9 @@ var PT_I18N = {
     if (dy === 0) return;
     vuLevel = Math.min(12, vuLevel + 0.22);   /* 原版 §9：滚轮每格喂一段 LED */
     vuKick();
+    /* 挂起就顺手恢复；**不补播**任何已过期的齿（见 sfxTick 的说明） */
     if (waCtx && waCtx.state === 'suspended') {
-      waCtx.resume().then(function () { tickFlush(); }).catch(function () {});
+      try { waCtx.resume().catch(function () {}); } catch (e) {}
     }
     sfxLastInteract = sfxSimT;
     /* immediate：滚轮一格的行程直接计入齿积累——出声不再等速度积分
