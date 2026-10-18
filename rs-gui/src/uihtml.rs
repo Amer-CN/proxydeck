@@ -10,10 +10,10 @@ pub const UI_HTML: &[u8] = include_bytes!("../ui.html");
 
 /// `ui.html` 的 SHA-256（小写十六进制）——与 `app/ui.html` 逐字节一致那份。
 /// 改动 `app/ui.html` 必须同步 `rs-gui/ui.html`，否则构建期与测试期都会红。
-pub const UI_HTML_SHA256: &str = "198e8eb60c3a8c42c593903a43213aa9553fb982aaaa51b1f8e23b373929ce19";
+pub const UI_HTML_SHA256: &str = "49f5c22776074332132e71d50021477ecd02b2ee3393ee150a2cb65564d1a052";
 
 /// 内嵌字节长度（与 `app/ui.html` 同值，多一个字节都算改了界面）。
-pub const UI_HTML_LEN: usize = 1467935;
+pub const UI_HTML_LEN: usize = 1468087;
 
 /// 内嵌字节的 SHA-256（小写十六进制）。
 pub fn embedded_sha256() -> String {
