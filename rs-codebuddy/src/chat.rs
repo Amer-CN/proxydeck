@@ -5,7 +5,7 @@
 //! `stream_options` 缺省、`tool_choice` 归一、`$ref` 内联、`developer`→`system`、
 //! **全角色脱敏**（P5c；生产 CN/INTL 都开）、INTL 自动补首条 system、出站体**逐字节重建**、
 //! **账号池换号分支**（401/403 标死换活号、429 冷却换号、14018 额度耗尽换号、
-//! 11128 按号封禁换号 + 1h 冷却）、
+//! 11128 按号封禁换号 + 1h 冷却；**通道校验子类直接透传**，不判账号不冷却）、
 //! **200 体 14018 Peek**（判定窗口 64KB；不命中时 peek 到的字节**一字不丢**地交给下游聚合，
 //! 对齐 Go `3d4627f` 之后的行为，见 `PEEK_WINDOW`）、CN 缺省
 //! `reasoning_effort` 注入、hy4 限流兜底改写与 trip、11133 退避重试（上限 2 次，
@@ -160,6 +160,38 @@ pub fn is_flagged_body(err_body: &str) -> bool {
 /// 11128 治理的冷却到期时点（epoch 毫秒）：Go `time.Now().Add(flaggedCooldown)`。
 pub fn flagged_until(now_ms: i64) -> i64 {
     now_ms.saturating_add(FLAGGED_COOLDOWN_MS)
+}
+
+/// INTL 会话关联头（2026-10-19 上游网关新增校验）：`www.codebuddy.ai` 的 chat
+/// 缺这三个头即回 400/11128（`request illegal` + channel verification）。
+/// 证据：mmqz/cpa-multi-plugins#43（Global，补头后 200）/#44（Intl，补头后
+/// 200/1.4s）、9router#4944（七行矩阵：三头必须同时在，值只验形态不校验）。
+pub const CONV_HEADERS: &[&str] = &[
+    "x-conversation-id",
+    "x-conversation-request-id",
+    "x-conversation-message-id",
+];
+
+/// 生成一组会话关联 ID（三个 v4 UUID 字符串）。
+///
+/// 用 crate 自带的 `atrest::getrandom_fill`（Windows 走 RtlGenRandom = Go 的
+/// `crypto/rand`），不新增依赖；随机源不可用时如实报 502，不编可预测 ID。
+pub fn new_conversation_ids() -> Result<[String; 3], String> {
+    let mut ids = [String::new(), String::new(), String::new()];
+    for slot in ids.iter_mut() {
+        let mut b = [0u8; 16];
+        crate::atrest::getrandom_fill(&mut b)?;
+        // RFC 4122 v4：版本 nibble 置 4，variant 置 10xx。
+        b[6] = (b[6] & 0x0f) | 0x40;
+        b[8] = (b[8] & 0x3f) | 0x80;
+        *slot = format!(
+            "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-\
+             {:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10],
+            b[11], b[12], b[13], b[14], b[15]
+        );
+    }
+    Ok(ids)
 }
 
 /// Go `writeErr`：`Content-Type: application/json` + `{"error":{"message":…,"type":"upstream_error"}}`
@@ -364,6 +396,18 @@ pub async fn handle_chat(
         Ok(h) => h,
         Err(e) => return write_err(502, &e),
     };
+    // INTL 会话关联头（2026-10-19 上游新增网关校验）：三个 ID 每请求生成一次，
+    // 后续各轮（换号/退避重试）复用同一组——上游只验存在与形态，官方抓包同样
+    // 是每请求新 ID；重试轮次换 ID 会被上游按新会话分桶（9router#4944），故不换。
+    // `hdr` 只来自凭据层、从不含这三个头，逐轮插入即等价于 GitHub 修复的 blank-only 填充。
+    let conv_ids: Option<[String; 3]> = if st.region == crate::region::Region::Intl {
+        match new_conversation_ids() {
+            Ok(ids) => Some(ids),
+            Err(e) => return write_err(502, &e),
+        }
+    } else {
+        None
+    };
 
     // 限流窗口内 hy4-preview 请求体层改写 fallback（agent 零感知）；兜底关闭时不改写、不 trip。
     // hy4 兜底与缺省 reasoning 注入均为国内专属逻辑，INTL 一律跳过。
@@ -414,10 +458,23 @@ pub async fn handle_chat(
         // 正是靠它拒绝「已经重试过之后的 hy4 trip」（Go `server.go:1247/1433`）。
         attempt = attempt.wrapping_add(1);
         let url = format!("{}/v2/chat/completions", st.base_url);
+        let mut out_hdr = hdr.clone();
+        if let Some(ids) = conv_ids.as_ref() {
+            for (name, val) in CONV_HEADERS.iter().zip(ids.iter()) {
+                // from_str 只对不可见 ASCII 失败——UUID 只含 hex 与连字符，恒成功；
+                // 万一失败就当本轮没带（= 改前行为），不 panic 不编值。
+                if let (Ok(n), Ok(v)) = (
+                    axum::http::HeaderName::from_bytes(name.as_bytes()),
+                    axum::http::HeaderValue::from_str(val),
+                ) {
+                    out_hdr.insert(n, v);
+                }
+            }
+        }
         let req = st
             .http
             .post(&url)
-            .headers(hdr.clone())
+            .headers(out_hdr)
             .body(gjson::to_go_bytes(&Value::Object(backend.clone())));
         let resp = match req.send().await {
             Ok(r) => r,
@@ -505,7 +562,14 @@ pub async fn handle_chat(
         // `write_err` 如实透传上游报文），防恒 11128 下无限 continue。计数与 14018/401
         // 各自独立：封号不是额度耗尽也不是凭据失效。
         if is_flagged_body(&err_body) && st.pool.is_some() && !acc_uid.is_empty() {
-            if crate::desensitize::body_has_11128_trigger(&backend) {
+            if err_body.contains("channel verification") {
+                // 通道校验子类（2026-10-19 起 INTL 网关新增）：缺会话头时整池同错，
+                // 与号无关、与内容无关——冷却任何号都是误伤，直接透传（不换号不冷却）。
+                println!(
+                    "[codebuddy] 11128 通道校验（缺会话头/非官方通道），不判账号、不冷却，原样透传，body 预览: {}",
+                    truncate(&err_body, 200)
+                );
+            } else if crate::desensitize::body_has_11128_trigger(&backend) {
                 println!(
                     "[codebuddy] 11128 命中内容指纹（{}），不判账号、不冷却，原样透传",
                     crate::pool::uid_short(&acc_uid)

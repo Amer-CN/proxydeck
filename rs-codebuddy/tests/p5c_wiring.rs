@@ -584,3 +584,177 @@ async fn flagged11128_cooldown_expires_lazily() {
     );
     env.point_to_empty(home.path());
 }
+
+// ---------- ④ INTL 会话关联头（2026-10-19 上游网关校验） ----------
+//
+// 上游 `www.codebuddy.ai` 的 chat 缺 `X-Conversation-Id` /
+// `X-Conversation-Request-Id` / `X-Conversation-Message-Id` 即回 400/11128
+// （`request illegal` + channel verification）；证据见 chat.rs `CONV_HEADERS`。
+// 本用例：INTL 出站每发都带三头、值是 v4 UUID 形态、换号两轮复用同一组。
+
+/// 合成 INTL 登录态（domain 必须含 `workbuddy.ai`，见 `region.rs`）。
+fn intl_auth_files() -> Value {
+    let file = |uid: &str, counter: u64| {
+        json!({
+            "name": format!("workbuddy-desktop-ai-{uid}.info"),
+            "body": format!(
+                "{{\"auth\":{{\"accessToken\":\"tok-{uid}\",\"domain\":\"www.workbuddy.ai\",\"expiresAt\":4102416000000}},\"account\":{{\"uid\":\"{uid}\",\"nickname\":\"nick-{uid}\",\"enterpriseId\":\"ent\"}}}}"
+            ),
+            "mtime_unix_ms": 1_792_000_000_000u64 + counter,
+        })
+    };
+    json!([file("u-wire", 2), file("u-wire2", 1)])
+}
+
+/// v4 UUID 形态：8-4-4-4-12 hex，版本 nibble 为 4、variant 为 8/9/a/b。
+fn is_uuid_v4(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() != 36 {
+        return false;
+    }
+    for (i, c) in b.iter().enumerate() {
+        match i {
+            8 | 13 | 18 | 23 => {
+                if *c != b'-' {
+                    return false;
+                }
+            }
+            14 => {
+                if *c != b'4' {
+                    return false;
+                }
+            }
+            19 => {
+                if !matches!(*c, b'8' | b'9' | b'a' | b'b' | b'A' | b'B') {
+                    return false;
+                }
+            }
+            _ => {
+                if !c.is_ascii_hexdigit() {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+const CONV_TEST_HEADERS: [&str; 3] = [
+    "x-conversation-id",
+    "x-conversation-request-id",
+    "x-conversation-message-id",
+];
+
+/// 场景四：INTL 干净请求遇旧族 11128 → 换号拿 200，且两轮出站都带三头、
+/// 三头值是 v4 UUID、两轮复用同一组（上游按会话分桶，轮次换 ID 会被当新会话）。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn intl_conversation_headers_present_and_stable_across_swap() {
+    let env = EnvGuard::set(&[]);
+    let up = FakeUpstream::start(&flagged_spec(&["u-wire"])).await;
+    let mut sc = scenario();
+    sc["auth_files"] = intl_auth_files();
+    let rp = start_real_replay(
+        "p5c-conv-headers",
+        Region::Intl,
+        &sc,
+        Some(up.base.clone()),
+        &env,
+    )
+    .await;
+
+    let r = send(
+        &rp.app.base,
+        "POST",
+        "/v1/chat/completions",
+        Some(CLEAN_PAYLOAD),
+    )
+    .await;
+    assert_eq!(
+        r.status,
+        200,
+        "INTL 干净请求遇 11128 应换号拿到 200（实得 {}）",
+        r.text()
+    );
+    assert_eq!(
+        hit_uids(&up),
+        vec!["u-wire", "u-wire2"],
+        "上游应 A(封)/B(好) 各打一次"
+    );
+    let hits = up.hits();
+    assert_eq!(hits.len(), 2, "上游应恰好命中两发");
+    for h in &hits {
+        for name in CONV_TEST_HEADERS {
+            let v = h.header(name).unwrap_or_else(|| panic!("{name} 缺失"));
+            assert!(is_uuid_v4(v), "{name} 应是 v4 UUID 形态（实得 {v}）");
+        }
+    }
+    for name in CONV_TEST_HEADERS {
+        assert_eq!(
+            hits[0].header(name),
+            hits[1].header(name),
+            "{name} 换号两轮应复用同一组 ID"
+        );
+    }
+    rp.finish();
+}
+
+/// 场景五：通道校验子类 11128（`request illegal` + channel verification）——
+/// 与号无关、与内容无关，不换号、不冷却任何号，原样透传 400。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn flagged11128_channel_verification_passes_through_without_cooling() {
+    const CHANNEL_BODY_11128: &str = r#"{"error":{"data":{"code":11128,"msg":"request illegal","requestId":"x","displayMsg":{"en":"Request blocked. Please send it again"},"displayTips":{"en":"This call failed channel verification, possibly because it was not sent from an official client."}}}}"#;
+    let bad = json!([{
+        "status": 400,
+        "headers": {"Content-Type": "application/json"},
+        "body": CHANNEL_BODY_11128,
+    }]);
+    let mut table = serde_json::Map::new();
+    for uid in ["u-wire", "u-wire2"] {
+        table.insert(uid.to_string(), bad.clone());
+    }
+    let spec = json!({"per_user": Value::Object(table)});
+
+    let env = EnvGuard::set(&[]);
+    let up = FakeUpstream::start(&spec).await;
+    let sc = scenario();
+    let rp = start_real_replay(
+        "p5c-11128-channel",
+        Region::Cn,
+        &sc,
+        Some(up.base.clone()),
+        &env,
+    )
+    .await;
+
+    let r = send(
+        &rp.app.base,
+        "POST",
+        "/v1/chat/completions",
+        Some(CLEAN_PAYLOAD),
+    )
+    .await;
+    assert_eq!(
+        r.status,
+        400,
+        "通道校验 11128 应原样透传 400（实得 {}：{}）",
+        r.status,
+        r.text()
+    );
+    assert!(
+        r.text().contains("channel verification"),
+        "透传体应保留通道校验提示（实得 {}）",
+        r.text()
+    );
+    assert_eq!(
+        hit_uids(&up),
+        vec!["u-wire"],
+        "通道校验只打首号一次、不换号"
+    );
+
+    let snap = send(&rp.app.base, "GET", "/v1/accounts", None).await;
+    let text = snap.text();
+    for uid in ["u-wire", "u-wire2"] {
+        assert_untouched(&text, uid);
+    }
+    rp.finish();
+}
