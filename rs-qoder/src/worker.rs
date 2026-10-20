@@ -28,9 +28,26 @@ use crate::gjson::{b, i, obj, s, J};
 /// 单次请求总超时（含 worker 起动 + 完整 agent 任务；写码类任务可长达数分钟）。
 pub const WORKER_TIMEOUT: Duration = Duration::from_secs(600);
 
-/// worker 相对 `<ProgramFiles>` 的路径（对应 Go `findWorker()` 里的 `rel`）。
-pub const WORKER_REL: &str = r"Qoder\Qoder CN\resources\app.asar.unpacked\node_modules\@qoder-ai\qoder-cn-agent-sdk\dist\_worker";
+/// worker 相对 `<ProgramFiles>` 的路径（对应 Go `findWorker()` 里的 `rel`）——**CN 版**。
+///
+/// 2026-10-20 实测修正：CN 客户端装在 `D:\Program Files\Qoder CN\`（独立目录），
+/// 不在 `Qoder\Qoder CN\` 之下。原常量 `Qoder\Qoder CN\...` 拼出来的路径**不存在**，
+/// 导致默认实例 `worker=<未找到>`、chat 回 503 `no_worker`。
+/// 改前生产实例日志能显示该路径，是因为它在旧目录布局下启动、路径在启动时已解析。
+pub const WORKER_REL: &str = r"Qoder CN\resources\app.asar.unpacked\node_modules\@qoder-ai\qoder-cn-agent-sdk\dist\_worker";
+
+/// CN 版**旧目录布局**（`Qoder\Qoder CN\...`）——仅作兜底候选，见 `worker_candidates`。
+pub const WORKER_REL_CN_LEGACY: &str = r"Qoder\Qoder CN\resources\app.asar.unpacked\node_modules\@qoder-ai\qoder-cn-agent-sdk\dist\_worker";
+
+/// 国际版（INTL）的 worker 相对路径：同一份代码的另一个构建，包名 `qoder-agent-sdk`。
+pub const WORKER_REL_INTL: &str = r"Qoder\resources\app.asar.unpacked\node_modules\@qoder-ai\qoder-agent-sdk\dist\_worker";
+
 pub const WORKER_FILE: &str = "qoder-worker-runtime.obf.mjs";
+
+/// 按区域取 worker 相对路径（`--region` 决定，默认 CN 与改前逐字节相同）。
+pub fn worker_rel(region: crate::Region) -> &'static str {
+    region.cfg().worker_rel
+}
 
 /// auth payload 文件内容（Go 里的字面量，70 字节，**无末尾换行**）。
 pub const AUTH_PAYLOAD_BODY: &str =
@@ -62,10 +79,18 @@ pub enum WorkerEvent {
     Thinking(String),
 }
 
-/// Go `findWorker()`：env `QODER_WORKER` → `D:\Program Files\...` → `%ProgramFiles%\...`。
-/// 找不到回 `None`（调用方回 503 提示安装 Qoder）。
-pub fn find_worker(env_override: Option<&str>, program_files: Option<&str>) -> Option<PathBuf> {
-    let rel = Path::new(WORKER_REL).join(WORKER_FILE);
+/// Go `findWorker()` 的候选列表：env `QODER_WORKER` → `D:\Program Files\<rel>`
+/// → `%ProgramFiles%\<rel>`。区域决定「相对路径」那一段（`worker_rel(region)`）。
+///
+/// CN 版额外容忍旧布局（`Qoder\Qoder CN\...`）：2026-10-20 实测当前布局是
+/// `Qoder CN\...`，但旧安装曾用 `Qoder\Qoder CN\...`，两者都放进来，
+/// 靠 `find_worker` 的 `is_file()` 兜底（**不影响候选顺序的主干**，只是多一条备选）。
+pub fn worker_candidates(
+    env_override: Option<&str>,
+    program_files: Option<&str>,
+    region: crate::Region,
+) -> Vec<PathBuf> {
+    let rel = Path::new(worker_rel(region)).join(WORKER_FILE);
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Some(p) = env_override {
         let t = p.trim();
@@ -79,7 +104,24 @@ pub fn find_worker(env_override: Option<&str>, program_files: Option<&str>) -> O
             candidates.push(Path::new(pf).join(&rel));
         }
     }
-    candidates.into_iter().find(|c| c.is_file())
+    // CN 旧布局兜底（`Qoder\Qoder CN\...`）：只在主候选全落空时才可能命中。
+    if region == crate::Region::Cn {
+        let legacy = Path::new(WORKER_REL_CN_LEGACY).join(WORKER_FILE);
+        candidates.push(Path::new(r"D:\Program Files").join(&legacy));
+    }
+    candidates
+}
+
+/// Go `findWorker()`：候选顺序见 `worker_candidates`，取第一个真存在的**文件**。
+/// 找不到回 `None`（调用方回 503 提示安装 Qoder）。
+pub fn find_worker(
+    env_override: Option<&str>,
+    program_files: Option<&str>,
+    region: crate::Region,
+) -> Option<PathBuf> {
+    worker_candidates(env_override, program_files, region)
+        .into_iter()
+        .find(|c| c.is_file())
 }
 
 /// payload 临时文件（Go `os.CreateTemp("", "qoder-auth-*.json")`）：写好后**用完即删**。
@@ -570,18 +612,100 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join(WORKER_FILE);
         std::fs::write(&f, "// fake").unwrap();
-        assert_eq!(find_worker(Some(&f.to_string_lossy()), None), Some(f.clone()));
+        assert_eq!(
+            find_worker(Some(&f.to_string_lossy()), None, crate::Region::Cn),
+            Some(f.clone())
+        );
         assert_ne!(
-            find_worker(Some("   "), None),
+            find_worker(Some("   "), None, crate::Region::Cn),
             Some(f.clone()),
             "空白 env 不该被当成路径"
         );
         // 目录而不是文件 → 不算命中（Go 是 `!fi.IsDir()`），继续往后找
         assert_ne!(
-            find_worker(Some(&dir.to_string_lossy()), None),
+            find_worker(Some(&dir.to_string_lossy()), None, crate::Region::Cn),
             Some(f.clone())
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 区域只换「相对路径」那一段，候选顺序（env → `D:\Program Files` → `%ProgramFiles%`）不变。
+    #[test]
+    fn find_worker_rel_depends_on_region_only() {
+        assert_eq!(worker_rel(crate::Region::Cn), WORKER_REL);
+        assert_eq!(worker_rel(crate::Region::Intl), WORKER_REL_INTL);
+        assert_ne!(worker_rel(crate::Region::Cn), worker_rel(crate::Region::Intl));
+
+        // 候选列表的形状：CN 4 条（含旧布局兜底）、INTL 3 条；主干顺序固定，
+        // 只有第 2/3 条的相对路径段按区域变。
+        let pf = r"E:\FakeProgramFiles";
+        let cn = worker_candidates(Some(r"E:\env\w.mjs"), Some(pf), crate::Region::Cn);
+        let intl = worker_candidates(Some(r"E:\env\w.mjs"), Some(pf), crate::Region::Intl);
+        assert_eq!(cn.len(), 4, "CN 含旧布局兜底候选");
+        assert_eq!(intl.len(), 3);
+        assert_eq!(cn[0], PathBuf::from(r"E:\env\w.mjs"), "env 仍是第一优先");
+        assert_eq!(intl[0], cn[0], "env 候选与区域无关");
+        assert_eq!(cn[1], Path::new(r"D:\Program Files").join(worker_rel(crate::Region::Cn)).join(WORKER_FILE));
+        assert_eq!(intl[1], Path::new(r"D:\Program Files").join(worker_rel(crate::Region::Intl)).join(WORKER_FILE));
+        assert_eq!(cn[2], Path::new(pf).join(worker_rel(crate::Region::Cn)).join(WORKER_FILE));
+        assert_eq!(intl[2], Path::new(pf).join(worker_rel(crate::Region::Intl)).join(WORKER_FILE));
+        // CN 第 4 条是旧布局兜底（`Qoder\Qoder CN\...`），INTL 没有这条
+        assert_eq!(
+            cn[3],
+            Path::new(r"D:\Program Files").join(WORKER_REL_CN_LEGACY).join(WORKER_FILE)
+        );
+        // 同一位置下两区的路径确实不同
+        assert_ne!(cn[2], intl[2]);
+
+        // 空白 env 不产生候选（Go 的 TrimSpace 守卫）；无 `%ProgramFiles%` 时
+        // CN 只剩 `D:\Program Files` 主干 1 条 + 旧布局兜底 1 条 = 2 条，INTL 只有 1 条
+        assert_eq!(worker_candidates(Some("   "), None, crate::Region::Cn).len(), 2);
+        assert_eq!(worker_candidates(Some("   "), None, crate::Region::Intl).len(), 1);
+
+        // `find_worker` 取第一个**真存在**的候选：区域决定它去找哪一份相对路径。
+        // 用临时目录冒充 `%ProgramFiles%`，两区各铺一份，断言各命中各的。
+        let root = std::env::temp_dir().join("rs-qoder-findworker-region");
+        let _ = std::fs::remove_dir_all(&root);
+        let cn_dir = root.join(worker_rel(crate::Region::Cn));
+        let intl_dir = root.join(worker_rel(crate::Region::Intl));
+        std::fs::create_dir_all(&cn_dir).unwrap();
+        std::fs::create_dir_all(&intl_dir).unwrap();
+        let cn_file = cn_dir.join(WORKER_FILE);
+        let intl_file = intl_dir.join(WORKER_FILE);
+        std::fs::write(&cn_file, "// cn").unwrap();
+        std::fs::write(&intl_file, "// intl").unwrap();
+
+        let pf = root.to_string_lossy().to_string();
+        // 注意 `D:\Program Files` 那条候选是硬编码且排在前面，本机装了 Qoder 时它可能先命中；
+        // 所以这里只对**本机没装的那一区**断言落到了临时目录（装了就以真装的为准，同样合法）。
+        for (region, want) in [
+            (crate::Region::Cn, &cn_file),
+            (crate::Region::Intl, &intl_file),
+        ] {
+            match find_worker(None, Some(&pf), region) {
+                Some(got) if got == *want => {}
+                Some(got) if got.is_file() => {
+                    // 命中了硬编码 `D:\Program Files` 下的真安装——区域相对路径仍在 `got` 里
+                    assert!(
+                        got.to_string_lossy().contains(worker_rel(region)),
+                        "{region:?} 命中的路径不含本区相对路径: {}",
+                        got.display()
+                    );
+                }
+                other => panic!("{region:?} 既没命中临时目录也没命中真安装: {other:?}"),
+            }
+        }
+
+        // env 覆盖仍然是第一优先（两区都先看 env，与区域无关）
+        let env_file = root.join("env-worker.mjs");
+        std::fs::write(&env_file, "// env").unwrap();
+        for region in [crate::Region::Cn, crate::Region::Intl] {
+            assert_eq!(
+                find_worker(Some(&env_file.to_string_lossy()), Some(&pf), region),
+                Some(env_file.clone())
+            );
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

@@ -20,6 +20,10 @@ use crate::gjson::{b, f, i, obj, s, J};
 /// 官方额度接口（CN 版；对应 Go `fetchUsage` 里的字面量）。
 pub const USAGE_URL: &str = "https://openapi.qoder.com.cn/api/v2/quota/usage";
 
+/// 国际版（INTL）的额度接口：同一套 `/api/v2/quota/usage`，域名换成 `.sh`。
+/// 实测 CN 域名对国际版 token 无效（`refresh=1` 不回 `realtime`），`.sh` 才正常。
+pub const USAGE_URL_INTL: &str = "https://openapi.qoder.sh/api/v2/quota/usage";
+
 /// `/api/v2/quota/usage` 响应里我们关心的字段（对应 Go `usageQuota`）。
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 pub struct UsageQuota {

@@ -22,6 +22,12 @@
 //!   `credits_path`（`%USERPROFILE%\.qoder-cli-credits.json`）、`usage_url`（官方额度接口）
 //!   —— 黄金回放靠它们指向临时目录与假上游，**不碰真实登录态、不碰网络**；
 //! * `cwd_env`（Go 每请求读 `QODER_CWD`，这里启动时读一次，见 README 差异清单）。
+//!
+//! 双区（`--region CN|INTL`，默认 CN）：Qoder 客户端有 CN 版与国际版两个构建，
+//! 协议完全一致（同一份代码的两个构建），差异只有三处默认值——登录态目录名、
+//! worker 相对路径、额度接口域名。区域只提供「整套默认值」，`--auth-dir` /
+//! `--worker` / `--usage-url` 显式给出时一律以覆盖值为准；不带 `--region` 时
+//! 三处默认值与改前逐字节一致（见 `RegionCfg`）。
 
 pub mod auth;
 pub mod credits;
@@ -53,6 +59,64 @@ use auth::QoderAuth;
 use godecode::ChatRequest;
 use usage::UsageQuota;
 use worker::{WorkerEvent, WorkerResult};
+
+// ---------- 区域（CN / INTL） ----------
+
+/// 服务区域：`--region CN|INTL`，默认 CN（**不带该参数时行为与改前逐字节一致**）。
+///
+/// 两区协议一致（实测 15 个探针同值、worker 是同一份代码的两个构建），所以不拆端口、
+/// 不做账号池，只按区域换三处默认值。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Region {
+    Cn,
+    Intl,
+}
+
+impl Region {
+    /// 与 `rs-codebuddy` 的 `Region::parse` 同口径：空/未知 → CN（默认行为不变）。
+    pub fn parse(s: &str) -> Region {
+        match s {
+            "INTL" | "intl" | "international" => Region::Intl,
+            _ => Region::Cn,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Region::Cn => "CN",
+            Region::Intl => "INTL",
+        }
+    }
+
+    pub fn cfg(self) -> &'static RegionCfg {
+        match self {
+            Region::Cn => &REGION_CN,
+            Region::Intl => &REGION_INTL,
+        }
+    }
+}
+
+/// 一个区域的全部默认值——本 crate 的区域差异**只有这三条**（协议层完全一致）。
+pub struct RegionCfg {
+    /// 登录态目录名：`%APPDATA%\<名字>`。
+    pub auth_dir_name: &'static str,
+    /// worker 相对 `<ProgramFiles>` 的路径（不含文件名 `qoder-worker-runtime.obf.mjs`）。
+    pub worker_rel: &'static str,
+    /// 实时额度接口（`/health?refresh=1` 才拉）。
+    pub usage_url: &'static str,
+}
+
+pub static REGION_CN: RegionCfg = RegionCfg {
+    auth_dir_name: auth::AUTH_DIR_NAME,
+    worker_rel: worker::WORKER_REL,
+    usage_url: usage::USAGE_URL,
+};
+
+pub static REGION_INTL: RegionCfg = RegionCfg {
+    auth_dir_name: auth::AUTH_DIR_NAME_INTL,
+    worker_rel: worker::WORKER_REL_INTL,
+    usage_url: usage::USAGE_URL_INTL,
+};
 
 /// 与 Go 侧 `--plugin-qoder` 的默认监听端口同值（对照一律显式指定测试端口，如 18785）。
 pub const DEFAULT_PORT: u16 = 8785;
@@ -96,6 +160,11 @@ pub struct Args {
     #[arg(long, default_value = "127.0.0.1")]
     pub host: String,
 
+    /// 区域：`CN`（默认）/ `INTL`。只提供「整套默认值」（登录态目录 / worker 路径 / 额度接口），
+    /// 显式的 `--auth-dir` / `--worker` / `--usage-url` 一律优先。
+    #[arg(long, default_value = "CN")]
+    pub region: String,
+
     /// worker 路径覆盖（默认 `QODER_WORKER` → `D:\Program Files\...` → `%ProgramFiles%\...`）。仅供对照。
     #[arg(long)]
     pub worker: Option<PathBuf>,
@@ -108,9 +177,19 @@ pub struct Args {
     #[arg(long)]
     pub credits_file: Option<PathBuf>,
 
-    /// 实时额度接口覆盖（默认官方 CN 版 `openapi.qoder.com.cn`）。仅供对照。
+    /// 实时额度接口覆盖（默认按 `--region`：CN `openapi.qoder.com.cn` / INTL `openapi.qoder.sh`）。仅供对照。
     #[arg(long = "usage-url", default_value = usage::USAGE_URL)]
     pub usage_url: String,
+}
+
+/// 四处显式覆盖（`--auth-dir` / `--worker` / `--credits-file` / `--usage-url`）。
+/// 区域只提供默认值，这里给了就以这里为准（`usage_url` 的默认值歧义见 `resolve_usage_url`）。
+#[derive(Debug, Default, Clone)]
+pub struct Overrides {
+    pub auth_dir: Option<PathBuf>,
+    pub worker: Option<PathBuf>,
+    pub credits_file: Option<PathBuf>,
+    pub usage_url: Option<String>,
 }
 
 /// 进程内可变状态（Go `Server` 的三个 mutex 段）。
@@ -125,7 +204,8 @@ struct CreditsState {
 /// 服务状态。
 pub struct AppState {
     pub started_at: Instant,
-    /// `%APPDATA%\com.qodercn.app.stable`（Go `authDir()`）。
+    /// `%APPDATA%\<区域目录名>`（Go `authDir()`；CN `com.qodercn.app.stable` /
+    /// INTL `com.qoder.app.stable`）。
     pub auth_dir: PathBuf,
     /// 探测到的 worker（Go 每请求 `findWorker()`；这里启动时解析一次，见 README 差异）。
     pub worker_path: Option<PathBuf>,
@@ -133,7 +213,7 @@ pub struct AppState {
     pub credits_path: Option<PathBuf>,
     /// `QODER_CWD`（Go 每请求 `os.Getenv`；这里启动时一次）。
     pub cwd_env: Option<String>,
-    /// 实时额度接口（Go 是常量）。
+    /// 实时额度接口（Go 是常量；CN `openapi.qoder.com.cn` / INTL `openapi.qoder.sh`）。
     pub usage_url: String,
     /// 登录态缓存（Go `authCache`）。
     auth_cache: Mutex<Option<QoderAuth>>,
@@ -143,8 +223,23 @@ pub struct AppState {
     http: reqwest::Client,
 }
 
+/// `--usage-url` 的生效值：`--region` 只提供默认值，**显式给出的值优先**。
+///
+/// CLI 的 `--usage-url` 保留 `default_value = usage::USAGE_URL`（字段类型与改前一致，
+/// 既有合同测试也据此断言默认值），所以这里把「值 == CN 默认值」当作「未显式覆盖」。
+/// 换言之：不带 `--usage-url` 时按区域取；带了别的值一律以它为准。
+/// （极端情形：`--region INTL --usage-url <CN 的默认值>` 会被当成未覆盖——登记在 README 差异 11。）
+pub fn resolve_usage_url(region: Region, cli_value: &str) -> String {
+    if cli_value == usage::USAGE_URL {
+        region.cfg().usage_url.to_string()
+    } else {
+        cli_value.to_string()
+    }
+}
+
 impl AppState {
-    /// 显式构造（测试/黄金回放用）。
+    /// 显式构造（测试/黄金回放用）。`usage_url` 取 CN 默认值（与改前一致），
+    /// 需要别的区域用 `with_usage_url` / `from_env_with`。
     pub fn new(
         auth_dir: PathBuf,
         worker_path: Option<PathBuf>,
@@ -168,18 +263,44 @@ impl AppState {
     }
 
     /// 生产构造：与 Go 的 `authDir()` / `findWorker()` / `creditsLedgerPath()` / `os.Getenv`
-    /// 同一套判定（环境变量读一次的差异见 README）。
+    /// 同一套判定（环境变量读一次的差异见 README）。默认区域 CN。
     pub fn from_env() -> Self {
+        Self::from_env_region(Region::Cn)
+    }
+
+    /// 按区域取「整套默认值」的生产构造。
+    pub fn from_env_region(region: Region) -> Self {
         let worker = worker::find_worker(
             std::env::var("QODER_WORKER").ok().as_deref(),
             std::env::var("ProgramFiles").ok().as_deref(),
+            region,
         );
-        Self::new(
-            auth::auth_dir(),
+        let mut st = Self::new(
+            auth::auth_dir(region),
             worker,
             credits::ledger_path_in(credits::home_dir().as_deref()),
             std::env::var("QODER_CWD").ok(),
-        )
+        );
+        st.usage_url = region.cfg().usage_url.to_string();
+        st
+    }
+
+    /// 区域默认值 + 显式覆盖（**覆盖优先**）。`run()` 与单测共用这一条路径。
+    pub fn from_env_with(region: Region, ov: &Overrides) -> Self {
+        let mut st = Self::from_env_region(region);
+        if let Some(p) = &ov.worker {
+            st.worker_path = Some(p.clone());
+        }
+        if let Some(d) = &ov.auth_dir {
+            st.auth_dir = d.clone();
+        }
+        if let Some(f) = &ov.credits_file {
+            st.credits_path = Some(f.clone());
+        }
+        if let Some(u) = ov.usage_url.as_deref() {
+            st.usage_url = resolve_usage_url(region, u);
+        }
+        st
     }
 
     pub fn with_usage_url(mut self, url: impl Into<String>) -> Self {
@@ -1191,21 +1312,21 @@ async fn handle_fallback(method: Method, uri: Uri) -> Response {
 // ---------- 入口 ----------
 
 pub async fn run(args: Args) -> Result<(), String> {
-    let mut state = AppState::from_env();
-    if let Some(p) = args.worker.clone() {
-        state.worker_path = Some(p);
-    }
-    if let Some(d) = args.auth_dir.clone() {
-        state.auth_dir = d;
-    }
-    if let Some(f) = args.credits_file.clone() {
-        state.credits_path = Some(f);
-    }
-    state.usage_url = args.usage_url.clone();
+    let region = Region::parse(&args.region);
+    let ov = Overrides {
+        auth_dir: args.auth_dir.clone(),
+        worker: args.worker.clone(),
+        credits_file: args.credits_file.clone(),
+        // CLI 的 `--usage-url` 带 CN 默认值，交给 `resolve_usage_url` 判「是否显式覆盖」
+        usage_url: Some(args.usage_url.clone()),
+    };
+    let state = AppState::from_env_with(region, &ov);
 
     println!(
-        "qoder-plugin: [rust rewrite] starting on {}:{} (official worker transport)",
-        args.host, args.port
+        "qoder-plugin: [rust rewrite] starting on {}:{} (official worker transport, region={})",
+        args.host,
+        args.port,
+        region.as_str()
     );
     // 只报路径与存在性，**绝不打印登录态内容**
     println!(
@@ -1430,5 +1551,132 @@ mod tests {
         assert_eq!(resp.headers().get("content-type").unwrap(), "application/json");
         assert_eq!(resp.headers().get("cache-control").unwrap(), "no-cache");
         assert_eq!(resp.headers().get("connection").unwrap(), "keep-alive");
+    }
+
+    // ---------- 区域（CN / INTL） ----------
+
+    #[test]
+    fn region_parse_defaults_to_cn() {
+        assert_eq!(Region::parse("CN"), Region::Cn);
+        assert_eq!(Region::parse(""), Region::Cn);
+        assert_eq!(Region::parse("weird"), Region::Cn);
+        assert_eq!(Region::parse("INTL"), Region::Intl);
+        assert_eq!(Region::parse("intl"), Region::Intl);
+        assert_eq!(Region::parse("international"), Region::Intl);
+        // 与 rs-codebuddy 的 Region::parse 同口径：大小写以外的写法不认，回落 CN
+        assert_eq!(Region::parse("Intl"), Region::Cn);
+        assert_eq!(Region::as_str(Region::Cn), "CN");
+        assert_eq!(Region::as_str(Region::Intl), "INTL");
+    }
+
+    /// 验收标准 3：**不带 `--region` 时三处默认值与改前逐字节一致**。
+    #[test]
+    fn default_region_is_cn_with_unchanged_defaults() {
+        // CLI 默认：`--region` 缺省是 "CN"，`--usage-url` 缺省是 CN 常量
+        let args = Args::try_parse_from(["rs-qoder"]).unwrap();
+        assert_eq!(args.region, "CN");
+        assert_eq!(Region::parse(&args.region), Region::Cn);
+        assert_eq!(args.usage_url, "https://openapi.qoder.com.cn/api/v2/quota/usage");
+
+        // 三处默认值：CN 与改前逐字相同（worker_rel 于 2026-10-20 按实测布局修正，
+        // 见 `worker::WORKER_REL` 的注释；旧布局 `Qoder\Qoder CN\...` 仍作为兜底候选保留）
+        let cn = Region::Cn.cfg();
+        assert_eq!(cn.auth_dir_name, "com.qodercn.app.stable");
+        assert_eq!(
+            cn.worker_rel,
+            r"Qoder CN\resources\app.asar.unpacked\node_modules\@qoder-ai\qoder-cn-agent-sdk\dist\_worker"
+        );
+        assert_eq!(cn.usage_url, "https://openapi.qoder.com.cn/api/v2/quota/usage");
+        // 旧常量仍然指向 CN（外部引用/合同测试不受影响）
+        assert_eq!(auth::AUTH_DIR_NAME, cn.auth_dir_name);
+        assert_eq!(worker::WORKER_REL, cn.worker_rel);
+        assert_eq!(usage::USAGE_URL, cn.usage_url);
+        assert_eq!(worker::worker_rel(Region::Cn), worker::WORKER_REL);
+
+        // 生产构造（默认 CN）：登录态目录仍是 `%APPDATA%\com.qodercn.app.stable`
+        let st = AppState::from_env();
+        assert_eq!(st.usage_url, cn.usage_url);
+        assert!(st.auth_dir.ends_with("com.qodercn.app.stable"), "{:?}", st.auth_dir);
+    }
+
+    /// 验收标准 4：`--region INTL` 必须选对三处值。
+    #[test]
+    fn intl_region_picks_all_three_values() {
+        let intl = Region::Intl.cfg();
+        assert_eq!(intl.auth_dir_name, "com.qoder.app.stable");
+        assert_eq!(
+            intl.worker_rel,
+            r"Qoder\resources\app.asar.unpacked\node_modules\@qoder-ai\qoder-agent-sdk\dist\_worker"
+        );
+        assert_eq!(intl.usage_url, "https://openapi.qoder.sh/api/v2/quota/usage");
+
+        // 走 CLI 解析（`--region INTL` 不带覆盖参数）
+        let args = Args::try_parse_from(["rs-qoder", "--region", "INTL"]).unwrap();
+        let region = Region::parse(&args.region);
+        assert_eq!(region, Region::Intl);
+        let st = AppState::from_env_with(
+            region,
+            &Overrides {
+                usage_url: Some(args.usage_url.clone()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(st.usage_url, "https://openapi.qoder.sh/api/v2/quota/usage");
+        assert!(st.auth_dir.ends_with("com.qoder.app.stable"), "{:?}", st.auth_dir);
+        // worker 相对路径按区域换（候选顺序与命中逻辑由 worker.rs 的单测锁）
+        assert_eq!(worker::worker_rel(Region::Intl), worker::WORKER_REL_INTL);
+        // 两区的相对路径必须真的不同（否则「选对」无从谈起）
+        assert_ne!(worker::worker_rel(Region::Cn), worker::worker_rel(Region::Intl));
+        assert_ne!(Region::Cn.cfg().auth_dir_name, Region::Intl.cfg().auth_dir_name);
+        assert_ne!(Region::Cn.cfg().usage_url, Region::Intl.cfg().usage_url);
+    }
+
+    /// 显式覆盖参数优先于 `--region`（四个覆盖口都要验）。
+    #[test]
+    fn explicit_overrides_beat_region() {
+        let ov = Overrides {
+            auth_dir: Some(PathBuf::from(r"C:\tmp\auth-override")),
+            worker: Some(PathBuf::from(r"C:\tmp\worker-override.mjs")),
+            credits_file: Some(PathBuf::from(r"C:\tmp\credits.json")),
+            usage_url: Some("https://example.test/usage".to_string()),
+        };
+        for region in [Region::Cn, Region::Intl] {
+            let st = AppState::from_env_with(region, &ov);
+            assert_eq!(st.auth_dir, PathBuf::from(r"C:\tmp\auth-override"));
+            assert_eq!(st.worker_path, Some(PathBuf::from(r"C:\tmp\worker-override.mjs")));
+            assert_eq!(st.credits_path, Some(PathBuf::from(r"C:\tmp\credits.json")));
+            assert_eq!(st.usage_url, "https://example.test/usage");
+        }
+        // 只覆盖一项时，其余两项仍按区域取（覆盖不是「全有或全无」）
+        let st = AppState::from_env_with(
+            Region::Intl,
+            &Overrides {
+                worker: Some(PathBuf::from(r"C:\tmp\w.mjs")),
+                ..Default::default()
+            },
+        );
+        assert_eq!(st.worker_path, Some(PathBuf::from(r"C:\tmp\w.mjs")));
+        assert!(st.auth_dir.ends_with("com.qoder.app.stable"), "{:?}", st.auth_dir);
+        assert_eq!(st.usage_url, "https://openapi.qoder.sh/api/v2/quota/usage");
+    }
+
+    #[test]
+    fn usage_url_override_semantics() {
+        // 未显式给 `--usage-url`（CLI 给的是 CN 默认值）⇒ 按区域取
+        assert_eq!(
+            resolve_usage_url(Region::Cn, usage::USAGE_URL),
+            "https://openapi.qoder.com.cn/api/v2/quota/usage"
+        );
+        assert_eq!(
+            resolve_usage_url(Region::Intl, usage::USAGE_URL),
+            "https://openapi.qoder.sh/api/v2/quota/usage"
+        );
+        // 显式给了别的值 ⇒ 一律以它为准（两区都一样）
+        for region in [Region::Cn, Region::Intl] {
+            assert_eq!(
+                resolve_usage_url(region, "https://example.test/u"),
+                "https://example.test/u"
+            );
+        }
     }
 }

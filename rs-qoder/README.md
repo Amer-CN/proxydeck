@@ -15,6 +15,8 @@ cd rs-qoder
 cargo build
 # 测试端口（绝不与 Go 版 8785 抢端口）
 .\target\debug\rs-qoder.exe --plugin-qoder --port 18785
+# 国际版（同一端口形态，按区域换整套默认值）
+.\target\debug\rs-qoder.exe --plugin-qoder --port 18786 --region INTL
 ```
 
 | 参数 | 默认 | 说明 |
@@ -22,10 +24,45 @@ cargo build
 | `--plugin-qoder` | 关 | 与 Go 侧同名占位开关（GUI 不会 spawn 本 crate） |
 | `--port` | `8785` | 与 Go 侧同值；对照一律显式给测试端口 |
 | `--host` | `127.0.0.1` | 回环 |
-| `--worker` | 自动探测 | 覆盖 worker 路径（`QODER_WORKER` → `D:\Program Files\...` → `%ProgramFiles%\...`） |
-| `--auth-dir` | `%APPDATA%\com.qodercn.app.stable` | 登录态目录覆盖（对照用） |
+| `--region` | `CN` | `CN` / `INTL`。**只提供「整套默认值」**（登录态目录 / worker 路径 / 额度接口），显式覆盖参数优先 |
+| `--worker` | 按区域自动探测 | 覆盖 worker 路径（`QODER_WORKER` → `D:\Program Files\...` → `%ProgramFiles%\...`） |
+| `--auth-dir` | 按区域 | 登录态目录覆盖（对照用） |
 | `--credits-file` | `%USERPROFILE%\.qoder-cli-credits.json` | 账本路径覆盖（对照用） |
-| `--usage-url` | `https://openapi.qoder.com.cn/api/v2/quota/usage` | 实时额度接口覆盖（对照用） |
+| `--usage-url` | 按区域 | 实时额度接口覆盖（对照用） |
+
+## 双区（CN / INTL）
+
+Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行时**字符串计数完全一致**
+（`qoder.com.cn` / `qoder.sh` / `agent_chat_generation` / `stream-json` / `jobToken` /
+`machine-id` / `--output-format` / `session_id` 等 15 个探针同值），差异仅 4 字节长度 +
+包名，说明是**同一份代码的两个构建**，协议一致 ⇒ **不拆端口、不做账号池**，同一端口内按
+`--region` 切三处默认值：
+
+| 项 | CN（默认） | INTL |
+|---|---|---|
+| 登录态目录 | `%APPDATA%\com.qodercn.app.stable` | `%APPDATA%\com.qoder.app.stable` |
+| worker 相对路径 | `Qoder CN\...\@qoder-ai\qoder-cn-agent-sdk\dist\_worker` | `Qoder\...\@qoder-ai\qoder-agent-sdk\dist\_worker` |
+| 额度接口 | `https://openapi.qoder.com.cn/api/v2/quota/usage` | `https://openapi.qoder.sh/api/v2/quota/usage` |
+
+区域配置是 `lib.rs` 的 `Region` / `RegionCfg`（`REGION_CN` / `REGION_INTL` 两张常量表，
+**在 rs-qoder 内自建，不跨 crate 引用** `rs-codebuddy/src/region.rs`）。两区登录态目录内部
+结构完全一致（都有 `Local State` + `auth.v1.dat`），解密链复用同一份 `auth.rs`。
+
+**优先级**：`--region` 只给默认值，`--auth-dir` / `--worker` / `--usage-url` 显式给出时一律以
+覆盖值为准。**不带 `--region` 时三处默认值与改前逐字节一致**（CN）。
+
+实测（2026-10-20，测试端口 18785）：
+- 默认（不带 `--region`）→ 读 `com.qodercn.app.stable`、用 `Qoder CN` 的 worker，
+  `/v1/chat/completions` 返回 `OK-CN-DEFAULT`；
+- `--region INTL` → 读 `com.qoder.app.stable`、用国际版 worker，`/health?refresh=1` 走 `.sh`
+  域名正常返回 `realtime`，`/v1/chat/completions` 返回 `OK-INTL`。
+
+> ⚠ **CN worker 路径已于 2026-10-20 按实测修正**：CN 客户端装在独立的
+> `D:\Program Files\Qoder CN\`，**不在** `Qoder\Qoder CN\` 之下。原常量拼出的路径不存在，
+> 会导致默认实例 `worker=<未找到>`、chat 回 503 `no_worker`。旧布局
+> （`Qoder\Qoder CN\...`）作为**兜底候选**保留在 `WORKER_REL_CN_LEGACY`，
+> 老安装仍能命中。本机 `D:\Program Files\Qoder` 是**国际版**。
+
 
 ## 端点（与 Go `http.ServeMux` 注册的四条同形）
 
@@ -88,8 +125,9 @@ cargo build
    `bufio.Scanner` 封顶在 8MB——超过即弃、不再读；Rust 的 `read_until` 是先把**整行**读进
    `Vec<u8>`（长到换行 / EOF / 600s 截止为止），读完才判 `> 8MB`。所以超长单行的峰值内存
    是「该行实际长度」，不是 8MB。
-6. **`no_worker` 503 分支**：本机真装了 Qoder CN（`D:\Program Files\Qoder\Qoder CN\...`），
-   Go 的 `findWorker()` 一定命中 ⇒ **Go 侧采不到**。Rust 用测试缝
+6. **`no_worker` 503 分支**：本机真装了 Qoder CN（`D:\Program Files\Qoder CN\...`，
+   2026-10-20 实测；旧文写的 `Qoder\Qoder CN\...` 布局不存在），Go 的 `findWorker()`
+   一定命中 ⇒ **Go 侧采不到**。Rust 用测试缝
    （`AppState.worker_path = None`）锁住状态码与文案（`tests/http_contract.rs`）。
 7. **流式响应的 `transfer-encoding`**：Go 的 SSE 不带 `content-length`（分块由 Go 隐式完成），
    hyper 会对长度未知的 body 显式补 `transfer-encoding: chunked`。门禁显式放行这一种形态，
@@ -102,11 +140,20 @@ cargo build
    `SKIP(dpapi-fixture): ...` 并计入汇总（**不静默跳过**）；重采即得新夹具。
 10. **`--port` 默认值等于生产端口 8785**：沿用 `rs-bai`（8891）/`rs-comate`（8786）的同款约定，
     本阶段一致；对照一律显式给测试端口。
+11. **`--usage-url` 的「显式覆盖」判定**：该参数保留了 `default_value`（CN 常量，字段类型与
+    改前一致，既有合同测试据此断言默认值），所以「值 == CN 默认值」被当作「未显式覆盖」，
+    由 `resolve_usage_url` 按区域取。极端情形 `--region INTL --usage-url <CN 的默认域名>`
+    会被当成未覆盖、实际走 `.sh`；真要指回 CN 域名时请带别的写法（如显式端口）。
+    `--auth-dir` / `--worker` / `--credits-file` 没有这个歧义（`Option`，给了就是给了）。
+12. **区域只换三处默认值**：两区 worker 协议实测一致，故 `--region` **不改**端口、模型目录、
+    cwd 解析、积分账本、请求/响应形状中的任何一项；只有登录态目录名、worker 相对路径、
+    额度接口域名随区域变。
 
 ## 未覆盖
 
-- 与**真 worker** 的端到端对话（会真出网、消耗账号积分）——本阶段一律用假 worker 驱动协议；
-  真实上游行为未验证，**接线到 GUI/切流都不在本阶段**。
+- 与**真 worker** 的端到端对话：CN 侧本阶段一律用假 worker 驱动协议（会真出网、消耗账号积分）；
+  INTL 侧已做**一次**活体验证（`--region INTL` 实例 `/v1/chat/completions` 返回 `OK-INTL`，
+  见上文「双区」），但未做长时/多模型对照。
 - 600s 超时与 >8MB 单行的逐字节对照（见差异 5）。
 - `no_worker` 的 Go 侧实测（见差异 6）。
 - Go 侧 `handleChatStream` 里「首 chunk 落盘后 worker 才超时」的时间轴细节（语义已对齐、
@@ -115,7 +162,7 @@ cargo build
 ## 测试与门禁
 
 ```powershell
-cd rs-qoder; cargo test          # 29 单测 + 6 黄金 + 7 合同
+cd rs-qoder; cargo test          # 36 单测 + 6 黄金 + 7 合同
 # 黄金门禁里的 SKIP 行与计数用 println! 打，libtest 默认**只在失败时**显示通过用例的 stdout：
 cargo test -- --nocapture        # 要看「跳过了什么、跳过几条」就带这个（见 tests/golden/README.md）
 ```

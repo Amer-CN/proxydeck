@@ -16,15 +16,24 @@
 
 use std::path::{Path, PathBuf};
 
-/// 与 Go `authDir()` 同值：`%APPDATA%\com.qodercn.app.stable`。
+use crate::Region;
+
+/// 与 Go `authDir()` 同值：`%APPDATA%\com.qodercn.app.stable`（CN 版，**默认区域**）。
 pub const AUTH_DIR_NAME: &str = "com.qodercn.app.stable";
 
-/// 与 Go `authDir()` 同判定：`filepath.Join(os.Getenv("APPDATA"), "com.qodercn.app.stable")`。
-/// APPDATA 缺失时 Go 得到的是相对路径 `com.qodercn.app.stable`（Join("") 的结果），这里同样返回它。
-pub fn auth_dir() -> PathBuf {
+/// 国际版（INTL）的登录态目录名：`%APPDATA%\com.qoder.app.stable`。
+/// 实测内部结构与 CN 版完全一致（都有 `Local State` + `auth.v1.dat`，解密链可复用）。
+pub const AUTH_DIR_NAME_INTL: &str = "com.qoder.app.stable";
+
+/// 与 Go `authDir()` 同判定：`filepath.Join(os.Getenv("APPDATA"), <区域目录名>)`。
+/// 目录名按 `--region` 取（`Region::cfg().auth_dir_name`）；不带 `--region` 时就是
+/// `com.qodercn.app.stable`，与改前逐字节一致。
+/// APPDATA 缺失时 Go 得到的是相对路径（Join("") 的结果），这里同样返回它。
+pub fn auth_dir(region: Region) -> PathBuf {
+    let name = region.cfg().auth_dir_name;
     match std::env::var("APPDATA") {
-        Ok(v) if !v.is_empty() => Path::new(&v).join(AUTH_DIR_NAME),
-        _ => PathBuf::from(AUTH_DIR_NAME),
+        Ok(v) if !v.is_empty() => Path::new(&v).join(name),
+        _ => PathBuf::from(name),
     }
 }
 
@@ -277,6 +286,28 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 区域只换目录名；CN 与改前逐字相同。
+    #[test]
+    fn auth_dir_name_follows_region() {
+        assert_eq!(Region::Cn.cfg().auth_dir_name, AUTH_DIR_NAME);
+        assert_eq!(AUTH_DIR_NAME, "com.qodercn.app.stable");
+        assert_eq!(Region::Intl.cfg().auth_dir_name, AUTH_DIR_NAME_INTL);
+        assert_eq!(AUTH_DIR_NAME_INTL, "com.qoder.app.stable");
+
+        let cn = auth_dir(Region::Cn);
+        let intl = auth_dir(Region::Intl);
+        assert!(cn.ends_with("com.qodercn.app.stable"), "{cn:?}");
+        assert!(intl.ends_with("com.qoder.app.stable"), "{intl:?}");
+        assert_ne!(cn, intl);
+        // APPDATA 存在时是「APPDATA + 目录名」；缺失时是裸目录名（Go 的 Join("") 同形）
+        match std::env::var("APPDATA") {
+            Ok(v) if !v.is_empty() => {
+                assert_eq!(cn, Path::new(&v).join(AUTH_DIR_NAME));
+            }
+            _ => assert_eq!(cn, PathBuf::from(AUTH_DIR_NAME)),
+        }
+    }
 
     // 期望值由**真 Go** `time.Parse(time.RFC3339, s)` 采收（golden-qoder-go.json 的 rfc3339 段）。
     #[test]
