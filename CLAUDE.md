@@ -131,10 +131,13 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   上游当时给 codely 别名配 `display_name` 后端名（core→GLM-5.3、basic/flash/air→
   DeepSeek-V4-Flash；**2026-10-20 复核已变 V4.1-Flash，见下条**），
   **矩阵与按账号列表只认 id，不认 display_name**
-  （v3.17.0，已实测 78363 免费号 5 个、另两号最多 10 个）；**GLM-5.3 直连名已 401**
-  （team_model_access_denied，上游白名单只剩 alias-only-proxy-models / KIMI-K3 / GLM-5.3-FLASH），
-  **codely-core 即 GLM-5.3 的承载入口**——上游把 GLM-5.3 收进 core 别名，
-  选 core 实际用的就是 GLM-5.3（用户 2026-09-06 确认，直连 401 同日复核）
+  （v3.17.0，已实测 78363 免费号 5 个；**2026-10-20 实测 56574 号 10 个**）。
+  **白名单按团队不同（2026-10-20 复核）**：78363 免费号只剩 `alias-only-proxy-models`
+  （直连 GLM-5.3 / DeepSeek-V4.1-Flash / MiniMax-M3.1-Flash 全 401）；池内 56574 号 6 个——
+  `alias-only-proxy-models / KIMI-K3 / GLM-5.3-FLASH / DeepSeek-V4.1-Flash / GLM-5.3 /
+  MiniMax-M3.1-Flash`，三个原生名直调均 200。
+  **codely-core 曾是 GLM-5.3 的承载入口**（2026-09-06 用户确认，当时直连 401）；
+  2026-10-20 起池内账号可直连 GLM-5.3，core 不再是唯一入口
 - codely-basic/flash/air 三档同源、仅推理深度不同（2026-09-06 实测同题：
   basic 3.8K / air 6.8K / flash 9.4K reasoning tokens）。
   **2026-10-20 复核（旧值 `deepseek-v4-flash-0731` 已作废）**：上游 `display_name`
@@ -451,7 +454,7 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-10-18，v4.2.7 已发布）
+## 当前状态（2026-10-19，v4.2.8 已发布）
 
 > **逐版历史只在 `CHANGELOG.md`**（唯一权威）。本节只保留「现在什么状态、下一步注意什么」，
 > 不再复制版本流水账——2026-10-18 洁癖收尾时删掉了约 200 行重复条目。
@@ -466,8 +469,8 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   修"每请求重设权限"（ACL 改目录级一次）、修更新日志版本号被脚本改坏。
   要点：**群友反馈的黑窗问题根因是后端（GUI 子系统）spawn `icacls`/`reg` 时没隐藏窗口**；
   `accounts.rs::pick()` 每请求落盘 → 每请求一次 `icacls`，已改为每目录一次。
-- **服务现状**（2026-10-18 17:22 实测）：GUI + 8787/8788/8789 三后端均 v4.2.7/v4.2.6，
-  health 全绿；8785/8786/8790/8891 未在运行（用哪个拉哪个）。
+- **服务现状**（2026-10-20 13:57 实测）：8785/8786/8787/8788/8790 端口在监听，8891 未起
+  （进程均为 2026-10-20 03:43 启动的 ProxyDeck 子进程，版本未逐个取）。
   后端是独立常驻子进程，关 GUI 不死；**重启 GUI 不会自动点火**，需逐个拉杆。
 - **账号池内存态**：Dead/冷却/调用计数只在内存（重启清零），只有 Enabled/Removed 落盘；
   上游 reset 时点不落盘，重启丢一次无害。`codebuddy-pool(-intl).json` 已 gitignore。
@@ -508,7 +511,9 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   （版本号必须唯一且严格降序），改坏会直接红。
 - `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
-- `.work/` 现状（2026-10-18 已清场，只剩 `task-rust-rewrite.md` 一份工作记录 ≈0.5MB）：
+- `.work/` 现状（2026-10-20 盘点，**未清场**）：`task-rust-rewrite.md`（≈0.5MB 工作记录）+
+  `current-task.md`（Qoder 双区简报，已随 d5b81bb 落地）+ `task-endpoints{,-result,-review}.md`
+  三份 + `refproxy-landscape-2026-10-20.md` + 空文件 `go-gui.err`——**均为会话残留，清场待用户确认**。
   下一任务重写 `current-task.md`；**并行会话用 `task-<关键词>.md`**
   （`enforce-flow.ps1` 对两者同等识别为简报）。
 - **构建缓存不要放进仓库盘**：Rust 的 `CARGO_TARGET_DIR` 曾散落在 `E:\cargo-target`
