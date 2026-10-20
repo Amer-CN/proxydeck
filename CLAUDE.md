@@ -127,10 +127,11 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 - 可用模型 ID（2026-09-06 实测 /v1/models，大小写敏感）：`KIMI-K3`（全大写）、
   `GLM-5.3-FLASH`、`codely-core/basic/flash/air/vl`；**2026-09-15 上游新增原生
   `DeepSeek-V4.1-Flash`（`?full=true` 共 8 个，裸 `GLM-5.3` 不在内）**；
+  **2026-10-20 实测 10 个：新增 `MiniMax-M3.1-Flash`，`GLM-5.3` 也在内**；
   上游当时给 codely 别名配 `display_name` 后端名（core→GLM-5.3、basic/flash/air→
   DeepSeek-V4-Flash；**2026-10-20 复核已变 V4.1-Flash，见下条**），
   **矩阵与按账号列表只认 id，不认 display_name**
-  （v3.17.0，已实测 78363 免费号 5 个、另两号 8 个）；**GLM-5.3 直连名已 401**
+  （v3.17.0，已实测 78363 免费号 5 个、另两号最多 10 个）；**GLM-5.3 直连名已 401**
   （team_model_access_denied，上游白名单只剩 alias-only-proxy-models / KIMI-K3 / GLM-5.3-FLASH），
   **codely-core 即 GLM-5.3 的承载入口**——上游把 GLM-5.3 收进 core 别名，
   选 core 实际用的就是 GLM-5.3（用户 2026-09-06 确认，直连 401 同日复核）
@@ -165,8 +166,9 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   被 GBK 打碎的探测数据上，一并作废。代理现已本地拦截并回可读 400（v3.10.4），
   且不再对该确定性错误做无谓重试
 - **2026-09-04 实测三条**：
-  - codely 别名现行映射：codely-core→glm-5-fp8-128k、codely-vl→glm-5.3-flash、
+  - codely 别名**当时**映射：codely-core→glm-5-fp8-128k、codely-vl→glm-5.3-flash、
     codely-flash/basic/air→deepseek-v4-flash（ga-260731/0731 双部署负载均衡）
+    ——**2026-10-20 复核：basic/flash/air 已换 DeepSeek-V4.1-Flash，见上文**
   - 官方团队白名单实测收紧为 alias-only-proxy-models / KIMI-K3 / GLM-5.3-FLASH：
     GLM-5.3 直连已 401（team_model_access_denied），桌面客户端模型目录里的 GLM-5.3
     选项不可用（目录与权限不匹配，非代理问题）
