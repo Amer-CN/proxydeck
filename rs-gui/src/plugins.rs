@@ -110,6 +110,18 @@ pub fn plugin_defs() -> Vec<PluginDef> {
         PluginDef::new("bai", "B.AI", "", "", &[], 8891, "/health", "bai"),
         PluginDef::new("comate", "Comate", "", "", &[], 8786, "/health", "comate"),
         PluginDef::new("qoder", "Qoder", "", "", &[], 8785, "/health", "qoder"),
+        // Qoder 国际版：8791，读 com.qoder.app.stable + 国际版 worker + .sh 额度接口。
+        // 与 codebuddy-intl 同款：子模式 flag 由 dispatch 翻译成 `--plugin-qoder --region INTL`。
+        PluginDef::new(
+            "qoder-intl",
+            "Qoder Intl",
+            "",
+            "",
+            &[],
+            8791,
+            "/health",
+            "qoder-intl",
+        ),
         PluginDef::new("vibex", "VibeX", "", "", &[], 8790, "/health", "vibex"),
     ]
 }
@@ -764,9 +776,10 @@ mod tests {
                 "bai",
                 "comate",
                 "qoder",
+                "qoder-intl",
                 "vibex"
             ],
-            "顺序与 Go pluginDefs 一致（ccPluginList 输出顺序依赖它）"
+            "顺序与 Go pluginDefs 一致（ccPluginList 输出顺序依赖它）；qoder-intl 为 2026-10-20 新增"
         );
         let ports: Vec<(String, u16)> = defs.iter().map(|d| (d.id.clone(), d.port)).collect();
         assert_eq!(
@@ -778,6 +791,7 @@ mod tests {
                 ("bai".to_string(), 8891),
                 ("comate".to_string(), 8786),
                 ("qoder".to_string(), 8785),
+                ("qoder-intl".to_string(), 8791),
                 ("vibex".to_string(), 8790),
             ]
         );

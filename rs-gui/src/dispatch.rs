@@ -51,7 +51,7 @@ pub fn plugin_crate(id: &str) -> Option<&'static str> {
         "bai" => Some("rs-bai"),
         "codebuddy" | "codebuddy-intl" => Some("rs-codebuddy"),
         "comate" => Some("rs-comate"),
-        "qoder" => Some("rs-qoder"),
+        "qoder" | "qoder-intl" => Some("rs-qoder"),
         // 团结（tuanjie / 8788）：P7d-1 起由 `rs-tuanjie` 承接（`pub async fn run(args)`，
         // 与 rs-vibex / rs-proxy 同一形态）。**本 exe 仍不去接管生产端口 8788**——
         // 那是停服/换装动作，须用户确认；`rs-tuanjie` 自己那条「8788 + 测试缝 → 拒绝」
@@ -65,7 +65,7 @@ pub fn plugin_crate(id: &str) -> Option<&'static str> {
 /// 本分发器认得的插件子模式 flag（与 Go `plugin_modes.go` 的**分支顺序**逐个对齐：
 /// vibex → tuanjie → codebuddy → codebuddy-intl → bai → comate → qoder。
 /// 顺序只在多个 `--plugin-*` 并存时有意义（与 Go 同：vibex 优先）。}
-pub const PLUGIN_FLAGS: [&str; 7] = [
+pub const PLUGIN_FLAGS: [&str; 8] = [
     "plugin-vibex",
     "plugin-tuanjie",
     "plugin-codebuddy",
@@ -73,6 +73,7 @@ pub const PLUGIN_FLAGS: [&str; 7] = [
     "plugin-bai",
     "plugin-comate",
     "plugin-qoder",
+    "plugin-qoder-intl",
 ];
 
 /// 把 Go 风格的「单横线长选项」规范化为 clap 认的 `--flag`（短选项/负值原样保留）。
@@ -120,6 +121,7 @@ pub fn plan(argv: &[String]) -> Mode {
 ///
 /// 三处翻译，其余原样透传：
 ///   * `--plugin-codebuddy-intl` → `--plugin-codebuddy --region INTL`（rs-codebuddy 用 region 区分）
+///   * `--plugin-qoder-intl` → `--plugin-qoder --region INTL`（rs-qoder 同款；2026-10-20 接入）
 ///   * `--portable`：只留给接受它的 crate（rs-vibex）；其余 crate 由调用方改用
 ///     `PROXYDECK_DATA_DIR` 环境变量保证父子数据目录一致。
 ///     ⚠ `rs-tuanjie` 的 `Args` 其实也接受 `--portable`（P7d-1），但这里**沿用原行为**一并丢掉：
@@ -134,6 +136,14 @@ pub fn plugin_argv(prog: &str, plugin_id: &str, argv: &[String]) -> Vec<String> 
     for a in &norm {
         if a == "--plugin-codebuddy-intl" {
             out.push("--plugin-codebuddy".to_string());
+            out.push("--region".to_string());
+            out.push("INTL".to_string());
+            continue;
+        }
+        // Qoder 国际版：与 codebuddy-intl 同款翻译（rs-qoder 的 `--region` 决定
+        // 登录态目录 / worker 路径 / 额度接口三处默认值）。
+        if a == "--plugin-qoder-intl" {
+            out.push("--plugin-qoder".to_string());
             out.push("--region".to_string());
             out.push("INTL".to_string());
             continue;

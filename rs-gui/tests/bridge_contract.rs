@@ -39,6 +39,14 @@ use rs_gui::state::App;
 
 const GOLDEN: &str = include_str!("golden/bridge-go-reference.json");
 
+/// Rust 侧**已知新增**的探活目标（Go `pluginDefs` 里没有）。
+///
+/// 2026-10-20：新增 `qoder-intl`（Qoder 国际版，8791）。Go 侧插件表仍是 7 条，
+/// 黄金基准 `ccLiveSnapshot.live` 因此少这个键。比对时**只扣除这一项**，
+/// 其余任何键差异照旧判红（见 `go_and_rust_bridge_agree_command_by_command` 例外 4）。
+/// 将来若 Go 侧也加了同名插件，把这里清空即可。
+const RUST_ONLY_LIVE_KEYS: &[&str] = &["qoder-intl"];
+
 /* ---------------- 归一化（与 Go 采集器同一套哨兵） ---------------- */
 
 struct Normalizer {
@@ -606,8 +614,12 @@ fn go_and_rust_bridge_agree_command_by_command() {
                 let r: Value = serde_json::from_str(&got_raw).unwrap();
                 assert_eq!(g["ok"], r["ok"], "ccLiveSnapshot 的 ok 必须一致");
                 let gk: BTreeSet<String> = g["live"].as_object().unwrap().keys().cloned().collect();
-                let rk: BTreeSet<String> = r["live"].as_object().unwrap().keys().cloned().collect();
-                assert_eq!(gk, rk, "ccLiveSnapshot 的探活目标键集必须一致");
+                let mut rk: BTreeSet<String> = r["live"].as_object().unwrap().keys().cloned().collect();
+                // 2026-10-20：Rust 侧新增 `qoder-intl`（Qoder 国际版，8791），而 Go 侧
+                // `pluginDefs` 仍是 7 条，黄金基准因此少一个键。这里**只放行这一个已知新增键**，
+                // 其余任何键差异照旧判红——不放宽标准，只是把「Rust 侧已知扩展」显式登记出来。
+                rk.remove(RUST_ONLY_LIVE_KEYS[0]);
+                assert_eq!(gk, rk, "ccLiveSnapshot 的探活目标键集必须一致（已扣除 Rust 侧已知新增键）");
                 live_snapshot_keys = gk;
                 checked_steps += 1;
                 continue;
