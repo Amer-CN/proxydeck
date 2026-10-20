@@ -16,6 +16,16 @@ use std::sync::Arc;
 
 // ---------- 纯函数 ----------
 
+/// 2026-10-20：目录扩充（`cmodel`/`kmodel_latest` 等）后，这几个输入在 Go 基准里是
+/// 「不认识 ⇒ 空」，现在必须解析成 worker key。**只列这四个**——旧代号
+/// （`q37fmodel`/`gm51model`）与全部拒绝样本仍按黄金逐字比，不在这里开口子。
+const RESOLVE_EXTENDED: [(&str, &str); 4] = [
+    ("Cantus", "cmodel"),
+    ("cmodel", "cmodel"),
+    ("Kimi-K3", "kmodel_latest"),
+    ("kmodel_latest", "kmodel_latest"),
+];
+
 #[test]
 fn pure_functions_match_go() {
     let g = load_golden();
@@ -34,11 +44,15 @@ fn pure_functions_match_go() {
 
     for case in g["resolve"].as_array().unwrap() {
         let input = case["in"].as_str().unwrap();
-        assert_eq!(
-            rs_qoder::resolve_model(input),
-            case["out"].as_str().unwrap(),
-            "[resolve {input:?}]"
-        );
+        // 2026-10-20：模型目录扩到 14 条（`catalog` 动态目录 + 同内容静态兜底）后，
+        // **只有这四个输入**的解析结果有意偏离 Go 基准（基准记的是旧 13 条目录）。
+        // 其余输入（含旧代号 q37fmodel/gm51model 与全部拒绝样本）仍逐字节比 Go。
+        let want = RESOLVE_EXTENDED
+            .iter()
+            .find(|(extended_input, _)| *extended_input == input)
+            .map(|(_, mapped)| *mapped)
+            .unwrap_or_else(|| case["out"].as_str().unwrap());
+        assert_eq!(rs_qoder::resolve_model(input), want, "[resolve {input:?}]");
         checks += 1;
     }
 
@@ -410,17 +424,12 @@ async fn routes_match_go() {
                 "[route {method} {path}] body"
             );
         } else {
-            // 与 `models_match_go` 同一条已知偏离：`/v1/models` 的 `id` 改发可读名，
-            // 换回代号后再逐字节比（其余字段/键序/换行仍严格一致）。
-            let got = if path.starts_with("/v1/models") {
-                models_body_with_legacy_ids(&String::from_utf8_lossy(&body))
-            } else {
-                String::from_utf8_lossy(&body).to_string()
-            };
-            assert_eq!(
-                got,
+            // 与 `models_match_go` 同一条已知偏离（目录改用动态目录（13 条））：目录体走
+            // 「信封比黄金 + 目录比手写期望」两条断言；404/307 等非目录体仍逐字节比。
+            assert_models_body(
+                &format!("route {method} {path}"),
                 want_body,
-                "[route {method} {path}] body"
+                &String::from_utf8_lossy(&body),
             );
         }
         assert_headers_like_go(
@@ -437,30 +446,61 @@ async fn routes_match_go() {
 
 // ---------- /v1/models ----------
 
-/// 2026-10-20：`/v1/models` 的 `id` 从上游内部代号改发**可读名**（见 `QODER_PUBLIC_IDS`）。
+/// 2026-10-20：`/v1/models` 的模型目录从写死的 13 条改成 `catalog`
+/// （Qoder 客户端 `resources\dynamic-text` 的 14 条）+ 同内容的静态兜底。
+/// 显式构造的 `AppState`（黄金回放用的测试缝）固定走静态表，所以这里可复现。
 ///
-/// 原因：OpenAI 兼容客户端（DSH / Cursor / Codex…）只读 `id`、忽略 `display_name`，
-/// 发代号会让用户界面显示一串 `qmodel_38max` 之类看不懂的名字。
-///
-/// 这是**有意偏离 Go 黄金**的一处：黄金录的是旧响应体（`id` = 代号）。这里不改黄金
-/// 文件（它是 Go 侧的权威记录），而是把 Rust 输出里 `id` 字段按同一张表换回代号后
-/// 再逐字节比——**其余字段、键序、换行仍严格一致**，偏离范围被限制在「id 的取值」这一项。
-fn models_body_with_legacy_ids(rust_body: &str) -> String {
-    use rs_codebuddy_public_ids::PUBLIC_TO_LEGACY;
-    let mut out = rust_body.to_string();
-    for (public_id, legacy_id) in PUBLIC_TO_LEGACY {
-        // 只替换 `"id":"<public>"` 这一处形态（display_name 与本字段同值时也要区分开）
-        let from = format!("\"id\":\"{public_id}\"");
-        let to = format!("\"id\":\"{legacy_id}\"");
-        out = out.replace(&from, &to);
-    }
-    out
+/// 这是**有意偏离 Go 黄金**的一处（黄金录的是旧目录）。旧做法「`id` 换回代号后逐字节比」
+/// 在条目数 13→14 之后已不可能成立，于是拆成两条**更窄**的断言，避免靠放宽断言变绿：
+/// 1. **信封逐字节**：把 `data` 数组挖空后与黄金完全相同（键序/分隔/换行仍锁死）；
+/// 2. **目录逐字节**：与下面手写的新期望体完全相同（14 条、worker key 字典序、
+///    `id == display_name == 可读名`）。期望体**不从被测代码推导**。
+fn models_envelope(body: &str) -> String {
+    const OPEN: &str = "{\"data\":[";
+    const CLOSE: &str = "],\"object\":\"list\"}";
+    let start = body
+        .find(OPEN)
+        .unwrap_or_else(|| panic!("models 响应体缺 data 前缀: {body:?}"))
+        + OPEN.len();
+    let end = body
+        .find(CLOSE)
+        .unwrap_or_else(|| panic!("models 响应体缺 object 后缀: {body:?}"));
+    format!("{}{}", &body[..start], &body[end..])
 }
 
-/// 可读名 → 旧代号的映射（测试侧副本；与 `rs_qoder::QODER_PUBLIC_IDS` 同源，
-/// 但测试直接引用 crate 常量，避免两处漂移）。
-mod rs_codebuddy_public_ids {
-    pub const PUBLIC_TO_LEGACY: [(&str, &str); 13] = rs_qoder::QODER_PUBLIC_IDS;
+/// 新目录的期望响应体（手写；`\n` 是 Go `json.Encoder` 的末尾换行）。
+const EXPECTED_MODELS_BODY: &str = concat!(
+    "{\"data\":[",
+    "{\"display_name\":\"Auto\",\"id\":\"Auto\",\"object\":\"model\"},",
+    "{\"display_name\":\"Cantus\",\"id\":\"Cantus\",\"object\":\"model\"},",
+    "{\"display_name\":\"DeepSeek-V4-Flash\",\"id\":\"DeepSeek-V4-Flash\",\"object\":\"model\"},",
+    "{\"display_name\":\"DeepSeek-V4-Pro\",\"id\":\"DeepSeek-V4-Pro\",\"object\":\"model\"},",
+    "{\"display_name\":\"GLM-5.3-Flash\",\"id\":\"GLM-5.3-Flash\",\"object\":\"model\"},",
+    "{\"display_name\":\"GLM-5.3\",\"id\":\"GLM-5.3\",\"object\":\"model\"},",
+    "{\"display_name\":\"Kimi-K2.7-Code\",\"id\":\"Kimi-K2.7-Code\",\"object\":\"model\"},",
+    "{\"display_name\":\"Kimi-K3\",\"id\":\"Kimi-K3\",\"object\":\"model\"},",
+    "{\"display_name\":\"MiniMax-M3\",\"id\":\"MiniMax-M3\",\"object\":\"model\"},",
+    "{\"display_name\":\"Qwen3.8-Flash\",\"id\":\"Qwen3.8-Flash\",\"object\":\"model\"},",
+    "{\"display_name\":\"Qwen3.7-Plus\",\"id\":\"Qwen3.7-Plus\",\"object\":\"model\"},",
+    "{\"display_name\":\"Qwen3.8-Max\",\"id\":\"Qwen3.8-Max\",\"object\":\"model\"},",
+    "{\"display_name\":\"Qwen3.7-Max\",\"id\":\"Qwen3.7-Max\",\"object\":\"model\"}",
+    "],\"object\":\"list\"}\n",
+);
+
+/// `/v1/models` 响应体的两条断言（`models_match_go` 与 `routes_match_go` 共用）：
+/// 空体（HEAD/OPTIONS）逐字节比黄金；非目录体（404/307）逐字节比黄金；
+/// 目录体 = 信封比黄金 + 目录比手写期望。
+fn assert_models_body(case: &str, want_golden: &str, got: &str) {
+    if !want_golden.contains("\"data\":[") {
+        assert_eq!(got, want_golden, "[{case}] 非目录响应体");
+        return;
+    }
+    assert_eq!(
+        models_envelope(got),
+        models_envelope(want_golden),
+        "[{case}] 信封（data 数组以外的键序/分隔/换行）必须与 Go 逐字节一致"
+    );
+    assert_eq!(got, EXPECTED_MODELS_BODY, "[{case}] 13 条目录必须逐字节一致");
 }
 
 #[tokio::test]
@@ -486,14 +526,13 @@ async fn models_match_go() {
             raw_request(&srv.addr, &m.to_uppercase(), "/v1/models", &[], "").await;
         let want = case["status"].as_u64().unwrap() as u16;
         assert_eq!(want, status, "[/v1/models {m}]");
-        // 唯一允许的偏离：`id` 用可读名（换回代号后必须与黄金逐字节相同）
-        let got = models_body_with_legacy_ids(&String::from_utf8_lossy(&body));
-        assert_eq!(
-            got,
+        // 已知偏离：目录改用动态目录（13 条）（见 `assert_models_body` 的说明）。
+        assert_models_body(
+            &format!("models {m}"),
             case["body"].as_str().unwrap(),
-            "[/v1/models {m}] body（已把可读 id 换回代号）"
+            &String::from_utf8_lossy(&body),
         );
-        // 已知偏离：id 改发可读名 ⇒ 响应体变长 ⇒ HEAD 的 content-length 必然与黄金不同。
+        // 已知偏离：目录变长 ⇒ 响应体变长 ⇒ HEAD 的 content-length 必然与黄金不同。
         // 只跳过这一项，其余头仍逐项严格比。
         assert_headers_like_go_opt(
             &format!("models {m}"),
@@ -505,7 +544,7 @@ async fn models_match_go() {
         );
         n += 1;
     }
-    println!("模型目录黄金对比：{n} 组（6 种方法）逐字节一致");
+    println!("模型目录黄金对比：{n} 组（6 种方法；信封逐字节 + 目录逐字节）");
 }
 
 // ---------- /credits/set ----------

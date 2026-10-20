@@ -13,7 +13,8 @@
 //!   有则带 `service`/`uptimeSec`/`credits{spent,spentThisSession,quotaExceeded[,realtime]}`。
 //!   **不看方法**（POST 也回 200）。
 //! * `/credits/set`         —— POST `{"spent":0}` 清零累计（非 POST 回 405 + `Allow: POST`）。
-//! * `/v1/models`           —— 静态模型目录 13 条（首条 Auto）。**不看方法**。
+//! * `/v1/models`           —— 模型目录（Qoder 客户端 `resources\dynamic-text` 的 14 条，
+//!   读不到回落内置静态表）。**不看方法**。
 //! * `/v1/chat/completions` —— 扁平化 messages → worker prompt → 翻回 OpenAI（流式/非流式）。
 //! * 其余路径 —— `ServeMux` 语义的 404/307（路径清洗重定向），见 `handle_fallback`。
 //!
@@ -30,6 +31,7 @@
 //! 三处默认值与改前逐字节一致（见 `RegionCfg`）。
 
 pub mod auth;
+pub mod catalog;
 pub mod credits;
 pub mod crypto;
 pub mod cwd;
@@ -41,7 +43,7 @@ pub mod worker;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, Bytes};
 use axum::extract::{Request, State};
@@ -127,22 +129,19 @@ pub const MAX_BODY_BYTES: usize = 32 << 20;
 /// 与 Go `handleCreditsSet` 的 `io.LimitReader(r.Body, 64<<10)` 同值。
 pub const CREDITS_BODY_BYTES: usize = 64 << 10;
 
-/// `/health` 展示用的静态模型目录：以用户 2026-08-30 的 Qoder 界面截图为准（13 条全量）。
-/// `id` 是传给 worker 的 `--model` 原文（displayName 上游不认——实测）。
-pub const QODER_MODELS: [(&str, &str); 13] = [
-    ("Auto", "Auto"),
-    ("qmodel_38max", "Qwen3.8-Max"),
-    ("qfmodel", "Qwen3.8-Flash"),
+/// 内置静态模型目录：以 Qoder 客户端 2026-10-20 的 `resources\dynamic-text\qoder-cn.json`
+/// 为准（14 条，按 worker key 字典序）。**唯一的表源是 `catalog::STATIC_MODELS`**——
+/// 这里只是把它转成历史名字，避免两处漂移。`id` 是传给 worker 的 `--model` 原文
+/// （displayName 上游不认——实测）。
+///
+/// 相对 2026-08-30 截图版：新增 `cmodel`(Cantus) / `kmodel_latest`(Kimi-K3)；`lite` 是质量档位，已排除；
+/// `q37fmodel`(Qwen3.7-Flash) / `gm51model`(GLM-5.2) 已从目录里消失（见 `QODER_LEGACY_MODELS`）。
+pub const QODER_MODELS: [(&str, &str); 13] = catalog::STATIC_MODELS;
+
+/// 目录已不再曝光、但**上游仍能跑通**的旧代号（实测）：只保留解析兼容，不进 `/v1/models`。
+pub const QODER_LEGACY_MODELS: [(&str, &str); 2] = [
     ("q37fmodel", "Qwen3.7-Flash"),
-    ("qmodel_latest", "Qwen3.7-Max"),
-    ("qmodel", "Qwen3.7-Plus"),
-    ("dmodel", "DeepSeek-V4-Pro"),
-    ("dfmodel", "DeepSeek-V4-Flash"),
-    ("gmodel", "GLM-5.3"),
-    ("gfmodel", "GLM-5.3-Flash"),
     ("gm51model", "GLM-5.2"),
-    ("kmodel", "Kimi-K2.7-Code"),
-    ("mmodel", "MiniMax-M3"),
 ];
 
 /// `/v1/models` 对外暴露的 id → worker 真正吃的 `--model` 原文。
@@ -156,20 +155,21 @@ pub const QODER_MODELS: [(&str, &str); 13] = [
 /// id 与 displayName，所以**旧代号仍然可用**，纯增量、不破坏任何既有调用方。
 ///
 /// 例外：`Auto` 保持原样（它本身就是可读词，且是上游的默认路由语义）。
+/// 内容与 `catalog::STATIC_MODELS` 一一对应（顺序、逐条；单测锁死）。
 pub const QODER_PUBLIC_IDS: [(&str, &str); 13] = [
-    ("Auto", "Auto"),
-    ("Qwen3.8-Max", "qmodel_38max"),
-    ("Qwen3.8-Flash", "qfmodel"),
-    ("Qwen3.7-Flash", "q37fmodel"),
-    ("Qwen3.7-Max", "qmodel_latest"),
-    ("Qwen3.7-Plus", "qmodel"),
-    ("DeepSeek-V4-Pro", "dmodel"),
+    ("Auto", "auto"),
+    ("Cantus", "cmodel"),
     ("DeepSeek-V4-Flash", "dfmodel"),
-    ("GLM-5.3", "gmodel"),
+    ("DeepSeek-V4-Pro", "dmodel"),
     ("GLM-5.3-Flash", "gfmodel"),
-    ("GLM-5.2", "gm51model"),
+    ("GLM-5.3", "gmodel"),
     ("Kimi-K2.7-Code", "kmodel"),
+    ("Kimi-K3", "kmodel_latest"),
     ("MiniMax-M3", "mmodel"),
+    ("Qwen3.8-Flash", "qfmodel"),
+    ("Qwen3.7-Plus", "qmodel"),
+    ("Qwen3.8-Max", "qmodel_38max"),
+    ("Qwen3.7-Max", "qmodel_latest"),
 ];
 
 #[derive(Parser, Debug)]
@@ -242,6 +242,12 @@ pub struct AppState {
     pub cwd_env: Option<String>,
     /// 实时额度接口（Go 是常量；CN `openapi.qoder.com.cn` / INTL `openapi.qoder.sh`）。
     pub usage_url: String,
+    /// 服务区域（决定 `/v1/models` 读哪一份动态目录；也是启动日志里的 `region=`）。
+    pub region: Region,
+    /// 本次启动使用的模型目录 `(worker key, 可读名)`；顺序即 `/v1/models` 的条目顺序。
+    pub models: Vec<(String, String)>,
+    /// 目录真实来源；`None` = 走的内置静态表（文件缺失/坏 JSON/环境变量强制）。
+    pub models_path: Option<PathBuf>,
     /// 登录态缓存（Go `authCache`）。
     auth_cache: Mutex<Option<QoderAuth>>,
     credits: Mutex<CreditsState>,
@@ -267,6 +273,9 @@ pub fn resolve_usage_url(region: Region, cli_value: &str) -> String {
 impl AppState {
     /// 显式构造（测试/黄金回放用）。`usage_url` 取 CN 默认值（与改前一致），
     /// 需要别的区域用 `with_usage_url` / `from_env_with`。
+    ///
+    /// **模型目录固定为内置静态表**（不读安装目录、不看 `QODER_STATIC_MODELS`）：
+    /// 显式构造是黄金回放的测试缝，目录必须逐字节可复现。生产走 `from_env_region`。
     pub fn new(
         auth_dir: PathBuf,
         worker_path: Option<PathBuf>,
@@ -280,6 +289,9 @@ impl AppState {
             credits_path,
             cwd_env,
             usage_url: usage::USAGE_URL.to_string(),
+            region: Region::Cn,
+            models: catalog::static_models(),
+            models_path: None,
             auth_cache: Mutex::new(None),
             credits: Mutex::new(CreditsState::default()),
             usage_cache: Mutex::new(None),
@@ -296,6 +308,9 @@ impl AppState {
     }
 
     /// 按区域取「整套默认值」的生产构造。
+    ///
+    /// 模型目录按区域读 Qoder 客户端的 `dynamic-text` 文件（`QODER_STATIC_MODELS=1` 可强制
+    /// 静态表）；读不到/坏 JSON 由 `catalog::load_for_env` 自己回落静态表。
     pub fn from_env_region(region: Region) -> Self {
         let worker = worker::find_worker(
             std::env::var("QODER_WORKER").ok().as_deref(),
@@ -308,6 +323,10 @@ impl AppState {
             credits::ledger_path_in(credits::home_dir().as_deref()),
             std::env::var("QODER_CWD").ok(),
         );
+        let (models, models_path) = catalog::load_for_env(region);
+        st.region = region;
+        st.models = models;
+        st.models_path = models_path;
         st.usage_url = region.cfg().usage_url.to_string();
         st
     }
@@ -333,6 +352,11 @@ impl AppState {
     pub fn with_usage_url(mut self, url: impl Into<String>) -> Self {
         self.usage_url = url.into();
         self
+    }
+
+    /// 按本次启动的目录解析模型（`/v1/chat/completions` 用这条，不直接用纯函数）。
+    pub fn resolve_model(&self, requested: &str) -> String {
+        resolve_model_in(&self.models, requested)
     }
 
     /// Go `currentAuth()`：内存缓存，`expiresAt` 临近过期（<30s）或解不出时重读文件
@@ -452,14 +476,36 @@ pub fn add_cors(h: &mut HeaderMap) {
 
 /// Go `resolveModel`：`'auto'`/空 → `Auto`；白名单内（忽略大小写，id 与显示名双向匹配）
 /// → 目录 id 原文；不认识的返回 `""`（调用方回 502 invalid_model）。
+///
+/// 认三张表（顺序即优先级，后两张是 2026-10-20 扩充）：
+/// 1. `QODER_MODELS`（静态目录 14 条，id 与可读名双向）；
+/// 2. `QODER_LEGACY_MODELS`（目录已不曝光、但上游仍能跑通的旧代号：`q37fmodel` /
+///    `gm51model`，以及它们的可读名）；
+/// 3. 调用方传入的**动态目录**（见 [`resolve_model_in`]）——由 `AppState::resolve_model`
+///    接上，`/v1/models` 发出去的每个 id 都保证能被解析回来。
 pub fn resolve_model(requested: &str) -> String {
     if requested.is_empty() || requested.eq_ignore_ascii_case("auto") {
         return "Auto".to_string();
     }
-    for (id, name) in QODER_MODELS {
+    for (id, name) in QODER_MODELS.iter().chain(QODER_LEGACY_MODELS.iter()) {
         // Go 的 strings.EqualFold 是 Unicode simple fold；这里用 ASCII 折叠（真实模型名全 ASCII）
         if id.eq_ignore_ascii_case(requested) || name.eq_ignore_ascii_case(requested) {
             return id.to_string();
+        }
+    }
+    String::new()
+}
+
+/// 目录感知的解析：先走 [`resolve_model`]（静态表 + 旧代号），认不出再按**本次启动的
+/// 动态目录**认 worker key / 可读名。
+pub fn resolve_model_in(models: &[(String, String)], requested: &str) -> String {
+    let base = resolve_model(requested);
+    if !base.is_empty() {
+        return base;
+    }
+    for (key, label) in models {
+        if key.eq_ignore_ascii_case(requested) || label.eq_ignore_ascii_case(requested) {
+            return key.clone();
         }
     }
     String::new()
@@ -621,6 +667,64 @@ pub fn first_err(res: Option<&WorkerResult>) -> String {
         }
     }
     "Qoder worker 返回错误".to_string()
+}
+
+// ---------- 上游排队（`type=system` / `subtype=model_queue_status`） ----------
+
+/// 排队耐心阈值：单个请求从**第一次**收到排队状态起计时，累计超过它就不再干等
+/// （否则要等满 `worker::WORKER_TIMEOUT` 的 600s，用户看到的是纯静默卡住）。
+///
+/// 计时坐标是「墙钟」而不是上游报的 `waitTime`：`waitTime` 是上游对**单次**排队的预计，
+/// 每 ~30s 随轮询重复下发，拿它累加会重复计数。
+pub const QUEUE_PATIENCE: Duration = Duration::from_secs(120);
+
+/// 排队计时器（纯逻辑；`now` 由调用方给，单测不用 sleep）。
+#[derive(Debug, Default)]
+struct QueueWatch {
+    first_seen: Option<Instant>,
+}
+
+impl QueueWatch {
+    /// 记一次排队状态，返回本次请求「已排队多久」（第一次调用即 0）。
+    fn note(&mut self, now: Instant) -> Duration {
+        let first = *self.first_seen.get_or_insert(now);
+        now.saturating_duration_since(first)
+    }
+
+    /// 处理一条 worker 事件（只关心排队状态）：写日志，超耐心时把状态交回调用方。
+    fn observe(&mut self, ev: &WorkerEvent, now: Instant) -> Option<worker::QueueStatus> {
+        let q = ev.queue_status()?;
+        println!("qoder-plugin: {}", q.log_line());
+        if self.note(now) >= QUEUE_PATIENCE {
+            Some(q)
+        } else {
+            None
+        }
+    }
+}
+
+/// 排队超耐心：429 + `Retry-After`（上游建议值）+ 可读错误体（验收 6）。
+///
+/// 真实 worker 的 `model_queue_status` 报文**不带** `retry_after_seconds`
+/// （只有嵌套在 403 错误体里的那份才带），所以 `0` 时退回上游自己 30 秒一轮的
+/// 重试节奏——回 `Retry-After: 0` 会让客户端立刻重试，把排队打得更糟。
+const RETRY_AFTER_FALLBACK_SECS: i64 = 30;
+
+fn queue_timeout_response(q: &worker::QueueStatus) -> Response {
+    let mut resp = write_error(
+        StatusCode::TOO_MANY_REQUESTS,
+        &q.timeout_message(),
+        "queue_timeout",
+    );
+    let secs = if q.retry_after_sec > 0 {
+        q.retry_after_sec
+    } else {
+        RETRY_AFTER_FALLBACK_SECS
+    };
+    if let Ok(v) = HeaderValue::from_str(&secs.to_string()) {
+        resp.headers_mut().insert(header::RETRY_AFTER, v);
+    }
+    resp
 }
 
 // ---------- 工具 ----------
@@ -864,18 +968,20 @@ pub fn decode_set_body(body: &[u8]) -> Result<f64, String> {
 
 // ---------- /v1/models ----------
 
-/// Go `handleModels`：静态模型目录（**不看方法**）。
+/// Go `handleModels` 的对应物：模型目录（**不看方法**）。
 ///
-/// 对外发**可读 id**（见 `QODER_PUBLIC_IDS`）：客户端只读 `id` 字段，发内部代号
-/// 会让界面显示一串 `qmodel_38max` 之类看不懂的名字。`resolve_model` 同时认
-/// 可读名与旧代号，所以旧调用方不受影响。
-async fn handle_models(State(_st): State<Arc<AppState>>) -> Response {
-    let data: Vec<J> = QODER_PUBLIC_IDS
+/// 目录来自 `AppState.models`——生产是 Qoder 客户端 `resources\dynamic-text` 的 14 条，
+/// 读不到回落到内置静态表（同样的 14 条）。对外发的是**可读名**（见 `QODER_PUBLIC_IDS`）：
+/// 客户端只读 `id` 字段，发内部代号会让界面显示一串 `qmodel_38max` 之类看不懂的名字。
+/// `st.resolve_model` 同时认可读名、目录 key 与旧代号，所以旧调用方不受影响。
+async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
+    let data: Vec<J> = st
+        .models
         .iter()
-        .map(|(public_id, _worker_id)| {
+        .map(|(_worker_key, label)| {
             obj(vec![
-                ("id", s(*public_id)),
-                ("display_name", s(*public_id)),
+                ("id", s(label)),
+                ("display_name", s(label)),
                 ("object", s("model")),
             ])
         })
@@ -936,7 +1042,7 @@ async fn handle_chat(State(st): State<Arc<AppState>>, method: Method, req: Reque
             );
         }
     };
-    let model = resolve_model(&parsed.model);
+    let model = st.resolve_model(&parsed.model);
     if model.is_empty() {
         println!(
             "qoder-plugin: {} {} model={} 502 invalid_model {:?}",
@@ -973,16 +1079,36 @@ async fn handle_chat_once(
 ) -> Response {
     let created = unix_now();
     let id = new_chat_id();
-    let res = worker::run_worker(
+    // 非流式也要看 worker 的 `system` 事件：排队状态可能持续好几分钟，必须能提前回 429，
+    // 而不是静默等满 600s。文本增量在这里用不上，忽略即可。
+    let (ev_tx, mut ev_rx) = mpsc::unbounded_channel::<WorkerEvent>();
+    let task = tokio::spawn(worker::run_worker(
         auth.token.clone(),
         auth.expires_at_ms,
         worker_path,
         model.clone(),
         prompt,
         st.cwd_env.clone(),
-        None,
-    )
-    .await;
+        Some(ev_tx),
+    ));
+    let mut queue = QueueWatch::default();
+    while let Some(ev) = ev_rx.recv().await {
+        if let Some(q) = queue.observe(&ev, Instant::now()) {
+            task.abort(); // 别把排队中的 worker 留在后台
+            println!(
+                "qoder-plugin: {} {} model={} 429 queue_timeout {:?}",
+                method,
+                path,
+                model,
+                start.elapsed()
+            );
+            return queue_timeout_response(&q);
+        }
+    }
+    let res = match task.await {
+        Ok(r) => r,
+        Err(e) => Err(format!("worker 任务异常: {e}")),
+    };
     let res = match res {
         Err(e) => {
             println!(
@@ -1049,30 +1175,19 @@ async fn handle_chat_stream(
         Some(ev_tx),
     ));
 
-    let first = ev_rx.recv().await;
-    let Some(first_ev) = first else {
-        // 一个增量都没有：等 worker 结论——错误回 502，成功回「只有 stop + [DONE]」的 200
-        let res = match task.await {
-            Ok(r) => r,
-            Err(e) => Err(format!("worker 任务异常: {e}")),
-        };
-        match res {
-            Err(e) => {
-                if is_quota_error(&e) {
-                    st.mark_quota_exceeded();
-                    println!("qoder-plugin: {} {} 检测到配额错误 → /health 报警", method, path);
-                }
-                println!(
-                    "qoder-plugin: {} {} model={} stream 502 {:?}",
-                    method, path, model, start.elapsed()
-                );
-                return sse_error(&e);
-            }
-            Ok(r) => {
-                st.add_credits(r.total_credits);
-                if r.is_err {
-                    let msg = first_err(Some(&r));
-                    if is_quota_error(&msg) {
+    // 首个**内容**增量之前只做一件事：盯排队状态。排队事件不能当成「已提交 200」的证据
+    // （它不是内容），否则排队超时就没机会回 429 了。
+    let mut queue = QueueWatch::default();
+    let first_ev = loop {
+        let Some(ev) = ev_rx.recv().await else {
+            // 一个增量都没有：等 worker 结论——错误回 502，成功回「只有 stop + [DONE]」的 200
+            let res = match task.await {
+                Ok(r) => r,
+                Err(e) => Err(format!("worker 任务异常: {e}")),
+            };
+            match res {
+                Err(e) => {
+                    if is_quota_error(&e) {
                         st.mark_quota_exceeded();
                         println!("qoder-plugin: {} {} 检测到配额错误 → /health 报警", method, path);
                     }
@@ -1080,17 +1195,48 @@ async fn handle_chat_stream(
                         "qoder-plugin: {} {} model={} stream 502 {:?}",
                         method, path, model, start.elapsed()
                     );
-                    return sse_error(&msg);
+                    return sse_error(&e);
                 }
-                println!(
-                    "qoder-plugin: {} {} model={} stream 200 {:?}",
-                    method, path, model, start.elapsed()
-                );
+                Ok(r) => {
+                    st.add_credits(r.total_credits);
+                    if r.is_err {
+                        let msg = first_err(Some(&r));
+                        if is_quota_error(&msg) {
+                            st.mark_quota_exceeded();
+                            println!("qoder-plugin: {} {} 检测到配额错误 → /health 报警", method, path);
+                        }
+                        println!(
+                            "qoder-plugin: {} {} model={} stream 502 {:?}",
+                            method, path, model, start.elapsed()
+                        );
+                        return sse_error(&msg);
+                    }
+                    println!(
+                        "qoder-plugin: {} {} model={} stream 200 {:?}",
+                        method, path, model, start.elapsed()
+                    );
+                }
             }
+            return sse_response(Body::from_stream(futures_util::stream::once(async move {
+                Ok::<Bytes, std::io::Error>(Bytes::from(sse_tail(&id, &model, created)))
+            })));
+        };
+        if let Some(q) = queue.observe(&ev, Instant::now()) {
+            task.abort(); // 别把排队中的 worker 留在后台
+            println!(
+                "qoder-plugin: {} {} model={} stream 429 queue_timeout {:?}",
+                method,
+                path,
+                model,
+                start.elapsed()
+            );
+            return queue_timeout_response(&q);
         }
-        return sse_response(Body::from_stream(futures_util::stream::once(async move {
-            Ok::<Bytes, std::io::Error>(Bytes::from(sse_tail(&id, &model, created)))
-        })));
+        if ev.queue_status().is_some() {
+            // 排队状态不是内容增量：继续等第一个真增量。
+            continue;
+        }
+        break ev;
     };
 
     // 已提交（HTTP 200 已定）：把增量、收尾块与 [DONE] 交给后台任务边产边发
@@ -1161,6 +1307,23 @@ fn emit_chunk(
     let data = match ev {
         WorkerEvent::Text(t) => chunk_json(id, model, &t, "", created),
         WorkerEvent::Thinking(t) => chunk_reasoning_json(id, model, &t, "", created),
+        // 已提交 200 之后又来的排队状态：没有改回 429 的时机，记日志后跳过
+        // （绝不能当内容增量发出去）。
+        WorkerEvent::QueueStatus {
+            model_key,
+            queue_count,
+            wait_time_sec,
+            retry_after_sec,
+        } => {
+            let q = worker::QueueStatus {
+                model_key,
+                queue_count,
+                wait_time_sec,
+                retry_after_sec,
+            };
+            println!("qoder-plugin: {}", q.log_line());
+            return;
+        }
     };
     let mut frame = Vec::with_capacity(data.len() + 8);
     frame.extend_from_slice(b"data: ");
@@ -1370,6 +1533,15 @@ pub async fn run(args: Args) -> Result<(), String> {
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "<未找到>".to_string())
     );
+    println!(
+        "qoder-plugin: 模型目录 {} 条（来源={}）",
+        state.models.len(),
+        state
+            .models_path
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "内置静态表".to_string())
+    );
 
     let state = Arc::new(state);
     let app = router(state);
@@ -1398,23 +1570,140 @@ mod tests {
         assert_eq!(resolve_model(""), "Auto");
         assert_eq!(resolve_model("auto"), "Auto");
         assert_eq!(resolve_model("AUTO"), "Auto");
+        // 2026-10-20 目录扩充：新模型的可读名与 key 双向解析
         assert_eq!(resolve_model("Qwen3.8-Max"), "qmodel_38max");
         assert_eq!(resolve_model("qmodel_38max"), "qmodel_38max");
-        assert_eq!(resolve_model("Qwen3.7-Flash"), "q37fmodel");
+        assert_eq!(resolve_model("Cantus"), "cmodel");
+        assert_eq!(resolve_model("cmodel"), "cmodel");
+        assert_eq!(resolve_model("Kimi-K3"), "kmodel_latest");
+        assert_eq!(resolve_model("kmodel_latest"), "kmodel_latest");
         assert_eq!(resolve_model("GLM-5.3-Flash"), "gfmodel");
         assert_eq!(resolve_model("MiniMax-M3"), "mmodel");
+        // 目录已不曝光、但上游仍能跑通的旧代号必须继续可用（向后兼容，不能砍）
+        assert_eq!(resolve_model("Qwen3.7-Flash"), "q37fmodel");
+        assert_eq!(resolve_model("q37fmodel"), "q37fmodel");
+        assert_eq!(resolve_model("GLM-5.2"), "gm51model");
+        assert_eq!(resolve_model("gm51model"), "gm51model");
+        // `lite` 是质量档位（轻量/经济/性能/极致 四档之一），不是模型 ⇒ 必须拒绝
+        assert_eq!(resolve_model("Lite"), "");
+        assert_eq!(resolve_model("lite"), "");
+        assert_eq!(resolve_model("轻量"), "");
+        // 质量档位与未知模型仍必须拒绝；不做 trim（Go 也没做）
         for gone in [
             "performance",
-            "Cantus",
-            "cmodel",
-            "Kimi-K3",
-            "kmodel_latest",
+            "efficient",
             "Ultimate",
             "Qwen3.8-Max-Preview",
             "not-a-model",
+            " gmodel ",
         ] {
             assert_eq!(resolve_model(gone), "", "{gone} 不在目录里必须拒绝");
         }
+    }
+
+    /// 2026-10-20：`QODER_PUBLIC_IDS` 与 `catalog::STATIC_MODELS` 必须一一对应
+    /// （顺序、逐条）；`/v1/models` 发出去的每个 id 都要能被解析回 worker key。
+    #[test]
+    fn public_ids_match_static_catalog() {
+        assert_eq!(QODER_PUBLIC_IDS.len(), QODER_MODELS.len());
+        assert_eq!(QODER_MODELS.len(), 13);
+        for (i, (key, label)) in QODER_MODELS.iter().enumerate() {
+            assert_eq!(QODER_PUBLIC_IDS[i], (*label, *key), "第 {i} 条与静态目录不一致");
+        }
+        let models = catalog::static_models();
+        for (key, label) in &models {
+            let got = resolve_model_in(&models, label);
+            if key == "auto" {
+                // `auto` 是上游的默认路由语义：解析结果固定是 `Auto`（Go 口径，未变）
+                assert_eq!(got, "Auto");
+            } else {
+                assert_eq!(&got, key, "可读名 {label} 必须能解析回 {key}");
+                assert_eq!(resolve_model_in(&models, key), *key);
+            }
+        }
+        // 目录条目（worker key ↔ 可读名）必须双向可解析
+        let entries = vec![
+            ("cmodel".to_string(), "Cantus".to_string()),
+            ("kmodel_latest".to_string(), "Kimi-K3".to_string()),
+        ];
+        assert_eq!(resolve_model_in(&entries, "Cantus"), "cmodel");
+        assert_eq!(resolve_model_in(&entries, "cmodel"), "cmodel");
+        assert_eq!(resolve_model_in(&entries, "Kimi-K3"), "kmodel_latest");
+        assert_eq!(resolve_model_in(&entries, "kmodel_latest"), "kmodel_latest");
+        // 未知模型仍然拒绝
+        assert_eq!(resolve_model_in(&entries, "not-a-model"), "");
+    }
+
+    // ---------- 上游排队（`model_queue_status`） ----------
+
+    /// 验收 5/6：排队状态的日志行形状 + 累计超过 `QUEUE_PATIENCE` 才判超时。
+    #[test]
+    fn queue_patience_starts_at_first_status() {
+        assert_eq!(QUEUE_PATIENCE, Duration::from_secs(120), "阈值按简报定 120s");
+        let ev = WorkerEvent::QueueStatus {
+            model_key: "dfmodel".into(),
+            queue_count: 4186,
+            wait_time_sec: 254,
+            retry_after_sec: 30,
+        };
+        let t0 = Instant::now();
+        let mut w = QueueWatch::default();
+        assert_eq!(w.observe(&ev, t0), None, "第一次排队不该立刻超时");
+        assert_eq!(
+            w.observe(&ev, t0 + Duration::from_secs(90)),
+            None,
+            "90s 还没到 120s，继续等"
+        );
+        let q = w
+            .observe(&ev, t0 + QUEUE_PATIENCE)
+            .expect("累计满 120s 必须回 429");
+        assert_eq!(q.retry_after_sec, 30);
+        assert_eq!(q.log_line(), "排队 4186 人，预计等 254 秒（model=dfmodel）");
+        assert_eq!(q.timeout_message(), "Qoder 上游排队：4186 人，预计 254 秒");
+        // 计时从第一次排队起算（不把 waitTime 累加）：30s 时报 30s
+        assert_eq!(w.note(t0 + Duration::from_secs(30)), Duration::from_secs(30));
+        // 非排队事件不参与计时
+        let mut w = QueueWatch::default();
+        assert_eq!(w.observe(&WorkerEvent::Text("hi".into()), t0), None);
+        assert_eq!(w.note(t0 + QUEUE_PATIENCE), Duration::ZERO);
+    }
+
+    /// 验收 6：429 + `Retry-After` + 可读错误体的逐字节形状。
+    #[tokio::test]
+    async fn queue_timeout_response_is_429_with_retry_after() {
+        let q = worker::QueueStatus {
+            model_key: "dfmodel".into(),
+            queue_count: 4186,
+            wait_time_sec: 254,
+            retry_after_sec: 30,
+        };
+        let resp = queue_timeout_response(&q);
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(resp.headers().get("retry-after").unwrap(), "30");
+        assert_eq!(
+            resp.headers().get("content-type").unwrap(),
+            "application/json"
+        );
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(body.to_vec()).unwrap(),
+            concat!(
+                "{\"error\":{\"message\":\"Qoder 上游排队：4186 人，预计 254 秒\",",
+                "\"type\":\"queue_timeout\"}}\n"
+            )
+        );
+        // 上游没给 `retry_after_sec`（真实 worker 报文就不带）⇒ 用 30 秒兜底，
+        // 不能回 `Retry-After: 0`（那会让客户端立刻重试，把排队打得更糟）
+        let q = worker::QueueStatus {
+            retry_after_sec: 0,
+            ..q
+        };
+        assert_eq!(
+            queue_timeout_response(&q).headers().get("retry-after").unwrap(),
+            RETRY_AFTER_FALLBACK_SECS.to_string().as_str()
+        );
     }
 
     #[test]

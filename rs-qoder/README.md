@@ -36,17 +36,20 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
 （`qoder.com.cn` / `qoder.sh` / `agent_chat_generation` / `stream-json` / `jobToken` /
 `machine-id` / `--output-format` / `session_id` 等 15 个探针同值），差异仅 4 字节长度 +
 包名，说明是**同一份代码的两个构建**，协议一致 ⇒ **不拆端口、不做账号池**，同一端口内按
-`--region` 切三处默认值：
+`--region` 切三处默认值 + 模型目录文件：
 
 | 项 | CN（默认） | INTL |
 |---|---|---|
 | 登录态目录 | `%APPDATA%\com.qodercn.app.stable` | `%APPDATA%\com.qoder.app.stable` |
 | worker 相对路径 | `Qoder CN\...\@qoder-ai\qoder-cn-agent-sdk\dist\_worker` | `Qoder\...\@qoder-ai\qoder-agent-sdk\dist\_worker` |
 | 额度接口 | `https://openapi.qoder.com.cn/api/v2/quota/usage` | `https://openapi.qoder.sh/api/v2/quota/usage` |
+| 模型目录 | `Qoder CN\resources\dynamic-text\qoder-cn.json` | `Qoder\resources\dynamic-text\qoder.json` |
 
 区域配置是 `lib.rs` 的 `Region` / `RegionCfg`（`REGION_CN` / `REGION_INTL` 两张常量表，
 **在 rs-qoder 内自建，不跨 crate 引用** `rs-codebuddy/src/region.rs`）。两区登录态目录内部
 结构完全一致（都有 `Local State` + `auth.v1.dat`），解密链复用同一份 `auth.rs`。
+模型目录的区域选择在 `catalog.rs`（`file_name` / `install_dir` / `find_root`），**不在**
+`RegionCfg` 里（它只装 worker 侧的三处默认值）。
 
 **优先级**：`--region` 只给默认值，`--auth-dir` / `--worker` / `--usage-url` 显式给出时一律以
 覆盖值为准。**不带 `--region` 时三处默认值与改前逐字节一致**（CN）。
@@ -70,7 +73,7 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
 |---|---|---|
 | `/health` | 无登录态 `{"status":"no_license"}`；有则 `{"credits":{...},"service":"qoder","status":"ok","uptimeSec":N}`，`credits` 含 `spent` / `spentThisSession` / `quotaExceeded`，`refresh=1` 时另有 `realtime` | **不看方法**（POST 也 200） |
 | `/credits/set` | `POST {"spent":0}` 清零账本；非 POST → 405 + `Allow: POST` | 判方法 |
-| `/v1/models` | 静态目录 13 条（首条 Auto） | **不看方法** |
+| `/v1/models` | 模型目录 **13 条**（Qoder 客户端 `resources\dynamic-text` 的目录；读不到回落内置静态表） | **不看方法** |
 | `/v1/chat/completions` | 扁平化 `messages` → worker prompt → 翻回 OpenAI（流式/非流式） | 仅 POST |
 | 其余 | `ServeMux` 语义：`cleanPath != path` → 307，否则 404 纯文本 | — |
 
@@ -145,9 +148,42 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
     由 `resolve_usage_url` 按区域取。极端情形 `--region INTL --usage-url <CN 的默认域名>`
     会被当成未覆盖、实际走 `.sh`；真要指回 CN 域名时请带别的写法（如显式端口）。
     `--auth-dir` / `--worker` / `--credits-file` 没有这个歧义（`Option`，给了就是给了）。
-12. **区域只换三处默认值**：两区 worker 协议实测一致，故 `--region` **不改**端口、模型目录、
-    cwd 解析、积分账本、请求/响应形状中的任何一项；只有登录态目录名、worker 相对路径、
-    额度接口域名随区域变。
+12. **区域只换三处默认值 + 模型目录文件**：两区 worker 协议实测一致，故 `--region` **不改**
+    端口、cwd 解析、积分账本、请求/响应形状；随区域变的只有登录态目录名、worker 相对路径、
+    额度接口域名，以及 `/v1/models` 读的那份目录文件（`qoder-cn.json` / `qoder.json`；
+    两区文件实测逐字节相同，所以解析出的条目也一致）。
+13. **`/v1/models` 的目录是动态的（有意偏离 Go 黄金）**：Go 版是写死目录；Rust 版
+    在启动时读 Qoder 客户端的 `resources\dynamic-text\{qoder-cn,qoder}.json`，取
+    `model.<key>.label`（**排除**四个质量档位 `lite`/`efficient`/`performance`/`ultimate`），
+    `en` 打底、`zh` 只补缺失的 key（保证 id 恒为 ASCII），按 worker key 字节序输出（13 条）。
+    文件缺失 / 坏 JSON / 解析空 ⇒ 回落内置静态表（同一份 13 条），`/v1/models` 永不 500。
+    * **`lite` 是档位不是模型（实证）**：直传 `lite` 上游回
+      `ModelNotFoundError: Model "lite" is not available in the current QoderCN catalog`（404）；
+      它和 `efficient`/`performance`/`ultimate` 构成「轻量/经济/性能/极致」四档阶梯。
+    * `QODER_STATIC_MODELS=1` 强制静态表（黄金门禁与可复现对照用；显式构造的 `AppState`
+      本来就固定走静态表——它是黄金回放的测试缝）。
+    * `q37fmodel`(Qwen3.7-Flash) / `gm51model`(GLM-5.2) 已从目录里消失，**不再进
+      `/v1/models`**，但上游仍能跑通 ⇒ 保留在 `QODER_LEGACY_MODELS`，旧调用方继续可用。
+    * 黄金门禁为此拆成两条**更窄**的断言：响应体「信封」（data 数组以外的键序/分隔/换行）
+      仍与 Go 逐字节一致；目录本身与**手写**的新期望体逐字节一致。`resolve` 的黄金比对
+      只对四个新增模型（`Cantus`/`cmodel`/`Kimi-K3`/`kmodel_latest`）列了显式新期望，
+      其余输入（含旧代号与全部拒绝样本）仍逐字比 Go。
+14. **上游排队状态透出（Go 侧没有这一层）**：worker 的 `type=system` /
+    `subtype=model_queue_status` 以前落在 `_ => {}` 被静默丢弃；现在解析
+    `modelKey`/`queueCount`/`waitTime`/`retryAfterSeconds`（兼容字段平铺、`message` 是
+    对象、`message` 是（多层）转义 JSON 字符串三种形态；实测原文
+    `{"isQueued":true,"modelKey":"dfmodel","queueCount":4186,"queueType":"p3",
+    "retryAfterSeconds":30,"waitTime":254}`）：
+    * 每条排队状态写日志 `排队 N 人，预计等 M 秒（model=xxx）`（GUI 日志面板可见）；
+    * 单个请求从**第一次**收到排队状态起计时，累计超过 `QUEUE_PATIENCE`（120s）⇒
+      HTTP 429 + `Retry-After: <retryAfterSeconds>` +
+      `{"error":{"message":"Qoder 上游排队：N 人，预计 M 秒","type":"queue_timeout"}}`；
+      未超阈值继续等（短队列正常完成，流式/非流式都实跑验过）。计时用墙钟而不是累加
+      `waitTime`（后者随每轮询重复下发，累加会重复计数）。
+    * 流式响应只在**提交（首个内容 chunk）之前**回 429；提交后再来的排队状态只写日志
+      （不能改回头）。上游没给 `retryAfterSeconds` 时 `Retry-After: 0`。
+    * 排队超时放弃时 `abort` worker 任务，并靠 `kill_on_drop` 杀掉排队中的 node 子进程
+      （实测无残留）。
 
 ## 未覆盖
 
@@ -162,7 +198,7 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
 ## 测试与门禁
 
 ```powershell
-cd rs-qoder; cargo test          # 36 单测 + 6 黄金 + 7 合同
+cd rs-qoder; cargo test          # 50 单测 + 6 黄金 + 7 合同
 # 黄金门禁里的 SKIP 行与计数用 println! 打，libtest 默认**只在失败时**显示通过用例的 stdout：
 cargo test -- --nocapture        # 要看「跳过了什么、跳过几条」就带这个（见 tests/golden/README.md）
 ```

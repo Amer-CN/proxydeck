@@ -73,10 +73,76 @@ pub struct WorkerResult {
 
 /// worker 过程中的增量事件（流式翻译用）。文本与思考**共用一条通道**，
 /// 保证与 Go 的 `onText`/`onThinking` 回调同一个到达顺序。
+///
+/// `QueueStatus` 是 2026-10-20 新增的透出项：Qoder 上游排队时 worker 每 ~30s 发一条
+/// `type=system` / `subtype=model_queue_status`，以前落在 `_ => {}` 被静默丢弃，
+/// 用户看到的是纯静默卡住（最长 `WORKER_TIMEOUT` 600s）。它不是内容，不能当增量发出去。
 #[derive(Debug, Clone, PartialEq)]
 pub enum WorkerEvent {
     Text(String),
     Thinking(String),
+    QueueStatus {
+        model_key: String,
+        queue_count: i64,
+        wait_time_sec: i64,
+        retry_after_sec: i64,
+    },
+}
+
+impl WorkerEvent {
+    /// 若这是排队状态，转成 [`QueueStatus`]（lib 侧要用它拼日志与 429 体）。
+    pub fn queue_status(&self) -> Option<QueueStatus> {
+        match self {
+            WorkerEvent::QueueStatus {
+                model_key,
+                queue_count,
+                wait_time_sec,
+                retry_after_sec,
+            } => Some(QueueStatus {
+                model_key: model_key.clone(),
+                queue_count: *queue_count,
+                wait_time_sec: *wait_time_sec,
+                retry_after_sec: *retry_after_sec,
+            }),
+            _ => None,
+        }
+    }
+}
+
+/// Qoder 上游排队状态。实测原文（HTTP 403 / 业务码 10605 时随 `system` 消息下发）：
+///
+/// ```json
+/// {"isQueued":true,"modelKey":"dfmodel","queueCount":4186,"queueType":"p3",
+///  "retryAfterSeconds":30,"waitTime":254}
+/// ```
+///
+/// ⚠ 真实报文在 Qoder 日志里是**多层转义**地嵌在 `message` 字符串里的；worker 给宿主
+/// 的形态可能不一致，所以 [`system_queue_status`] 同时兼容「平铺」「`message` 是对象」
+/// 「`message` 是（多层）转义 JSON 字符串」三种。
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct QueueStatus {
+    pub model_key: String,
+    pub queue_count: i64,
+    pub wait_time_sec: i64,
+    pub retry_after_sec: i64,
+}
+
+impl QueueStatus {
+    /// GUI 日志面板要能看见的一行（不含 `qoder-plugin: ` 前缀）。
+    pub fn log_line(&self) -> String {
+        format!(
+            "排队 {} 人，预计等 {} 秒（model={}）",
+            self.queue_count, self.wait_time_sec, self.model_key
+        )
+    }
+
+    /// 429 响应体里的可读文案。
+    pub fn timeout_message(&self) -> String {
+        format!(
+            "Qoder 上游排队：{} 人，预计 {} 秒",
+            self.queue_count, self.wait_time_sec
+        )
+    }
 }
 
 /// Go `findWorker()` 的候选列表：env `QODER_WORKER` → `D:\Program Files\<rel>`
@@ -242,6 +308,9 @@ pub async fn run_worker(
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+    // 宿主提前放弃时（排队超耐心 → lib 侧 abort 任务）杀掉子进程，别把排队中的 node
+    // worker 留在后台。正常路径一律显式 `wait()` / `kill()+wait()`，行为不变。
+    cmd.kill_on_drop(true);
     #[cfg(windows)]
     {
         // Go 的 hideConsole：CREATE_NO_WINDOW，不弹控制台窗口
@@ -425,6 +494,23 @@ pub async fn run_worker(
                     }
                 }
             }
+            Some("system") => {
+                // 上游排队：以前这条落在 `_ => {}` 被静默丢弃，用户只看到卡住。
+                if let Some(q) = system_queue_status(&msg) {
+                    match &events {
+                        Some(tx) => {
+                            let _ = tx.send(WorkerEvent::QueueStatus {
+                                model_key: q.model_key,
+                                queue_count: q.queue_count,
+                                wait_time_sec: q.wait_time_sec,
+                                retry_after_sec: q.retry_after_sec,
+                            });
+                        }
+                        // 没有事件通道的调用方：至少把日志打出来，不静默吞掉
+                        None => println!("qoder-plugin: {}", q.log_line()),
+                    }
+                }
+            }
             Some("assistant") => {
                 let content = msg
                     .get("message")
@@ -554,6 +640,110 @@ fn go_duration(d: Duration) -> String {
         format!("{m}m{s}s")
     } else {
         format!("{s}s")
+    }
+}
+
+// ---------- `system` / `model_queue_status` 解析 ----------
+
+/// 排队报文里可能出现的字段名（找到任意一个就认为这个对象是排队载荷）。
+/// 同时含**蛇形**（真实 worker 报文）与**驼峰**（嵌套错误体）两套命名。
+const QUEUE_FIELDS: [&str; 8] = [
+    "queue_count",
+    "queueCount",
+    "wait_time_ms",
+    "wait_time",
+    "waitTime",
+    "model_key",
+    "modelKey",
+    "retryAfterSeconds",
+];
+
+/// `system` 消息里只关心排队状态：`subtype == "model_queue_status"` 且能解析出载荷才回
+/// `Some`。别的 `system` 消息（init/其他诊断）一律 `None`，**不会被误当排队**。
+pub fn system_queue_status(msg: &serde_json::Value) -> Option<QueueStatus> {
+    if msg.get("subtype").and_then(|v| v.as_str()) != Some("model_queue_status") {
+        return None;
+    }
+    parse_queue_status(msg)
+}
+
+/// 兼容**两种字段命名**：真实 worker 报文是**蛇形 + 毫秒**（反编译
+/// `qoder-worker-runtime.obf.mjs` 的 `vYi()` 实证）：
+///
+/// ```text
+/// {type:"system", subtype:"model_queue_status", status:"queued",
+///  model_key:"dfmodel", queue_type:"p3", queue_count:4186,
+///  wait_time_ms:254000, ...}
+/// ```
+///
+/// 而嵌套在错误体里的那份是驼峰 + 秒。两种都要认，否则真实排队永远解不出来
+/// （2026-10-20 实测：只认驼峰时 `/v1/models` 正常但排队事件一次不触发）。
+fn parse_queue_status(msg: &serde_json::Value) -> Option<QueueStatus> {
+    let payload = find_queue_payload(msg, 0)?;
+    let obj = payload.as_object()?;
+    // `isQueued:false` / `status:"ready"` 都表示「已经不在队列里」，不是排队状态。
+    if let Some(false) = obj.get("isQueued").and_then(|v| v.as_bool()) {
+        return None;
+    }
+    if obj.get("status").and_then(|v| v.as_str()) == Some("ready") {
+        return None;
+    }
+    let model_key = obj
+        .get("model_key")
+        .or_else(|| obj.get("modelKey"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let queue_count = int_field(obj, "queue_count")
+        .or_else(|| int_field(obj, "queueCount"))
+        .unwrap_or(0);
+    // 秒：驼峰 `waitTime` / 蛇形 `wait_time`；毫秒：蛇形 `wait_time_ms`（真实 worker 用的这个）
+    let wait_time_sec = int_field(obj, "wait_time_ms")
+        .map(|ms| ms / 1000)
+        .or_else(|| int_field(obj, "wait_time"))
+        .or_else(|| int_field(obj, "waitTime"))
+        .unwrap_or(0);
+    let retry_after_sec = int_field(obj, "retry_after_seconds")
+        .or_else(|| int_field(obj, "retryAfterSeconds"))
+        .unwrap_or(0);
+    if model_key.is_empty() && queue_count == 0 && wait_time_sec == 0 {
+        // 一个队列字段都没解出来 ⇒ 不是排队报文
+        return None;
+    }
+    Some(QueueStatus {
+        model_key,
+        queue_count,
+        wait_time_sec,
+        retry_after_sec,
+    })
+}
+
+/// 找承载队列字段的那个对象；字符串按 JSON 再解一层（封顶 6 层，防病态嵌套）。
+fn find_queue_payload(v: &serde_json::Value, depth: usize) -> Option<serde_json::Value> {
+    if depth > 6 {
+        return None;
+    }
+    match v {
+        serde_json::Value::String(text) => serde_json::from_str::<serde_json::Value>(text)
+            .ok()
+            .and_then(|inner| find_queue_payload(&inner, depth + 1)),
+        serde_json::Value::Object(obj) => {
+            if QUEUE_FIELDS.iter().any(|k| obj.contains_key(*k)) {
+                return Some(v.clone());
+            }
+            obj.get("message")
+                .and_then(|m| find_queue_payload(m, depth + 1))
+        }
+        _ => None,
+    }
+}
+
+/// 队列字段的整数值：数字直取，字符串按十进制解析（上游偶有字符串化的数字）。
+fn int_field(obj: &serde_json::Map<String, serde_json::Value>, key: &str) -> Option<i64> {
+    match obj.get(key)? {
+        serde_json::Value::Number(n) => n.as_i64().or_else(|| n.as_f64().map(|f| f as i64)),
+        serde_json::Value::String(text) => text.trim().parse::<i64>().ok(),
+        _ => None,
     }
 }
 
@@ -774,5 +964,139 @@ mod tests {
         assert_eq!(go_duration(Duration::from_secs(600)), "10m0s");
         assert_eq!(go_duration(Duration::from_secs(60)), "1m0s");
         assert_eq!(go_duration(Duration::from_secs(5)), "5s");
+    }
+
+    // ---------- 上游排队（`system` / `model_queue_status`） ----------
+
+    /// 实测原文（HTTP 403 / 业务码 10605 时上游下发）。
+    fn want_queue() -> QueueStatus {
+        QueueStatus {
+            model_key: "dfmodel".to_string(),
+            queue_count: 4186,
+            wait_time_sec: 254,
+            retry_after_sec: 30,
+        }
+    }
+
+    fn parse_line(line: &str) -> Option<QueueStatus> {
+        let msg: serde_json::Value = serde_json::from_str(line).unwrap();
+        system_queue_status(&msg)
+    }
+
+    /// 形态零（**真实 worker 报文**，反编译 `qoder-worker-runtime.obf.mjs` 的 `vYi()`）：
+    /// 蛇形命名 + **毫秒**。2026-10-20 实测：只认驼峰时这条解不出来，排队事件一次不触发。
+    #[test]
+    fn parses_real_worker_snake_case_queue_status() {
+        let line = concat!(
+            r#"{"type":"system","subtype":"model_queue_status","content":"Model request queued...","#,
+            r#""level":"info","uuid":"11111111-2222-3333-4444-555555555555","#,
+            r#""status":"queued","request_id":"req-1","request_set_id":"set-1","#,
+            r#""model_key":"dfmodel","queue_type":"p3","queue_count":4186,"wait_time_ms":254000}"#
+        );
+        // 真实报文**不含** `retry_after_seconds`（那份只在 403 错误体里），所以这里为 0；
+        // 429 的 `Retry-After` 由 `lib.rs` 的 `RETRY_AFTER_FALLBACK_SECS` 兜 30 秒。
+        assert_eq!(
+            parse_line(line),
+            Some(QueueStatus {
+                retry_after_sec: 0,
+                ..want_queue()
+            })
+        );
+
+        // `status:"ready"` = 已出队，不是排队状态
+        let ready = concat!(
+            r#"{"type":"system","subtype":"model_queue_status","status":"ready","#,
+            r#""model_key":"dfmodel","queue_count":0,"wait_time_ms":0}"#
+        );
+        assert_eq!(parse_line(ready), None, "status=ready 不该判成排队");
+    }
+
+    /// 形态一：字段平铺在 `system` 消息上。
+    #[test]
+    fn parses_flat_queue_status() {
+        let line = concat!(
+            r#"{"type":"system","subtype":"model_queue_status","isQueued":true,"#,
+            r#""modelKey":"dfmodel","queueCount":4186,"queueType":"p3","#,
+            r#""retryAfterSeconds":30,"waitTime":254}"#
+        );
+        assert_eq!(parse_line(line), Some(want_queue()));
+
+        // 不是排队消息 ⇒ None（别的 system 消息不能被误当排队）
+        for line in [
+            r#"{"type":"system","subtype":"init","modelKey":"dfmodel","queueCount":1}"#,
+            r#"{"type":"system","subtype":"model_queue_status","message":"hello"}"#,
+            r#"{"type":"system","subtype":"model_queue_status","message":123}"#,
+            r#"{"type":"system","subtype":"model_queue_status","isQueued":false,"modelKey":"dfmodel","queueCount":9}"#,
+            r#"{"type":"system","subtype":"model_queue_status"}"#,
+        ] {
+            assert_eq!(parse_line(line), None, "{line}");
+        }
+    }
+
+    /// 形态二/三：`message` 是对象、或（多层）转义 JSON 字符串——Qoder 日志里就是后者。
+    #[test]
+    fn parses_nested_and_escaped_queue_status() {
+        // `message` 是对象
+        let line = concat!(
+            r#"{"type":"system","subtype":"model_queue_status","message":{"isQueued":true,"#,
+            r#""modelKey":"dfmodel","queueCount":4186,"retryAfterSeconds":30,"waitTime":254}}"#
+        );
+        assert_eq!(parse_line(line), Some(want_queue()));
+
+        // `message` 是转义 JSON 字符串（单层）
+        let line = concat!(
+            r#"{"type":"system","subtype":"model_queue_status","message":"#,
+            r#""{\"isQueued\":true,\"modelKey\":\"dfmodel\",\"queueCount\":4186,"#,
+            r#"\"queueType\":\"p3\",\"retryAfterSeconds\":30,\"waitTime\":254}"}"#
+        );
+        assert_eq!(parse_line(line), Some(want_queue()));
+
+        // 多层转义：message → 字符串 → 对象（实测的被多层转义嵌在日志里）
+        let payload = concat!(
+            r#"{"isQueued":true,"modelKey":"dfmodel","queueCount":4186,"#,
+            r#""retryAfterSeconds":30,"waitTime":254}"#
+        );
+        let once = serde_json::to_string(payload).unwrap();
+        let twice = serde_json::to_string(&once).unwrap();
+        let line = format!(
+            r#"{{"type":"system","subtype":"model_queue_status","message":{twice}}}"#
+        );
+        assert_eq!(parse_line(&line), Some(want_queue()), "{line}");
+    }
+
+    /// 数字被字符串化也能解析（上游偶发形态）；`isQueued:false` 一律不算排队。
+    #[test]
+    fn queue_status_accepts_string_numbers() {
+        let line = concat!(
+            r#"{"type":"system","subtype":"model_queue_status","message":"#,
+            r#""{\"modelKey\":\"dfmodel\",\"queueCount\":\"12\",\"waitTime\":\"34\","#,
+            r#"\"retryAfterSeconds\":\"5\"}"}"#
+        );
+        assert_eq!(
+            parse_line(line),
+            Some(QueueStatus {
+                model_key: "dfmodel".to_string(),
+                queue_count: 12,
+                wait_time_sec: 34,
+                retry_after_sec: 5,
+            })
+        );
+    }
+
+    /// 验收 5：事件 → `QueueStatus` 转回来，日志行形状锁死。
+    #[test]
+    fn worker_event_roundtrips_queue_status() {
+        let ev = WorkerEvent::QueueStatus {
+            model_key: "dfmodel".to_string(),
+            queue_count: 4186,
+            wait_time_sec: 254,
+            retry_after_sec: 30,
+        };
+        let q = ev.queue_status().expect("排队事件必须能转成 QueueStatus");
+        assert_eq!(q, want_queue());
+        assert_eq!(q.log_line(), "排队 4186 人，预计等 254 秒（model=dfmodel）");
+        assert_eq!(q.timeout_message(), "Qoder 上游排队：4186 人，预计 254 秒");
+        assert_eq!(WorkerEvent::Text("x".to_string()).queue_status(), None);
+        assert_eq!(WorkerEvent::Thinking("x".to_string()).queue_status(), None);
     }
 }
