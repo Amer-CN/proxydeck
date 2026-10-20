@@ -199,13 +199,18 @@ pub fn append_log(path: &Path, msg: &str) -> Result<(), String> {
 }
 
 /// 超过上限就把 `path` 滚成 `.1`，旧的依次后移，最老的丢弃（Go `rotateLog`）。
-pub fn rotate_log(path: &Path) {
+///
+/// 返回**是否真的轮转过**：未到上限 / 读不到大小 / 改名失败一律 `false`。
+/// 调用方（`StampedWriter`）据此决定要不要重开文件句柄——轮转后旧句柄仍指向已经改名的
+/// `.1`，不重开就会把后续内容继续写进备份（日志看着正常、实际新 `path` 不再增长）。
+/// 大小判断只在**本函数里做一处**（`rotate_if_big` 是它的别名，不重复判）。
+pub fn rotate_log(path: &Path) -> bool {
     let size = match std::fs::metadata(path) {
         Ok(md) => md.len(),
-        Err(_) => return,
+        Err(_) => return false,
     };
     if size <= LOG_MAX_BYTES {
-        return;
+        return false;
     }
     let with_suffix = |n: usize| -> PathBuf {
         let mut s = path.as_os_str().to_os_string();
@@ -216,16 +221,13 @@ pub fn rotate_log(path: &Path) {
     for i in (1..LOG_BACKUPS).rev() {
         let _ = std::fs::rename(with_suffix(i), with_suffix(i + 1));
     }
-    let _ = std::fs::rename(path, with_suffix(1));
+    // 改名失败 = 没轮转（原文件还在原处，旧句柄依然有效）⇒ 调用方不该重开。
+    std::fs::rename(path, with_suffix(1)).is_ok()
 }
 
-/// 写完后按大小轮转（长驻日志用；Go `rotateIfBig`）。
-pub fn rotate_if_big(path: &Path) {
-    if let Ok(md) = std::fs::metadata(path) {
-        if md.len() > LOG_MAX_BYTES {
-            rotate_log(path);
-        }
-    }
+/// 写完后按大小轮转（长驻日志用；Go `rotateIfBig`）。返回是否真的轮转过。
+pub fn rotate_if_big(path: &Path) -> bool {
+    rotate_log(path)
 }
 
 /// 打开（不存在则创建）追加写日志文件，写失败不阻断主流程（Go `OpenLog`：
@@ -249,10 +251,19 @@ pub fn open_log(path: &Path) -> Option<std::fs::File> {
 ///
 /// 逐字对齐 Go 的分行口径：按 `\n` 切；**无换行的尾巴也立刻打戳写出**；
 /// 空行跳过；`f` 为 `None` 时丢弃全部输出并返回 `len(p)`。
+///
+/// 轮转（Go `rotateIfBig`）在本实现里多做了两件 Go 没做的事，都是为了让「轮转后继续写」
+/// 真的落到当前 `path` 上：
+/// 1. `rotate_log` 改名成功后**重开** `f`——旧句柄指向已经改名成 `.1` 的文件，不重开
+///    后续内容会继续写进备份，新建的 `path` 再也不增长（Go 有同样的隐患，见模块头差异）；
+/// 2. 轮转检查按**累计写入字节数** `written` 触发，不再每行 `metadata`（Windows 上
+///    rename 遇占用会重试，每行一次检查等于每行一次潜在的长持锁）。
 pub struct StampedWriter {
     f: Option<std::fs::File>,
     path: PathBuf,
     buf: Vec<u8>,
+    /// 自上次轮转检查以来写出的字节数（只用于决定「要不要去查一次大小」）。
+    written: u64,
 }
 
 impl StampedWriter {
@@ -262,6 +273,7 @@ impl StampedWriter {
             f,
             path,
             buf: Vec::new(),
+            written: 0,
         }
     }
 
@@ -279,9 +291,9 @@ impl StampedWriter {
 
 impl std::io::Write for StampedWriter {
     fn write(&mut self, p: &[u8]) -> std::io::Result<usize> {
-        let Some(f) = self.f.as_mut() else {
+        if self.f.is_none() {
             return Ok(p.len());
-        };
+        }
         self.buf.extend_from_slice(p);
         let mut out: Vec<u8> = Vec::with_capacity(p.len() + 24);
         while !self.buf.is_empty() {
@@ -302,8 +314,22 @@ impl std::io::Write for StampedWriter {
             out.extend_from_slice(&line);
             out.push(b'\n');
         }
-        f.write_all(&out)?;
-        rotate_if_big(&self.path);
+        if let Some(f) = self.f.as_mut() {
+            f.write_all(&out)?;
+        }
+        self.written += out.len() as u64;
+        // 累计写入没超上限就不去查大小（上限判定只在 `rotate_log` 里做一处）。
+        // 超了就查**一次**：无论轮转是否成功都把计数清零，避免「rename 失败 → 每行重试」。
+        if self.written > LOG_MAX_BYTES {
+            self.written = 0;
+            if rotate_if_big(&self.path) {
+                // 轮转成功 ⇒ 旧句柄指向 `.1`，必须换到新 `path` 上继续写。
+                // 重开失败（极端情况）保留旧句柄：宁可继续写备份，也不要静默丢日志。
+                if let Some(nf) = open_log(&self.path) {
+                    self.f = Some(nf);
+                }
+            }
+        }
         Ok(p.len())
     }
 
@@ -405,6 +431,105 @@ mod tests {
         std::fs::write(&p, b"1").unwrap();
         assert!(remove(&p).is_ok());
         assert!(!file_exists(&p));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 轮转竞态：`rotate_log` 把 `path` 改名成 `.1` 之后，`StampedWriter` 必须**重开**句柄，
+    /// 否则后续内容继续写进 `.1`、新建的 `path` 不再增长（日志看着正常、实际丢失）。
+    ///
+    /// 反向验证：把 `write()` 里轮转后的 `open_log` 重开去掉 ⇒ 本用例判红
+    ///（`TAIL-MARKER` 会落在 `.1` 里，`path` 本身只有空文件）。
+    #[test]
+    fn rotate_keeps_writing_to_current_log() {
+        use std::io::Write;
+
+        // 与同模块其它用例共用一把锁：libtest 默认多线程并行，`StampedWriter::open`
+        // 内部会读数据目录/环境变量，不加锁会与本模块其它用例互相踩。
+        let _g = crate::testutil::env_lock().lock().unwrap();
+        let dir = std::env::temp_dir().join("rs-gui-appdir-rotate-reopen");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("plugin.log");
+        let mut backup = path.as_os_str().to_os_string();
+        backup.push(".1");
+        let backup = PathBuf::from(backup);
+
+        let mut w = StampedWriter::open(path.clone());
+        assert!(w.is_open(), "日志文件应能打开");
+
+        // 按 ~64KB 的块写，累计超过上限（1MB）——轮转必然发生在中途。
+        let chunk = format!("{}\n", "A".repeat(1023)).repeat(64);
+        let mut sent = 0usize;
+        while sent <= LOG_MAX_BYTES as usize {
+            w.write_all(chunk.as_bytes()).unwrap();
+            sent += chunk.len();
+        }
+        assert!(backup.exists(), "写超上限后应产生 .1 备份（轮转没触发）");
+
+        // 轮转之后**用同一个 writer** 继续写：这段必须落在 `path` 本身。
+        w.write_all(b"TAIL-MARKER\n").unwrap();
+        w.flush().unwrap();
+
+        let cur = std::fs::read_to_string(&path).unwrap();
+        let old = std::fs::read_to_string(&backup).unwrap();
+        assert!(
+            cur.contains("TAIL-MARKER"),
+            "轮转后的新内容应写进当前日志（实得 {} 字节，备份 {} 字节）",
+            cur.len(),
+            old.len()
+        );
+        assert!(
+            !old.contains("TAIL-MARKER"),
+            "轮转后的新内容不该写进 .1（句柄没重开就是本用例要抓的缺陷）"
+        );
+        assert!(
+            old.len() as u64 > LOG_MAX_BYTES,
+            "备份应是轮转走的那份超限内容（实得 {} 字节）",
+            old.len()
+        );
+        assert!(
+            (cur.len() as u64) < LOG_MAX_BYTES,
+            "当前日志应是轮转后新建的那份（实得 {} 字节）",
+            cur.len()
+        );
+
+        // 同一个句柄再写超一轮：确认重开不是「只对第一次有效」。
+        let mut sent = 0usize;
+        while sent <= LOG_MAX_BYTES as usize {
+            w.write_all(chunk.as_bytes()).unwrap();
+            sent += chunk.len();
+        }
+        w.write_all(b"SECOND-MARKER\n").unwrap();
+        w.flush().unwrap();
+        drop(w);
+
+        let cur = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            cur.contains("SECOND-MARKER"),
+            "第二轮之后的写入仍应落在当前日志（实得 {} 字节）",
+            cur.len()
+        );
+        // 备份链里不该出现新内容——无论是 `.1` 还是更老的备份。
+        let mut backups: Vec<(PathBuf, String)> = Vec::new();
+        for n in 1..=LOG_BACKUPS {
+            let mut p = path.as_os_str().to_os_string();
+            p.push(format!(".{n}"));
+            let p = PathBuf::from(p);
+            if let Ok(s) = std::fs::read_to_string(&p) {
+                backups.push((p, s));
+            }
+        }
+        assert!(
+            !backups.is_empty(),
+            "两轮写入后应留下至少一个备份（轮转没发生）"
+        );
+        for (p, s) in &backups {
+            assert!(
+                !s.contains("SECOND-MARKER"),
+                "轮转后的新内容不该出现在备份 {} 里（句柄没重开就是本用例要抓的缺陷）",
+                p.display()
+            );
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -758,3 +758,85 @@ async fn flagged11128_channel_verification_passes_through_without_cooling() {
     }
     rp.finish();
 }
+// ---------- ⑥ 流内错误嗅探（2026-10-20） ----------
+//
+// 上游在 **200** 里塞错误帧/空流时，下游会拿到「200 但没内容」。流式路径在发出 SSE
+// 响应头之前 peek 8KB（`STREAM_PEEK_WINDOW`），命中 `ErrCode` / `EmptyStream` 就换号重发；
+// **判错只耗 attempt、绝不冷却账号**（不动 mark_limited / mark_exhausted）——
+// 与 11128 账号级封禁治理的关键区别，防慢账号误判后级联耗竭整池。
+
+/// 流内嗅探场景的上游应答表：`bad` 里的号回 200 + 错误帧，其余号回正常 SSE。
+fn stream_head_spec(bad: &[&str]) -> Value {
+    let err = json!([{
+        "status": 200,
+        "headers": {"Content-Type": "text/event-stream"},
+        "body": r#"{"code":11128,"msg":"Illegal API invocation from an unapproved channel"}"#,
+    }]);
+    let ok = json!([{
+        "status": 200,
+        "headers": {"Content-Type": "text/event-stream"},
+        "body": OK_SSE,
+    }]);
+    let mut table = serde_json::Map::new();
+    for uid in ["u-wire", "u-wire2"] {
+        table.insert(
+            uid.to_string(),
+            if bad.contains(&uid) { err.clone() } else { ok.clone() },
+        );
+    }
+    json!({"per_user": Value::Object(table)})
+}
+
+/// 场景六：首号 200 + 错误帧，次号正常 SSE ⇒ 客户端拿 200 正常内容、两号各命中一次、
+/// **两个号的 cooling/dead/exhausted 全为 false**（判错只耗 attempt，不动账号状态）。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stream_error_head_swaps_without_cooling() {
+    let env = EnvGuard::set(&[]);
+    let up = FakeUpstream::start(&stream_head_spec(&["u-wire"])).await;
+    let sc = scenario();
+    let rp = start_real_replay(
+        "p5c-stream-head-swap",
+        Region::Cn,
+        &sc,
+        Some(up.base.clone()),
+        &env,
+    )
+    .await;
+
+    let r = send(
+        &rp.app.base,
+        "POST",
+        "/v1/chat/completions",
+        Some(br#"{"model":"auto","messages":[{"role":"user","content":"hi"}],"stream":true}"#),
+    )
+    .await;
+    assert_eq!(
+        r.status,
+        200,
+        "流内错误帧应换号拿到正常 200（实得 {}：{}）",
+        r.status,
+        r.text()
+    );
+    assert!(
+        r.text().contains("hi"),
+        "客户端应拿到次号的正常 SSE 内容（实得 {}）",
+        r.text()
+    );
+    assert!(
+        !r.text().contains("11128"),
+        "错误帧不该透传到下游（实得 {}）",
+        r.text()
+    );
+    assert_eq!(
+        hit_uids(&up),
+        vec!["u-wire", "u-wire2"],
+        "上游应 A(错误帧)/B(正常) 各打一次"
+    );
+
+    let snap = send(&rp.app.base, "GET", "/v1/accounts", None).await;
+    let text = snap.text();
+    for uid in ["u-wire", "u-wire2"] {
+        assert_untouched(&text, uid);
+    }
+    rp.finish();
+}

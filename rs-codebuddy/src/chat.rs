@@ -7,7 +7,9 @@
 //! **账号池换号分支**（401/403 标死换活号、429 冷却换号、14018 额度耗尽换号、
 //! 11128 按号封禁换号 + 1h 冷却；**通道校验子类直接透传**，不判账号不冷却）、
 //! **200 体 14018 Peek**（判定窗口 64KB；不命中时 peek 到的字节**一字不丢**地交给下游聚合，
-//! 对齐 Go `3d4627f` 之后的行为，见 `PEEK_WINDOW`）、CN 缺省
+//! 对齐 Go `3d4627f` 之后的行为，见 `PEEK_WINDOW`）、**流内错误嗅探**（流式路径在发出
+//! SSE 头之前 peek 8KB，见 `STREAM_PEEK_WINDOW`；命中错误码/空流只**换号重试**、
+//! **绝不冷却账号**，判错只耗 attempt）、CN 缺省
 //! `reasoning_effort` 注入、hy4 限流兜底改写与 trip、11133 退避重试（上限 2 次，
 //! 800ms/1600ms，退避期间客户端断开 → 499）与失败现场落盘、上游非 200 的 `writeErr` 形状。
 //!
@@ -57,6 +59,17 @@ pub const FLAGGED_COOLDOWN_MS: i64 = 60 * 60 * 1000;
 /// 「一次从上游拉多少字节」，两边的判定都是对「已缓冲字节」做 `body != "" && contains("14018")`
 /// 子串判，聚合又是逐行的（`feed_line` 与 Go `bufio.Scanner` 同语义），故下游字节完全一致。
 pub const PEEK_WINDOW: usize = 64 * 1024;
+/// 流式路径的嗅探窗口（**比非流式的 64KB 小**）：流式要求首字节尽快到下游，
+/// 8KB 足够看清「是不是 data: 帧 / 有没有错误码」，又不至于把首字节压太久。
+pub const STREAM_PEEK_WINDOW: usize = 8 * 1024;
+
+/// 流内嗅探的**时间预算**：到点就用已攒到的字节下判断，不再等。
+///
+/// 上游在思考型模型的 prefill 阶段常静默 30~70 秒（实测数据见 qidi-relay 的
+/// `classify_failure.py` 注释）；若按「攒满 8KB 或流结束」死等，首字节会被压到
+/// prefill 结束——比不嗅探更糟。120ms 足够覆盖「上游一上来就吐错误帧」的情形，
+/// 又不会让正常流明显变慢。
+pub const STREAM_PEEK_BUDGET: Duration = Duration::from_millis(120);
 /// Go `passthroughBodyKeys`（顺序即 Go 的切片顺序；写出时按键排序）。
 pub const PASSTHROUGH_KEYS: &[&str] = &[
     "model",
@@ -443,6 +456,7 @@ pub async fn handle_chat(
     let mut exhausted_resent = 0usize; // 额度耗尽换号重发计数，上限 = 池大小
     let mut transient_resent = 0usize; // 11133 原地重试计数，上限 TRANSIENT_MAX_RETRY
     let mut flagged_resent = 0usize; // 11128 按号封禁换号计数，上限 = 池大小（全封防循环）
+    let mut stream_head_resent = 0usize; // 流内嗅探判错换号计数，上限 = 池大小（**不冷却账号**）
     let mut hy4_tripped = false; // hy4 模型级兜底重放只允许一次
     // Go `for attempt := 0; ; attempt++` 的**轮次**语义：先判后增，首轮 `attempt == 0`。
     // 这里的循环体在末尾用 `continue`（不是 `for` 的增量表达式），故把自增放在**轮首**，
@@ -452,6 +466,9 @@ pub async fn handle_chat(
     // 200 响应体（非流式 + 有池）在 loop 里就地把 Peek 做完：判定窗口与交给聚合的字节
     // **同源且不丢**（`ok_reader` 是本轮新建的读取器，peek 到的字节留在它里面，见 PEEK_WINDOW）。
     let mut ok_reader: Option<ChunkReader> = None;
+    // 流式路径同理：嗅探用的读取器（peek 到的字节在 `pending` 里）直接交给下游，
+    // 与 Go 把 `br` 回填 `resp.Body` 同义（一字不丢）。
+    let mut stream_reader: Option<ChunkReader> = None;
     let (status, resp) = loop {
         // Go `for attempt := 0; ; attempt++`：attempt 是**轮次**，每轮自增（含 11133 退避重试、
         // 14018/401/429 换号重发），不是「hy4 兜底次数」。守卫 `(attempt == 0 || account_resent)`
@@ -489,7 +506,6 @@ pub async fn handle_chat(
             // **不命中时 peek 到的字节必须一字不丢**——Go `3d4627f` 把 `br` 接回了
             // `resp.Body`（此前 4096 字节被丢弃，表现为下游 `content:null` + usage 全 0）。
             // 本实现的 `peek` 天然把已读字节留在 `ChunkReader::pending` 里，后续聚合照读。
-            // 流式路径不做此检查（headers 一旦发出中途换号会撕裂客户端流）。
             if !client_wants_stream && st.pool.is_some() && !acc_uid.is_empty() {
                 let mut reader = ChunkReader::new(resp);
                 let peeked = reader.peek(PEEK_WINDOW).await;
@@ -531,6 +547,64 @@ pub async fn handle_chat(
                     );
                 }
                 ok_reader = Some(reader);
+                break (200u16, None);
+            }
+            // 流式路径的流内嗅探：拿到 200、**发出 SSE 响应头之前** peek 一小段
+            //（`STREAM_PEEK_WINDOW`），判上游是不是在 200 里塞了错误帧/空流。
+            //
+            // 关键区别（与 11128 账号级封禁治理相比）：这里**判错只换号，绝不冷却账号**
+            //——不动 `mark_limited` / `mark_exhausted`。200 里的错误帧常是上游抖动或
+            // 单号瞬时问题，按账号级封禁处理会级联耗竭整池（慢账号误判 → 全池冷却）。
+            // 换号有界（`stream_head_resent < p.size()`）；到顶或 `pick()` 拿不到号
+            // ⇒ 不 continue，落到下方把上游响应**如实透传**（peek 到的字节留在
+            // `ChunkReader::pending` 里，一字不丢地交给下游）。
+            if client_wants_stream && st.pool.is_some() && !acc_uid.is_empty() {
+                let mut reader = ChunkReader::new(resp);
+                // 带时间预算：思考型模型 prefill 静默期不会把首字节压住（见 STREAM_PEEK_BUDGET）。
+                let peeked = reader
+                    .peek_within(STREAM_PEEK_WINDOW, STREAM_PEEK_BUDGET)
+                    .await;
+                let verdict =
+                    crate::failover::classify_stream_head(&String::from_utf8_lossy(&peeked));
+                if verdict != crate::failover::StreamVerdict::Ok {
+                    let p = st.pool.as_ref().expect("上面已判 Some");
+                    let label = match verdict {
+                        crate::failover::StreamVerdict::ErrCode(c) => format!("{c}@200"),
+                        _ => "空流@200".to_string(),
+                    };
+                    if stream_head_resent < p.size() {
+                        if let Some(next) = p.pick() {
+                            let nhdr = match st.cred.headers_for(&next.auth_path) {
+                                Ok(h) => h,
+                                Err(e) => return write_err(502, &e),
+                            };
+                            println!(
+                                "[codebuddy] 账号 {} 流内嗅探命中 {}，换 {} 重发（不冷却）",
+                                crate::pool::uid_short(&acc_uid),
+                                label,
+                                crate::pool::uid_short(&next.uid)
+                            );
+                            p.dec_load(&acc_uid);
+                            p.touch(&next.uid);
+                            p.inc_load(&next.uid);
+                            hdr = nhdr;
+                            acc_uid = next.uid.clone();
+                            acc_path = next.auth_path.clone();
+                            if let Some(g) = load_guard.as_mut() {
+                                g.uid = acc_uid.clone();
+                            }
+                            stream_head_resent += 1;
+                            continue;
+                        }
+                    }
+                    println!(
+                        "[codebuddy] 全池 {} 个号流内嗅探均异常（{}），如实透传",
+                        p.size(),
+                        label
+                    );
+                }
+                // 判定为 Ok，或已到换号上限：把 peek 过的读取器原样交给下游。
+                stream_reader = Some(reader);
                 break (200u16, None);
             }
             break (200u16, Some(resp));
@@ -784,12 +858,16 @@ pub async fn handle_chat(
         // reasoning_content 两个键（未活动侧为空字符串），ZCode 的流解析按字段出现切分
         // part，双键并存会把一次思考阶段撕成几十个「思考」条目（团结上游只发活动侧键，
         // 无此现象）。剔掉空字符串键即对齐团结流形；同时行扫描 data: 行提取 usage 入账。
-        let resp = match resp {
+        // 有池时响应来自 `stream_reader`（已 peek 过，`pending` 里留着嗅探用的字节）。
+        let reader = match stream_reader {
             Some(r) => r,
-            None => return write_err(500, "internal: streaming response missing"),
+            None => match resp {
+                Some(r) => ChunkReader::new(r),
+                None => return write_err(500, "internal: streaming response missing"),
+            },
         };
         let mut out = Response::new(Body::from_stream(clean_and_scan_stream(
-            resp,
+            reader,
             sent_model.clone(),
             st.stats.clone(),
             // 守卫随流带走：流结束（或被丢弃）时才 DecLoad，等价 Go 的 defer 时点。
@@ -928,6 +1006,42 @@ impl ChunkReader {
         self.pending[..self.pending.len().min(max)].to_vec()
     }
 
+    /// 带**时间上限**的 peek：给流式路径用。
+    ///
+    /// 为什么需要它：`peek` 的循环条件是「攒满 `max` 或流结束」，而上游在思考型模型的
+    /// prefill 阶段可能静默几十秒——那样首字节会被压到 prefill 结束才吐，比「不嗅探」
+    /// 还差。这里在 `budget` 到点时**用已攒到的字节就下判断**（可能不足 `max`），
+    /// 攒到的字节仍然留在 `pending` 里、后续原样交给下游，一字不丢。
+    ///
+    /// 语义边界：超时**不算错误**（不是上游坏，是它慢），所以调用方拿到的 head 可能很短，
+    /// 交给 `classify_stream_head` 判——短到判不出 `ErrCode` 就落 `Ok`，正常透传。
+    pub async fn peek_within(&mut self, max: usize, budget: Duration) -> Vec<u8> {
+        let deadline = tokio::time::Instant::now() + budget;
+        loop {
+            if self.pending.len() >= max {
+                break;
+            }
+            let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if left.is_zero() {
+                break;
+            }
+            match tokio::time::timeout(left, self.read_source()).await {
+                // 读到一块：继续攒（下一次循环再看还够不够时间）。
+                Ok(Some(Ok(b))) => {
+                    let mut merged = Vec::with_capacity(self.pending.len() + b.len());
+                    merged.extend_from_slice(&self.pending);
+                    merged.extend_from_slice(&b);
+                    self.pending = Bytes::from(merged);
+                }
+                // 流结束 / 读错误：与 `peek` 同义，停止攒。
+                Ok(Some(Err(_))) | Ok(None) => break,
+                // 超时：用已攒到的字节下判断。
+                Err(_) => break,
+            }
+        }
+        self.pending[..self.pending.len().min(max)].to_vec()
+    }
+
     /// 把「剩下的全部」包成聚合用的流（`pending` 先发，然后透传上游）。
     pub fn into_rest_stream(
         self,
@@ -946,14 +1060,13 @@ impl ChunkReader {
 
 /// 流式下游：清洗 + usage 入账（逐块 yield，与 Go 的「读一块→写一块→Flush」同形）。
 fn clean_and_scan_stream(
-    resp: reqwest::Response,
+    reader: ChunkReader,
     model: String,
     stats: Arc<crate::stats::Stats>,
     release: Option<LoadRelease>,
 ) -> std::pin::Pin<
     Box<dyn futures_util::Stream<Item = Result<Bytes, std::io::Error>> + Send>,
 > {
-    let reader = ChunkReader::new(resp);
     let cleaner = SseFieldCleaner::new();
     let scan = UsageScanner::new(&model, stats);
     Box::pin(futures_util::stream::unfold(
@@ -1096,6 +1209,62 @@ mod tests {
             got,
             parts.concat(),
             "peek 之后的字节必须与上游逐字节相同（丢头就是 Go 修复前那个缺陷）"
+        );
+    }
+
+    /// `peek_within` 的**时间预算**语义：上游静默时按已攒字节返回，不把首字节压住；
+    /// 且已攒到的字节仍原样留给下游（一字不丢）。
+    ///
+    /// 反向验证：把 `peek_within` 换成无超时的 `peek`（即死等攒满/EOF）⇒ 本用例会卡在
+    /// 600ms 的 deadline 上判红（超时 panic）。
+    #[tokio::test]
+    async fn peek_within_returns_on_budget_and_keeps_bytes() {
+        // 一个「先吐 3 字节，然后永久静默」的流：模拟思考型模型的 prefill 静默期。
+        let head = futures_util::stream::iter(vec![Ok::<Bytes, std::io::Error>(Bytes::from_static(
+            b"dat",
+        ))]);
+        let stall = futures_util::stream::pending::<Result<Bytes, std::io::Error>>();
+        let mut reader = ChunkReader::from_stream(Box::pin(head.chain(stall)));
+
+        let t0 = std::time::Instant::now();
+        let peeked = tokio::time::timeout(
+            Duration::from_millis(600),
+            reader.peek_within(STREAM_PEEK_WINDOW, Duration::from_millis(60)),
+        )
+        .await
+        .expect("peek_within 必须在预算内返回（不许死等攒满 8KB）");
+        let elapsed = t0.elapsed();
+
+        assert_eq!(peeked, b"dat", "预算到点应返回已攒到的字节");
+        assert!(
+            elapsed < Duration::from_millis(500),
+            "应在预算附近返回（实耗 {elapsed:?}），不许等满 8KB"
+        );
+        // 已攒字节必须仍留在 pending 里，下游能原样读回
+        let mut got: Vec<u8> = Vec::new();
+        if let Some(Ok(b)) = reader.next_chunk().await {
+            got.extend_from_slice(&b);
+        }
+        assert_eq!(got, b"dat", "peek_within 之后字节必须原样交给下游");
+    }
+
+    /// 常量本身必须落在「够快」的量级：`peek_within_returns_on_budget_and_keeps_bytes`
+    /// 用的是自己传入的 60ms，测不到这个常量的取值——这里单独锁一次，
+    /// 防止有人把它改成秒级（那等于把首字节压到 prefill 结束）。
+    #[test]
+    fn stream_peek_budget_stays_subsecond() {
+        assert!(
+            STREAM_PEEK_BUDGET <= Duration::from_millis(500),
+            "流内嗅探预算必须小于 500ms（实得 {STREAM_PEEK_BUDGET:?}）；\
+             改到秒级会把思考型模型的首字节压到 prefill 结束"
+        );
+        assert!(
+            !STREAM_PEEK_BUDGET.is_zero(),
+            "预算为 0 等于不嗅探（错误帧会被直接透传给下游）"
+        );
+        assert!(
+            STREAM_PEEK_WINDOW <= 64 * 1024,
+            "流式嗅探窗口不该超过非流式的 64KB（实得 {STREAM_PEEK_WINDOW}）"
         );
     }
 

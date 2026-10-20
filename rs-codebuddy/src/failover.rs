@@ -288,6 +288,78 @@ pub fn is_exhausted_body(body: &str) -> bool {
     !body.is_empty() && body.contains("14018")
 }
 
+/// 流内嗅探（200 响应头之后、发出 SSE 之前）的判定结果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamVerdict {
+    /// 看起来是正常流（有 `data:` 行，且不是「只有 `[DONE]`」）。
+    Ok,
+    /// 上游在 200 里塞了已知业务错误码（封禁/结构/抖动/额度/频控）。
+    ErrCode(u32),
+    /// 空流：非空但一行 `data:` 都没有，或只有 `[DONE]` 而没有任何 content/tool_calls。
+    EmptyStream,
+}
+
+/// 流式响应体里出现即判「假成功」的已知业务码。
+///
+/// 与非流式路径的 14018/11128/11133 治理同源，但**判错只换号、不进冷却**：
+/// 200 里的错误帧往往是上游抖动或单号问题，把它当账号级封禁会级联耗竭整池。
+pub const STREAM_ERR_CODES: &[u32] = &[11128, 11129, 11133, 11102, 11115, 6004];
+
+/// `head` 里是否出现**独立**的业务码 token。
+///
+/// 与 `chat::is_flagged_body` 的注释同口径：裸子串会把 requestId/正文里的同数字串误判
+///（`16004` 里也含 `6004`）。这里只加一条「前后都不是 ASCII 数字」的边界，仍是子串检测
+///（业务码本身就是独立数字 token），不改变判定语义。
+fn contains_code_token(haystack: &str, code: u32) -> bool {
+    let needle = code.to_string();
+    let n = needle.as_bytes();
+    let h = haystack.as_bytes();
+    let mut i = 0usize;
+    while i + n.len() <= h.len() {
+        if &h[i..i + n.len()] == n {
+            let before = if i == 0 { None } else { Some(h[i - 1]) };
+            let after = h.get(i + n.len()).copied();
+            let is_digit = |c: Option<u8>| c.map(|b| b.is_ascii_digit()).unwrap_or(false);
+            if !is_digit(before) && !is_digit(after) {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// 判定上游 200 响应体的开头（peek 窗口）是不是「假成功」——按序：
+///
+/// 1. 含已知业务码 ⇒ `ErrCode(码)`（错误帧可能带 `data:` 行，也可能不带，两种形态都认）；
+/// 2. 非空但一行 `data:` 都没有 ⇒ `EmptyStream`（HTML 错误页 / JSON 错体 / 空体占位）；
+/// 3. 含 `data: [DONE]` 但整个 head 里既无 `content` 也无 `tool_calls` ⇒ `EmptyStream`
+///    （流「正常结束」了却一个回答都没有）；
+/// 4. 其余 ⇒ `Ok`。
+///
+/// 空 `head` 按字面落 `Ok`（规则 2 明写「非空但…」）——调用方把它当正常流透传。
+pub fn classify_stream_head(head: &str) -> StreamVerdict {
+    // ① 业务码优先：这是唯一能判「上游明确报错」的信号，比形态判定可靠。
+    for code in STREAM_ERR_CODES {
+        if contains_code_token(head, *code) {
+            return StreamVerdict::ErrCode(*code);
+        }
+    }
+    // ② 一行 data: 都没有 ⇒ 上游根本没在发 SSE。
+    let has_data_line = head
+        .lines()
+        .any(|l| l.trim_start().starts_with("data:"));
+    if !head.is_empty() && !has_data_line {
+        return StreamVerdict::EmptyStream;
+    }
+    // ③ 只有结束标记：`[DONE]` 前后都没有任何实际载荷。
+    let has_done = head.contains("data: [DONE]") || head.contains("data:[DONE]");
+    if has_done && !head.contains("content") && !head.contains("tool_calls") {
+        return StreamVerdict::EmptyStream;
+    }
+    StreamVerdict::Ok
+}
+
 /// Go `reasoningDefaultFor`：缺省 `reasoning_effort` 注入判定（纯逻辑）。
 /// 返回 `None` 表示不注入：模型无元数据 / reasoning 矩阵缺失，或配置档位不在该模型矩阵。
 pub fn reasoning_default_for(model: &str, cfg: &str) -> Option<String> {
@@ -522,5 +594,81 @@ mod tests {
         assert!(is_exhausted_body("14018"));
         assert!(!is_exhausted_body("Credits exhausted"));
         assert!(!is_exhausted_body(""));
+    }
+
+    /// 验收标准 4：6 类输入（正常流 / 11128 / 11129 / 11133 / 空流 / 只有 DONE）。
+    #[test]
+    fn classify_stream_head_cases() {
+        // 正常流
+        assert_eq!(
+            classify_stream_head(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n"
+            ),
+            StreamVerdict::Ok
+        );
+        // 只有 tool_calls 的正常流同样算 Ok（规则 3 的 `tool_calls` 分支）
+        assert_eq!(
+            classify_stream_head(
+                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n\n"
+            ),
+            StreamVerdict::Ok
+        );
+        // 六个已知业务码各命中一次（数字形态与字符串形态都认）
+        for (body, code) in [
+            (r#"{"code":11128,"msg":"illegal"}"#, 11128u32),
+            (r#"{"code":11129,"msg":"invalid_function_parameters"}"#, 11129),
+            (r#"{"code":11133,"msg":"content rejected"}"#, 11133),
+            (r#"{"code":11102,"msg":"bad"}"#, 11102),
+            (r#"{"code":11115,"msg":"bad"}"#, 11115),
+            (r#"{"code":6004,"msg":"frequency limit"}"#, 6004),
+        ] {
+            assert_eq!(
+                classify_stream_head(body),
+                StreamVerdict::ErrCode(code),
+                "业务码 {code} 应判 ErrCode"
+            );
+            let quoted = format!("{{\"code\":\"{code}\"}}");
+            assert_eq!(
+                classify_stream_head(&quoted),
+                StreamVerdict::ErrCode(code),
+                "字符串形态的业务码 {code} 应同样判 ErrCode"
+            );
+        }
+        // 业务码即使出现在 data: 帧里也照样判错（形态与码序：码优先）
+        assert_eq!(
+            classify_stream_head("data: {\"code\":11128,\"msg\":\"blocked\"}\n\n"),
+            StreamVerdict::ErrCode(11128)
+        );
+        // 空流：非空但没有任何 data: 行（HTML 错误页 / JSON 错体）
+        assert_eq!(classify_stream_head("<html>gateway</html>"), StreamVerdict::EmptyStream);
+        assert_eq!(
+            classify_stream_head(r#"{"error":"boom"}"#),
+            StreamVerdict::EmptyStream
+        );
+        // 只有 DONE：没有任何 content / tool_calls
+        assert_eq!(
+            classify_stream_head("data: [DONE]\n\n"),
+            StreamVerdict::EmptyStream
+        );
+        assert_eq!(
+            classify_stream_head("data: {\"choices\":[]}\n\ndata: [DONE]\n\n"),
+            StreamVerdict::EmptyStream,
+            "有 data 行但无 content/tool_calls、且带 [DONE] ⇒ 空流"
+        );
+        // 空 head：按字面落 Ok（规则 2 是「非空但…」）
+        assert_eq!(classify_stream_head(""), StreamVerdict::Ok);
+        // 子串边界：16004 / 111280 不是业务码（前后都是数字 ⇒ 不算独立 token）
+        assert_eq!(classify_stream_head(r#"{"code":16004}"#), StreamVerdict::EmptyStream);
+        assert_eq!(
+            classify_stream_head(r#"{"code":111280}"#),
+            StreamVerdict::EmptyStream
+        );
+        // 已知局限（有意）：判定是**子串**级的（简报口径「head 含已知业务码」），
+        // requestId 里恰好带 11128 也会命中。代价只是多耗一次 attempt、绝不冷却账号，
+        // 故不为它加字段级解析。
+        assert_eq!(
+            classify_stream_head("data: {\"requestId\":\"11128\",\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n"),
+            StreamVerdict::ErrCode(11128)
+        );
     }
 }
