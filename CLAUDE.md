@@ -127,14 +127,24 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 - 可用模型 ID（2026-09-06 实测 /v1/models，大小写敏感）：`KIMI-K3`（全大写）、
   `GLM-5.3-FLASH`、`codely-core/basic/flash/air/vl`；**2026-09-15 上游新增原生
   `DeepSeek-V4.1-Flash`（`?full=true` 共 8 个，裸 `GLM-5.3` 不在内）**；
-  上游现给 codely 别名配 `display_name` 后端名（core→GLM-5.3、basic/flash/air→
-  DeepSeek-V4-Flash），**矩阵与按账号列表只认 id，不认 display_name**
+  上游当时给 codely 别名配 `display_name` 后端名（core→GLM-5.3、basic/flash/air→
+  DeepSeek-V4-Flash；**2026-10-20 复核已变 V4.1-Flash，见下条**），
+  **矩阵与按账号列表只认 id，不认 display_name**
   （v3.17.0，已实测 78363 免费号 5 个、另两号 8 个）；**GLM-5.3 直连名已 401**
   （team_model_access_denied，上游白名单只剩 alias-only-proxy-models / KIMI-K3 / GLM-5.3-FLASH），
   **codely-core 即 GLM-5.3 的承载入口**——上游把 GLM-5.3 收进 core 别名，
   选 core 实际用的就是 GLM-5.3（用户 2026-09-06 确认，直连 401 同日复核）
-- codely-basic/flash/air 同后端 `deepseek-v4-flash-0731`（真 v4 flash），仅推理深度不同
-  （实测同题：basic 3.8K / air 6.8K / flash 9.4K reasoning tokens）
+- codely-basic/flash/air 三档同源、仅推理深度不同（2026-09-06 实测同题：
+  basic 3.8K / air 6.8K / flash 9.4K reasoning tokens）。
+  **2026-10-20 复核（旧值 `deepseek-v4-flash-0731` 已作废）**：上游 `display_name`
+  已改成 `DeepSeek-V4.1-Flash`（`owned_by: deepseek`）；原生 `DeepSeek-V4.1-Flash`
+  条目在模型最多的账号（56574）下 `display_name` 是 `(1017) DeepSeek-V4.1-Flash`。
+  两者**不是同一部署**：别名组响应 id 形如 `02<毫秒时间戳><随机hex>` 且带
+  `service_tier`，原生是 32 位 hex、无 `service_tier`；同题 temperature=0 推理内容
+  与部分答案不同（哈希表题：basic「按键哈希映射存储并快速查找的数据结构。」vs
+  原生「键值映射实现快速存取的数据结构。」），但 tokenizer 一致（同 prompt 的
+  `prompt_tokens` 逐题相同）。`/model/info` 仍 403，部署名读不到——**(1017) 只是
+  上游标签，不能据此断言 basic 用的是哪个构建**
 - 费率（官方 /model/info）：codely 系 1.6/3.2；GLM-5.3 3.2/11.2；KIMI-K3 16/80（贵，慎用）。
   **⚠ 2026-09-06 晚实测 `/model/info` 上游已拦（nginx 403 HTML，带签名也一样），
   代理正确回 502——费率数字是历史缓存，不再能实时刷新**
