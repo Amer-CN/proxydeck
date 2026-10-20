@@ -455,6 +455,21 @@ pub fn assert_headers_like_go(
     body_len: usize,
     head: bool,
 ) {
+    assert_headers_like_go_opt(case, golden, actual, body_len, head, false)
+}
+
+/// 同 [`assert_headers_like_go`]，多一个 `allow_len_drift`：
+/// HEAD 响应体为空，`content-length` 只能跟黄金值比；当本侧**有意**让响应体变长/变短
+/// （例如 `/v1/models` 的 `id` 改发可读名）时，黄金那次记的长度必然对不上。
+/// 置 `true` 时**只跳过 content-length 这一项**，其余头仍逐项严格比。
+pub fn assert_headers_like_go_opt(
+    case: &str,
+    golden: &Value,
+    actual: &HeaderMap,
+    body_len: usize,
+    head: bool,
+    allow_len_drift: bool,
+) {
     let golden_map = golden
         .as_object()
         .unwrap_or_else(|| panic!("[{case}] 黄金响应头不是对象"));
@@ -470,6 +485,11 @@ pub fn assert_headers_like_go(
         if key == "content-length" {
             let got = actual_len.unwrap_or_else(|| panic!("[{case}] 缺少 content-length"));
             let want: usize = v.as_str().unwrap_or("0").parse().unwrap_or_default();
+            if allow_len_drift {
+                // 本侧有意改了响应体长度（如 /v1/models 的 id 改可读名）：
+                // 不跟黄金比，但仍要求它自洽（HEAD 拿不到体，只能跳过）。
+                continue;
+            }
             if head {
                 assert_eq!(got, want, "[{case}] HEAD 的 content-length 与 Go 不一致");
             } else {

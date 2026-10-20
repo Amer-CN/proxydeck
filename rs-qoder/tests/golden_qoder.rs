@@ -410,8 +410,15 @@ async fn routes_match_go() {
                 "[route {method} {path}] body"
             );
         } else {
+            // 与 `models_match_go` 同一条已知偏离：`/v1/models` 的 `id` 改发可读名，
+            // 换回代号后再逐字节比（其余字段/键序/换行仍严格一致）。
+            let got = if path.starts_with("/v1/models") {
+                models_body_with_legacy_ids(&String::from_utf8_lossy(&body))
+            } else {
+                String::from_utf8_lossy(&body).to_string()
+            };
             assert_eq!(
-                String::from_utf8_lossy(&body),
+                got,
                 want_body,
                 "[route {method} {path}] body"
             );
@@ -429,6 +436,32 @@ async fn routes_match_go() {
 }
 
 // ---------- /v1/models ----------
+
+/// 2026-10-20：`/v1/models` 的 `id` 从上游内部代号改发**可读名**（见 `QODER_PUBLIC_IDS`）。
+///
+/// 原因：OpenAI 兼容客户端（DSH / Cursor / Codex…）只读 `id`、忽略 `display_name`，
+/// 发代号会让用户界面显示一串 `qmodel_38max` 之类看不懂的名字。
+///
+/// 这是**有意偏离 Go 黄金**的一处：黄金录的是旧响应体（`id` = 代号）。这里不改黄金
+/// 文件（它是 Go 侧的权威记录），而是把 Rust 输出里 `id` 字段按同一张表换回代号后
+/// 再逐字节比——**其余字段、键序、换行仍严格一致**，偏离范围被限制在「id 的取值」这一项。
+fn models_body_with_legacy_ids(rust_body: &str) -> String {
+    use rs_codebuddy_public_ids::PUBLIC_TO_LEGACY;
+    let mut out = rust_body.to_string();
+    for (public_id, legacy_id) in PUBLIC_TO_LEGACY {
+        // 只替换 `"id":"<public>"` 这一处形态（display_name 与本字段同值时也要区分开）
+        let from = format!("\"id\":\"{public_id}\"");
+        let to = format!("\"id\":\"{legacy_id}\"");
+        out = out.replace(&from, &to);
+    }
+    out
+}
+
+/// 可读名 → 旧代号的映射（测试侧副本；与 `rs_qoder::QODER_PUBLIC_IDS` 同源，
+/// 但测试直接引用 crate 常量，避免两处漂移）。
+mod rs_codebuddy_public_ids {
+    pub const PUBLIC_TO_LEGACY: [(&str, &str); 13] = rs_qoder::QODER_PUBLIC_IDS;
+}
 
 #[tokio::test]
 async fn models_match_go() {
@@ -453,17 +486,22 @@ async fn models_match_go() {
             raw_request(&srv.addr, &m.to_uppercase(), "/v1/models", &[], "").await;
         let want = case["status"].as_u64().unwrap() as u16;
         assert_eq!(want, status, "[/v1/models {m}]");
+        // 唯一允许的偏离：`id` 用可读名（换回代号后必须与黄金逐字节相同）
+        let got = models_body_with_legacy_ids(&String::from_utf8_lossy(&body));
         assert_eq!(
-            String::from_utf8_lossy(&body),
+            got,
             case["body"].as_str().unwrap(),
-            "[/v1/models {m}] body"
+            "[/v1/models {m}] body（已把可读 id 换回代号）"
         );
-        assert_headers_like_go(
+        // 已知偏离：id 改发可读名 ⇒ 响应体变长 ⇒ HEAD 的 content-length 必然与黄金不同。
+        // 只跳过这一项，其余头仍逐项严格比。
+        assert_headers_like_go_opt(
             &format!("models {m}"),
             &case["resp_headers"],
             &headers_from_raw(&raw_headers),
             body.len(),
             m == "head",
+            true,
         );
         n += 1;
     }

@@ -561,11 +561,13 @@ pub async fn handle_chat(
             if client_wants_stream && st.pool.is_some() && !acc_uid.is_empty() {
                 let mut reader = ChunkReader::new(resp);
                 // 带时间预算：思考型模型 prefill 静默期不会把首字节压住（见 STREAM_PEEK_BUDGET）。
-                let peeked = reader
+                let (peeked, truncated) = reader
                     .peek_within(STREAM_PEEK_WINDOW, STREAM_PEEK_BUDGET)
                     .await;
-                let verdict =
-                    crate::failover::classify_stream_head(&String::from_utf8_lossy(&peeked));
+                let verdict = crate::failover::classify_stream_head(
+                    &String::from_utf8_lossy(&peeked),
+                    truncated,
+                );
                 if verdict != crate::failover::StreamVerdict::Ok {
                     let p = st.pool.as_ref().expect("上面已判 Some");
                     let label = match verdict {
@@ -1006,19 +1008,25 @@ impl ChunkReader {
         self.pending[..self.pending.len().min(max)].to_vec()
     }
 
-    /// 带**时间上限**的 peek：给流式路径用。
+    /// 带**时间上限**的 peek：给流式路径用。返回 `(已攒字节, 是否被截断)`。
     ///
     /// 为什么需要它：`peek` 的循环条件是「攒满 `max` 或流结束」，而上游在思考型模型的
     /// prefill 阶段可能静默几十秒——那样首字节会被压到 prefill 结束才吐，比「不嗅探」
     /// 还差。这里在 `budget` 到点时**用已攒到的字节就下判断**（可能不足 `max`），
     /// 攒到的字节仍然留在 `pending` 里、后续原样交给下游，一字不丢。
     ///
-    /// 语义边界：超时**不算错误**（不是上游坏，是它慢），所以调用方拿到的 head 可能很短，
-    /// 交给 `classify_stream_head` 判——短到判不出 `ErrCode` 就落 `Ok`，正常透传。
-    pub async fn peek_within(&mut self, max: usize, budget: Duration) -> Vec<u8> {
+    /// **健康流不付这份时间**：只要第一块数据到了就立刻返回（首块足以判错误帧/`data:`
+    /// 形态），预算只在「上游完全没吐字节」时才真正生效。这样正常请求的首字节延迟
+    /// 与不嗅探时一致，只有真正可疑的慢上游才等到预算到点。
+    ///
+    /// 返回值第二项 `truncated`：head 是否**没读全**（预算到点 / 窗口未满）。
+    /// `classify_stream_head` 据此避免把半截 `"dat"` 误判成「上游没发 SSE」。
+    pub async fn peek_within(&mut self, max: usize, budget: Duration) -> (Vec<u8>, bool) {
         let deadline = tokio::time::Instant::now() + budget;
+        let mut truncated = true;
         loop {
             if self.pending.len() >= max {
+                truncated = false;
                 break;
             }
             let left = deadline.saturating_duration_since(tokio::time::Instant::now());
@@ -1026,20 +1034,29 @@ impl ChunkReader {
                 break;
             }
             match tokio::time::timeout(left, self.read_source()).await {
-                // 读到一块：继续攒（下一次循环再看还够不够时间）。
                 Ok(Some(Ok(b))) => {
                     let mut merged = Vec::with_capacity(self.pending.len() + b.len());
                     merged.extend_from_slice(&self.pending);
                     merged.extend_from_slice(&b);
                     self.pending = Bytes::from(merged);
+                    // 拿到第一块就够判了：错误帧/JSON 错体/HTML 页都是首块即见，
+                    // 正常 SSE 的首块也足以看到 `data:`。不再等满窗口/预算。
+                    truncated = false;
+                    break;
                 }
-                // 流结束 / 读错误：与 `peek` 同义，停止攒。
-                Ok(Some(Err(_))) | Ok(None) => break,
-                // 超时：用已攒到的字节下判断。
+                // 流结束 / 读错误：读全了（EOF 不是截断）。
+                Ok(Some(Err(_))) | Ok(None) => {
+                    truncated = false;
+                    break;
+                }
+                // 预算到点：用已攒到的字节下判断，并标记「可能没读全」。
                 Err(_) => break,
             }
         }
-        self.pending[..self.pending.len().min(max)].to_vec()
+        (
+            self.pending[..self.pending.len().min(max)].to_vec(),
+            truncated,
+        )
     }
 
     /// 把「剩下的全部」包成聚合用的流（`pending` 先发，然后透传上游）。
@@ -1227,7 +1244,7 @@ mod tests {
         let mut reader = ChunkReader::from_stream(Box::pin(head.chain(stall)));
 
         let t0 = std::time::Instant::now();
-        let peeked = tokio::time::timeout(
+        let (peeked, truncated) = tokio::time::timeout(
             Duration::from_millis(600),
             reader.peek_within(STREAM_PEEK_WINDOW, Duration::from_millis(60)),
         )
@@ -1240,12 +1257,61 @@ mod tests {
             elapsed < Duration::from_millis(500),
             "应在预算附近返回（实耗 {elapsed:?}），不许等满 8KB"
         );
+        // 拿到第一块就返回 ⇒ 这 3 字节已读全，不算截断
+        assert!(!truncated, "拿到首块即返回，不算截断");
         // 已攒字节必须仍留在 pending 里，下游能原样读回
         let mut got: Vec<u8> = Vec::new();
         if let Some(Ok(b)) = reader.next_chunk().await {
             got.extend_from_slice(&b);
         }
         assert_eq!(got, b"dat", "peek_within 之后字节必须原样交给下游");
+    }
+
+    /// **健康流不付预算代价**：上游一吐字节就返回，不等满预算。
+    /// 反向验证：去掉「拿到首块就 break」⇒ 本用例实耗会撞到 300ms 预算并判红。
+    #[tokio::test]
+    async fn peek_within_returns_immediately_when_data_arrives() {
+        let first = futures_util::stream::iter(vec![Ok::<Bytes, std::io::Error>(
+            Bytes::from_static(b"data: {\"choices\":[]}\n\n"),
+        )]);
+        let stall = futures_util::stream::pending::<Result<Bytes, std::io::Error>>();
+        let mut reader = ChunkReader::from_stream(Box::pin(first.chain(stall)));
+
+        let t0 = std::time::Instant::now();
+        let (peeked, _truncated) = reader
+            .peek_within(STREAM_PEEK_WINDOW, Duration::from_millis(300))
+            .await;
+        let elapsed = t0.elapsed();
+
+        assert!(!peeked.is_empty(), "应拿到首块内容");
+        assert!(
+            elapsed < Duration::from_millis(120),
+            "健康流拿到首块必须立刻返回，不许等满 300ms 预算（实耗 {elapsed:?}）"
+        );
+    }
+
+    /// 预算截断时，半截 `"dat"` 不能被判成「上游没发 SSE」（否则误换号）。
+    #[test]
+    fn truncated_head_does_not_become_empty_stream() {
+        use crate::failover::{classify_stream_head, StreamVerdict};
+        // 没读全：半截前缀 → 按 Ok 透传
+        assert_eq!(
+            classify_stream_head("dat", true),
+            StreamVerdict::Ok,
+            "截断的半截 data: 前缀不能判空流"
+        );
+        // 读全了但没有 data: 行 → 才是空流
+        assert_eq!(
+            classify_stream_head("dat", false),
+            StreamVerdict::EmptyStream,
+            "读全后仍无 data: 行才算空流"
+        );
+        // 明确的业务码即使截断也要判出来（错误帧首块即见）
+        assert_eq!(
+            classify_stream_head(r#"{"code":11128,"msg":"x"}"#, true),
+            StreamVerdict::ErrCode(11128),
+            "截断也要能判出业务码"
+        );
     }
 
     /// 常量本身必须落在「够快」的量级：`peek_within_returns_on_budget_and_keeps_bytes`

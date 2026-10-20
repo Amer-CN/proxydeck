@@ -338,7 +338,10 @@ fn contains_code_token(haystack: &str, code: u32) -> bool {
 /// 4. 其余 ⇒ `Ok`。
 ///
 /// 空 `head` 按字面落 `Ok`（规则 2 明写「非空但…」）——调用方把它当正常流透传。
-pub fn classify_stream_head(head: &str) -> StreamVerdict {
+///
+/// `truncated`：head 是否**没读完**就被截断（时间预算到点 / 窗口未满）。为 `true` 时
+/// 规则 2 不生效——半截的 `"dat"` 是 `data:` 的前缀，不是「上游没发 SSE」。
+pub fn classify_stream_head(head: &str, truncated: bool) -> StreamVerdict {
     // ① 业务码优先：这是唯一能判「上游明确报错」的信号，比形态判定可靠。
     for code in STREAM_ERR_CODES {
         if contains_code_token(head, *code) {
@@ -346,10 +349,14 @@ pub fn classify_stream_head(head: &str) -> StreamVerdict {
         }
     }
     // ② 一行 data: 都没有 ⇒ 上游根本没在发 SSE。
+    //
+    // ⚠ `truncated == true` 时**不能**据此判空流：peek 被时间预算截断时，head 可能
+    // 恰好停在 `data:` 的半截前缀（如 `"dat"`），那是「还没读全」而不是「上游没发」。
+    // 这种情形只认规则 ① 的明确业务码，其余一律按 Ok 透传（宁可漏判，不可误换号）。
     let has_data_line = head
         .lines()
         .any(|l| l.trim_start().starts_with("data:"));
-    if !head.is_empty() && !has_data_line {
+    if !head.is_empty() && !has_data_line && !truncated {
         return StreamVerdict::EmptyStream;
     }
     // ③ 只有结束标记：`[DONE]` 前后都没有任何实际载荷。
@@ -602,14 +609,16 @@ mod tests {
         // 正常流
         assert_eq!(
             classify_stream_head(
-                "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n"
+                "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n",
+                false
             ),
             StreamVerdict::Ok
         );
         // 只有 tool_calls 的正常流同样算 Ok（规则 3 的 `tool_calls` 分支）
         assert_eq!(
             classify_stream_head(
-                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n\n"
+                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n\n",
+                false
             ),
             StreamVerdict::Ok
         );
@@ -623,51 +632,51 @@ mod tests {
             (r#"{"code":6004,"msg":"frequency limit"}"#, 6004),
         ] {
             assert_eq!(
-                classify_stream_head(body),
+                classify_stream_head(body, false),
                 StreamVerdict::ErrCode(code),
                 "业务码 {code} 应判 ErrCode"
             );
             let quoted = format!("{{\"code\":\"{code}\"}}");
             assert_eq!(
-                classify_stream_head(&quoted),
+                classify_stream_head(&quoted, false),
                 StreamVerdict::ErrCode(code),
                 "字符串形态的业务码 {code} 应同样判 ErrCode"
             );
         }
         // 业务码即使出现在 data: 帧里也照样判错（形态与码序：码优先）
         assert_eq!(
-            classify_stream_head("data: {\"code\":11128,\"msg\":\"blocked\"}\n\n"),
+            classify_stream_head("data: {\"code\":11128,\"msg\":\"blocked\"}\n\n", false),
             StreamVerdict::ErrCode(11128)
         );
         // 空流：非空但没有任何 data: 行（HTML 错误页 / JSON 错体）
-        assert_eq!(classify_stream_head("<html>gateway</html>"), StreamVerdict::EmptyStream);
+        assert_eq!(classify_stream_head("<html>gateway</html>", false), StreamVerdict::EmptyStream);
         assert_eq!(
-            classify_stream_head(r#"{"error":"boom"}"#),
+            classify_stream_head(r#"{"error":"boom"}"#, false),
             StreamVerdict::EmptyStream
         );
         // 只有 DONE：没有任何 content / tool_calls
         assert_eq!(
-            classify_stream_head("data: [DONE]\n\n"),
+            classify_stream_head("data: [DONE]\n\n", false),
             StreamVerdict::EmptyStream
         );
         assert_eq!(
-            classify_stream_head("data: {\"choices\":[]}\n\ndata: [DONE]\n\n"),
+            classify_stream_head("data: {\"choices\":[]}\n\ndata: [DONE]\n\n", false),
             StreamVerdict::EmptyStream,
             "有 data 行但无 content/tool_calls、且带 [DONE] ⇒ 空流"
         );
         // 空 head：按字面落 Ok（规则 2 是「非空但…」）
-        assert_eq!(classify_stream_head(""), StreamVerdict::Ok);
+        assert_eq!(classify_stream_head("", false), StreamVerdict::Ok);
         // 子串边界：16004 / 111280 不是业务码（前后都是数字 ⇒ 不算独立 token）
-        assert_eq!(classify_stream_head(r#"{"code":16004}"#), StreamVerdict::EmptyStream);
+        assert_eq!(classify_stream_head(r#"{"code":16004}"#, false), StreamVerdict::EmptyStream);
         assert_eq!(
-            classify_stream_head(r#"{"code":111280}"#),
+            classify_stream_head(r#"{"code":111280}"#, false),
             StreamVerdict::EmptyStream
         );
         // 已知局限（有意）：判定是**子串**级的（简报口径「head 含已知业务码」），
         // requestId 里恰好带 11128 也会命中。代价只是多耗一次 attempt、绝不冷却账号，
         // 故不为它加字段级解析。
         assert_eq!(
-            classify_stream_head("data: {\"requestId\":\"11128\",\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n"),
+            classify_stream_head("data: {\"requestId\":\"11128\",\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n", false),
             StreamVerdict::ErrCode(11128)
         );
     }

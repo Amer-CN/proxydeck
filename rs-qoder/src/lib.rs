@@ -145,6 +145,33 @@ pub const QODER_MODELS: [(&str, &str); 13] = [
     ("mmodel", "MiniMax-M3"),
 ];
 
+/// `/v1/models` 对外暴露的 id → worker 真正吃的 `--model` 原文。
+///
+/// 为什么要这张表：上游的模型 id 是内部代号（`qmodel_38max` / `dfmodel`…），
+/// 而 OpenAI 兼容客户端（DSH、Cursor、Codex…）**只读 `id` 字段**、忽略
+/// `display_name`，于是界面上全是一串看不懂的代号。
+///
+/// 做法：`/v1/models` 的 `id` 改发可读名（`Qwen3.8-Max` / `DeepSeek-V4-Flash`…），
+/// 收到请求时再经 `resolve_model` 映射回代号——`resolve_model` 本来就同时认
+/// id 与 displayName，所以**旧代号仍然可用**，纯增量、不破坏任何既有调用方。
+///
+/// 例外：`Auto` 保持原样（它本身就是可读词，且是上游的默认路由语义）。
+pub const QODER_PUBLIC_IDS: [(&str, &str); 13] = [
+    ("Auto", "Auto"),
+    ("Qwen3.8-Max", "qmodel_38max"),
+    ("Qwen3.8-Flash", "qfmodel"),
+    ("Qwen3.7-Flash", "q37fmodel"),
+    ("Qwen3.7-Max", "qmodel_latest"),
+    ("Qwen3.7-Plus", "qmodel"),
+    ("DeepSeek-V4-Pro", "dmodel"),
+    ("DeepSeek-V4-Flash", "dfmodel"),
+    ("GLM-5.3", "gmodel"),
+    ("GLM-5.3-Flash", "gfmodel"),
+    ("GLM-5.2", "gm51model"),
+    ("Kimi-K2.7-Code", "kmodel"),
+    ("MiniMax-M3", "mmodel"),
+];
+
 #[derive(Parser, Debug)]
 #[command(name = "rs-qoder", version, about = "ProxyDeck Qoder 插件（Rust 重写）")]
 pub struct Args {
@@ -838,13 +865,17 @@ pub fn decode_set_body(body: &[u8]) -> Result<f64, String> {
 // ---------- /v1/models ----------
 
 /// Go `handleModels`：静态模型目录（**不看方法**）。
+///
+/// 对外发**可读 id**（见 `QODER_PUBLIC_IDS`）：客户端只读 `id` 字段，发内部代号
+/// 会让界面显示一串 `qmodel_38max` 之类看不懂的名字。`resolve_model` 同时认
+/// 可读名与旧代号，所以旧调用方不受影响。
 async fn handle_models(State(_st): State<Arc<AppState>>) -> Response {
-    let data: Vec<J> = QODER_MODELS
+    let data: Vec<J> = QODER_PUBLIC_IDS
         .iter()
-        .map(|(id, name)| {
+        .map(|(public_id, _worker_id)| {
             obj(vec![
-                ("id", s(*id)),
-                ("display_name", s(*name)),
+                ("id", s(*public_id)),
+                ("display_name", s(*public_id)),
                 ("object", s("model")),
             ])
         })
