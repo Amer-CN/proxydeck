@@ -2687,7 +2687,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
               <div class="pt-sc-body qoder" data-body="qoder">
                 <div class="sc-unified">
                   <div class="run-line">
-                    <span class="pt-dot grn" data-dot="qoderRun"><span class="run-name">QODER · 8785</span><b></b></span>
+                    <span class="pt-dot grn" data-dot="qoderRun"><span class="run-name" id="qoderRunName">QODER · 8785</span><b></b></span>
                   </div>
                   <div class="pt-system-readout">
                     <span class="pt-silk">Uptime</span>
@@ -3258,6 +3258,23 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
               <!-- —————— Qoder 甲板（WORKBUDDY 键副页：双击进入） —————— -->
               <div class="pt-deck" data-deck="qoder">
                <div class="pt-deck-scroll"><div class="inner">
+                <div class="pt-row">
+                  <div class="pt-rowline">
+                    <div class="pt-label"><div class="t" data-i18n="app.s.qoderRegion">版本</div></div>
+                    <span class="pt-val" data-val="qoderRegion" aria-hidden="true">国内版</span>
+                  </div>
+                  <div class="pt-gear k3" style="--s:0;--c:2" data-gear="qoderRegion" data-count="2"
+                       role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="1"
+                       aria-label="版本" data-i18n-attr="aria-label:app.s.qoderRegion">
+                    <div class="stops">
+                      <span data-i18n="app.val.cbCn">国内版</span>
+                      <span data-i18n="app.val.cbIntl">国际版</span>
+                    </div>
+                    <div class="pt-rail"><i></i><i></i><span class="k"></span></div>
+                  </div>
+                  <p class="pt-notice" data-i18n="app.s.qoderRegionN">国内版走 com.qodercn（8785），国际版走 com.qoder（8791）· 切换即改本甲板全部目标，互不影响。</p>
+                </div>
+                <div class="pt-div"></div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.ignite">点火拉杆</div>
@@ -7470,8 +7487,7 @@ var PT_I18N = {
     cn:   { id: 'codebuddy',      port: 8787, screen: 'WORKBUDDY · 8787' },
     intl: { id: 'codebuddy-intl', port: 8789, screen: 'WORKBUDDY · 8789' }
   };
-  var cbRegion = 'cn'; /* 默认国内版 */
-  function cbRegionApply(regionName) {
+  var cbRegion = 'cn'; /* 默认国内版 */  function cbRegionApply(regionName) {
     var r = CB_REGIONS[regionName]; if (!r) return;
     cbRegion = regionName;
     var V = PV.cb;
@@ -7510,6 +7526,38 @@ var PT_I18N = {
     var target = i === 1 ? 'intl' : 'cn';
     if (target === cbRegion) return true;
     cbRegionApply(target);
+    return true;
+  });
+
+  /* ---------------- Qoder 甲板：国内版 ⇄ 国际版（同甲板区域切换，不增甲板/模式键） ----------------
+     语义：切换本甲板绑定的插件 qoder(8785) ⇄ qoder-intl(8791)。
+     与 CB_REGIONS 同款：改 V.id / V.port 即让端点、状态灯、模型列表、日志、点火目标整体跟随。
+     默认 = 国内版（老用户零变化）。 */
+  var QODER_REGIONS = {
+    cn:   { id: 'qoder',      port: 8785, screen: 'QODER · 8785' },
+    intl: { id: 'qoder-intl', port: 8791, screen: 'QODER · 8791' }
+  };
+  var qoderRegion = 'cn'; /* 默认国内版 */
+  function qoderRegionApply(regionName) {
+    var r = QODER_REGIONS[regionName]; if (!r) return;
+    qoderRegion = regionName;
+    var V = PV.qoder;
+    var wasRunning = V.phase === 'running' || V.phase === 'starting';
+    V.id = r.id; V.port = r.port;
+    /* 模型/元数据缓存是按上游口径算的，区域换了必须作废重探 */
+    V.lastModels = null; V.lastMeta = null; V.metaMap = null; V.modelIds = null;
+    var nameEl = $('qoderRunName');
+    if (nameEl) nameEl.textContent = r.screen;
+    var epEl = $('qoderEndpoint');
+    if (epEl) epEl.textContent = 'http://127.0.0.1:' + r.port + '/v1';
+    PTApp.gear('qoderRegion', regionName === 'intl' ? 1 : 0);
+    if (wasRunning) plog(V, 'err', '注意：切换前区域的插件仍在运行，本甲板现在监视 ' + r.id + '（8785/8791 互不接管）');
+    refreshPluginView('qoder');
+  }
+  PTApp.onGear('qoderRegion', function (i) {
+    var target = i === 1 ? 'intl' : 'cn';
+    if (target === qoderRegion) return true;
+    qoderRegionApply(target);
     return true;
   });
   function pSet(V, id, val) { var el = $(V.pfx + id); if (el) el.textContent = val; }
@@ -8769,7 +8817,9 @@ var PT_I18N = {
     'app.s.qoderLever':      { zh: '拉杆点火，托管 Qoder 智能体引擎（8785）· 拉回熄火', 'zh-hant': '拉桿點火，託管 Qoder 智能體引擎（8785）· 拉回熄火', en: 'Pull to ignite, hosting the Qoder agent engine (8785) · Pull back to stop', de: 'Ziehen zum Start, hostet die Qoder-Engine (8785) · Zurück zum Stoppen', ja: '引いて点火、Qoder エージェントエンジンをホスト（8785）· 戻して停止', fr: 'Tirer pour démarrer, héberge le moteur Qoder (8785) · Retour pour arrêter', es: 'Tira para encender, aloja el motor de Qoder (8785) · Vuelve para apagar' },
     'app.s.copy':     { zh: '点击复制', 'zh-hant': '點擊複製', en: 'Click to copy', de: 'Klicken zum Kopieren', ja: 'クリックでコピー', fr: 'Cliquer pour copier', es: 'Clic para copiar' },
     'app.s.cbRegion':     { zh: '版本', 'zh-hant': '版本', en: 'Region', de: 'Region', ja: 'リージョン', fr: 'Région', es: 'Región' },
-    'app.s.cbRegionN':     { zh: '国内版走 copilot.tencent.com（8787），国际版走 www.codebuddy.ai（8789，含免费模型）· 切换即改本甲板全部目标，互不影响。', 'zh-hant': '國內版走 copilot.tencent.com（8787），國際版走 www.codebuddy.ai（8789，含免費模型）· 切換即改本甲板全部目標，互不影響。', en: 'CN hits copilot.tencent.com (8787); Intl hits www.codebuddy.ai (8789, includes free models) · Switching retargets this whole deck; both are independent.', de: 'CN erreicht copilot.tencent.com (8787); Intl erreicht www.codebuddy.ai (8789, inkl. kostenlose Modelle) · Umschalen zielt das ganze Deck um; beide sind unabhängig.', ja: '中国版は copilot.tencent.com（8787）、国際版は www.codebuddy.ai（8789、無料モデルあり）・切替でこのデッキの宛先が全て変わる。相互に影響しない。', fr: 'CN rejoint copilot.tencent.com (8787) ; Intl rejoint www.codebuddy.ai (8789, dont modèles gratuits) · Le basculement retarget tout le deck ; les deux sont indépendants.', es: 'CN va a copilot.tencent.com (8787); Intl va a www.codebuddy.ai (8789, incluye modelos gratis) · El cambio redirige todo el deck; ambos son independientes.' },
+    'app.s.cbRegionN':     { zh: '国内版走 copilot.tencent.com（8787），国际版走 www.codebuddy.ai（8789，含免费模型）· 切换即改本甲板全部目标，互不影响。', 'zh-hant': '國內版走 copilot.tencent.com（8787），國際版走 www.codebuddy.ai（8789，含免費模型）· 切換即改本甲板全部目標，互不影響。', en: 'CN hits copilot.tencent.com (8787); Intl hits www.codebuddy.ai (8789, includes free models) · Switching retargets this whole deck; both are independent.', de: 'CN erreicht copilot.tencent.com (8787); Intl erreicht www.codebuddy.ai (8789, inkl. kostenlose Modelle) · Umschalten zielt das ganze Deck um; beide sind unabhängig.', ja: '中国版は copilot.tencent.com（8787）、国際版は www.codebuddy.ai（8789、無料モデルあり）・切替でこのデッキの宛先が全て変わる。相互に影響しない。', fr: 'CN rejoint copilot.tencent.com (8787) ; Intl rejoint www.codebuddy.ai (8789, dont modèles gratuits) · Le basculement retarget tout le deck ; les deux sont indépendants.', es: 'CN va a copilot.tencent.com (8787); Intl va a www.codebuddy.ai (8789, incluye modelos gratis) · El cambio redirige todo el deck; ambos son independientes.' },
+    'app.s.qoderRegion':     { zh: '版本', 'zh-hant': '版本', en: 'Region', de: 'Region', ja: 'リージョン', fr: 'Région', es: 'Región' },
+    'app.s.qoderRegionN':     { zh: '国内版走 com.qodercn（8785），国际版走 com.qoder（8791）· 切换即改本甲板全部目标，互不影响。', 'zh-hant': '國內版走 com.qodercn（8785），國際版走 com.qoder（8791）· 切換即改本甲板全部目標，互不影響。', en: 'CN hits com.qodercn (8785); Intl hits com.qoder (8791) · Switching retargets this whole deck; both are independent.', de: 'CN erreicht com.qodercn (8785); Intl erreicht com.qoder (8791) · Umschalten zielt das ganze Deck um; beide sind unabhängig.', ja: '中国版は com.qodercn（8785）、国際版は com.qoder（8791）・切替でこのデッキの宛先が全て変わる。相互に影響しない。', fr: 'CN rejoint com.qodercn (8785) ; Intl rejoint com.qoder (8791) · Le basculement retarget tout le deck ; les deux sont indépendants.', es: 'CN va a com.qodercn (8785); Intl va a com.qoder (8791) · El cambio redirige todo el deck; ambos son independientes.' },
     'app.val.cbCn':     { zh: '国内版', 'zh-hant': '國內版', en: 'CN', de: 'CN', ja: '中国版', fr: 'CN', es: 'CN' },
     'app.val.cbIntl':     { zh: '国际版', 'zh-hant': '國際版', en: 'Intl', de: 'Intl', ja: '国際版', fr: 'Intl', es: 'Intl' },
     'app.s.autostart':     { zh: '登录 Windows 后无窗口自动点火（软件统一，非按代理单独）。', 'zh-hant': '登錄 Windows 後無窗口自動點火（軟件統一，非按代理單獨）。', en: 'Auto-ignite headless after Windows sign-in (app-wide).', de: 'Nach Anmeldung automatisch headless starten (app-weit).', ja: 'Windowsログイン後に自動点火（アプリ全体）。', fr: 'Démarrage auto sans fenêtre après connexion (global).', es: 'Arranque automático sin ventana al iniciar Windows (global).' },
