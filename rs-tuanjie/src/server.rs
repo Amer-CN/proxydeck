@@ -979,9 +979,9 @@ fn reasoning_tiers_for(model: &str) -> &'static str {
 /// `aliasNote`（`server.go:890-908`）——**逐字**照搬 Go 的实测说明。
 fn alias_note(name: &str) -> &'static str {
     match name {
-        "codely-air" => "✓可用 · 后端: deepseek-v4-flash-0731 · ~75 积分/1M token",
-        "codely-basic" => "✓可用 · 后端: deepseek-v4-flash-0731 · ~64 积分/1M token",
-        "codely-flash" => "✓可用 · 后端: deepseek-v4-flash-0731 · ~129 积分/1M token",
+        "codely-air" => "✓可用 · 后端: DeepSeek-V4.1-Flash · ~75 积分/1M token",
+        "codely-basic" => "✓可用 · 后端: DeepSeek-V4.1-Flash · ~64 积分/1M token",
+        "codely-flash" => "✓可用 · 后端: DeepSeek-V4.1-Flash · ~129 积分/1M token",
         "codely-core" => {
             "✓可用 · 后端: glm-5-2-260617 · ~91 积分/1M token（浅推理，单日波动 47-233）"
         }
