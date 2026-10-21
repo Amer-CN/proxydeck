@@ -2538,6 +2538,12 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
 /* 语言挡位读数（设置页） */
 .lang-row .pt-val { min-width: 64px; text-align: right; }
 
+/* ———— OPENCODE 甲板：运行时就绪 / 一键安装（8784 /install/*）———— */
+.oc-install-actions { display: flex; flex: none; align-items: center; gap: 6px; }
+.oc-install-track { margin: 7px 0 4px; }
+.oc-install-bar { background: var(--pt-accent); }
+.oc-install-hint { margin-top: 5px; font-size: 10px; line-height: 1.55; color: var(--pt-ink2); }
+
 @media (prefers-reduced-motion: reduce) {
   .toast, .toast.out { animation: none; }
   .bar-fill { transition: none; }
@@ -3637,6 +3643,26 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label"><div class="s" data-i18n="app.oc.hint">本机 opencode 免费档有滚动限流，撞限流会自动换模型；不承诺无限量。</div></div>
                 </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.oc.runtime">运行时就绪 · RUNTIME</span></div>
+                <div class="pt-row">
+                  <div class="pt-rowline">
+                    <div class="pt-label">
+                      <div class="s" id="ocRuntimeState">未检测到 opencode 运行时</div>
+                    </div>
+                    <div class="oc-install-actions">
+                      <button type="button" class="ibtn2 accent" id="ocInstallBtn"
+                              data-i18n="app.oc.installBtn">⬇ 一键安装 opencode</button>
+                      <button type="button" class="ibtn2" id="ocInstallCancel"
+                              data-i18n="app.oc.cancelBtn" style="display:none">取消</button>
+                    </div>
+                  </div>
+                  <div class="bar-track oc-install-track" id="ocInstallTrack" style="display:none">
+                    <div class="bar-fill oc-install-bar" id="ocInstallBar"></div>
+                  </div>
+                  <div class="oc-install-hint" id="ocInstallHint"
+                       data-i18n="app.oc.sizeHint">下载约 95 MB，安装后占用约 204 MB；只写入 ProxyDeck 数据目录，不改系统 PATH</div>
+                </div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
                   <button type="button" class="ibtn2" id="ocRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
@@ -8535,6 +8561,22 @@ var PT_I18N = {
           pSet(V, 'StModels', '—');
           pSet(V, 'StModelsSub', h.reason || 'opencode 未就绪');
         }
+        /* 一键安装区块：ready 直接写「已就绪」；未安装时拉一次 /install/status；
+           插件自报 opencode_installing（autoInstall 等路径）则接管 800ms 轮询。
+           安装轮询进行中不回查 status——/install/status 的 error 是一次性读取。 */
+        if (!ocInstall.polling && ocReady) {
+          var ocStReady = { installed: true, version: h.opencode || '?', downloading: false };
+          ocInstall.lastStatus = ocStReady;
+          ocInstall.lastError = '';
+          ocInstallRender(ocStReady);
+        } else if (!ocInstall.polling && h.reason === 'opencode_not_installed' &&
+                   !ocInstall.syncedForRun) {
+          ocInstall.syncedForRun = true;
+          ocInstallRefresh();
+        } else if (!ocInstall.polling &&
+                   String(h.reason || '').indexOf('opencode_installing') === 0) {
+          ocInstallStartPolling();
+        }
       }
       if (V.id === 'tuanjie') { updateJudgeBanner(h); updateSeedBanner(h); }
       if (V.mode === 'cb') {
@@ -8772,6 +8814,156 @@ var PT_I18N = {
     }
   }
 
+  /* ================= OPENCODE 一键安装（8784 /install/*） ================= */
+  /* 状态机：未安装 → 下载中（800ms 轮询 /install/status）→ 已就绪 | 失败。
+     请求一律 AbortSignal.timeout(3000)，网络错误只改文案、不弹窗打断。
+     /install/status 的 error 是一次性读取（后端 take_error），这里缓存到
+     lastError，防止 3s 的 /health 轮询与 800ms 安装轮询同时取状态时把错误吃掉。 */
+  var ocInstall = {
+    polling: false, timer: null, starting: false,
+    lastStatus: null, lastError: '', syncedForRun: false
+  };
+  function ocInstallMB(n) {
+    return (Math.max(0, Number(n) || 0) / 1048576).toFixed(1);
+  }
+  function ocInstallRender(st) {
+    var stateEl = $('ocRuntimeState');
+    if (!stateEl) return;
+    var btn = $('ocInstallBtn'), cancel = $('ocInstallCancel');
+    var track = $('ocInstallTrack'), bar = $('ocInstallBar');
+    var downloading = !!(st && st.downloading);
+    var installed = !!(st && st.installed);
+    var err = (st && st.error) ? String(st.error) : '';
+    if (err) ocInstall.lastError = err;
+    if (downloading || installed) ocInstall.lastError = '';
+    if (downloading) {
+      var total = Number(st.total) || 0, done = Number(st.downloaded) || 0;
+      var pct = total > 0 ? Math.max(0, Math.min(100, Math.round(done * 100 / total))) : 0;
+      stateEl.textContent = t('app.oc.installing')
+        .replace('{p}', pct)
+        .replace('{done}', ocInstallMB(done))
+        .replace('{total}', ocInstallMB(total));
+      if (track) track.style.display = '';
+      if (bar) bar.style.width = pct + '%';
+      if (btn) { btn.disabled = true; btn.style.display = ''; }
+      if (cancel) { cancel.disabled = false; cancel.style.display = ''; }
+      return;
+    }
+    if (installed) {
+      stateEl.textContent = t('app.oc.ready').replace('{ver}', (st && st.version) || '?');
+      if (track) track.style.display = '';
+      if (bar) bar.style.width = '100%';
+      if (btn) { btn.disabled = false; btn.style.display = 'none'; }
+      if (cancel) cancel.style.display = 'none';
+      return;
+    }
+    if (err || ocInstall.lastError) {
+      stateEl.textContent = t('app.oc.installFailed').replace('{msg}', err || ocInstall.lastError);
+    } else {
+      stateEl.textContent = t('app.oc.notInstalled');
+    }
+    if (track) track.style.display = 'none';
+    if (bar) bar.style.width = '0%';
+    if (btn) { btn.disabled = false; btn.style.display = ''; }
+    if (cancel) cancel.style.display = 'none';
+  }
+  async function ocInstallFetch() {
+    try {
+      var r = await fetch('http://127.0.0.1:8784/install/status', { signal: AbortSignal.timeout(3000) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } catch (e) {
+      return null;   /* 网络错误：保留当前文案，不弹窗 */
+    }
+  }
+  async function ocInstallRefresh() {
+    var st = await ocInstallFetch();
+    if (!st) return null;
+    ocInstall.lastStatus = st;
+    ocInstallRender(st);
+    return st;
+  }
+  function ocInstallStopPolling() {
+    if (ocInstall.timer) { clearInterval(ocInstall.timer); ocInstall.timer = null; }
+    ocInstall.polling = false;
+  }
+  async function ocInstallPollTick() {
+    var st = await ocInstallFetch();
+    if (!st) return;
+    ocInstall.lastStatus = st;
+    ocInstallRender(st);
+    if (st.installed) {
+      ocInstallStopPolling();
+      refreshPluginView('oc');   /* 装完立刻刷一轮健康：模型列表会自己出来 */
+    } else if (!st.downloading && (st.error || ocInstall.lastError)) {
+      ocInstallStopPolling();    /* 失败：停下等用户重试，避免每 800ms 白打 */
+    }
+  }
+  function ocInstallStartPolling() {
+    if (ocInstall.timer) return;
+    ocInstall.polling = true;
+    ocInstall.timer = setInterval(function () {
+      if (document.hidden) return;
+      ocInstallPollTick();
+    }, 800);
+    ocInstallPollTick();
+  }
+  async function ocInstallStart() {
+    if (ocInstall.starting || ocInstall.polling) return;   /* 下载期间不重复 POST */
+    ocInstall.starting = true;
+    ocInstall.lastError = '';
+    var btn = $('ocInstallBtn');
+    if (btn) btn.disabled = true;
+    try {
+      var r = await fetch('http://127.0.0.1:8784/install/start', {
+        method: 'POST', signal: AbortSignal.timeout(3000)
+      });
+      var j = null;
+      try { j = await r.json(); } catch (e2) {}
+      if (!r.ok && r.status !== 409) {
+        throw new Error((j && j.error) || ('HTTP ' + r.status));
+      }
+      /* 409 = 已有安装任务在跑：同样进入轮询，不重复下载 */
+      ocInstallRender({ installed: false, downloading: true, downloaded: 0, total: 0 });
+      ocInstallStartPolling();
+    } catch (e) {
+      var msg = (e && e.name === 'TimeoutError')
+        ? '请求超时'
+        : ((e && e.message) || '无法连接 opencode 插件');
+      ocInstall.lastError = msg;
+      ocInstallRender({ installed: false, downloading: false, error: msg });
+    } finally {
+      ocInstall.starting = false;
+    }
+  }
+  async function ocInstallCancel() {
+    var cancel = $('ocInstallCancel');
+    if (cancel) cancel.disabled = true;
+    ocInstallStopPolling();
+    try {
+      await fetch('http://127.0.0.1:8784/install/cancel', {
+        method: 'POST', signal: AbortSignal.timeout(3000)
+      });
+    } catch (e) { /* 网络错误：仍回未安装态，让下一次 /health 轮询自愈 */ }
+    ocInstall.lastError = '';
+    ocInstallRender({ installed: false, downloading: false, downloaded: 0, total: 0 });
+    /* 取消是异步的（下载循环下一轮才退出）：最多跟 4 秒，等临时文件清理完再定态 */
+    for (var i = 0; i < 8; i++) {
+      await new Promise(function (res) { setTimeout(res, 500); });
+      var st = await ocInstallFetch();
+      if (st) {
+        if (!st.downloading) { ocInstall.lastStatus = st; ocInstallRender(st); break; }
+      }
+    }
+    if (cancel) cancel.disabled = false;
+    refreshPluginView('oc');
+  }
+  (function bindOcInstall() {
+    var btn = $('ocInstallBtn'), cancel = $('ocInstallCancel');
+    if (btn) btn.addEventListener('click', function () { ocInstallStart(); });
+    if (cancel) cancel.addEventListener('click', function () { ocInstallCancel(); });
+  })();
+
   /* ================= 团结 K3 限流护航 ================= */
   var tjK3Busy = false;
   function renderTuanjiePacing(st) {
@@ -8942,6 +9134,15 @@ var PT_I18N = {
     /* OPENCODE 甲板（8784）：拉杆副标题 + 限流口径（免费模型是滚动限流，不承诺无限量） */
     'app.s.ocLever':      { zh: '拉到底点火（8784）· 拉回熄火 · 复用本机 opencode', 'zh-hant': '拉到底點火（8784）· 拉回熄火 · 復用本機 opencode', en: 'Pull to ignite (8784) · Back to stop · Reuses local opencode', de: 'Ziehen zum Starten (8784) · Zurück zum Stoppen · Nutzt lokales opencode', ja: '引いて起動（8784）· 戻して停止 · ローカル opencode を再利用', fr: 'Tirer pour démarrer (8784) · Retour pour arrêter · Réutilise opencode local', es: 'Tira para encender (8784) · Vuelve para apagar · Reutiliza opencode local' },
     'app.oc.hint':        { zh: '本机 opencode 免费档有滚动限流，撞限流会自动换模型；不承诺无限量。', 'zh-hant': '本機 opencode 免費檔有滾動限流，撞限流會自動換模型；不承諾無限額。', en: 'Free opencode models are rate-limited on a rolling window; the plugin rotates models when limited — no unlimited guarantee.', de: 'Kostenlose opencode-Modelle haben ein rollierendes Limit; der Plugin wechselt dann das Modell — keine unbegrenzte Zusage.', ja: 'opencode の無料モデルはローリング制限があります。制限時は自動でモデルを切り替えます（無制限の保証はありません）。', fr: 'Les modèles gratuits opencode sont limités par fenêtre glissante ; le plugin change de modèle en cas de limite — sans garantie illimitée.', es: 'Los modelos gratuitos de opencode tienen límite por ventana móvil; el plugin cambia de modelo al alcanzarlo — sin garantía ilimitada.' },
+    /* OPENCODE 甲板「运行时就绪 / 一键安装」（8784 /install/*）：{p}/{done}/{total}/{ver}/{msg} 占位符 */
+    'app.oc.runtime':      { zh: '运行时就绪 · RUNTIME', 'zh-hant': '執行時就緒 · RUNTIME', en: 'Runtime Ready · RUNTIME', de: 'Laufzeit bereit · RUNTIME', ja: 'ランタイム準備 · RUNTIME', fr: 'Runtime prêt · RUNTIME', es: 'Runtime listo · RUNTIME' },
+    'app.oc.notInstalled': { zh: '未检测到 opencode 运行时', 'zh-hant': '未檢測到 opencode 執行時', en: 'opencode runtime not detected', de: 'opencode-Laufzeit nicht gefunden', ja: 'opencode ランタイムが見つかりません', fr: 'Runtime opencode introuvable', es: 'Runtime de opencode no detectado' },
+    'app.oc.installing':   { zh: '正在下载 {p}%（{done}/{total} MB）', 'zh-hant': '正在下載 {p}%（{done}/{total} MB）', en: 'Downloading {p}% ({done}/{total} MB)', de: 'Herunterladen {p} % ({done}/{total} MB)', ja: 'ダウンロード中 {p}%（{done}/{total} MB）', fr: 'Téléchargement {p} % ({done}/{total} MB)', es: 'Descargando {p}% ({done}/{total} MB)' },
+    'app.oc.ready':        { zh: '已就绪 · opencode {ver}', 'zh-hant': '已就緒 · opencode {ver}', en: 'Ready · opencode {ver}', de: 'Bereit · opencode {ver}', ja: '準備完了 · opencode {ver}', fr: 'Prêt · opencode {ver}', es: 'Listo · opencode {ver}' },
+    'app.oc.installFailed': { zh: '安装失败：{msg}（可重试）', 'zh-hant': '安裝失敗：{msg}（可重試）', en: 'Install failed: {msg} (retryable)', de: 'Installation fehlgeschlagen: {msg} (erneut versuchbar)', ja: 'インストール失敗：{msg}（再試行可）', fr: 'Échec de l’installation : {msg} (réessayable)', es: 'Error de instalación: {msg} (reintentable)' },
+    'app.oc.installBtn':   { zh: '⬇ 一键安装 opencode', 'zh-hant': '⬇ 一鍵安裝 opencode', en: '⬇ Install opencode', de: '⬇ opencode installieren', ja: '⬇ opencode をインストール', fr: '⬇ Installer opencode', es: '⬇ Instalar opencode' },
+    'app.oc.cancelBtn':    { zh: '取消', 'zh-hant': '取消', en: 'Cancel', de: 'Abbrechen', ja: 'キャンセル', fr: 'Annuler', es: 'Cancelar' },
+    'app.oc.sizeHint':     { zh: '下载约 95 MB，安装后占用约 204 MB；只写入 ProxyDeck 数据目录，不改系统 PATH', 'zh-hant': '下載約 95 MB，安裝後佔用約 204 MB；只寫入 ProxyDeck 資料目錄，不改系統 PATH', en: 'Downloads about 95 MB, uses about 204 MB installed; writes only to the ProxyDeck data directory and does not change the system PATH', de: 'Download ca. 95 MB, installiert ca. 204 MB; schreibt nur ins ProxyDeck-Datenverzeichnis und ändert den System-PATH nicht', ja: 'ダウンロード約 95 MB、インストール後約 204 MB。ProxyDeck のデータディレクトリにのみ書き込み、システム PATH は変更しません', fr: 'Téléchargement d’environ 95 Mo, environ 204 Mo installé ; écrit uniquement dans le dossier de données ProxyDeck, sans modifier le PATH système', es: 'Descarga de unos 95 MB y ocupa unos 204 MB instalado; solo escribe en el directorio de datos de ProxyDeck y no modifica el PATH del sistema' },
     /* VIBEX 账号行（8790）：三态状态字 ＋ 账号区标题/副行。{n} 是剩余天数占位符 */
     'app.vibex.acc':       { zh: '账号', 'zh-hant': '賬號', en: 'Account', de: 'Konto', ja: 'アカウント', fr: 'Compte', es: 'Cuenta' },
     'app.vibex.tokenState': { zh: 'Rh-Accesstoken', 'zh-hant': 'Rh-Accesstoken', en: 'Rh-Accesstoken', de: 'Rh-Accesstoken', ja: 'Rh-Accesstoken', fr: 'Rh-Accesstoken', es: 'Rh-Accesstoken' },
@@ -9073,6 +9274,8 @@ var PT_I18N = {
       if (vh) vibexRenderAccounts(vh);
       else $('vibexAccState').textContent = t('app.vibex.notSet');
     }
+    /* OpenCode 一键安装的状态文字是动态文案（未安装/下载中/已就绪/失败），切语言后重绘 */
+    if ($('ocRuntimeState')) ocInstallRender(ocInstall.lastStatus);
     var val = document.querySelector('[data-val="lang"]');
     if (val) val.textContent = langState === 'system' ? t('try.gen.langSystemTitle') : LANG_TITLE[langState];
     var etch = document.querySelector('[data-etch="lang"]');
@@ -10611,6 +10814,8 @@ var PT_I18N = {
     if (m === 'water') { loadWaterPage(); loadTuanjieAccounts(); return; } /* 被动观测数据同源 /accounts，即时刷一轮 */
     if (m === 'keymap') { try { window.renderKeymapPage(); } catch (e) {} return; }
     if (m === 'tj') { loadTuanjieAccounts(); loadTuanjieInflight(); loadTuanjieActivity(); } /* 进甲板即时刷，不等 3s tick */
+    /* OPENCODE 甲板：进板即查一次安装状态（插件没在跑就静默失败，保留现有文案） */
+    if (m === 'oc') { ocInstall.syncedForRun = false; ocInstallRefresh(); }
     if (m !== 'cmd') refreshPluginView(m);
     else pollState();
   });
