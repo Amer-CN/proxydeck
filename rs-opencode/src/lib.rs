@@ -696,16 +696,26 @@ async fn handle_chat(State(s): State<Arc<Server>>, req: Request) -> Response {
     };
     // 顺手刷新模型缓存（给 /v1/models 用）；失败时：未指定模型就直接报错，
     // 指定了模型则沿用入站 model 让上游如实回错误（不因此改选别的模型）。
-    if let Err(e) = s.refresh_models(&up, false).await {
-        if requested.is_none() {
-            return map_up_error(&e);
+    // refresh 的条目同时用来把裸模型名还原成 `<provider>/<model>`（见 models::resolve_ref）。
+    let entries: Vec<ModelEntry> = match s.refresh_models(&up, false).await {
+        Ok(entries) => entries,
+        Err(e) => {
+            if requested.is_none() {
+                return map_up_error(&e);
+            }
+            logf(&format!("模型列表拉取失败，沿用入站 model：{}", e.message));
+            Vec::new()
         }
-        logf(&format!("模型列表拉取失败，沿用入站 model：{}", e.message));
-    }
+    };
     let selected =
         match s
             .pool
-            .pick(requested.as_deref(), &s.cfg.default_model)
+            .pick(
+                requested.as_deref(),
+                &entries,
+                &s.cfg.providers,
+                &s.cfg.default_model,
+            )
         {
             Pick::Selected(m) => m,
             Pick::RequestedCooling { key, retry_after } => {

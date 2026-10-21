@@ -1,8 +1,7 @@
 //! models.rs —— `/api/model` 的解析、白/黑名单过滤、OpenAI `/v1/models` 输出，
-//! 以及 429 冷却与模型轮换。
+//! 以及 429 冷却（撞限流的模型只对它自己生效，绝不静默换模型）。
 //!
-//! 模型键统一用 `<providerID>/<modelID>`（与对外 `/v1/models` 的 id 同形）。
-//! 免费档是滚动限流：某个模型撞 429 后只冷却它自己，下次请求自动换下一个可用模型。
+//! 内部选模/冷却用的键统一是 `<providerID>/<modelID>`；对外 `/v1/models` 只给裸模型名，入站再按配置的 provider 顺序还原（见 `resolve_ref`）。
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -104,13 +103,14 @@ pub fn filter_models(
         .collect()
 }
 
-/// OpenAI `/v1/models` 响应（id = `<providerID>/<modelID>`，created 固定 0）。
+/// OpenAI `/v1/models` 响应（id = 裸模型名，不带 provider 前缀；
+/// `owned_by` 保留 provider 供区分；created 固定 0）。
 pub fn openai_models(entries: &[ModelEntry]) -> Value {
     let data: Vec<Value> = entries
         .iter()
         .map(|m| {
             json!({
-                "id": m.key(),
+                "id": m.id,
                 "object": "model",
                 "created": 0,
                 "owned_by": m.provider,
@@ -120,10 +120,42 @@ pub fn openai_models(entries: &[ModelEntry]) -> Value {
     json!({"object": "list", "data": data})
 }
 
-/// 把入站模型名规范成 `<providerID>/<modelID>`：
+/// 把入站模型名还原成完整的 `<providerID>/<modelID>` 引用：
+/// * 含 `/` 的显式引用（如 `opencode/xxx`）→ 原样采用，即使不在模型列表里
+///   也照样尝试（让上游如实报错，而不是本地猜一个）。
+/// * 裸名（如 `deepseek-v4.1-flash-free`，正是 `/v1/models` 给出的形态）→ 按配置的
+///   provider 顺序，取第一个实际提供它的 provider；都没提供就缺省 `opencode/<id>`
+///   （上游如实报错）。
+/// * `#variant` 后缀照旧去掉。
+pub fn resolve_ref(raw: &str, entries: &[ModelEntry], providers: &[String]) -> String {
+    let raw = raw.trim();
+    let raw = raw.split('#').next().unwrap_or(raw).trim();
+    if raw.is_empty() {
+        return String::new();
+    }
+    if raw.contains('/') {
+        return raw.to_string();
+    }
+    for p in providers {
+        let p = p.trim();
+        if p.is_empty() {
+            continue;
+        }
+        if let Some(e) = entries
+            .iter()
+            .find(|e| e.provider.eq_ignore_ascii_case(p) && e.id.eq_ignore_ascii_case(raw))
+        {
+            return e.key();
+        }
+    }
+    format!("opencode/{raw}")
+}
+
+/// 把入站模型名规范成 `<providerID>/<modelID>`（保留作显式引用的快速归一化；
+/// 裸名的路由请走 `resolve_ref`，它会按配置的 provider 顺序找）：
 /// * `deepseek-v4.1-flash-free` → `opencode/deepseek-v4.1-flash-free`（缺省 provider 为 opencode）
 /// * `opencode/xxx` → 原样
-/// * `opencode/xxx#high` → `opencode/xxx`（变体暂不转发，第一版只做纯文本对话）
+/// * `opencode/xxx#high` → `opencode/xxx`（变体暂不转发）
 pub fn normalize_key(raw: &str) -> String {
     let raw = raw.trim();
     let raw = raw.split('#').next().unwrap_or(raw).trim();
@@ -214,14 +246,21 @@ impl ModelPool {
 
     /// 选模型：**绝不静默换模型**。
     ///
-    /// * 入站指定了 `model` → 直接用它；若它正在冷却，返回 `RequestedCooling`
-    ///   （即使模型列表里没有该条目也照样尝试，让上游如实回错误）。
+    /// * 入站指定了 `model` → 还原成完整引用后用它；若它正在冷却，返回
+    ///   `RequestedCooling`（即使模型列表里没有该条目也照样尝试，让上游如实回错误）。
     /// * 入站未指定 → 用配置的默认模型；默认模型为空或正在冷却同样如实报错，
     ///   不会顺手换成别的模型。
-    pub fn pick(&self, requested: Option<&str>, default_model: &str) -> Pick {
+    /// * 裸名按 `providers` 的顺序找第一个实际提供的 provider（见 `resolve_ref`）。
+    pub fn pick(
+        &self,
+        requested: Option<&str>,
+        entries: &[ModelEntry],
+        providers: &[String],
+        default_model: &str,
+    ) -> Pick {
         let key = match requested.map(str::trim).filter(|s| !s.is_empty()) {
-            Some(req) => normalize_key(req),
-            None => normalize_key(default_model),
+            Some(req) => resolve_ref(req, entries, providers),
+            None => resolve_ref(default_model, entries, providers),
         };
         if key.is_empty() {
             return Pick::Empty;
@@ -280,7 +319,8 @@ mod tests {
         let f = filter_models(&entries(), &["opencode".to_string()], &[]);
         let v = openai_models(&f);
         assert_eq!(v["object"], "list");
-        assert_eq!(v["data"][0]["id"], "opencode/deepseek-v4.1-flash-free");
+        // 对外只给裸模型名，不带 provider 前缀（DSH 这类客户端直接展示 id）
+        assert_eq!(v["data"][0]["id"], "deepseek-v4.1-flash-free");
         assert_eq!(v["data"][0]["object"], "model");
         assert_eq!(v["data"][0]["created"], 0);
         assert_eq!(v["data"][0]["owned_by"], "opencode");
@@ -305,20 +345,77 @@ mod tests {
         assert!(parse_ref("opencode/").is_none());
     }
 
+    fn provs() -> Vec<String> {
+        vec!["opencode".to_string(), "opencode-go".to_string()]
+    }
+
+    fn tie_entries() -> Vec<ModelEntry> {
+        vec![
+            ModelEntry {
+                provider: "opencode".to_string(),
+                id: "dup".to_string(),
+                enabled: true,
+                released: 0,
+                name: "dup".to_string(),
+            },
+            ModelEntry {
+                provider: "opencode-go".to_string(),
+                id: "dup".to_string(),
+                enabled: true,
+                released: 0,
+                name: "dup".to_string(),
+            },
+        ]
+    }
+
+    #[test]
+    fn resolve_bare_name_by_provider_order() {
+        let e = tie_entries();
+        // 裸名按配置顺序找第一个实际提供的 provider
+        assert_eq!(resolve_ref("dup", &e, &provs()), "opencode/dup");
+        assert_eq!(
+            resolve_ref("dup", &e, &[String::from("opencode-go")]),
+            "opencode-go/dup"
+        );
+        // 大小写不敏感，但回填用目录里的原样
+        assert_eq!(resolve_ref("DUP", &e, &provs()), "opencode/dup");
+        // 显式引用原样采用（即使不在列表里）
+        assert_eq!(
+            resolve_ref("other/unknown", &e, &provs()),
+            "other/unknown"
+        );
+        // 列表里没有的裸名：缺省 opencode，让上游如实报错
+        assert_eq!(resolve_ref("nope", &e, &provs()), "opencode/nope");
+        // 变体后缀照旧去掉；空串给空串
+        assert_eq!(resolve_ref("dup#high", &e, &provs()), "opencode/dup");
+        assert_eq!(resolve_ref("  ", &e, &provs()), "");
+    }
+
     #[test]
     fn pool_never_switches_model_silently() {
         let pool = ModelPool::new(Duration::from_secs(60));
+        let e = tie_entries();
 
-        // 显式指定且未冷却 → 用它
+        // 显式指定（完整引用）且未冷却 → 用它
         assert_eq!(
-            pool.pick(Some("opencode/a"), "opencode/b"),
+            pool.pick(Some("opencode/a"), &e, &provs(), "opencode/b"),
             Pick::Selected("opencode/a".to_string())
+        );
+        // 显式指定裸名：列表里没有 → 缺省 opencode/ 前缀（上游如实报错）
+        assert_eq!(
+            pool.pick(Some("a"), &tie_entries(), &provs(), "opencode/b"),
+            Pick::Selected("opencode/a".to_string())
+        );
+        // 显式指定裸名且命中 → 按 provider 顺序还原成完整引用
+        assert_eq!(
+            pool.pick(Some("dup"), &tie_entries(), &provs(), "opencode/b"),
+            Pick::Selected("opencode/dup".to_string())
         );
 
         pool.mark_cooling("opencode/a");
         assert!(pool.is_cooling("opencode/a"));
         // 冷却后：显式指定的仍按原名回 429，不许换成默认模型
-        match pool.pick(Some("opencode/a"), "opencode/b") {
+        match pool.pick(Some("opencode/a"), &e, &provs(), "opencode/b") {
             Pick::RequestedCooling { key, retry_after } => {
                 assert_eq!(key, "opencode/a");
                 assert!(retry_after >= 1 && retry_after <= 60);
@@ -328,7 +425,7 @@ mod tests {
 
         // 未指定：用默认模型；默认模型也在冷却 → 同样如实 429
         pool.mark_cooling("opencode/b");
-        match pool.pick(None, "opencode/b") {
+        match pool.pick(None, &e, &provs(), "opencode/b") {
             Pick::RequestedCooling { key, .. } => assert_eq!(key, "opencode/b"),
             other => panic!("期望 RequestedCooling，实际 {other:?}"),
         }
@@ -337,6 +434,6 @@ mod tests {
     #[test]
     fn pool_empty_when_no_candidates() {
         let pool = ModelPool::new(Duration::from_secs(60));
-        assert_eq!(pool.pick(None, ""), Pick::Empty);
+        assert_eq!(pool.pick(None, &[], &[], ""), Pick::Empty);
     }
 }

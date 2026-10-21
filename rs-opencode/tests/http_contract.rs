@@ -1081,14 +1081,8 @@ async fn models_list_filters_provider_and_denylist() {
         .collect();
     assert_eq!(
         ids,
-        vec![
-            "opencode/model-a",
-            "opencode/model-b",
-            "opencode/model-p",
-            "opencode/model-t",
-            "opencode-go/go-1"
-        ],
-        "beam-free / other provider / disabled 都应被过滤：{j}"
+        vec!["model-a", "model-b", "model-p", "model-t", "go-1"],
+        "beam-free / other provider / disabled 都应被过滤，且 id 必须是裸模型名（不带 provider 前缀）：{j}"
     );
     assert_eq!(j["data"][0]["created"], 0);
     assert_eq!(j["data"][0]["owned_by"], "opencode");
@@ -1132,6 +1126,30 @@ async fn non_stream_success_shape_and_usage() {
     assert_eq!(j["usage"]["prompt_tokens"], 10);
     assert_eq!(j["usage"]["completion_tokens"], 5, "output 3 + reasoning 2");
     assert_eq!(j["usage"]["total_tokens"], 15);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bare_model_name_resolves_by_provider_order() {
+    let fake = Fake::start(&[]).await;
+    let base = boot(&fake).await;
+
+    // /v1/models 给的是裸名；客户端照抄裸名发回来，必须能用。
+    // fake 里 model-b 只在 opencode 下有，应还原成 opencode/model-b。
+    let (status, j) = post_chat(
+        &base,
+        json!({
+            "model": "model-b",
+            "messages": [{"role": "user", "content": "hi"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{j}");
+    assert_eq!(j["choices"][0]["message"]["content"], "Hello");
+    assert_eq!(
+        fake.model_requests(),
+        vec!["model opencode/model-b"],
+        "裸名 model-b 必须还原成完整引用再打上游：{j}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

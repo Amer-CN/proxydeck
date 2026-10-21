@@ -61,6 +61,9 @@ curl -N -H 'content-type: application/json' -d '{"messages":[{"role":"user","con
 * `modelDenylist`：对 `<providerID>/<modelID>` 做大小写不敏感子串匹配；`beam-free`
   因中国大陆地区限制默认拉黑。
 * `defaultModel`：入站未指定模型时的首选；它若也在冷却，照样如实回 429（不换别的模型）。
+* 模型 id 形态：`/v1/models` 只给裸名（如 `deepseek-v4.1-flash-free`，`owned_by` 保留
+  provider）；入站不管填裸名还是 `opencode/xxx` 全名都能用，裸名按 `providers`
+  的顺序还原成第一个实际提供它的 `<provider>/<model>`（重名时排前面的赢）。
 * `timeoutSeconds`：单轮总超时，超时杀会话并回 504。
 * `cooldownSeconds`：单模型撞 429 后的内存冷却时长；冷却期内再点名该模型 → 429 + `retry-after`。
   **绝不静默换模型**：用户要哪个就是哪个，再差也不偷换。
@@ -102,10 +105,10 @@ curl -N -H 'content-type: application/json' -d '{"messages":[{"role":"user","con
 
 ## 已知不做 / 限制
 
-* 不转发入站 `tools`，不桥接 MCP（第二版）。
-* 不做一键安装、不做 GUI 甲板、不改 `rs-gui`（第一版不动 UI）。
-* PATH 回退只认 `opencode.exe` / 无扩展名的 `opencode`；npm 生成的 `opencode.cmd`
-  启动器暂不自动识别（可用 `PROXYDECK_OPENCODE_EXE` 指向真实 exe）。
+* MCP 工具桥接已落地（客户端 `tools` 转真 `tool_calls`，默认开，失败自动降级纯文本）。
+* 一键安装、GUI 甲板已落地（见 `app/ui.html` 的 OPENCODE 甲板）。
+* PATH 回退认 `opencode.exe` / 无扩展名的 `opencode`；npm 生成的 `opencode.cmd`
+  启动器会自动解析它指向的真实 exe（解析不出才跳过）。
 * 暂不转发 `#variant`（如 `opencode/xxx#high`）：`#` 之后会被忽略。
 * `max_tokens` / `temperature` 只读取、不转发（opencode 会话发送接口无此入口）。
 * 并发请求串行排队；排队超过 `timeoutSeconds` 回 503。
