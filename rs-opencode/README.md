@@ -60,10 +60,10 @@ curl -N -H 'content-type: application/json' -d '{"messages":[{"role":"user","con
 * `providers`：允许路由的 `providerID` 白名单（`/v1/models` 与聊天选模都按它过滤）。
 * `modelDenylist`：对 `<providerID>/<modelID>` 做大小写不敏感子串匹配；`beam-free`
   因中国大陆地区限制默认拉黑。
-* `defaultModel`：入站未指定模型（或指定模型正在冷却）时的首选。
+* `defaultModel`：入站未指定模型时的首选；它若也在冷却，照样如实回 429（不换别的模型）。
 * `timeoutSeconds`：单轮总超时，超时杀会话并回 504。
-* `cooldownSeconds`：单模型撞 429 后的内存冷却时长，冷却期内自动换下一个可用模型；
-  全池都在冷却时回 429 + `retry-after`。
+* `cooldownSeconds`：单模型撞 429 后的内存冷却时长；冷却期内再点名该模型 → 429 + `retry-after`。
+  **绝不静默换模型**：用户要哪个就是哪个，再差也不偷换。
 
 配置读不出来 / JSON 坏掉只打日志并退默认值，不会让插件起不来。
 
@@ -95,7 +95,7 @@ curl -N -H 'content-type: application/json' -d '{"messages":[{"role":"user","con
 | `src/server.rs` | 托管 `opencode serve`（挑端口/密码/就绪/Job Object 兜底/taskkill） |
 | `src/upstream.rs` | opencode HTTP API 客户端（Basic auth）+ 错误分类 |
 | `src/translate.rs` | 消息压平、SSE 解码、OpenAI 帧构造 |
-| `src/models.rs` | `/api/model` 解析、白/黑名单、模型冷却轮换 |
+| `src/models.rs` | `/api/model` 解析、白/黑名单、选型（绝不静默换模型）+ 冷却 |
 | `src/config.rs` | `opencode.json` 读取与默认值 |
 | `src/datadir.rs` | 数据目录解析（沿用 `rs-bai` 判定链） |
 | `tests/http_contract.rs` | 假 opencode 上游 + HTTP 契约用例 |

@@ -147,14 +147,15 @@ pub fn parse_ref(raw: &str) -> Option<(String, String)> {
 }
 
 /// 选模型的结果。
+///
+/// 铁律：**显式指定的模型绝不静默换成别的**。撞限流的模型只能如实返回 429，
+/// 让调用方自己决定重试还是换模型。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Pick {
     Selected(String),
-    /// 还有候选，但全部在冷却中。`retry_after` 是最早解冻的剩余秒数。
-    AllCooling {
-        retry_after: u64,
-    },
-    /// 一个候选都没有（模型列表空且没有默认模型）。
+    /// 明确要求的模型正在冷却：必须回 429，不许用其它模型代替。
+    RequestedCooling { key: String, retry_after: u64 },
+    /// 未指定模型且没有可用的默认模型。
     Empty,
 }
 
@@ -199,61 +200,39 @@ impl ModelPool {
         }
     }
 
-    /// 所有冷却项里最早解冻的剩余秒数（向上取整，至少 1）。
-    pub fn retry_after_secs(&self) -> u64 {
+    /// 某个模型冷却的剩余秒数（向上取整，至少 1；没在冷却返回 0）。
+    pub fn retry_after_for(&self, key: &str) -> u64 {
         let now = Instant::now();
         let guard = self.lock();
-        let mut best: Option<Duration> = None;
-        for until in guard.values() {
-            if *until > now {
-                let left = *until - now;
-                best = Some(match best {
-                    Some(b) if b <= left => b,
-                    _ => left,
-                });
+        match guard.get(key) {
+            Some(until) if *until > now => {
+                (((*until - now).as_millis() + 999) / 1000).max(1) as u64
             }
-        }
-        match best {
-            Some(d) => ((d.as_millis() + 999) / 1000).max(1) as u64,
-            None => 1,
+            _ => 0,
         }
     }
 
-    /// 挑一个本次请求实际要用的模型。
+    /// 选模型：**绝不静默换模型**。
     ///
-    /// 优先级：入站 `model`（未冷却）→ 默认模型 → 可用池顺序里的第一个未冷却项。
-    /// 入站显式指定但不在列表里的模型也会被尝试（让上游如实回错误）。
-    pub fn pick(&self, requested: Option<&str>, available: &[String], default_model: &str) -> Pick {
-        if let Some(req) = requested.map(str::trim).filter(|s| !s.is_empty()) {
-            let key = normalize_key(req);
-            if !key.is_empty() && !self.is_cooling(&key) {
-                return Pick::Selected(key);
-            }
-        }
-
-        let mut candidates: Vec<String> = Vec::new();
-        let default_key = normalize_key(default_model);
-        if !default_key.is_empty() {
-            candidates.push(default_key);
-        }
-        for key in available {
-            let key = normalize_key(key);
-            if !key.is_empty() && !candidates.contains(&key) {
-                candidates.push(key);
-            }
-        }
-
-        if candidates.is_empty() {
+    /// * 入站指定了 `model` → 直接用它；若它正在冷却，返回 `RequestedCooling`
+    ///   （即使模型列表里没有该条目也照样尝试，让上游如实回错误）。
+    /// * 入站未指定 → 用配置的默认模型；默认模型为空或正在冷却同样如实报错，
+    ///   不会顺手换成别的模型。
+    pub fn pick(&self, requested: Option<&str>, default_model: &str) -> Pick {
+        let key = match requested.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(req) => normalize_key(req),
+            None => normalize_key(default_model),
+        };
+        if key.is_empty() {
             return Pick::Empty;
         }
-        for key in &candidates {
-            if !self.is_cooling(key) {
-                return Pick::Selected(key.clone());
-            }
+        if self.is_cooling(&key) {
+            return Pick::RequestedCooling {
+                retry_after: self.retry_after_for(&key),
+                key,
+            };
         }
-        Pick::AllCooling {
-            retry_after: self.retry_after_secs(),
-        }
+        Pick::Selected(key)
     }
 }
 
@@ -327,34 +306,37 @@ mod tests {
     }
 
     #[test]
-    fn pool_rotates_and_reports_all_cooling() {
+    fn pool_never_switches_model_silently() {
         let pool = ModelPool::new(Duration::from_secs(60));
-        let avail = vec!["opencode/a".to_string(), "opencode/b".to_string()];
 
         // 显式指定且未冷却 → 用它
         assert_eq!(
-            pool.pick(Some("opencode/a"), &avail, "opencode/b"),
+            pool.pick(Some("opencode/a"), "opencode/b"),
             Pick::Selected("opencode/a".to_string())
         );
 
         pool.mark_cooling("opencode/a");
         assert!(pool.is_cooling("opencode/a"));
-        // 冷却后自动换到默认模型
-        assert_eq!(
-            pool.pick(Some("opencode/a"), &avail, "opencode/b"),
-            Pick::Selected("opencode/b".to_string())
-        );
+        // 冷却后：显式指定的仍按原名回 429，不许换成默认模型
+        match pool.pick(Some("opencode/a"), "opencode/b") {
+            Pick::RequestedCooling { key, retry_after } => {
+                assert_eq!(key, "opencode/a");
+                assert!(retry_after >= 1 && retry_after <= 60);
+            }
+            other => panic!("期望 RequestedCooling，实际 {other:?}"),
+        }
 
+        // 未指定：用默认模型；默认模型也在冷却 → 同样如实 429
         pool.mark_cooling("opencode/b");
-        match pool.pick(Some("opencode/a"), &avail, "opencode/b") {
-            Pick::AllCooling { retry_after } => assert!(retry_after >= 1 && retry_after <= 60),
-            other => panic!("期望全冷却，实际 {other:?}"),
+        match pool.pick(None, "opencode/b") {
+            Pick::RequestedCooling { key, .. } => assert_eq!(key, "opencode/b"),
+            other => panic!("期望 RequestedCooling，实际 {other:?}"),
         }
     }
 
     #[test]
     fn pool_empty_when_no_candidates() {
         let pool = ModelPool::new(Duration::from_secs(60));
-        assert_eq!(pool.pick(None, &[], ""), Pick::Empty);
+        assert_eq!(pool.pick(None, ""), Pick::Empty);
     }
 }

@@ -15,7 +15,7 @@
 //!   `chat.completion[.chunk]`。
 //! * **权限询问一律 reject**：没有 approve 分支（见 `upstream::reply_permission`）。
 //! * **串行化**：全局 `Semaphore(1)`，opencode 免费档吃不了并发。
-//! * **429 冷却轮换**：单模型 60s 内存冷却，池子空了回 429（见 `models::ModelPool`）。
+//! * **429 明确报错**：撞限流的模型回 429 + retry-after，不会自动换模型（见 `models::ModelPool`）。
 //! * **第一版不做工具调用**：入站 `tools` 忽略；`permission.asked` 只拒绝。
 pub mod config;
 pub mod datadir;
@@ -694,26 +694,27 @@ async fn handle_chat(State(s): State<Arc<Server>>, req: Request) -> Response {
             )
         }
     };
-    let available: Vec<String> = match s.refresh_models(&up, false).await {
-        Ok(entries) => entries.iter().map(ModelEntry::key).collect(),
-        Err(e) => {
-            if requested.is_none() {
-                return map_up_error(&e);
-            }
-            logf(&format!("模型列表拉取失败，沿用入站 model：{}", e.message));
-            Vec::new()
+    // 顺手刷新模型缓存（给 /v1/models 用）；失败时：未指定模型就直接报错，
+    // 指定了模型则沿用入站 model 让上游如实回错误（不因此改选别的模型）。
+    if let Err(e) = s.refresh_models(&up, false).await {
+        if requested.is_none() {
+            return map_up_error(&e);
         }
-    };
+        logf(&format!("模型列表拉取失败，沿用入站 model：{}", e.message));
+    }
     let selected =
         match s
             .pool
-            .pick(requested.as_deref(), &available, &s.cfg.default_model)
+            .pick(requested.as_deref(), &s.cfg.default_model)
         {
             Pick::Selected(m) => m,
-            Pick::AllCooling { retry_after } => {
+            Pick::RequestedCooling { key, retry_after } => {
+                let msg = format!(
+                    "模型 {key} 正在限流冷却，还剩约 {retry_after} 秒；未自动切换其它模型（显式指定的模型不会被替换）"
+                );
                 let mut resp = oai_error(
                     StatusCode::TOO_MANY_REQUESTS,
-                    "all available opencode models are cooling down after 429; retry later",
+                    &msg,
                     "rate_limit_error",
                 );
                 if let Ok(v) = HeaderValue::from_str(&retry_after.to_string()) {
@@ -722,9 +723,9 @@ async fn handle_chat(State(s): State<Arc<Server>>, req: Request) -> Response {
                 return resp;
             }
             Pick::Empty => return oai_error(
-                StatusCode::BAD_GATEWAY,
-                "no opencode models available (check providers / modelDenylist in opencode.json)",
-                "upstream_error",
+                StatusCode::BAD_REQUEST,
+                "no model specified and no default model configured (set opencode.json defaultModel)",
+                "invalid_request_error",
             ),
         };
     let (provider, model_id) = match models::parse_ref(&selected) {

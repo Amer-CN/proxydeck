@@ -4,7 +4,7 @@
 //! * 消息压平（字符串/数组/空/多轮/tool 结果）——`translate` 单测 + 这里的 400 用例；
 //! * `/v1/models` 的 provider 白名单 + denylist 过滤；
 //! * SSE：text delta / reasoning delta / finish / `[DONE]`；
-//! * 429 判定 + 冷却轮换；
+//! * 429 判定 + 冷却（冷却中的模型如实 429，绝不静默换模型）；
 //! * 国家限制 → 400；
 //! * 未安装 opencode → `/health` 的 reason + `/v1/*` 503；
 //! * `permission.asked` 必须回 `reject`。
@@ -1190,7 +1190,7 @@ async fn stream_translates_text_reasoning_and_done() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn rate_limit_marks_cooling_and_rotates_next_request() {
+async fn rate_limit_marks_cooling_and_never_switches_model() {
     let fake = Fake::start(&[("opencode/model-a", Behavior::Quota)]).await;
     let base = boot(&fake).await;
 
@@ -1212,21 +1212,47 @@ async fn rate_limit_marks_cooling_and_rotates_next_request() {
         "{j1}"
     );
 
-    // 同一模型第二次：它已冷却，应自动换默认模型 model-b 并成功。
-    let (s2, j2) = post_chat(
-        &base,
-        json!({
-            "model": "opencode/model-a",
-            "messages": [{"role": "user", "content": "x"}]
-        }),
-    )
-    .await;
-    assert_eq!(s2, 200, "{j2}");
-    assert_eq!(j2["choices"][0]["message"]["content"], "Hello");
+    // 同一模型第二次：它已冷却，必须如实再回 429（文案点名模型 + retry-after），
+    // 绝不静默换成默认模型 model-b。
+    let resp = client()
+        .post(format!("{base}/v1/chat/completions"))
+        .header("content-type", "application/json")
+        .body(
+            serde_json::to_vec(&json!({
+                "model": "opencode/model-a",
+                "messages": [{"role": "user", "content": "x"}]
+            }))
+            .expect("序列化请求"),
+        )
+        .send()
+        .await
+        .expect("POST chat");
+    let s2 = resp.status().as_u16();
+    let retry_after = resp
+        .headers()
+        .get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let t2 = resp.text().await.unwrap_or_default();
+    let j2: Value = serde_json::from_str(&t2).unwrap_or(Value::Null);
+    assert_eq!(s2, 429, "{j2}");
+    assert_eq!(j2["error"]["type"], "rate_limit_error");
+    assert!(
+        j2["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("opencode/model-a"),
+        "429 文案必须点名是哪个模型在冷却：{j2}"
+    );
+    assert!(
+        !retry_after.is_empty() && retry_after != "0",
+        "429 必须带 retry-after：{retry_after}"
+    );
     assert_eq!(
         fake.model_requests(),
-        vec!["model opencode/model-a", "model opencode/model-b"],
-        "第一次用 model-a，429 后第二次应轮换到 model-b"
+        vec!["model opencode/model-a"],
+        "第二次不许再向上游发 set_model（没换模型，自然也没有新请求）"
     );
 }
 
