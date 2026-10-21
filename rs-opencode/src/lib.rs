@@ -21,11 +21,14 @@ pub mod config;
 pub mod datadir;
 pub mod discover;
 pub mod install;
+pub mod mcp;
+pub mod mcp_child;
 pub mod models;
 pub mod server;
 pub mod translate;
 pub mod upstream;
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant as StdInstant, SystemTime, UNIX_EPOCH};
@@ -95,6 +98,8 @@ pub struct Server {
     install_watch: AtomicBool,
     /// 初始化串行化：启动初始化与「安装完成后的重试」不会各 spawn 一个 serve。
     init_lock: tokio::sync::Mutex<()>,
+    /// 测试/诊断：MCP 桥子进程用的可执行文件路径覆盖（默认 `current_exe`）。
+    bridge_exe: Mutex<Option<PathBuf>>,
 }
 
 impl Server {
@@ -149,6 +154,7 @@ impl Server {
             attach_mode: AtomicBool::new(false),
             install_watch: AtomicBool::new(false),
             init_lock: tokio::sync::Mutex::new(()),
+            bridge_exe: Mutex::new(None),
         })
     }
 
@@ -324,6 +330,26 @@ impl Server {
     /// 记录启动参数 `--attach`（安装完成后的重试初始化沿用同一模式）。
     pub fn set_attach_mode(&self, attach: bool) {
         self.attach_mode.store(attach, Ordering::Relaxed);
+    }
+
+    /// 测试/诊断：覆盖 MCP 桥子进程的可执行文件路径。
+    ///
+    /// 生产不用调：默认取 `std::env::current_exe()`（就是本插件 exe）。
+    /// 集成测试里当前进程是 test harness，必须指向 `CARGO_BIN_EXE_rs-opencode`。
+    pub fn set_bridge_exe(&self, path: PathBuf) {
+        *self.bridge_exe.lock().unwrap_or_else(|e| e.into_inner()) = Some(path);
+    }
+
+    fn bridge_exe_path(&self) -> Option<PathBuf> {
+        if let Some(path) = self
+            .bridge_exe
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        {
+            return Some(path);
+        }
+        std::env::current_exe().ok()
     }
 
     /// 盯安装任务：完成后自动重新初始化，让 `/health` 变成 `ready:true`。
@@ -718,12 +744,45 @@ async fn handle_chat(State(s): State<Arc<Server>>, req: Request) -> Response {
         stream
     ));
 
+    // ---- 工具桥接（只有带合法 tools 的请求才走；无 tools 时零行为变化）----
+    let tool_specs = mcp::parse_tools(input.get("tools"));
+    let mut bridge: Option<mcp::Bridge> = None;
+    if !tool_specs.is_empty() {
+        match s.bridge_exe_path() {
+            None => logf("工具桥接：无法定位插件 exe，本轮退回纯文本"),
+            Some(exe) => {
+                let turn_timeout = Duration::from_secs(s.cfg.timeout_seconds.max(1));
+                match mcp::Bridge::create(tool_specs, turn_timeout) {
+                    Err(e) => logf(&format!("工具桥接：建临时目录失败（{e}），本轮退回纯文本")),
+                    Ok(b) => match b.register(&up.base, &up.password, &exe).await {
+                        Ok(()) => {
+                            logf(&format!(
+                                "工具桥接：已注册 {}（{} 个工具）",
+                                b.name(),
+                                b.tool_count()
+                            ));
+                            bridge = Some(b);
+                        }
+                        Err(e) => logf(&format!(
+                            "工具桥接：注册失败（{}），本轮退回纯文本",
+                            e.message
+                        )),
+                    },
+                }
+            }
+        }
+    }
+
     let session_id = match up.create_session().await {
         Ok(id) => id,
-        Err(e) => return map_up_error(&e),
+        Err(e) => {
+            close_bridge(&up, bridge).await;
+            return map_up_error(&e);
+        }
     };
     if let Err(e) = up.set_model(&session_id, &provider, &model_id).await {
         up.delete_session(&session_id).await;
+        close_bridge(&up, bridge).await;
         return map_up_error(&e);
     }
     // 先订阅全局事件流，再发 prompt：避免漏掉 execution.started 之前的帧。
@@ -732,10 +791,12 @@ async fn handle_chat(State(s): State<Arc<Server>>, req: Request) -> Response {
         Ok(Ok(r)) => r,
         Ok(Err(e)) => {
             up.delete_session(&session_id).await;
+            close_bridge(&up, bridge).await;
             return map_up_error(&e);
         }
         Err(_) => {
             up.delete_session(&session_id).await;
+            close_bridge(&up, bridge).await;
             return oai_error(
                 StatusCode::GATEWAY_TIMEOUT,
                 "opencode /api/event did not start in time",
@@ -745,6 +806,7 @@ async fn handle_chat(State(s): State<Arc<Server>>, req: Request) -> Response {
     };
     if let Err(e) = up.prompt(&session_id, &prompt).await {
         up.delete_session(&session_id).await;
+        close_bridge(&up, bridge).await;
         return map_up_error(&e);
     }
 
@@ -765,6 +827,7 @@ async fn handle_chat(State(s): State<Arc<Server>>, req: Request) -> Response {
             &completion_id,
             &model_echo,
             &selected,
+            bridge,
             permit,
         )
         .await
@@ -780,9 +843,19 @@ async fn handle_chat(State(s): State<Arc<Server>>, req: Request) -> Response {
             &completion_id,
             &model_echo,
             Vec::new(),
+            bridge.as_ref(),
         )
         .await;
+        if !outcome.tool_calls.is_empty() {
+            finish_bridge_turn(&up, &session_id, bridge).await;
+            drop(permit);
+            return json_response(
+                StatusCode::OK,
+                completion_json(&completion_id, &model_echo, created, &outcome),
+            );
+        }
         up.delete_session(&session_id).await;
+        close_bridge(&up, bridge).await;
         if let Some(e) = &outcome.error {
             if e.kind == ErrorKind::RateLimit {
                 s.pool.mark_cooling(&selected);
@@ -797,6 +870,29 @@ async fn handle_chat(State(s): State<Arc<Server>>, req: Request) -> Response {
     }
 }
 
+/// 本轮没有工具调用时的桥清理：只注销 + 交给 Drop 删目录。
+async fn close_bridge(up: &Upstream, bridge: Option<mcp::Bridge>) {
+    if let Some(b) = bridge {
+        b.unregister(&up.base, &up.password).await;
+        b.remove_dir();
+    }
+}
+
+/// 本轮已产出 tool_calls：按简报顺序 interrupt → delete session → delete MCP → 清目录。
+async fn finish_bridge_turn(up: &Upstream, session_id: &str, bridge: Option<mcp::Bridge>) {
+    if let Err(e) = mcp::interrupt_session(&up.base, &up.password, session_id).await {
+        logf(&format!(
+            "工具桥接：interrupt 会话失败（{}），继续清理",
+            e.message
+        ));
+    }
+    up.delete_session(session_id).await;
+    if let Some(b) = bridge {
+        b.unregister(&up.base, &up.password).await;
+        b.remove_dir();
+    }
+}
+
 /// 流式：先读最多 15 秒，若第一帧就是 429/国家限制，则在发 HTTP 头之前回真实状态码。
 #[allow(clippy::too_many_arguments)]
 async fn stream_chat(
@@ -808,6 +904,7 @@ async fn stream_chat(
     completion_id: &str,
     model: &str,
     selected: &str,
+    mut bridge: Option<mcp::Bridge>,
     permit: OwnedSemaphorePermit,
 ) -> Response {
     let mut stream: EventStream = Box::pin(event_resp.bytes_stream());
@@ -862,7 +959,7 @@ async fn stream_chat(
                                 .unwrap_or_else(|| UpError::http(502, "opencode execution failed")),
                         );
                     }
-                    if is_meaningful(&ev) {
+                    if is_meaningful(&ev) || (bridge.is_some() && is_tool_event(&ev)) {
                         meaningful = true;
                     }
                     pending.push(ev);
@@ -876,6 +973,7 @@ async fn stream_chat(
 
     if let Some(e) = early_error {
         up.delete_session(session_id).await;
+        close_bridge(up, bridge.take()).await;
         if e.kind == ErrorKind::RateLimit {
             s.pool.mark_cooling(selected);
         }
@@ -883,6 +981,7 @@ async fn stream_chat(
     }
     if stream_ended && !pending.iter().any(is_terminal) && !pending.iter().any(is_delta) {
         up.delete_session(session_id).await;
+        close_bridge(up, bridge.take()).await;
         if let Some(e) = step_error {
             if e.kind == ErrorKind::RateLimit {
                 s.pool.mark_cooling(selected);
@@ -906,6 +1005,7 @@ async fn stream_chat(
     );
     if send_json_frame(&tx, &role).await.is_err() {
         up.delete_session(session_id).await;
+        close_bridge(up, bridge.take()).await;
         return empty_sse_response();
     }
 
@@ -915,6 +1015,7 @@ async fn stream_chat(
     let id2 = completion_id.to_string();
     let model2 = model.to_string();
     let selected2 = selected.to_string();
+    let bridge2 = bridge.take();
     tokio::spawn(async move {
         // permit 移到任务里：客户端读到 [DONE] 或断开之前，都算这一轮还占着上游。
         let _permit = permit;
@@ -928,19 +1029,36 @@ async fn stream_chat(
             &id2,
             &model2,
             pending,
+            bridge2.as_ref(),
         )
         .await;
-        up2.delete_session(&sid).await;
-        if let Some(e) = &outcome.error {
-            if e.kind == ErrorKind::RateLimit {
-                srv.pool.mark_cooling(&selected2);
-            }
-            let frame = json!({"error": {"message": e.message, "type": e.error_type()}});
-            let _ = send_json_frame(&tx, &frame).await;
-        } else {
-            let finish =
-                translate::completion_chunk(&id2, &model2, now_secs(), json!({}), Some("stop"));
+        if !outcome.tool_calls.is_empty() {
+            finish_bridge_turn(&up2, &sid, bridge2).await;
+            let delta = json!({"tool_calls": translate::tool_call_delta(&outcome.tool_calls)});
+            let chunk = translate::completion_chunk(&id2, &model2, now_secs(), delta, None);
+            let _ = send_json_frame(&tx, &chunk).await;
+            let finish = translate::completion_chunk(
+                &id2,
+                &model2,
+                now_secs(),
+                json!({}),
+                Some("tool_calls"),
+            );
             let _ = send_json_frame(&tx, &finish).await;
+        } else {
+            up2.delete_session(&sid).await;
+            close_bridge(&up2, bridge2).await;
+            if let Some(e) = &outcome.error {
+                if e.kind == ErrorKind::RateLimit {
+                    srv.pool.mark_cooling(&selected2);
+                }
+                let frame = json!({"error": {"message": e.message, "type": e.error_type()}});
+                let _ = send_json_frame(&tx, &frame).await;
+            } else {
+                let finish =
+                    translate::completion_chunk(&id2, &model2, now_secs(), json!({}), Some("stop"));
+                let _ = send_json_frame(&tx, &finish).await;
+            }
         }
         let _ = tx.send(Ok(Bytes::from_static(b"data: [DONE]\n\n"))).await;
     });
@@ -961,6 +1079,8 @@ struct DriveOutcome {
     usage: Option<Usage>,
     error: Option<UpError>,
     interrupted: bool,
+    /// 非空时本轮返回 `finish_reason:"tool_calls"`，文本/错误都让位。
+    tool_calls: Vec<translate::OpenAiToolCall>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -971,7 +1091,7 @@ enum EventAction {
     ClientGone,
 }
 
-/// 消费事件流直到 `execution.succeeded / failed / interrupted` 或 deadline。
+/// 消费事件流直到 `execution.succeeded / failed / interrupted`、工具收集窗结束或 deadline。
 #[allow(clippy::too_many_arguments)]
 async fn drive_turn(
     up: &Upstream,
@@ -983,12 +1103,22 @@ async fn drive_turn(
     completion_id: &str,
     model: &str,
     mut pending: Vec<translate::Event>,
+    bridge: Option<&mcp::Bridge>,
 ) -> DriveOutcome {
     let mut out = DriveOutcome::default();
+    let mut tools = bridge.map(mcp::Bridge::runtime);
+    // 第一次识别到外部工具调用后开始 1500ms 收集窗；窗口内继续收并行调用。
+    let mut collect_until: Option<Instant> = None;
     'outer: loop {
         for ev in pending.drain(..) {
             if !event_for_session(&ev, session_id) {
                 continue;
+            }
+            if let Some(rt) = tools.as_mut() {
+                rt.observe(&ev);
+                if collect_until.is_none() && rt.has_ready_calls() {
+                    collect_until = Some(Instant::now() + mcp::TOOL_COLLECT_WINDOW);
+                }
             }
             match handle_event(up, session_id, &ev, sink, completion_id, model, &mut out).await {
                 EventAction::Continue => {}
@@ -999,6 +1129,15 @@ async fn drive_turn(
                 }
             }
         }
+        if let Some(until) = collect_until {
+            if Instant::now() >= until {
+                break 'outer;
+            }
+        }
+        let wait_deadline = match collect_until {
+            Some(until) if until < deadline => until,
+            _ => deadline,
+        };
         // 流式时同时盯客户端是否断开：没有下游接收方就立刻停手，
         // 不要空等到 300s deadline 才清理会话。
         let next = match sink {
@@ -1008,25 +1147,35 @@ async fn drive_turn(
                         out.error = Some(UpError::client_disconnected());
                         break;
                     }
-                    r = timeout_at(deadline, stream.next()) => r,
+                    r = timeout_at(wait_deadline, stream.next()) => r,
                 }
             }
-            None => timeout_at(deadline, stream.next()).await,
+            None => timeout_at(wait_deadline, stream.next()).await,
         };
         match next {
             Err(_) => {
+                // 有可返回的调用时，超时点无论是收集窗还是总 deadline 都优先返回 tool_calls。
+                if tools.as_ref().map(|t| t.has_ready_calls()).unwrap_or(false) {
+                    break;
+                }
                 if out.error.is_none() {
                     out.error = Some(UpError::timeout());
                 }
                 break;
             }
             Ok(None) => {
+                if tools.as_ref().map(|t| t.has_ready_calls()).unwrap_or(false) {
+                    break;
+                }
                 if out.error.is_none() {
                     out.error = Some(UpError::stream_ended());
                 }
                 break;
             }
             Ok(Some(Err(e))) => {
+                if tools.as_ref().map(|t| t.has_ready_calls()).unwrap_or(false) {
+                    break;
+                }
                 if out.error.is_none() {
                     out.error = Some(UpError::network(e));
                 }
@@ -1038,9 +1187,21 @@ async fn drive_turn(
         }
     }
 
+    if let Some(rt) = tools.as_ref() {
+        out.tool_calls = rt
+            .ready_calls()
+            .iter()
+            .map(|c| translate::openai_tool_call(&c.name, &c.arguments))
+            .collect();
+    }
+    if !out.tool_calls.is_empty() {
+        // 工具调用优先：权限拒绝 / 打断导致的 execution.failed 不算本轮错误。
+        out.error = None;
+    }
+
     // 成功但没收到任何文本（例如事件流只给了 execution.succeeded）时，用最终消息兜底；
     // 错误信息缺失时也从消息接口补。都只是 best-effort，拿不到不改变已有结果。
-    if out.error.is_none() && out.text.is_empty() {
+    if out.error.is_none() && out.text.is_empty() && out.tool_calls.is_empty() {
         if let Ok(messages) = up.final_messages(session_id).await {
             if let Some(text) = final_assistant_text(&messages) {
                 out.text = text;
@@ -1049,11 +1210,13 @@ async fn drive_turn(
                 out.error = Some(err);
             }
         }
-    } else if let Some(err) = &out.error {
-        if err.message.trim().is_empty() {
-            if let Ok(messages) = up.final_messages(session_id).await {
-                if let Some(e) = final_error(&messages) {
-                    out.error = Some(e);
+    } else if out.tool_calls.is_empty() {
+        if let Some(err) = &out.error {
+            if err.message.trim().is_empty() {
+                if let Ok(messages) = up.final_messages(session_id).await {
+                    if let Some(e) = final_error(&messages) {
+                        out.error = Some(e);
+                    }
                 }
             }
         }
@@ -1179,6 +1342,19 @@ fn is_meaningful(ev: &translate::Event) -> bool {
     )
 }
 
+/// 带桥接的请求里，工具事件也算“有意义”：否则流式预热会一直等到文本/终点才发头，
+/// 工具调用会卡在 15s 窗口里。无桥接时不看这些（保持旧行为）。
+fn is_tool_event(ev: &translate::Event) -> bool {
+    matches!(
+        ev.ty.as_str(),
+        "session.tool.input.started"
+            | "session.tool.called"
+            | "session.tool.progress"
+            | "session.tool.success"
+            | "session.tool.failed"
+    )
+}
+
 fn is_terminal(ev: &translate::Event) -> bool {
     matches!(
         ev.ty.as_str(),
@@ -1198,10 +1374,17 @@ fn is_delta(ev: &translate::Event) -> bool {
 // ------------------------------ 输出构造 ------------------------------
 
 fn completion_json(id: &str, model: &str, created: i64, out: &DriveOutcome) -> Value {
-    let mut message = json!({"role": "assistant", "content": out.text});
-    if !out.reasoning.is_empty() {
-        message["reasoning_content"] = Value::String(out.reasoning.clone());
-    }
+    let (message, finish_reason) = if out.tool_calls.is_empty() {
+        let mut message = json!({"role": "assistant", "content": out.text});
+        if !out.reasoning.is_empty() {
+            message["reasoning_content"] = Value::String(out.reasoning.clone());
+        }
+        (message, "stop")
+    } else {
+        let mut message = json!({"role": "assistant", "content": Value::Null});
+        message["tool_calls"] = translate::tool_calls_json(&out.tool_calls);
+        (message, "tool_calls")
+    };
     json!({
         "id": id,
         "object": "chat.completion",
@@ -1210,7 +1393,7 @@ fn completion_json(id: &str, model: &str, created: i64, out: &DriveOutcome) -> V
         "choices": [{
             "index": 0,
             "message": message,
-            "finish_reason": "stop",
+            "finish_reason": finish_reason,
         }],
         "usage": out.usage.unwrap_or_default().to_json(),
     })
@@ -1306,7 +1489,7 @@ fn now_secs() -> i64 {
         .unwrap_or(0)
 }
 
-fn random_hex(n: usize) -> String {
+pub(crate) fn random_hex(n: usize) -> String {
     let mut buf = vec![0u8; n];
     if getrandom::fill(&mut buf).is_err() {
         let mut x = SystemTime::now()
@@ -1354,10 +1537,25 @@ pub struct Args {
     /// 附着到 service.json 里已在运行的 opencode serve（默认自己 spawn）
     #[arg(long)]
     pub attach: bool,
+    /// MCP stdio 桥接子进程（由 opencode 拉起；值是本轮临时桥目录）
+    #[arg(long = "mcp-bridge", value_name = "DIR", hide = true)]
+    pub mcp_bridge: Option<PathBuf>,
 }
 
 /// 启动插件服务：先绑端口（让 `/health` 立刻可连），后台初始化 opencode 后再服务。
 pub async fn run(args: Args) -> Result<(), String> {
+    // 桥接子进程模式：必须在加载配置/打印日志之前切走。
+    // `logf` 会写 stdout，而 stdout 是 MCP 的 JSON-RPC 通道，绝不能混入日志。
+    if let Some(dir) = args.mcp_bridge.clone() {
+        let code = tokio::task::spawn_blocking(move || mcp_child::serve(&dir))
+            .await
+            .unwrap_or(2);
+        return if code == 0 {
+            Ok(())
+        } else {
+            Err(format!("mcp-bridge 退出码 {code}"))
+        };
+    }
     let cfg = config::load(None);
     logf(&format!(
         "配置：providers={:?} modelDenylist={:?} defaultModel={} timeout={}s cooldown={}s autoInstall={} opencodeVersion={}",

@@ -124,6 +124,167 @@ pub fn completion_chunk(
     })
 }
 
+// ------------------------------ 工具事件 ↔ tool_calls ------------------------------
+
+/// `session.tool.called` 里本轮关联需要的最小事实。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolCalled {
+    pub id: String,
+    pub input: Value,
+    pub executed: bool,
+}
+
+/// `session.tool.progress.metadata.toolCalls[]` 里属于桥接 server 的一条。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolProgressEntry {
+    /// 对应 `session.tool.called.data.id`。
+    pub call_id: String,
+    /// 去掉 `pd-<bridge_id>.` 前缀后的 MCP 工具名。
+    pub tool: String,
+    pub status: Option<String>,
+    pub input: Option<Value>,
+}
+
+/// 解析 `session.tool.called`。
+pub fn tool_called(ev: &Event) -> Option<ToolCalled> {
+    if ev.ty != "session.tool.called" {
+        return None;
+    }
+    let id = ev
+        .data
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    let input = ev.data.get("input").cloned().unwrap_or(Value::Null);
+    let executed = ev
+        .data
+        .get("executed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    Some(ToolCalled {
+        id,
+        input,
+        executed,
+    })
+}
+
+/// 解析 `session.tool.progress`：只返回 `tool == "<prefix><name>"` 的条目。
+pub fn tool_progress_entries(ev: &Event, prefix: &str) -> Vec<ToolProgressEntry> {
+    if ev.ty != "session.tool.progress" {
+        return Vec::new();
+    }
+    let Some(call_id) = ev
+        .data
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+    else {
+        return Vec::new();
+    };
+    let Some(items) = ev
+        .data
+        .pointer("/metadata/toolCalls")
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for item in items {
+        let Some(full) = item.get("tool").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(tool) = full.strip_prefix(prefix) else {
+            continue;
+        };
+        if tool.is_empty() {
+            continue;
+        }
+        out.push(ToolProgressEntry {
+            call_id: call_id.to_string(),
+            tool: tool.to_string(),
+            status: item
+                .get("status")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            input: item.get("input").cloned().filter(|v| !v.is_null()),
+        });
+    }
+    out
+}
+
+/// `session.tool.input.started` 的 `(id, name)`。
+pub fn tool_input_name(ev: &Event) -> Option<(String, String)> {
+    if ev.ty != "session.tool.input.started" {
+        return None;
+    }
+    let id = ev
+        .data
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    let name = ev
+        .data
+        .get("name")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    Some((id, name))
+}
+
+/// 构造好的 OpenAI `tool_calls[]` 元素。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenAiToolCall {
+    pub id: String,
+    pub name: String,
+    /// 已经是合法 JSON 文本。
+    pub arguments: String,
+}
+
+/// 把桥接拿到的 `(name, arguments)` 包成 OpenAI tool_call；id 由本进程生成。
+pub fn openai_tool_call(name: &str, arguments: &Value) -> OpenAiToolCall {
+    OpenAiToolCall {
+        id: format!("call_{}", crate::random_hex(8)),
+        name: name.to_string(),
+        arguments: serde_json::to_string(arguments).unwrap_or_else(|_| "{}".to_string()),
+    }
+}
+
+/// 非流式响应里的 `message.tool_calls`。
+pub fn tool_calls_json(calls: &[OpenAiToolCall]) -> Value {
+    Value::Array(
+        calls
+            .iter()
+            .map(|c| {
+                json!({
+                    "id": c.id,
+                    "type": "function",
+                    "function": {"name": c.name, "arguments": c.arguments},
+                })
+            })
+            .collect(),
+    )
+}
+
+/// 流式响应里单帧的 `delta.tool_calls`（所有调用一次给全，index 递增）。
+pub fn tool_call_delta(calls: &[OpenAiToolCall]) -> Value {
+    Value::Array(
+        calls
+            .iter()
+            .enumerate()
+            .map(|(index, c)| {
+                json!({
+                    "index": index,
+                    "id": c.id,
+                    "type": "function",
+                    "function": {"name": c.name, "arguments": c.arguments},
+                })
+            })
+            .collect(),
+    )
+}
+
 /// 一条 SSE 事件：`type` 是顶层事件名，`data` 是 `data` 字段（缺省时退回整帧）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Event {
@@ -307,5 +468,85 @@ mod tests {
         assert_eq!(c["object"], "chat.completion.chunk");
         assert_eq!(c["choices"][0]["delta"]["content"], "hi");
         assert!(c["choices"][0]["finish_reason"].is_null());
+    }
+
+    fn tool_ev(ty: &str, data: Value) -> Event {
+        Event {
+            ty: ty.to_string(),
+            data,
+        }
+    }
+
+    #[test]
+    fn tool_called_parses_id_input_and_executed() {
+        let ev = tool_ev(
+            "session.tool.called",
+            json!({"sessionID":"s","id":"tc1","input":{"city":"Beijing"},"executed":false}),
+        );
+        let c = tool_called(&ev).unwrap();
+        assert_eq!(c.id, "tc1");
+        assert_eq!(c.input["city"], "Beijing");
+        assert!(!c.executed);
+        assert!(tool_called(&tool_ev("session.tool.called", json!({"id":""}))).is_none());
+        assert!(tool_called(&tool_ev("session.text.delta", json!({"id":"x"}))).is_none());
+    }
+
+    #[test]
+    fn tool_progress_only_returns_matching_server_prefix() {
+        let ev = tool_ev(
+            "session.tool.progress",
+            json!({"sessionID":"s","id":"tc1","metadata":{"toolCalls":[
+                {"tool":"pd-abc.get_weather","status":"running","input":{"city":"Beijing"}},
+                {"tool":"pd-other.get_weather","status":"running","input":{}},
+                {"tool":"pd-abc.","status":"running"},
+                {"tool":"read"}
+            ]}}),
+        );
+        let entries = tool_progress_entries(&ev, "pd-abc.");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].call_id, "tc1");
+        assert_eq!(entries[0].tool, "get_weather");
+        assert_eq!(entries[0].status.as_deref(), Some("running"));
+        assert_eq!(entries[0].input.as_ref().unwrap()["city"], "Beijing");
+        assert!(
+            tool_progress_entries(&tool_ev("session.tool.called", json!({})), "pd-abc.").is_empty()
+        );
+    }
+
+    #[test]
+    fn tool_input_started_parses_name() {
+        let ev = tool_ev(
+            "session.tool.input.started",
+            json!({"sessionID":"s","id":"tc1","name":"pd-abc.get_weather"}),
+        );
+        assert_eq!(
+            tool_input_name(&ev),
+            Some(("tc1".to_string(), "pd-abc.get_weather".to_string()))
+        );
+        assert!(tool_input_name(&tool_ev(
+            "session.tool.called",
+            json!({"id":"tc1","name":"x"})
+        ))
+        .is_none());
+    }
+
+    #[test]
+    fn openai_tool_calls_have_unique_ids_and_json_arguments() {
+        let a = openai_tool_call("get_weather", &json!({"city":"Beijing"}));
+        let b = openai_tool_call("second", &json!({"n":1}));
+        assert!(a.id.starts_with("call_"));
+        assert_ne!(a.id, b.id);
+        assert_eq!(
+            serde_json::from_str::<Value>(&a.arguments).unwrap()["city"],
+            "Beijing"
+        );
+        let arr = tool_calls_json(&[a.clone(), b.clone()]);
+        assert_eq!(arr[0]["type"], "function");
+        assert_eq!(arr[0]["function"]["name"], "get_weather");
+        assert_eq!(arr[1]["function"]["arguments"], "{\"n\":1}");
+        let delta = tool_call_delta(&[a, b]);
+        assert_eq!(delta[0]["index"], 0);
+        assert_eq!(delta[1]["index"], 1);
+        assert!(delta[1]["id"].as_str().unwrap().len() > 5);
     }
 }
