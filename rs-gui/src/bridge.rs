@@ -516,18 +516,19 @@ pub fn set_close_mode(mode: &str) -> Result<(), String> {
 
 /* ---------------- 键位映射（Go bridge.go:90-152） ---------------- */
 
-/// 默认键位映射（与 ui.html 的 `KEYMAP_DEF` 同源：B.AI 默认不在任何键下）。
+/// 默认键位映射（与 ui.html 的 `KEYMAP_DEF` 同源：B.AI 默认不在任何键下；
+/// 2026-10-21 起 OPENCODE 作为第 4 键的副页，与 VIBEX 同键轮切）。
 pub fn key_map_default() -> Vec<Vec<String>> {
     vec![
         vec!["cmd".to_string()],
         vec!["tj".to_string(), "comate".to_string()],
         vec!["cb".to_string(), "qoder".to_string()],
-        vec!["ext".to_string()],
+        vec!["ext".to_string(), "oc".to_string()],
     ]
 }
 
-/// 脸名白名单（与 ui.html 的 `SUP_FACES` 同源）。
-pub const KEY_MAP_FACES: [&str; 7] = ["cmd", "tj", "comate", "cb", "qoder", "bai", "ext"];
+/// 脸名白名单（与 ui.html 的 `SUP_FACES` 同源；2026-10-21 起含 `oc`）。
+pub const KEY_MAP_FACES: [&str; 8] = ["cmd", "tj", "comate", "cb", "qoder", "bai", "ext", "oc"];
 
 /// 键位映射形态校验（1-4 键、每键 ≥1 脸、脸名白名单、一页一键）。
 pub fn key_map_valid(m: &[Vec<String>]) -> bool {
@@ -552,13 +553,47 @@ pub fn key_map_valid(m: &[Vec<String>]) -> bool {
     true
 }
 
+/// 一次性迁移标记：2026-10-21 之前落盘的 keymap.json 里还没有 OPENCODE 脸。
+/// 标记存在 = 迁移已经做过，之后用户再手动删掉 oc **不再回填**（尊重用户的显式选择）。
+fn key_map_oc_migration_marker() -> std::path::PathBuf {
+    appdir::path("keymap-oc-migrated.v1")
+}
+
+/// 旧映射（合法、缺 `oc` 且有 `ext`）→ 把 `oc` 补成 ext 所在键的副页。
+/// 找不到 ext 的映射原样返回（不替用户造键）；已有 oc 的也原样返回。
+fn key_map_with_opencode(mut m: Vec<Vec<String>>) -> Vec<Vec<String>> {
+    if m.iter().any(|k| k.iter().any(|f| f == "oc")) {
+        return m;
+    }
+    if let Some(ki) = m.iter().position(|k| k.iter().any(|f| f == "ext")) {
+        m[ki].push("oc".to_string());
+    }
+    m
+}
+
 /// 读盘：文件缺席/非法 → 返回默认映射 + saved=false。
+///
+/// 2026-10-21：OPENCODE 接入时对**旧的合法映射**做一次性迁移（补 `oc` 到第 4 键），
+/// 否则老用户的 keymap.json 里没有这个脸，甲板永远进不去；迁移标记保证只做一次。
 pub fn key_map_get() -> (Vec<Vec<String>>, bool) {
     let Ok(b) = std::fs::read(App::key_map_file()) else {
         return (key_map_default(), false);
     };
     match serde_json::from_slice::<Vec<Vec<String>>>(&b) {
-        Ok(m) if key_map_valid(&m) => (m, true),
+        Ok(m) if key_map_valid(&m) => {
+            let has_oc = m.iter().any(|k| k.iter().any(|f| f == "oc"));
+            let marker = key_map_oc_migration_marker();
+            if !has_oc && !appdir::file_exists(&marker) {
+                let migrated = key_map_with_opencode(m);
+                if let Ok(raw) = serde_json::to_vec(&migrated) {
+                    let _ = std::fs::write(App::key_map_file(), raw);
+                }
+                let _ = std::fs::write(&marker, b"1");
+                (migrated, true)
+            } else {
+                (m, true)
+            }
+        }
         _ => (key_map_default(), false),
     }
 }
@@ -678,6 +713,38 @@ mod tests {
         let (m, saved) = key_map_get();
         assert_eq!(m, key_map_default(), "非法文件 → 默认映射");
         assert!(!saved);
+        std::env::remove_var(appdir::DATA_DIR_ENV);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn key_map_get_migrates_old_map_with_opencode_once() {
+        let _g = env_lock().lock().unwrap();
+        let dir = std::env::temp_dir().join("rs-gui-bridge-keymap-oc");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var(appdir::DATA_DIR_ENV, &dir);
+
+        // 旧默认（VIBEX 单脸）：迁移成 ext+oc 双脸，并落盘
+        let old = r#"[["cmd"],["tj"],["cb","qoder"],["ext"]]"#;
+        std::fs::write(App::key_map_file(), old).unwrap();
+        let (m, saved) = key_map_get();
+        assert!(saved);
+        assert_eq!(
+            m[3],
+            vec!["ext".to_string(), "oc".to_string()],
+            "旧映射应补上 OPENCODE 副页"
+        );
+        assert!(appdir::file_exists(&key_map_oc_migration_marker()));
+        let on_disk: Vec<Vec<String>> =
+            serde_json::from_slice(&std::fs::read(App::key_map_file()).unwrap()).unwrap();
+        assert_eq!(on_disk, m, "迁移结果必须落盘（文件为准）");
+
+        // 用户手动删掉 oc 后（模拟再次写回旧映射）：标记已存在，不再回填
+        std::fs::write(App::key_map_file(), old).unwrap();
+        let (m2, _) = key_map_get();
+        assert_eq!(m2[3], vec!["ext".to_string()], "迁移只做一次，不回填用户删掉的脸");
+
         std::env::remove_var(appdir::DATA_DIR_ENV);
         let _ = std::fs::remove_dir_all(&dir);
     }

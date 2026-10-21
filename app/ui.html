@@ -2584,8 +2584,8 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <i data-mode="cb"><span>WORKBUDDY</span></i>
                   <i data-mode="qoder"><span>QODER</span></i>
                   <i data-mode="ext"><span>VIBEX</span></i>
-                  <!-- 第 8 供应商预留格（未映射任何 mode，路过时鼓轮保持上一位置） -->
-                  <i><span>···</span></i>
+                  <!-- 第 8 格：OPENCODE（2026-10-21 接入，占原预留格 idx7） -->
+                  <i data-mode="oc"><span>OPENCODE</span></i>
                   <i data-mode="set"><span data-i18n="app.settings">设置</span></i>
                 </span>
               </span>
@@ -2756,6 +2756,24 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="vibexToken"><span>token 就绪</span><b></b></span>
                       <span class="pt-dot" data-dot="vibexFree"><span>限时免费</span><b></b></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- OPENCODE 屏体（OpenCode 甲板：插件视图；点火目标 OpenCode 8784） -->
+              <div class="pt-sc-body oc" data-body="oc">
+                <div class="sc-unified">
+                  <div class="run-line">
+                    <span class="pt-dot grn" data-dot="ocRun"><span class="run-name">OPENCODE · 8784</span><b></b></span>
+                  </div>
+                  <div class="pt-system-readout">
+                    <span class="pt-silk">Uptime</span>
+                    <div class="pt-odo pt-sc" data-odo="ocUptime">0:00:00</div>
+                  </div>
+                  <div class="pt-sc-sep"></div>
+                  <div class="pt-dots">
+                    <span class="pt-dot" data-dot="ocModels"><span>模型</span><b></b></span>
+                    <span class="pt-dot" data-dot="ocHealth"><span>健康</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -3588,6 +3606,59 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                </div></div>
               </div>
 
+              <!-- —————— OPENCODE 甲板（本机 opencode serve → OpenAI 兼容；点火目标 8784） —————— -->
+              <div class="pt-deck" data-deck="oc">
+               <div class="pt-deck-scroll"><div class="inner">
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.ignite">点火拉杆</div>
+                    <div class="s" data-i18n="app.s.ocLever">拉到底点火（8784）· 拉回熄火 · 复用本机 opencode</div>
+                  </div>
+                </div></div>
+                <button type="button" class="pt-activation" data-ignite="ocRun" data-lever-mode="activate"
+                        aria-label="点火拉杆">
+                  <span class="rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                  <span class="legend">IGNITE</span>
+                  <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
+                </button>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.baseUrl">BASE URL</div>
+                    <div class="s" data-i18n="app.s.copy">点击复制</div>
+                  </div>
+                  <span class="pt-val click" id="ocEndpoint">http://127.0.0.1:8784/v1</span>
+                </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label"><div class="t">协议适配</div></div>
+                  <span class="pt-val">opencode serve · OpenAI 兼容 · 单会话串行</span>
+                </div></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label"><div class="s" data-i18n="app.oc.hint">本机 opencode 免费档有滚动限流，撞限流会自动换模型；不承诺无限量。</div></div>
+                </div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
+                  <button type="button" class="ibtn2" id="ocRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
+                <div class="pt-grid">
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
+                    <span class="rv" id="ocStModels">—</span><span class="rs" id="ocStModelsSub">实时拉取</span></div>
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.health">健康检查</span>
+                    <span class="rv" id="ocStHealth">—<span class="u">ms</span></span><span class="rs" id="ocStHealthSub">本地回环</span></div>
+                </div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.models">模型矩阵 · Models</span>
+                  <span class="pt-val" id="ocModelCount">OFFLINE</span></div>
+                <div id="ocModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
+
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.modelRef">模型参考</button>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
+                  <button type="button" class="ibtn2" id="ocClearLog" data-i18n="app.btn.clear">清空</button></div>
+                <div class="pt-log" id="ocLog"></div>
+               </div></div>
+              </div>
+
               <!-- —————— Comate 甲板 —————— -->
               <div class="pt-deck" data-deck="comate">
                <div class="pt-deck-scroll"><div class="inner">
@@ -4338,15 +4409,15 @@ var PT_I18N = {
 
   /* ══════════════════ 3. 状态与模式 ══════════════════ */
   var st = { mode: 'cmd', soundSet: 1 };
-  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'ext', 'water', 'keymap'];
+  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'ext', 'oc', 'water', 'keymap'];
   /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；tj 的副页是 COMATE；cb 的副页是 Qoder） */
   var ALT_MODE = { cmd: 'bai', bai: 'cmd', tj: 'comate', comate: 'tj', cb: 'qoder', qoder: 'cb' };
   /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
   var ALT_LABEL = { cmd: 'B.AI', tj: 'COMATE', cb: 'QODER' };
-  /* 鼓轮 9 格 DOM [cmd,bai,tj,comate,cb,qoder,ext,预留,set]；居中格 = children[--i]（CSS 按 --y−--i 定位，
-     cell 的 --y 与 children 序号一致）。顺序即终态：主页 COMMAND 开头，第 8 格（idx7）为第 8 供应商预留
-     （无 mode 映射，路过保持上一位置），设置 idx8；后来者只填预留格，不调顺序。 */
-  var DRUM_IDX = { cmd: 0, bai: 1, tj: 2, comate: 3, cb: 4, qoder: 5, ext: 6, set: 8 };
+  /* 鼓轮 9 格 DOM [cmd,bai,tj,comate,cb,qoder,ext,oc,set]；居中格 = children[--i]（CSS 按 --y−--i 定位，
+     cell 的 --y 与 children 序号一致）。顺序即终态：主页 COMMAND 开头，第 8 格（idx7）为 OPENCODE
+     （2026-10-21 接入，填掉原预留格），设置 idx8；后来者只填预留格，不调顺序。 */
+  var DRUM_IDX = { cmd: 0, bai: 1, tj: 2, comate: 3, cb: 4, qoder: 5, ext: 6, oc: 7, set: 8 };
   /* 实体键面子记忆：每物理键记住离开时的那张脸（1-4 键动态，索引记忆；
      单脸键恒显示该脸，多脸键在离开时的那张脸上保持键名）。 */
   var keyFace = { cmd: 'cmd', tj: 'tj', cb: 'cb' };
@@ -4368,15 +4439,16 @@ var PT_I18N = {
     });
   }
   /* ═══ B类键位自由组合（localStorage 快路＋keymap.json 文件为准，默认 B.AI 不在任何键下）═══
-     键：keyMap.v1 = [[faces...],...]，1-4 键，每键 1..N 张脸；脸名仅限 7 供应商。
+     键：keyMap.v1 = [[faces...],...]，1-4 键，每键 1..N 张脸；脸名仅限 8 供应商
+     （2026-10-21 起含 opencode）。
      旧 provVis.v1 无论缺失/存在一律按默认映射解释，不读不迁，无弹窗。
      引擎层只读此键做绘制与切换门控，写操作由配置子页经 window.__keymapSet 进入
      （同步写快路＋透传桥落盘）；启动时业务层拉一次桥文件值经 window.__keymapApplyFile
      覆盖快路（无文件时不调不回写，快路绝不覆盖文件值）；
      window.__provGet/__provSet 保留为兼容垫（派生布尔值，旧调用点照常工作）。 */
-  var SUP_FACES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext'];
-  var SUP_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX' };
-  var KEYMAP_DEF = [['cmd'], ['tj', 'comate'], ['cb', 'qoder'], ['ext']];
+  var SUP_FACES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext', 'oc'];
+  var SUP_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX', oc: 'OPENCODE' };
+  var KEYMAP_DEF = [['cmd'], ['tj', 'comate'], ['cb', 'qoder'], ['ext', 'oc']];
   var KEYMAP_KEY = 'keyMap.v1';
   function keyMapClone(m) { return m.map(function (k) { return k.slice(); }); }
   function keyMapValid(m) {
@@ -4433,7 +4505,7 @@ var PT_I18N = {
     return faces[0];
   }
   function provGet() {
-    return { bai: isMapped('bai'), comate: isMapped('comate'), qoder: isMapped('qoder'), ext: isMapped('ext') };
+    return { bai: isMapped('bai'), comate: isMapped('comate'), qoder: isMapped('qoder'), ext: isMapped('ext'), oc: isMapped('oc') };
   }
   function provEnabled(m) {
     if (SUP_FACES.indexOf(m) >= 0) return isMapped(m);
@@ -4447,15 +4519,15 @@ var PT_I18N = {
   window.__provSet = function (cfg) {
     if (!cfg || typeof cfg !== 'object') { paint(); return true; }
     var km = keyMapClone(keyMapGet());
-    var homeOf = { bai: 'cmd', comate: 'tj', qoder: 'cb', ext: 'ext' };
-    ['bai', 'comate', 'qoder', 'ext'].forEach(function (k) {
+    var homeOf = { bai: 'cmd', comate: 'tj', qoder: 'cb', ext: 'ext', oc: 'ext' };
+    ['bai', 'comate', 'qoder', 'ext', 'oc'].forEach(function (k) {
       if (typeof cfg[k] !== 'boolean') return;
       var idx = -1;
       for (var ai = 0; ai < km.length; ai++) if (km[ai].indexOf(k) >= 0) idx = ai;
       if (cfg[k] && idx < 0) {
         var home = homeOf[k], hi = -1;
         for (var hi2 = 0; hi2 < km.length; hi2++) if (km[hi2].indexOf(home) >= 0) hi = hi2;
-        if (k === 'ext' && hi < 0 && km.length < 4) km.push([k]);
+        if ((k === 'ext' || k === 'oc') && hi < 0 && km.length < 4) km.push([k]);
         else if (hi >= 0) km[hi].push(k);
         else if (km.length) km[0].push(k);
       } else if (!cfg[k] && idx >= 0) {
@@ -4481,9 +4553,9 @@ var PT_I18N = {
     paint();
     return true;
   };
-  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, comate: 7, water: 8, keymap: 9 };
-  /* 上屏 Wheel 音量条只亮着六个主页可见；set/water 里它挡住屏体右侧读数 */
-  var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate', 'qoder'];
+  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, oc: 7, comate: 8, water: 9, keymap: 10 };
+  /* 上屏 Wheel 音量条只亮着主页可见；set/water 里它挡住屏体右侧读数 */
+  var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate', 'qoder', 'oc'];
   /* lx（灵犀+设置）与 no 共用第 4 颗键：已停在 no 时再点该键进 lx（双职责），
      鼓轮/传送带各自有独立位；键盘方向键沿 MODES 全链可达。 */
   var modeListeners = [];
@@ -4645,7 +4717,7 @@ var PT_I18N = {
     if (vuWrap) vuWrap.style.display = VU_HOME.indexOf(m) >= 0 ? '' : 'none';
     var drum = $('.pt-drum');
     if (drum) {
-      /* 居中格 = children[--i]（顺序见 DRUM_IDX 注释：cmd→0 … ext→6，预留格 idx7 无映射，set→8）；
+      /* 居中格 = children[--i]（顺序见 DRUM_IDX 注释：cmd→0 … ext→6，oc→7，set→8）；
          没有专属格的 mode 保持鼓轮上一位置，不能把 --i 设成 undefined（calc 失效，格子会叠成一坨） */
       var di = DRUM_IDX[m];
       if (di != null) {
@@ -4670,14 +4742,14 @@ var PT_I18N = {
       b.classList.toggle('cur', b.dataset.body === m);
       /* B类供应商显隐：上屏屏体同步隐藏 */
       if (b.dataset.body === 'bai' || b.dataset.body === 'comate' ||
-          b.dataset.body === 'qoder' || b.dataset.body === 'ext') {
+          b.dataset.body === 'qoder' || b.dataset.body === 'ext' || b.dataset.body === 'oc') {
         b.style.display = provEnabled(b.dataset.body) ? '' : 'none';
       }
     });
     /* B类供应商显隐：鼓轮禁用格只变暗占位（nth-child/children 下标定位，禁止 display:none 抽格） */
     $$('.pt-drum i[data-mode]').forEach(function (cell) {
       var cm = cell.getAttribute('data-mode');
-      var off = (cm === 'bai' || cm === 'comate' || cm === 'qoder' || cm === 'ext') && !provEnabled(cm);
+      var off = (cm === 'bai' || cm === 'comate' || cm === 'qoder' || cm === 'ext' || cm === 'oc') && !provEnabled(cm);
       cell.classList.toggle('off', off);
       if (off) cell.setAttribute('aria-disabled', 'true');
       else cell.removeAttribute('aria-disabled');
@@ -7486,7 +7558,9 @@ var PT_I18N = {
     comate: { id: 'comate', port: 8786, pfx: 'comate', mode: 'comate', uptime: null, phase: 'idle' },
     qoder: { id: 'qoder', port: 8785, pfx: 'qoder', mode: 'qoder', uptime: null, phase: 'idle' },
     /* VIBEX 甲板（8790）——端点/状态灯/模型列表/拉杆全走通用插件视图 */
-    ext: { id: 'vibex', port: 8790, pfx: 'vibex', mode: 'vibex', uptime: null, phase: 'idle' }
+    ext: { id: 'vibex', port: 8790, pfx: 'vibex', mode: 'vibex', uptime: null, phase: 'idle' },
+    /* OPENCODE 甲板（8784）——本机 opencode serve → OpenAI 兼容，同款通用插件视图 */
+    oc: { id: 'opencode', port: 8784, pfx: 'oc', mode: 'oc', uptime: null, phase: 'idle' }
   };
 
   /* ---------------- WorkBuddy 甲板：国内版 ⇄ 国际版（同甲板区域切换，不增甲板/模式键） ----------------
@@ -7923,11 +7997,12 @@ var PT_I18N = {
   }
 
   /* ================= 插件通用 ================= */
+  var PLUGIN_MODES = ['tj', 'cb', 'bai', 'comate', 'qoder', 'ext', 'oc']; /* 通用插件视图遍历源（启停/刷新/日志） */
   async function refreshPluginView(mode) {
     var V = PV[mode];
     if (!V) return;
     /* B类供应商显隐：隐藏页不展示不请求（矩阵/统计/日志一律不拉，后端不动） */
-    if ((mode === 'bai' || mode === 'comate' || mode === 'qoder' || mode === 'ext') &&
+    if ((mode === 'bai' || mode === 'comate' || mode === 'qoder' || mode === 'ext' || mode === 'oc') &&
         typeof window.__provGet === 'function') {
       try { if (!window.__provGet()[mode]) return; } catch (e) {}
     }
@@ -8091,6 +8166,7 @@ var PT_I18N = {
       V.tjIdleHinted = false; /* 停止后重置——下次运行时若仍无矩阵，重新提示一次 */
       V.healthMs = null; /* cb/ba 甲板「本地回环」读数同步回「不通」 */
       if (V.mode === 'cb') PTApp.dot('cbProbe', false, false, ''); /* 模型探测灯随停堆熄灭 */
+      if (V.mode === 'oc') PTApp.dot('ocModels', false, false, ''); /* OpenCode 模型灯随停堆熄灭 */
       if (V.mode === 'qoder') { PTApp.dot('qoderCredits', false, false, ''); PTApp.dot('qoderQuota', false, false, ''); }
     }
   }
@@ -8099,6 +8175,16 @@ var PT_I18N = {
 
   function setPluginPhase(V, p) {
     V.phase = p;
+    /* OpenCode 的 /health 不带 uptimeSec（协议翻译层没有自己的会话计时）：
+       客户端从进入 running 的时刻起自己算，停堆归零（GUI 重启接管已有实例从 0 起算） */
+    if (V.mode === 'oc') {
+      if (p === 'running' && !V.ocStartedAt) V.ocStartedAt = Date.now();
+      if (p !== 'running' && p !== 'starting') {
+        V.ocStartedAt = null;
+        V.uptime = 0;
+        PTApp.odo('ocUptime', fmtUptime(0));
+      }
+    }
     PTApp.dot(V.mode + 'Run', p === 'running', p === 'starting', p === 'starting' ? '启动中' : '');
     /* starting/stopping 不动拉杆（同 setPhase 守卫，防拉杆中途弹回） */
     if (p !== 'starting' && p !== 'stopping') {
@@ -8216,6 +8302,17 @@ var PT_I18N = {
       var ids = items.map(function (m) { return m.id; });
       var mcEl = $(V.pfx + 'ModelCount'), mlBox = $(V.pfx + 'ModelList');
       if (!mcEl || !mlBox) return;
+      /* opencode 未安装 / 未就绪时 /v1/models 回 OpenAI 错误体（503），如实上屏，
+         不要伪装成「0 个模型」 */
+      if (V.mode === 'oc' && d && d.error) {
+        var ocErr = String((d.error && d.error.message) || 'opencode 未就绪');
+        mcEl.textContent = 'NOT READY';
+        mlBox.innerHTML = '<div class="pt-models-empty">// ' + esc(ocErr) + '</div>';
+        pSet(V, 'StModels', '—'); pSet(V, 'StModelsSub', 'opencode 未就绪');
+        V.lastModels = null;
+        PTApp.dot('ocModels', false, true, '未就绪');
+        return;
+      }
       if (isMatrix && d.ok === false) {
         var noKey = d.err === 'need_key';
         mcEl.textContent = noKey ? 'NO KEY' : 'ERR';
@@ -8231,6 +8328,7 @@ var PT_I18N = {
         mlBox.innerHTML = '<div class="pt-models-empty">// 后端暂无可调用模型（预算超限？）</div>';
         V.lastModels = null;
         if (V.mode === 'cb') PTApp.dot('cbProbe', false, false, '');
+        if (V.mode === 'oc') PTApp.dot('ocModels', false, false, '0 个');
         return;
       }
       var key = ids.join('\u0001');
@@ -8246,8 +8344,10 @@ var PT_I18N = {
       pSet(V, 'StModels', ids.length);
       pSet(V, 'StModelsSub', isMatrix ? '缓存于 ' + fmtTime((d.fetched_at || 0) * 1000)
         : ids.length + ' 个真实可用');
-      /* cb 上屏「模型探测」灯：动态探测完成即亮，b 显示 N 个 */
+      /* cb 上屏「模型探测」灯：动态探测完成即亮，b 显示 N 个；
+         oc 上屏「模型」灯同口径（8784 的真实模型数） */
       if (V.mode === 'cb') PTApp.dot('cbProbe', true, false, ids.length + ' 个');
+      if (V.mode === 'oc') PTApp.dot('ocModels', true, false, ids.length + ' 个');
       var groups = {};
       /* nameMap: 有 display_name 且与 id 不同的条目（Qoder qmodel_38max→Qwen3.8-Max）：
          chip 显示界面名、复制仍复制可用名（id）；tj 甲板不用 display_name——团结上游
@@ -8275,13 +8375,15 @@ var PT_I18N = {
       if (ml2) ml2.innerHTML = '<div class="pt-models-empty">// 拉取失败: ' + esc(e && e.message || e) +
         (V.mode === 'tj' ? '<br>// 点右上「↻ 刷新」重试（已无轮询自动重试）' : '') + '</div>';
       if (V.mode === 'cb') PTApp.dot('cbProbe', false, false, '');
+      if (V.mode === 'oc') PTApp.dot('ocModels', false, true, 'ERR');
     }
   }
 
   async function loadPluginMeta(V) {
     /* bai 没有 /model/info，这个路径会被透传代理原样打到 api.b.ai ——
-       3 秒一轮的轮询等于持续对境外无意义请求（同刚修掉的 /v1/models 空打） */
-    if (V.mode === 'bai') return;
+       3 秒一轮的轮询等于持续对境外无意义请求（同刚修掉的 /v1/models 空打）；
+       opencode 同样没有 /model/info（只有 /v1/models），别每轮白打一个 404。 */
+    if (V.mode === 'bai' || V.mode === 'oc') return;
     try {
       var r = await fetch('http://127.0.0.1:' + V.port + '/model/info', { signal: AbortSignal.timeout(3000) });
       var list = await r.json();
@@ -8407,6 +8509,9 @@ var PT_I18N = {
       if (typeof h.uptimeSec === 'number') {
         V.uptime = h.uptimeSec;
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
+      } else if (V.mode === 'oc' && V.ocStartedAt) {
+        V.uptime = Math.floor((Date.now() - V.ocStartedAt) / 1000);
+        PTApp.odo(mode + 'Uptime', fmtUptime(V.uptime));
       }
       /* vibex 屏灯：token 就绪（token 7～30 天过期是本通道头号运维项，health 自带该字段；
          缺 token 时琥珀警告，行为对标各甲板相位灯写法） */
@@ -8414,6 +8519,22 @@ var PT_I18N = {
         PTApp.dot('vibexToken', h.token_configured === true, h.token_configured === false, '');
         V.vibexHealth = h; /* 留给切语言时重渲染账号行三态文案 */
         vibexRenderAccounts(h); /* 账号行三态（未配置/剩 X 天/已过期），复用本次 /health */
+      }
+      /* opencode 屏灯：健康 = /health 的 ok:true 且 ready:true（后端只在 opencode
+         可连通时才 ready）；模型数直接取 health.models（后端 60s 缓存 + 2s 探活）。
+         未就绪时琥珀 + 如实原因（opencode_not_installed / unreachable）。 */
+      if (V.mode === 'oc') {
+        var ocReady = h.ok === true && h.ready === true;
+        PTApp.dot('ocHealth', ocReady, !ocReady, ocReady ? 'ok' : (h.reason || '未就绪'));
+        pSet(V, 'StHealthSub', ocReady ? '本地回环' : (h.reason || 'opencode 未就绪'));
+        if (typeof h.models === 'number') {
+          pSet(V, 'StModels', h.models);
+          pSet(V, 'StModelsSub', 'opencode ' + (h.opencode || '?'));
+          if (ocReady) PTApp.dot('ocModels', true, false, h.models + ' 个');
+        } else if (!ocReady) {
+          pSet(V, 'StModels', '—');
+          pSet(V, 'StModelsSub', h.reason || 'opencode 未就绪');
+        }
       }
       if (V.id === 'tuanjie') { updateJudgeBanner(h); updateSeedBanner(h); }
       if (V.mode === 'cb') {
@@ -8449,8 +8570,9 @@ var PT_I18N = {
        轮询不再重复打官网；其余插件用本地 token 统计 */
     try {
       var entries = null, bmode = 'tokens';
-      /* bai 走本地 /v1/stats（插件侧自建统计，不再透传打到 api.b.ai 的境外空请求） */
-      if (V.id !== 'tuanjie') {
+      /* bai 走本地 /v1/stats（插件侧自建统计，不再透传打到 api.b.ai 的境外空请求）；
+         opencode 没有 /v1/stats（是协议翻译层，不落本地用量），别每 3 秒白打一个 404 */
+      if (V.id !== 'tuanjie' && V.mode !== 'oc') {
         var ds = await (await fetch('http://127.0.0.1:' + V.port + '/v1/stats', { signal: AbortSignal.timeout(3000) })).json();
         var models = ds.models || {};
         entries = Object.keys(models).map(function (name) {
@@ -8817,6 +8939,9 @@ var PT_I18N = {
     'app.s.cbLeverIntl':     { zh: '拉到底点火（8789）· 拉回熄火 · 模型探测首次约 20 秒', 'zh-hant': '拉到底點火（8789）· 拉回熄火 · 模型探測首次約 20 秒', en: 'Pull fully to ignite (8789) · Pull back to stop · Probe ~20s first run', de: 'Ganz ziehen (8789) · Zurück zum Stop · Erste Suche ~20 s', ja: '右端まで引いて点火（8789）・初回検出約20秒', fr: 'Tirer à fond (8789) · Détection ~20 s au début', es: 'Tira al fondo (8789) · Detección ~20 s la primera vez' },
     'app.s.baiLever':     { zh: '拉到底点火（8891）· 拉回熄火 · Go 栈直连 api.b.ai', 'zh-hant': '拉到底點火（8891）· 拉回熄火 · Go 棧直連 api.b.ai', en: 'Pull to ignite (8891) · Back to stop · Go stack to api.b.ai', de: 'Ziehen zum Starten (8891) · Zurück zum Stoppen · Go-Stack zu api.b.ai', ja: '引いて起動（8891）· 戻して停止 · Goスタックで api.b.ai へ', fr: 'Tirer pour démarrer (8891) · Retour pour arrêter · Pile Go vers api.b.ai', es: 'Tira para encender (8891) · Vuelve para apagar · Pila Go a api.b.ai' },
     'app.s.vibexLever':   { zh: '拉到底点火（8790）· 拉回熄火 · VibeX 插件', 'zh-hant': '拉到底點火（8790）· 拉回熄火 · VibeX 插件', en: 'Pull to ignite (8790) · Back to stop · VibeX plugin', de: 'Ziehen zum Starten (8790) · Zurück zum Stoppen · VibeX-Plugin', ja: '引いて起動（8790）· 戻して停止 · VibeXプラグイン', fr: 'Tirer pour démarrer (8790) · Retour pour arrêter · Plugin VibeX', es: 'Tira para encender (8790) · Vuelve para apagar · Plugin VibeX' },
+    /* OPENCODE 甲板（8784）：拉杆副标题 + 限流口径（免费模型是滚动限流，不承诺无限量） */
+    'app.s.ocLever':      { zh: '拉到底点火（8784）· 拉回熄火 · 复用本机 opencode', 'zh-hant': '拉到底點火（8784）· 拉回熄火 · 復用本機 opencode', en: 'Pull to ignite (8784) · Back to stop · Reuses local opencode', de: 'Ziehen zum Starten (8784) · Zurück zum Stoppen · Nutzt lokales opencode', ja: '引いて起動（8784）· 戻して停止 · ローカル opencode を再利用', fr: 'Tirer pour démarrer (8784) · Retour pour arrêter · Réutilise opencode local', es: 'Tira para encender (8784) · Vuelve para apagar · Reutiliza opencode local' },
+    'app.oc.hint':        { zh: '本机 opencode 免费档有滚动限流，撞限流会自动换模型；不承诺无限量。', 'zh-hant': '本機 opencode 免費檔有滾動限流，撞限流會自動換模型；不承諾無限額。', en: 'Free opencode models are rate-limited on a rolling window; the plugin rotates models when limited — no unlimited guarantee.', de: 'Kostenlose opencode-Modelle haben ein rollierendes Limit; der Plugin wechselt dann das Modell — keine unbegrenzte Zusage.', ja: 'opencode の無料モデルはローリング制限があります。制限時は自動でモデルを切り替えます（無制限の保証はありません）。', fr: 'Les modèles gratuits opencode sont limités par fenêtre glissante ; le plugin change de modèle en cas de limite — sans garantie illimitée.', es: 'Los modelos gratuitos de opencode tienen límite por ventana móvil; el plugin cambia de modelo al alcanzarlo — sin garantía ilimitada.' },
     /* VIBEX 账号行（8790）：三态状态字 ＋ 账号区标题/副行。{n} 是剩余天数占位符 */
     'app.vibex.acc':       { zh: '账号', 'zh-hant': '賬號', en: 'Account', de: 'Konto', ja: 'アカウント', fr: 'Compte', es: 'Cuenta' },
     'app.vibex.tokenState': { zh: 'Rh-Accesstoken', 'zh-hant': 'Rh-Accesstoken', en: 'Rh-Accesstoken', de: 'Rh-Accesstoken', ja: 'Rh-Accesstoken', fr: 'Rh-Accesstoken', es: 'Rh-Accesstoken' },
@@ -9823,6 +9948,14 @@ var PT_I18N = {
       '<h3>使用帮助 · GUIDE · VIBEX</h3><div class="m-body">' +
       '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8790）；拉回最左熄火。<br>' +
       '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8790/v1</code>（甲板上点击即复制）。<br>' +
+      '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>',
+    oc:
+      '<h3>使用帮助 · GUIDE · OpenCode</h3><div class="m-body">' +
+      '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8784）；拉回最左熄火。<br>' +
+      '<b>【前置条件】</b>复用本机已安装的 <code>opencode</code>（不随 ProxyDeck 打包）；找不到时可把 <code>PROXYDECK_OPENCODE_EXE</code> 指向 opencode.exe。未安装时甲板显示「未就绪」并给出原因。<br>' +
+      '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8784/v1</code>（甲板上点击即复制）。<br>' +
+      '<b>【运行口径】</b>每个请求对应一个真实 opencode 会话，全局单会话串行（免费档吃不了并发）；权限询问一律拒绝。<br>' +
+      '<b>【限流】</b>免费模型是滚动限流，撞限流时插件按冷却表自动换模型，全部冷却时如实回 429——不承诺无限量。<br>' +
       '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>'
   };
 
@@ -9956,7 +10089,8 @@ var PT_I18N = {
     qoder: refForQoder,
     bai: refForBai,
     comate: refForComate,
-    ext: refForExt
+    ext: refForExt,
+    oc: refForNamed(8784, 'OpenCode')
   };
 
   function setModelFilter(mode) {
@@ -9998,9 +10132,9 @@ var PT_I18N = {
 
     /* —— B类键位自由组合：独立配置子页（设置页只留入口行） —— */
     (function bindKeymapPage() {
-      var KM_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX' };
-      var KM_PORT = { cmd: '55990', tj: '8788', comate: '8786', cb: '8787', qoder: '8785', bai: '8891', ext: '8790' };
-      var KM_ALL = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext'];
+      var KM_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX', oc: 'OPENCODE' };
+      var KM_PORT = { cmd: '55990', tj: '8788', comate: '8786', cb: '8787', qoder: '8785', bai: '8891', ext: '8790', oc: '8784' };
+      var KM_ALL = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext', 'oc'];
       function kmGet() {
         try {
           if (typeof window.__keymapGet === 'function') return window.__keymapGet();
@@ -10206,9 +10340,9 @@ var PT_I18N = {
     });
 
     /* —— 插件启停 —— */
-    ['tj', 'cb', 'bai', 'comate', 'qoder', 'ext'].forEach(bindPluginToggle);
+    PLUGIN_MODES.forEach(bindPluginToggle);
     vibexBindAcc(); /* VIBEX 甲板账号行：⚡自动探测 + 手动粘贴兜底（DOM 常驻，一次性绑） */
-    ['tjEndpoint', 'cbEndpoint', 'baEndpoint', 'comateEndpoint', 'qoderEndpoint', 'vibexEndpoint'].forEach(function (id) {
+    ['tjEndpoint', 'cbEndpoint', 'baEndpoint', 'comateEndpoint', 'qoderEndpoint', 'vibexEndpoint', 'ocEndpoint'].forEach(function (id) {
       var el = $(id);
       if (el) el.onclick = function () { copyText(el.textContent, 'Base URL'); };
     });
@@ -10228,15 +10362,15 @@ var PT_I18N = {
         else plog(V, 'err', '积分清零失败: ' + ((d && d.error) || '未知'));
       } catch (e) { plog(V, 'err', '积分清零失败: ' + (e && e.message || e)); }
     };
-    ['tj', 'cb', 'bai', 'comate', 'qoder', 'ext'].forEach(function (mode) {
+    PLUGIN_MODES.forEach(function (mode) {
       var V = PV[mode];
       var clr = $(V.pfx + 'ClearLog');
       if (clr) clr.onclick = function () { $(V.pfx + 'Log').innerHTML = ''; plog(V, 'sys', '日志已清空'); };
       /* 积分刷新按钮统一在这里绑（tjRefresh/cbRefresh）：
-         团结/WorkBuddy 强制实时拉一次积分，B.AI/Comate/Qoder 无积分卡只刷视图 */
+         团结/WorkBuddy 强制实时拉一次积分，B.AI/Comate/Qoder/OpenCode 无积分卡只刷视图 */
       var rf = $(V.pfx + 'Refresh');
       if (rf) rf.onclick = async function () {
-        if (mode === 'bai' || mode === 'comate' || mode === 'ext') {
+        if (mode === 'bai' || mode === 'comate' || mode === 'ext' || mode === 'oc') {
           /* B.AI 的「↻ 刷新」与拉杆点火同权：复用同一个闩锁去强制刷一次模型矩阵，
              否则改走缓存端点之后这颗按钮按下去不会有任何变化 */
           if (mode === 'bai') V.fetchOnRun = true;
@@ -10313,7 +10447,7 @@ var PT_I18N = {
               ids = plist.map(function (p) { return p.id; });
             }
           } catch (e) {}
-          if (!ids) ids = ['tuanjie', 'codebuddy', 'codebuddy-intl', 'bai', 'comate', 'qoder', 'vibex'];
+          if (!ids) ids = ['tuanjie', 'codebuddy', 'codebuddy-intl', 'bai', 'comate', 'qoder', 'vibex', 'opencode'];
           for (var i = 0; i < ids.length; i++) {
             try { await call('PluginStop', ids[i]); } catch (e) {}
           }
@@ -10568,7 +10702,7 @@ var PT_I18N = {
   }
 
   function buildAllOdo() {
-    ['uptime', 'tjUptime', 'cbUptime', 'baiUptime', 'comateUptime', 'qoderUptime', 'extUptime'].forEach(function (k) {
+    ['uptime', 'tjUptime', 'cbUptime', 'baiUptime', 'comateUptime', 'qoderUptime', 'extUptime', 'ocUptime'].forEach(function (k) {
       var el = document.querySelector('[data-odo="' + k + '"]');
       if (el) { PTApp.buildOdo(el, fmtUptime(0)); el.dataset.text = fmtUptime(0); }
     });

@@ -2807,6 +2807,7 @@ dependencies = [
  "rs-bai",
  "rs-codebuddy",
  "rs-comate",
+ "rs-opencode",
  "rs-proxy",
  "rs-qoder",
  "rs-tuanjie",

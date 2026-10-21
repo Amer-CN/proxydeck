@@ -41,11 +41,12 @@ const GOLDEN: &str = include_str!("golden/bridge-go-reference.json");
 
 /// Rust 侧**已知新增**的探活目标（Go `pluginDefs` 里没有）。
 ///
-/// 2026-10-20：新增 `qoder-intl`（Qoder 国际版，8791）。Go 侧插件表仍是 7 条，
-/// 黄金基准 `ccLiveSnapshot.live` 因此少这个键。比对时**只扣除这一项**，
-/// 其余任何键差异照旧判红（见 `go_and_rust_bridge_agree_command_by_command` 例外 4）。
+/// 2026-10-20：新增 `qoder-intl`（Qoder 国际版，8791）；2026-10-21：新增 `opencode`
+/// （OpenCode 插件，8784）。Go 侧插件表仍是 7 条，黄金基准 `ccLiveSnapshot.live`
+/// 因此少这些键。比对时**只扣除登记项**，其余任何键差异照旧判红
+/// （见 `go_and_rust_bridge_agree_command_by_command` 例外 4）。
 /// 将来若 Go 侧也加了同名插件，把这里清空即可。
-const RUST_ONLY_LIVE_KEYS: &[&str] = &["qoder-intl"];
+const RUST_ONLY_LIVE_KEYS: &[&str] = &["qoder-intl", "opencode"];
 
 /* ---------------- 归一化（与 Go 采集器同一套哨兵） ---------------- */
 
@@ -149,6 +150,12 @@ fn replace_msg(s: &str, sentinel: &str) -> String {
         return s.to_string();
     };
     format!("{}{}{}", &s[..start], sentinel, &tail[end..])
+}
+
+/// 2026-10-21：`oc`（OPENCODE）是 Rust 侧新增的键位脸，Go 黄金基准里没有。
+/// 比对前只从映射 JSON 里去掉这一个脸（`,"oc"`），键数/顺序/其它脸一字不动。
+fn strip_opencode_face(s: &str) -> String {
+    s.replace(",\"oc\"", "")
 }
 
 /// 时间戳 → `$TS`（StampedWriter 用例；与 Go 采集器的 `normStamp` 同规则）。
@@ -615,10 +622,13 @@ fn go_and_rust_bridge_agree_command_by_command() {
                 assert_eq!(g["ok"], r["ok"], "ccLiveSnapshot 的 ok 必须一致");
                 let gk: BTreeSet<String> = g["live"].as_object().unwrap().keys().cloned().collect();
                 let mut rk: BTreeSet<String> = r["live"].as_object().unwrap().keys().cloned().collect();
-                // 2026-10-20：Rust 侧新增 `qoder-intl`（Qoder 国际版，8791），而 Go 侧
-                // `pluginDefs` 仍是 7 条，黄金基准因此少一个键。这里**只放行这一个已知新增键**，
-                // 其余任何键差异照旧判红——不放宽标准，只是把「Rust 侧已知扩展」显式登记出来。
-                rk.remove(RUST_ONLY_LIVE_KEYS[0]);
+                // 2026-10-20/21：Rust 侧新增 `qoder-intl`（8791）与 `opencode`（8784），
+                // 而 Go 侧 `pluginDefs` 仍是 7 条，黄金基准因此少键。这里**只放行登记过的
+                // 已知新增键**，其余任何键差异照旧判红——不放宽标准，只是把「Rust 侧已知
+                // 扩展」显式登记出来（清单见 RUST_ONLY_LIVE_KEYS）。
+                for k in RUST_ONLY_LIVE_KEYS {
+                    rk.remove(*k);
+                }
                 assert_eq!(gk, rk, "ccLiveSnapshot 的探活目标键集必须一致（已扣除 Rust 侧已知新增键）");
                 live_snapshot_keys = gk;
                 checked_steps += 1;
@@ -635,6 +645,13 @@ fn go_and_rust_bridge_agree_command_by_command() {
                     want = replace_msg(&want, "$JSONERR");
                     got = replace_msg(&got, "$JSONERR");
                 }
+            }
+
+            // 例外 1b：ccKeyMapGet 的映射里，Rust 侧多了 OPENCODE 脸（`oc`，2026-10-21
+            // 接入）——Go 黄金基准冻结时还没有这个供应商。只忽略 `,"oc"`，其余照比。
+            if cmd == "ccKeyMapGet" {
+                want = strip_opencode_face(&want);
+                got = strip_opencode_face(&got);
             }
 
             checked_steps += 1;
@@ -676,6 +693,12 @@ fn go_and_rust_bridge_agree_command_by_command() {
                 }
                 let go_norm = norm.norm(&String::from_utf8_lossy(&go_plain));
                 let rust_norm = norm.norm(&String::from_utf8_lossy(&rust_plain));
+                // keymap.json 例外同 ccKeyMapGet：Rust 侧默认/迁移会带 OPENCODE 脸。
+                let (go_norm, rust_norm) = if rel.ends_with("keymap.json") {
+                    (strip_opencode_face(&go_norm), strip_opencode_face(&rust_norm))
+                } else {
+                    (go_norm, rust_norm)
+                };
                 if go_norm != rust_norm {
                     failures.push(format!(
                         "[{scen}] 文件 {rel} 逻辑内容不一致：\n    Go   : {go_norm:?}\n    Rust : {rust_norm:?}"

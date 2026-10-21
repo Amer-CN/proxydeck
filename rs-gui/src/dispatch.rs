@@ -44,13 +44,17 @@ pub enum Mode {
 
 /// 插件 id → 承载它的 Rust crate 名（`None` = 该插件**没有** Rust 实现）。
 ///
-/// P7d-1 起七条全有承载（团结于本轮接入）；`None` 这条分支保留——Go 侧 `pluginDefs`
-/// 是数据驱动的，将来加插件时这里仍要如实报「尚无实现」，不许静默当成功。
+/// P7d-1 起七条全有承载（团结于本轮接入），2026-10-21 再加 OpenCode（第八条）；
+/// `None` 这条分支保留——Go 侧 `pluginDefs` 是数据驱动的，将来加插件时这里仍要
+/// 如实报「尚无实现」，不许静默当成功。
 pub fn plugin_crate(id: &str) -> Option<&'static str> {
     match id {
         "bai" => Some("rs-bai"),
         "codebuddy" | "codebuddy-intl" => Some("rs-codebuddy"),
         "comate" => Some("rs-comate"),
+        // OpenCode（8784）：2026-10-21 接入；`rs-opencode` 提供 `pub async fn run(args)`，
+        // 与 rs-vibex 同形，`Args` 里自带 `--plugin-opencode` 护栏。
+        "opencode" => Some("rs-opencode"),
         "qoder" | "qoder-intl" => Some("rs-qoder"),
         // 团结（tuanjie / 8788）：P7d-1 起由 `rs-tuanjie` 承接（`pub async fn run(args)`，
         // 与 rs-vibex / rs-proxy 同一形态）。**本 exe 仍不去接管生产端口 8788**——
@@ -63,9 +67,10 @@ pub fn plugin_crate(id: &str) -> Option<&'static str> {
 }
 
 /// 本分发器认得的插件子模式 flag（与 Go `plugin_modes.go` 的**分支顺序**逐个对齐：
-/// vibex → tuanjie → codebuddy → codebuddy-intl → bai → comate → qoder。
+/// vibex → tuanjie → codebuddy → codebuddy-intl → bai → comate → qoder → qoder-intl；
+/// OpenCode 作为 2026-10-21 新增项**放在最后**，既有顺序一字不动。
 /// 顺序只在多个 `--plugin-*` 并存时有意义（与 Go 同：vibex 优先）。}
-pub const PLUGIN_FLAGS: [&str; 8] = [
+pub const PLUGIN_FLAGS: [&str; 9] = [
     "plugin-vibex",
     "plugin-tuanjie",
     "plugin-codebuddy",
@@ -74,6 +79,7 @@ pub const PLUGIN_FLAGS: [&str; 8] = [
     "plugin-comate",
     "plugin-qoder",
     "plugin-qoder-intl",
+    "plugin-opencode",
 ];
 
 /// 把 Go 风格的「单横线长选项」规范化为 clap 认的 `--flag`（短选项/负值原样保留）。
@@ -283,6 +289,17 @@ pub fn run(argv: Vec<String>) -> i32 {
                     Ok(a) => block_on(rs_qoder::run(a)),
                     Err(e) => Err(e.to_string()),
                 },
+                "rs-opencode" => match rs_opencode::Args::try_parse_from(&sub) {
+                    Ok(a) => {
+                        // 与单独跑 rs-opencode 时同一条护栏与文案（退出码 2）
+                        if !a.plugin_opencode {
+                            eprintln!("请用 --plugin-opencode 启动（OpenCode 插件服务模式）");
+                            return 2;
+                        }
+                        block_on(rs_opencode::run(a))
+                    }
+                    Err(e) => Err(e.to_string()),
+                },
                 "rs-tuanjie" => match rs_tuanjie::Args::try_parse_from(&sub) {
                     Ok(a) => match block_on_tuanjie(rs_tuanjie::run(a)) {
                         Ok(()) => Ok(()),
@@ -429,6 +446,10 @@ mod tests {
             Mode::Plugin("codebuddy-intl")
         );
         assert_eq!(plan(&v(&["--plugin-tuanjie", "--port", "8788"])), Mode::Plugin("tuanjie"));
+        assert_eq!(
+            plan(&v(&["--plugin-opencode", "--port", "18784"])),
+            Mode::Plugin("opencode")
+        );
         assert_eq!(plan(&v(&["--fax"])), Mode::Fax);
         // Go 侧 `-plugin-*` 单横线写法同样要认
         assert_eq!(plan(&v(&["-plugin-qoder", "-port", "18785"])), Mode::Plugin("qoder"));
@@ -527,6 +548,15 @@ mod tests {
         assert_eq!(a.port, 18790);
         assert!(a.portable);
 
+        let a = rs_opencode::Args::try_parse_from(plugin_argv(
+            "rs-gui",
+            "opencode",
+            &v(&["--plugin-opencode", "--port", "18784"]),
+        ))
+        .expect("rs-opencode 必须接受翻译后的 argv");
+        assert_eq!(a.port, 18784);
+        assert!(a.plugin_opencode);
+
         let a = rs_tuanjie::Args::try_parse_from(plugin_argv(
             "rs-gui",
             "tuanjie",
@@ -576,6 +606,7 @@ mod tests {
         assert_eq!(plugin_crate("comate"), Some("rs-comate"));
         assert_eq!(plugin_crate("qoder"), Some("rs-qoder"));
         assert_eq!(plugin_crate("vibex"), Some("rs-vibex"));
+        assert_eq!(plugin_crate("opencode"), Some("rs-opencode"));
         // 未知 id 仍如实报「没有承载」（不静默当成功）
         assert_eq!(plugin_crate("zz-nope"), None);
     }

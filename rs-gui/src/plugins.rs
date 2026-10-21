@@ -3,8 +3,8 @@
 //!
 //! 托管逻辑逐条对齐 Go：
 //!   * `pluginDefs` 注册表（顺序即 `ccPluginList` 的输出顺序）
-//!   * `pluginList`：**并发**探活（本方法在 WebView UI 线程同步执行，串行探 7 个端口
-//!     最坏 7×1.5s 会把整窗拖死）、陈旧报错自愈、字段与键序逐字对齐
+//!   * `pluginList`：**并发**探活（本方法在 WebView UI 线程同步执行，串行探 8 个端口
+//!     最坏 8×1.5s 会把整窗拖死）、陈旧报错自愈、字段与键序逐字对齐
 //!   * `pluginStart`：探活接管（端口上已有健康实例 → 直接复用，不杀不重启）→ 端口被
 //!     非健康进程占用则先清理 → spawn **本 exe** 的 `--plugin-<id>` → 退出监视
 //!   * `watchPluginExit` + `pluginExitReason`：子进程一死就复位状态并带上失败原因
@@ -123,6 +123,10 @@ pub fn plugin_defs() -> Vec<PluginDef> {
             "qoder-intl",
         ),
         PluginDef::new("vibex", "VibeX", "", "", &[], 8790, "/health", "vibex"),
+        // OpenCode（8784）：2026-10-21 接入 GUI——把本机 `opencode serve` 翻成
+        // OpenAI 兼容接口（不打包 opencode；未安装时 /health 如实报 not_installed）。
+        // 顺序放在 vibex 之后，不插队（`ccPluginList` 输出顺序依赖它）。
+        PluginDef::new("opencode", "OpenCode", "", "", &[], 8784, "/health", "opencode"),
     ]
 }
 
@@ -777,9 +781,10 @@ mod tests {
                 "comate",
                 "qoder",
                 "qoder-intl",
-                "vibex"
+                "vibex",
+                "opencode"
             ],
-            "顺序与 Go pluginDefs 一致（ccPluginList 输出顺序依赖它）；qoder-intl 为 2026-10-20 新增"
+            "顺序与 Go pluginDefs 一致（ccPluginList 输出顺序依赖它）；qoder-intl 为 2026-10-20 新增，opencode 为 2026-10-21 新增"
         );
         let ports: Vec<(String, u16)> = defs.iter().map(|d| (d.id.clone(), d.port)).collect();
         assert_eq!(
@@ -793,9 +798,10 @@ mod tests {
                 ("qoder".to_string(), 8785),
                 ("qoder-intl".to_string(), 8791),
                 ("vibex".to_string(), 8790),
+                ("opencode".to_string(), 8784),
             ]
         );
-        // 七个都是原生内置插件（Go pluginDefs 同款）
+        // 八个都是原生内置插件（Go pluginDefs 同款）
         assert!(defs.iter().all(|d| !d.native.is_empty()));
         let d = find("tuanjie").unwrap();
         assert_eq!(plugin_health_url(&d), "http://127.0.0.1:8788/health");
