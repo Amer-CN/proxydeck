@@ -362,6 +362,8 @@ fn test_config() -> Config {
         default_model: "opencode/model-b".to_string(),
         timeout_seconds: 20,
         cooldown_seconds: 60,
+        auto_install: false,
+        opencode_version: "2.0.32".to_string(),
     }
 }
 
@@ -794,6 +796,27 @@ async fn not_installed_reports_health_reason_and_503() {
             .contains("opencode_not_installed"),
         "{j}"
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn install_status_endpoint_shape_and_cancel_are_available() {
+    let base = boot_not_ready("opencode_not_installed").await;
+
+    let (status, j) = get_json(&base, "/install/status").await;
+    assert_eq!(status, 200, "{j}");
+    for key in ["installed", "downloading", "downloaded", "total"] {
+        assert!(j.get(key).is_some(), "/install/status 缺字段 {key}：{j}");
+    }
+
+    let resp = client()
+        .post(format!("{base}/install/cancel"))
+        .send()
+        .await
+        .expect("POST /install/cancel");
+    assert_eq!(resp.status().as_u16(), 202);
+    let text = resp.text().await.expect("cancel body");
+    let j: Value = serde_json::from_str(&text).expect("cancel JSON");
+    assert_eq!(j["cancelled"], true);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

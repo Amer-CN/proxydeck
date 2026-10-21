@@ -20,11 +20,13 @@
 pub mod config;
 pub mod datadir;
 pub mod discover;
+pub mod install;
 pub mod models;
 pub mod server;
 pub mod translate;
 pub mod upstream;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant as StdInstant, SystemTime, UNIX_EPOCH};
 
@@ -87,6 +89,12 @@ pub struct Server {
     pool: ModelPool,
     /// 自己 spawn 的 `opencode serve`；attach 模式为 None。
     managed: tokio::sync::Mutex<Option<server::ManagedServer>>,
+    /// 启动参数 `--attach`（安装完成后重试初始化时沿用同一模式）。
+    attach_mode: AtomicBool,
+    /// 是否已有安装完成监视任务（避免重复 POST /install/start 叠加 watcher）。
+    install_watch: AtomicBool,
+    /// 初始化串行化：启动初始化与「安装完成后的重试」不会各 spawn 一个 serve。
+    init_lock: tokio::sync::Mutex<()>,
 }
 
 impl Server {
@@ -138,6 +146,9 @@ impl Server {
             cache: Mutex::new(None),
             pool: ModelPool::new(cooldown),
             managed: tokio::sync::Mutex::new(None),
+            attach_mode: AtomicBool::new(false),
+            install_watch: AtomicBool::new(false),
+            init_lock: tokio::sync::Mutex::new(()),
         })
     }
 
@@ -205,6 +216,14 @@ impl Server {
 
     /// 后台初始化：attach（仅 `--attach`）或自己 spawn。
     async fn initialize(self: Arc<Self>, attach: bool) {
+        // 启动初始化与「安装完成后重试」可能撞车：串行化，且已就绪就不再 spawn 第二个 serve。
+        let _init_guard = self.init_lock.lock().await;
+        {
+            let rt = self.runtime.read().await;
+            if matches!(&*rt, Runtime::Ready { .. }) {
+                return;
+            }
+        }
         if attach {
             if let Some(reg) = discover::read_service_registration() {
                 let up = Upstream::new(self.client.clone(), &reg.url, &reg.password);
@@ -232,8 +251,32 @@ impl Server {
 
         match discover::find_opencode_exe() {
             None => {
-                self.set_not_ready("opencode_not_installed").await;
-                logf("未找到 opencode：请安装 opencode，或设置 PROXYDECK_OPENCODE_EXE 指向 opencode.exe");
+                let st = install::status().await;
+                if st.downloading {
+                    logf("opencode 正在安装中，等待完成后重试初始化");
+                    self.set_not_ready("opencode_installing").await;
+                    self.clone().spawn_install_watcher();
+                } else if self.cfg.auto_install {
+                    logf(&format!(
+                        "未找到 opencode：autoInstall=true，自动安装 {}",
+                        self.cfg.opencode_version
+                    ));
+                    match install::start(&self.cfg.opencode_version).await {
+                        Ok(()) => {
+                            self.set_not_ready("opencode_installing").await;
+                            self.clone().spawn_install_watcher();
+                        }
+                        Err(e) => {
+                            self.set_not_ready(&format!("opencode_install_failed: {e}"))
+                                .await;
+                        }
+                    }
+                } else {
+                    self.set_not_ready("opencode_not_installed").await;
+                    logf(
+                        "未找到 opencode：请安装 opencode、设置 PROXYDECK_OPENCODE_EXE，或 POST /install/start 一键安装",
+                    );
+                }
             }
             Some(found) => {
                 logf(&format!(
@@ -277,6 +320,49 @@ impl Server {
             logf("已停止托管的 opencode serve");
         }
     }
+
+    /// 记录启动参数 `--attach`（安装完成后的重试初始化沿用同一模式）。
+    pub fn set_attach_mode(&self, attach: bool) {
+        self.attach_mode.store(attach, Ordering::Relaxed);
+    }
+
+    /// 盯安装任务：完成后自动重新初始化，让 `/health` 变成 `ready:true`。
+    ///
+    /// 重复 `POST /install/start` 不会叠加 watcher（`install_watch` 去重）；
+    /// 每 400ms 读一次状态，直到 `downloading` 变 false。
+    fn spawn_install_watcher(self: &Arc<Self>) {
+        if self.install_watch.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let me = self.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(400)).await;
+                let st = install::status().await;
+                if st.downloading {
+                    continue;
+                }
+                me.install_watch.store(false, Ordering::Release);
+                if st.installed {
+                    if let Some(path) = st.path.as_deref() {
+                        logf(&format!("opencode 安装完成：{path}，重新初始化"));
+                    } else {
+                        logf("opencode 安装完成，重新初始化");
+                    }
+                    let attach = me.attach_mode.load(Ordering::Relaxed);
+                    me.clone().initialize(attach).await;
+                } else if let Some(e) = st.error {
+                    logf(&format!("opencode 安装失败：{e}"));
+                    me.set_not_ready(&format!("opencode_install_failed: {e}"))
+                        .await;
+                } else {
+                    // 取消（或任务什么都没做）：回到未安装状态，界面可以再点一次安装。
+                    me.set_not_ready("opencode_not_installed").await;
+                }
+                return;
+            }
+        });
+    }
 }
 
 // ------------------------------ 路由 ------------------------------
@@ -285,6 +371,9 @@ impl Server {
 pub fn router(state: Arc<Server>) -> Router {
     Router::new()
         .route("/health", any(handle_health))
+        .route("/install/status", any(handle_install_status))
+        .route("/install/start", any(handle_install_start))
+        .route("/install/cancel", any(handle_install_cancel))
         .route("/v1/models", any(handle_models))
         .route("/v1/chat/completions", any(handle_chat))
         .fallback(not_found)
@@ -361,7 +450,13 @@ fn map_up_error(e: &UpError) -> Response {
 async fn handle_health(State(s): State<Arc<Server>>, _req: Request) -> Response {
     match s.runtime().await {
         Runtime::NotReady { reason } => {
-            json_response(StatusCode::OK, json!({"ok": false, "reason": reason}))
+            let mut body = json!({"ok": false, "reason": reason});
+            if body["reason"] == "opencode_not_installed" {
+                // 界面据此显示「一键安装」按钮；装不装由用户决定，插件绝不偷偷下 95 MB。
+                body["can_install"] = json!(true);
+                body["auto_install"] = json!(s.cfg.auto_install);
+            }
+            json_response(StatusCode::OK, body)
         }
         Runtime::Ready {
             base,
@@ -411,6 +506,46 @@ impl Server {
             }),
         }
     }
+}
+
+// ------------------------------ /install/* ------------------------------
+
+/// 安装进度（`installed` 以磁盘为准，完成后自动变 true）。
+async fn handle_install_status(State(_s): State<Arc<Server>>) -> Response {
+    match serde_json::to_value(install::status().await) {
+        Ok(v) => json_response(StatusCode::OK, v),
+        Err(e) => json_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({"error": format!("serialize install status: {e}")}),
+        ),
+    }
+}
+
+/// 启动一键安装（后台下载 95 MB，立刻返回 202）。重复调用不重复下载。
+async fn handle_install_start(State(s): State<Arc<Server>>) -> Response {
+    let version = s.cfg.opencode_version.clone();
+    match install::start(&version).await {
+        Ok(()) => {
+            logf(&format!(
+                "安装：已启动（版本 {version}）——下载完成会自动重试初始化"
+            ));
+            s.spawn_install_watcher();
+            json_response(StatusCode::ACCEPTED, json!({"started": true}))
+        }
+        Err(e) if e == "already running" => {
+            json_response(StatusCode::CONFLICT, json!({"started": false, "error": e}))
+        }
+        Err(e) => json_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({"started": false, "error": e}),
+        ),
+    }
+}
+
+/// 取消正在进行的下载；下载循环下一轮退出并清理临时文件。
+async fn handle_install_cancel(State(_s): State<Arc<Server>>) -> Response {
+    install::cancel().await;
+    json_response(StatusCode::ACCEPTED, json!({"cancelled": true}))
 }
 
 // ------------------------------ /v1/models ------------------------------
@@ -1225,14 +1360,17 @@ pub struct Args {
 pub async fn run(args: Args) -> Result<(), String> {
     let cfg = config::load(None);
     logf(&format!(
-        "配置：providers={:?} modelDenylist={:?} defaultModel={} timeout={}s cooldown={}s",
+        "配置：providers={:?} modelDenylist={:?} defaultModel={} timeout={}s cooldown={}s autoInstall={} opencodeVersion={}",
         cfg.providers,
         cfg.model_denylist,
         cfg.default_model,
         cfg.timeout_seconds,
-        cfg.cooldown_seconds
+        cfg.cooldown_seconds,
+        cfg.auto_install,
+        cfg.opencode_version
     ));
     let srv = Server::new(cfg);
+    srv.set_attach_mode(args.attach);
     let addr = format!("{}:{}", args.host, args.port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await

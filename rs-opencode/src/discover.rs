@@ -1,10 +1,15 @@
 //! discover.rs —— 定位 opencode 可执行文件，以及读 attach 用的 service.json。
 //!
-//! 定位顺序（任务简报 §4.2）：
+//! 定位顺序（任务简报 §3）：
 //! 1. 环境变量 `PROXYDECK_OPENCODE_EXE`（绝对路径，测试用，最高优先级）
-//! 2. `%APPDATA%\ProxyDeck\opencode\` 下最新版本目录里的 `opencode.exe`
-//! 3. PATH 上的 `opencode`
-//! 4. 都没有 → 调用方把 `/health` 报 `opencode_not_installed`
+//! 2. `%APPDATA%\ProxyDeck\opencode\` 下最新版本目录里的 `opencode.exe`（本插件自装的落位）
+//! 3. 用户自己装过的常见位置：
+//!    `%LOCALAPPDATA%\Programs\opencode\opencode.exe` →
+//!    `%USERPROFILE%\.opencode\bin\opencode.exe` →
+//!    `%APPDATA%\npm\node_modules\@opencode\cli\bin\opencode.exe` →
+//!    `%APPDATA%\npm\opencode.cmd`（解析 .cmd 启动器指向的真实 exe，解析不出就跳过）
+//! 4. PATH 上的 `opencode`
+//! 5. 都没有 → 调用方把 `/health` 报 `opencode_not_installed`
 //!
 //! attach 模式（`--attach`）才读 `service.json`；默认永远自己 spawn，避免干扰用户的 TUI。
 use std::path::{Path, PathBuf};
@@ -61,6 +66,10 @@ pub fn find_opencode_exe() -> Option<FoundExe> {
         });
     }
 
+    if let Some((path, source)) = find_user_install() {
+        return Some(FoundExe { path, source });
+    }
+
     if let Some(path) = find_on_path() {
         return Some(FoundExe {
             path,
@@ -100,14 +109,130 @@ fn find_in_appdata() -> Option<PathBuf> {
     latest_by_version(candidates)
 }
 
+/// 用户自己装过 opencode 的常见位置（按简报顺序），PATH 之前。
+///
+/// 只认真实存在的文件；`.cmd` 启动器解析不出目标 exe 就跳过，不瞎猜路径。
+fn find_user_install() -> Option<(PathBuf, &'static str)> {
+    if let Some(local) = env_nonempty("LOCALAPPDATA") {
+        let exe = Path::new(&local)
+            .join("Programs")
+            .join("opencode")
+            .join("opencode.exe");
+        if is_file(&exe) {
+            return Some((exe, "localappdata"));
+        }
+    }
+
+    if let Some(home) = env_nonempty("USERPROFILE") {
+        let exe = Path::new(&home)
+            .join(".opencode")
+            .join("bin")
+            .join("opencode.exe");
+        if is_file(&exe) {
+            return Some((exe, "userprofile"));
+        }
+    }
+
+    if let Some(appdata) = env_nonempty("APPDATA") {
+        let npm = Path::new(&appdata).join("npm");
+        let pkg_exe = npm
+            .join("node_modules")
+            .join("@opencode")
+            .join("cli")
+            .join("bin")
+            .join("opencode.exe");
+        if is_file(&pkg_exe) {
+            return Some((pkg_exe, "npm"));
+        }
+
+        let shim = npm.join("opencode.cmd");
+        if let Ok(text) = std::fs::read_to_string(&shim) {
+            if let Some(exe) = parse_cmd_shim(&text, shim.parent().unwrap_or(Path::new("."))) {
+                if is_file(&exe) {
+                    return Some((exe, "npm-shim"));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// 解析 npm 生成的 Windows `.cmd` 启动器：抽取引号里的 `.exe` 路径，
+/// 把 `%dp0%` / `%~dp0` 展开成 `.cmd` 所在目录。解析不出返回 None。
+///
+/// npm 的 shim 形如：
+/// ```text
+/// endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\node_modules\...\opencode.exe" %*
+/// ```
+/// 也见过 `"%~dp0%\node_modules\...\opencode.exe"`；两种都认。
+fn parse_cmd_shim(text: &str, shim_dir: &Path) -> Option<PathBuf> {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty()
+            || trimmed.starts_with("REM ")
+            || trimmed.starts_with("rem ")
+            || trimmed.starts_with("::")
+        {
+            continue;
+        }
+        for quoted in quoted_segments(trimmed) {
+            let expanded = expand_dp0(&quoted, shim_dir);
+            let path = PathBuf::from(&expanded);
+            let file_name = path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_default();
+            if file_name.starts_with("opencode") && file_name.ends_with(".exe") {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+/// 取一行里所有双引号包裹的片段（未闭合的尾巴忽略）。
+fn quoted_segments(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut inside = false;
+    for ch in line.chars() {
+        match ch {
+            '"' => {
+                if inside {
+                    out.push(std::mem::take(&mut current));
+                }
+                inside = !inside;
+            }
+            _ if inside => current.push(ch),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// 展开批处理里的 `%~dp0` / `%dp0%`（不区分这几种常见大小写写法）。
+fn expand_dp0(token: &str, shim_dir: &Path) -> String {
+    let dir = shim_dir.display().to_string();
+    let mut out = token.to_string();
+    for pattern in ["%~dp0", "%dp0%", "%~DP0", "%DP0%"] {
+        out = out.replace(pattern, &dir);
+    }
+    out
+}
+
 /// 目录名按版本号排序（`2.0.32` > `2.0.9`），非版本名排在版本名之后；同分按名字倒序。
-pub fn latest_by_version(mut candidates: Vec<(String, PathBuf)>) -> Option<PathBuf> {
+pub fn latest_by_version(candidates: Vec<(String, PathBuf)>) -> Option<PathBuf> {
+    sort_latest_by_version(candidates).map(|(_, path)| path)
+}
+
+/// 同 [`latest_by_version`]，但把版本名一起返回（安装状态扫描用）。
+pub fn sort_latest_by_version(mut candidates: Vec<(String, PathBuf)>) -> Option<(String, PathBuf)> {
     candidates.sort_by(|a, b| {
         let va = version_key(&a.0);
         let vb = version_key(&b.0);
         vb.cmp(&va).then_with(|| b.0.cmp(&a.0))
     });
-    candidates.into_iter().next().map(|(_, p)| p)
+    candidates.into_iter().next()
 }
 
 /// 把目录名里的连续数字取出来做版本比较（不解析点号语义，够用且不 panic）。
@@ -248,6 +373,38 @@ mod tests {
             ("beta".to_string(), PathBuf::from("d")),
         ];
         assert_eq!(latest_by_version(c), Some(PathBuf::from("b")));
+    }
+
+    #[test]
+    fn cmd_shim_resolves_opencode_exe_and_ignores_node() {
+        let dir = std::env::temp_dir().join(format!(
+            "rs-opencode-shim-{}-{}",
+            std::process::id(),
+            crate::random_hex(4)
+        ));
+        let pkg_bin = dir
+            .join("node_modules")
+            .join("@opencode")
+            .join("cli")
+            .join("bin");
+        std::fs::create_dir_all(&pkg_bin).unwrap();
+        let exe = pkg_bin.join("opencode.exe");
+        std::fs::write(&exe, b"exe").unwrap();
+
+        let shim = "@ECHO off\r\n\
+                    GOTO start\r\n\
+                    :start\r\n\
+                    SETLOCAL\r\n\
+                    endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & \"%_prog%\"  \"%dp0%\\node_modules\\@opencode\\cli\\bin\\opencode.exe\" %*\r\n";
+        assert_eq!(parse_cmd_shim(shim, &dir), Some(exe.clone()));
+
+        // 只有 node.exe 的 node 包 shim：不能当成 opencode。
+        let node_shim = "endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & \"%_prog%\"  \"%~dp0%\\node_modules\\foo\\bin\\foo.js\" %*\r\n";
+        assert_eq!(parse_cmd_shim(node_shim, &dir), None);
+        let exe_shim = "start \"\" \"%dp0%\\node.exe\" %*\r\n";
+        assert_eq!(parse_cmd_shim(exe_shim, &dir), None);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

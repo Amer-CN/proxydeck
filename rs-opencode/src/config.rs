@@ -21,6 +21,8 @@ pub const DEFAULT_MODEL: &str = "opencode/deepseek-v4.1-flash-free";
 pub const DEFAULT_TIMEOUT_SECONDS: u64 = 300;
 /// 429 后单模型冷却（秒）。
 pub const DEFAULT_COOLDOWN_SECONDS: u64 = 60;
+/// 一键安装钉死的 opencode 版本（2.0.32 已用真实 opencode 验证；2.1.2 未验证）。
+pub const DEFAULT_OPENCODE_VERSION: &str = crate::install::DEFAULT_VERSION;
 
 /// 插件配置。字段名对应用户可手改的 JSON camelCase。
 #[derive(Debug, Clone, Deserialize)]
@@ -36,6 +38,10 @@ pub struct Config {
     pub timeout_seconds: u64,
     /// 单模型撞 429 后的冷却时间（秒），内存态。
     pub cooldown_seconds: u64,
+    /// 找不到 opencode 时是否自动下载安装（默认 false：绝不偷偷下 95 MB）。
+    pub auto_install: bool,
+    /// 一键安装/自动安装使用的钉死版本。
+    pub opencode_version: String,
 }
 
 impl Default for Config {
@@ -46,6 +52,8 @@ impl Default for Config {
             default_model: DEFAULT_MODEL.to_string(),
             timeout_seconds: DEFAULT_TIMEOUT_SECONDS,
             cooldown_seconds: DEFAULT_COOLDOWN_SECONDS,
+            auto_install: false,
+            opencode_version: DEFAULT_OPENCODE_VERSION.to_string(),
         }
     }
 }
@@ -68,6 +76,10 @@ impl Config {
         self.default_model = self.default_model.trim().to_string();
         if self.default_model.is_empty() {
             self.default_model = DEFAULT_MODEL.to_string();
+        }
+        self.opencode_version = self.opencode_version.trim().to_string();
+        if self.opencode_version.is_empty() {
+            self.opencode_version = DEFAULT_OPENCODE_VERSION.to_string();
         }
         self.timeout_seconds = self.timeout_seconds.max(1);
         self.cooldown_seconds = self.cooldown_seconds.max(1);
@@ -124,6 +136,11 @@ mod tests {
         assert_eq!(c.default_model, "opencode/deepseek-v4.1-flash-free");
         assert_eq!(c.timeout_seconds, 300);
         assert_eq!(c.cooldown_seconds, 60);
+        assert!(
+            !c.auto_install,
+            "autoInstall 默认必须是 false（绝不自动下载）"
+        );
+        assert_eq!(c.opencode_version, "2.0.32");
     }
 
     #[test]
@@ -134,7 +151,8 @@ mod tests {
                 "modelDenylist": ["BEAM-FREE", " "],
                 "defaultModel": "  ",
                 "timeoutSeconds": 0,
-                "cooldownSeconds": 0
+                "cooldownSeconds": 0,
+                "opencodeVersion": "  "
             }"#,
         )
         .unwrap();
@@ -143,6 +161,15 @@ mod tests {
         assert_eq!(c.default_model, DEFAULT_MODEL);
         assert_eq!(c.timeout_seconds, 1);
         assert_eq!(c.cooldown_seconds, 1);
+        assert!(!c.auto_install);
+        assert_eq!(c.opencode_version, DEFAULT_OPENCODE_VERSION);
+    }
+
+    #[test]
+    fn auto_install_and_version_are_readable() {
+        let c = parse(r#"{"autoInstall": true, "opencodeVersion": " 2.0.32 "}"#).unwrap();
+        assert!(c.auto_install);
+        assert_eq!(c.opencode_version, "2.0.32");
     }
 
     #[test]

@@ -15,6 +15,12 @@ base64 = "0.22"
 bytes = "1"
 clap = { version = "4", features = ["derive"] }
 futures-util = "0.3"
+# 一键安装 opencode：gzip + tar 全部在进程内解包（不 shell 调 tar.exe）。
+# tar 关掉默认的 xattr feature（Windows 用不上，少拉一个依赖）。
+flate2 = "1"
+tar = { version = "0.4", default-features = false }
+# registry 的 dist.integrity 是 SRI sha512：整包哈希用它算。
+sha2 = "0.10"
 # 32 字节服务器密码；getrandom 已在 lock 里（其它 crate 的间接依赖），这里直接声明。
 getrandom = "0.3"
 # 出站只打本机 opencode serve（HTTP/1.1），TLS 栈显式声明以免将来改默认时静默换栈。
