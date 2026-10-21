@@ -5973,16 +5973,24 @@ var PT_I18N = {
   }
   // 自动探测：从浏览器读团结登录态（CDP；探测不到时带调试参数拉起浏览器）
   // 按钮在账号矩阵子页面头部（tab 账号池区块不再放）；矩阵每次打开重新渲染，绑定重挂。
+  /* 探测进行中标志：矩阵可能被 back 重开，光靠按钮 disabled 挡不住新渲染的按钮 */
+  var tjAccAutoBusy = false;
   function bindAccAuto() {
     var btn = $('tjAccAuto');
     if (!btn) return;
+    if (tjAccAutoBusy) { btn.disabled = true; btn.textContent = "等待登录…（在弹出的窗口里登录团结）"; }
     btn.onclick = async function () {
+      if (tjAccAutoBusy) return;
       confirmModal("自动探测 · AUTO DETECT",
         "将弹出一个专用的浏览器窗口并打开团结登录页。<br>请在那扇窗口里登录你要添加的账号（一次性，之后全自动）；日常浏览器不受影响。",
         async function () {
 
 
-      btn.disabled = true; btn.textContent = "等待登录…（在弹出的窗口里登录团结）";
+      /* 点确认后矩阵会被 back 重开，旧 btn 已脱离文档：进度与禁用要打在当前那颗按钮上 */
+      var b = $('tjAccAuto') || btn;
+      if (tjAccAutoBusy) return;
+      tjAccAutoBusy = true;
+      b.disabled = true; b.textContent = "等待登录…（在弹出的窗口里登录团结）";
       try {
         var r = await (await fetch("http://127.0.0.1:8788/accounts", {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -5991,7 +5999,11 @@ var PT_I18N = {
         toast(r.ok ? "ok" : "err", r.ok ? "自动探测成功" : "探测未成功", r.msg || "");
         if (r.ok) logInto($('logStream'), "ok", "账号池：已自动添加账号 " + (r.user_id || ""));
       } catch (e) { toast("err", "探测失败", String(e)); }
-      btn.disabled = false; btn.textContent = "⚡ 自动探测";
+      finally {
+        b = $('tjAccAuto') || b;
+        b.disabled = false; b.textContent = "⚡ 自动探测";
+        tjAccAutoBusy = false;
+      }
       tjAccountsReset();
       loadTuanjieAccounts();
         }, "开始探测", openTuanjieMatrix);
