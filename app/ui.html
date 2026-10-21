@@ -2714,7 +2714,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v4.3.0</span>
+                    <span class="v ver" id="etchVer">v4.3.1</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3468,13 +3468,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v4.3.0">v4.3.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v4.3.1">v4.3.1</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v4.3.0</div>
+                    <div class="s" id="buildNo">v4.3.1</div>
                   </div>
-                  <span class="pt-val" id="verChip">v4.3.0</span>
+                  <span class="pt-val" id="verChip">v4.3.1</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -9088,6 +9088,10 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v4.3.1', date: '2026-10-21', groups: [
+      { label: '🐛 Bug 修复', items: [
+        '修团结自动探测确定按钮显示成一串函数代码',
+        '探测期间按钮禁用并显示等待，防重复提交' ] } ] },
     { v: 'v4.3.0', date: '2026-10-20', groups: [
       { label: '🚀 新功能', items: [
         'Qoder 支持国际版，甲板可切国内/国际',
@@ -10330,7 +10334,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v4.3.0';
+  var UI_CUR = 'v4.3.1';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   var cbQuotaUserId = ''; // WorkBuddy 积分面板选中的账号（空串=默认最新号；区域感知：切区后失效重选）
   function verCmp(a, b) {
