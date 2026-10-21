@@ -1229,6 +1229,13 @@ async fn rate_limit_marks_cooling_and_never_switches_model() {
             .contains("Rate limit exceeded"),
         "{j1}"
     );
+    assert!(
+        j1["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("opencode/model-a"),
+        "本轮 429 也要点名是哪个模型：{j1}"
+    );
 
     // 同一模型第二次：它已冷却，必须如实再回 429（文案点名模型 + retry-after），
     // 绝不静默换成默认模型 model-b。

@@ -471,6 +471,17 @@ fn map_up_error(e: &UpError) -> Response {
     oai_error(status, &e.message, e.error_type())
 }
 
+/// 本轮错误（选模之后）：消息里点名是哪个模型出的错，方便多模型时定位。
+/// 调用方保证只在已选定模型后用；选模前（建会话/拉列表失败）走 `map_up_error` 原样透出。
+fn map_turn_error(model: &str, e: &UpError) -> Response {
+    let named = UpError {
+        kind: e.kind,
+        status: e.status,
+        message: format!("模型 {model}：{}", e.message),
+    };
+    map_up_error(&named)
+}
+
 // ------------------------------ /health ------------------------------
 
 async fn handle_health(State(s): State<Arc<Server>>, _req: Request) -> Response {
@@ -871,7 +882,7 @@ async fn handle_chat(State(s): State<Arc<Server>>, req: Request) -> Response {
             if e.kind == ErrorKind::RateLimit {
                 s.pool.mark_cooling(&selected);
             }
-            return map_up_error(e);
+            return map_turn_error(&selected, e);
         }
         drop(permit);
         json_response(
@@ -988,7 +999,7 @@ async fn stream_chat(
         if e.kind == ErrorKind::RateLimit {
             s.pool.mark_cooling(selected);
         }
-        return map_up_error(&e);
+        return map_turn_error(selected, &e);
     }
     if stream_ended && !pending.iter().any(is_terminal) && !pending.iter().any(is_delta) {
         up.delete_session(session_id).await;
@@ -997,7 +1008,7 @@ async fn stream_chat(
             if e.kind == ErrorKind::RateLimit {
                 s.pool.mark_cooling(selected);
             }
-            return map_up_error(&e);
+            return map_turn_error(selected, &e);
         }
         return oai_error(
             StatusCode::BAD_GATEWAY,
@@ -1063,7 +1074,7 @@ async fn stream_chat(
                 if e.kind == ErrorKind::RateLimit {
                     srv.pool.mark_cooling(&selected2);
                 }
-                let frame = json!({"error": {"message": e.message, "type": e.error_type()}});
+                let frame = json!({"error": {"message": format!("模型 {selected2}：{}", e.message), "type": e.error_type()}});
                 let _ = send_json_frame(&tx, &frame).await;
             } else {
                 let finish =
