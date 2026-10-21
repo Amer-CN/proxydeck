@@ -1,6 +1,6 @@
 # ProxyDeck Rust 工作区（绞杀者路线 P7d-2）
 #
-# 这里只做聚合：把 8 个 `rs-*` crate 收进同一个 workspace，让**一次 `cargo build`
+# 这里只做聚合：把 9 个 `rs-*` crate 收进同一个 workspace，让**一次 `cargo build`
 # 全绿**、一条 `cargo test` 跑完全部成员、依赖只解一份 `Cargo.lock`。
 # 本轮不迁移任何成员到 `version.workspace = true` / `edition.workspace = true`
 # ——各 crate 自己的 `version = "0.1.0"` 原样保留（见下方「版本统一口径」）。
@@ -11,7 +11,7 @@
 #   cargo test                         # 全部成员的测试
 #   cargo build --release -p rs-gui    # 只编宿主 exe
 #
-# 成员清单（8 个，与仓库目录一一对应）：
+# 成员清单（9 个，与仓库目录一一对应）：
 #   rs-gui      —— 宿主外壳 + 单 exe 多子模式分发器（唯一产出 exe 的成品目标）
 #   rs-proxy    —— COMMAND 代理核心（55990）
 #   rs-bai      —— B.AI 插件（8891）
@@ -20,6 +20,7 @@
 #   rs-qoder    —— Qoder 插件（8785）
 #   rs-tuanjie  —— 团结 Cowork 插件（8788）
 #   rs-vibex    —— VibeX 插件（8790）
+#   rs-opencode —— OpenCode 插件（8784）
 
 [workspace]
 resolver = "2"
@@ -28,6 +29,7 @@ members = [
     "rs-codebuddy",
     "rs-comate",
     "rs-gui",
+    "rs-opencode",
     "rs-proxy",
     "rs-qoder",
     "rs-tuanjie",
@@ -38,7 +40,7 @@ members = [
 
 # ── 版本统一口径（**本轮不改任何 crate 的版本号**）────────────────────────────
 #
-# 1. 8 个 crate 现在**全是 `version = "0.1.0"`**，且 release profile 全同
+# 1. 9 个 crate 现在**全是 `version = "0.1.0"`**，且 release profile 全同
 #    （`opt-level = 2`）。版本号是**打包形态的内部标记**，不是用户看到的版本。
 # 2. 用户看到的版本只有一处真源：`rs-gui/src/lib.rs` 的 `APP_VERSION` /
 #    `CORE_VERSION`（对应 Go 侧 `app/main.go` 的 `appVersion`），由
@@ -48,9 +50,9 @@ members = [
 #    `rs-gui/src/lib.rs` 的 `APP_VERSION`/`CORE_VERSION`、`rs-gui/version.rc`
 #    的 `FILEVERSION`/`PRODUCTVERSION`/`FileVersion`/`ProductVersion` 四个数字、
 #    以及（发版纪律规定的）`CHANGELOG.md` 与版本串 8 处。
-#    8 个 crate 的 `version = "0.1.0"` **不参与**发版（它们是内部 crate 版本，
+#    9 个 crate 的 `version = "0.1.0"` **不参与**发版（它们是内部 crate 版本，
 #    没有对外可见面；要动的话是一次独立的、统一口径的决定，属用户拍板项）。
-# 4. 依赖版本**不当场统一成 workspace 表**：8 个 crate 现有 `clap`/`reqwest`/
+# 4. 依赖版本**不当场统一成 workspace 表**：9 个 crate 现有 `clap`/`reqwest`/
 #    `serde`/`serde_json`/`tokio` 的大版本本来就一致，进同一个 workspace 后
 #    cargo 会解析出**同一份** `Cargo.lock`；版本声明仍留在各 crate 自己的
 #    `Cargo.toml` 里，没做 `workspace.dependencies` 继承。哪天要走继承，

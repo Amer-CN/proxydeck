@@ -1,0 +1,37 @@
+[package]
+name = "rs-opencode"
+version = "0.1.0"
+edition = "2021"
+description = "ProxyDeck OpenCode 插件：把本机 opencode serve 翻成本地 OpenAI 兼容接口（测试端口用，未接入 GUI）"
+
+[[bin]]
+name = "rs-opencode"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+# Basic 头与随机密码的 base64url 编码（标准件，不手搓）。
+base64 = "0.22"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+# 32 字节服务器密码；getrandom 已在 lock 里（其它 crate 的间接依赖），这里直接声明。
+getrandom = "0.3"
+# 出站只打本机 opencode serve（HTTP/1.1），TLS 栈显式声明以免将来改默认时静默换栈。
+reqwest = { version = "0.13", features = ["default-tls", "http2", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# process = 托管 opencode serve；io-util = 逐行读它的 stdout/stderr；
+# sync = 流式 SSE 的 mpsc 管道；其余是 axum/服务端基础件。
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util", "process"] }
+
+# release profile 的唯一真源在仓库根 `Cargo.toml`（workspace 级 `[profile.release]`
+# opt-level = 2）。workspace 成员的 `[profile]` 会被 cargo 忽略并打 warning，故不在这里写。
+
+# ── Windows 专属：Job Object 兜底 ───────────────────────────────────────────────
+# 父进程被 TerminateProcess / `taskkill /F` 强杀时不会跑 `Drop`，托管子进程会变孤儿。
+# 用 `KILL_ON_JOB_CLOSE` 的匿名 Job Object：父进程死亡 → 内核关闭最后一个 job 句柄
+# → 系统终止 job 内的 opencode serve。`win32job` 是 safe 封装（MIT OR Apache-2.0），
+# 不需要写 unsafe；只有 Windows 目标才编译它。
+[target.'cfg(windows)'.dependencies]
+win32job = "2.0.3"
