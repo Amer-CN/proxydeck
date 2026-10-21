@@ -7561,6 +7561,12 @@ var PT_I18N = {
           c.title = id; /* 悬停提示内部代号，仅供排查 */
         }
         c.textContent = fullId ? shown : id.split('/').pop();
+        /* oc 的 id 自带 provider 前缀：界面只显示尾段（如 deepseek-v4.1-flash-free），
+           复制仍用完整 id（opencode/...），悬停提示完整 id 供排查。其它模式原样不动。 */
+        if (V && V.mode === 'oc') {
+          c.textContent = id.split('/').pop();
+          c.title = id;
+        }
         c.onclick = function () {
           copyText(shown, '模型名');
           var wrap = c.closest('.pt-chips');
@@ -8388,9 +8394,11 @@ var PT_I18N = {
       }
       ids.forEach(function (id) {
         var label = V.modelNameMap[id] || id;
+        /* oc 的 id 自带 provider 前缀（opencode/xxx）：分组只看尾段，
+           否则全堆进 OPENCODE 一组。 */
         var v = V.mode === 'vibex'
           ? vibexVendorOf(id + ' ' + label)
-          : pluginVendorOf(label);
+          : pluginVendorOf(V.mode === 'oc' ? id.split('/').pop() : label);
         (groups[v] = groups[v] || []).push(id);
       });
       renderModelChips(mlBox, groups, PLUGIN_VENDOR_COLORS, true, V);
