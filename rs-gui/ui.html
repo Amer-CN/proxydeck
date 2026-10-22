@@ -3663,6 +3663,11 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="oc-install-hint" id="ocInstallHint"
                        data-i18n="app.oc.sizeHint">下载约 95 MB，安装后占用约 204 MB；只写入 ProxyDeck 数据目录，不改系统 PATH</div>
                 </div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="s" id="ocTuiState">TUI：检测中…</div>
+                  </div>
+                </div></div>
 
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
                   <button type="button" class="ibtn2" id="ocRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
@@ -8033,6 +8038,8 @@ var PT_I18N = {
   async function refreshPluginView(mode) {
     var V = PV[mode];
     if (!V) return;
+    /* oc：先探一次"用户自己开着的 opencode TUI"，与插件是否点火无关 */
+    if (mode === 'oc') ocProbeTui();
     /* B类供应商显隐：隐藏页不展示不请求（矩阵/统计/日志一律不拉，后端不动） */
     if ((mode === 'bai' || mode === 'comate' || mode === 'qoder' || mode === 'ext' || mode === 'oc') &&
         typeof window.__provGet === 'function') {
@@ -8836,6 +8843,34 @@ var PT_I18N = {
   function ocInstallMB(n) {
     return (Math.max(0, Number(n) || 0) / 1048576).toFixed(1);
   }
+
+  /* oc：探"用户自己开着的 opencode TUI"——插件没点火也能看。
+     桥 ccTuiProbe 只读 service.json + 打一次本地 /api/info，不起任何进程。 */
+  var ocTui = { busy: false, last: null };
+  async function ocProbeTui() {
+    if (ocTui.busy) return;
+    if (typeof window.ccTuiProbe !== 'function') return;
+    ocTui.busy = true;
+    try {
+      var raw = await window.ccTuiProbe();
+      var r = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      ocTui.last = r;
+      var el = $('ocTuiState');
+      if (!el) return;
+      if (r && r.ok && r.running) {
+        el.textContent = 'TUI：已就绪' + (r.version ? ' · opencode ' + r.version : '') +
+          '（拉杆即接管，不会再另起一个）';
+      } else {
+        el.textContent = 'TUI：未检测到正在运行的 opencode（拉杆会自启一个）';
+      }
+    } catch (e) {
+      var el2 = $('ocTuiState');
+      if (el2) el2.textContent = 'TUI：探测失败';
+    } finally {
+      ocTui.busy = false;
+    }
+  }
+  window.__ocProbeTui = ocProbeTui;
   function ocInstallRender(st) {
     var stateEl = $('ocRuntimeState');
     if (!stateEl) return;

@@ -102,7 +102,11 @@ fn bindings_are_26_plus_4_plus_3_and_match_go() {
         .collect();
     assert_eq!(
         go_plugin,
-        PLUGIN_BINDINGS.iter().map(|s| s.to_string()).collect::<Vec<_>>()
+        PLUGIN_BINDINGS[..go_plugin.len()]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
+        "Go 的 4 个插件绑定必须作为前缀逐字一致，Rust 新增只能追加"
     );
     let go_fax: Vec<String> = g["bindings_fax"]
         .as_array()
@@ -115,7 +119,8 @@ fn bindings_are_26_plus_4_plus_3_and_match_go() {
         FAX_BINDINGS.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
         "传真 3 绑定的名字与顺序必须与 Go 黄金一致"
     );
-    assert_eq!(BINDINGS.len() + PLUGIN_BINDINGS.len() + FAX_BINDINGS.len(), 33);
+    // 26 bridge.go + 4 插件托管 + 1 Rust 期新增（ccTuiProbe）+ 3 传真 = 34
+    assert_eq!(BINDINGS.len() + PLUGIN_BINDINGS.len() + FAX_BINDINGS.len(), 34);
 }
 
 /* ---------------- 2. ccOpenFax：与 Go 逐字节同形 ---------------- */

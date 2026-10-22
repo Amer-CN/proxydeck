@@ -473,10 +473,14 @@ fn go_and_rust_bridge_agree_command_by_command() {
         .iter()
         .map(|v| v.as_str().unwrap().to_string())
         .collect();
+    // Go 那 4 个逐字不变、顺序不变；Rust 期新增的只能追加在尾部（当前是 ccTuiProbe）。
     assert_eq!(
         go_plugin,
-        PLUGIN_BINDINGS.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-        "插件托管 4 个绑定的名字/顺序必须与 Go 黄金逐个一致"
+        PLUGIN_BINDINGS[..go_plugin.len()]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
+        "插件托管：Go 的 4 个绑定名/顺序必须逐字一致，新增只能追加"
     );
 
     // 隔离根目录：数据目录与 APPDATA 都指到这里，绝不碰用户真实状态
@@ -758,6 +762,8 @@ fn go_and_rust_bridge_agree_command_by_command() {
         ("ccPluginLog", vec![Value::String("zz-alpha".into()), Value::from(5)]),
         ("ccPluginStart", vec![Value::String("zz-nope".into())]),
         ("ccPluginStop", vec![Value::String("zz-nope".into())]),
+        // Rust 期新增：只读探测，不启动进程（本机没有 service.json 时也应正常返回 running:false）
+        ("ccTuiProbe", vec![]),
     ];
     for (cmd, args) in &presence {
         covered.insert((*cmd).to_string());

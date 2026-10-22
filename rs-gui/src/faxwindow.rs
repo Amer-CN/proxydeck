@@ -107,8 +107,9 @@ pub fn run_fax_window(app: Arc<App>) -> Result<(), String> {
     });
 }
 
-/// 桥名清单自检（门禁用）：33 个名字必须都被注入脚本覆盖。
+/// 桥名清单自检（门禁用）：34 个名字必须都被注入脚本覆盖。
 /// Go 侧浮窗挂的是**同一个** `bindAll` + 两个直绑桥，故名字集合与主窗一致 + 3 个传真绑定。
+/// （34 = 26 bridge.go + 4 插件托管 + 1 Rust 期新增 ccTuiProbe + 3 传真）
 pub fn fax_binding_names() -> Vec<String> {
     BINDINGS
         .iter()
@@ -128,11 +129,11 @@ pub fn ui_html_has_fax_branch() -> bool {
 mod tests {
     use super::*;
 
-    /// 33 个桥名（26 + 4 + 3）与主窗注入面一致；浮窗不另开一套。
+    /// 34 个桥名（26 + 5 + 3）与主窗注入面一致；浮窗不另开一套。
     #[test]
-    fn fax_window_exposes_all_33_bindings() {
+    fn fax_window_exposes_all_34_bindings() {
         let names = fax_binding_names();
-        assert_eq!(names.len(), 33);
+        assert_eq!(names.len(), 34);
         for n in ["ccOpenFax", "ccFaxWin", "ccFaxClose"] {
             assert!(names.contains(&n.to_string()), "缺 {n}");
         }

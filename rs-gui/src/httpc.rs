@@ -94,6 +94,23 @@ pub fn get(url: &str) -> Option<String> {
     get_limited(url, BODY_LIMIT)
 }
 
+/// 带 HTTP Basic 认证的 GET（opencode serve 用 `opencode:<password>`）。
+/// 只用于本地回环；非 200 / 读失败返回 None。
+pub fn get_with_basic(url: &str, user: &str, password: &str) -> Option<String> {
+    if local_unreachable(url) {
+        return None;
+    }
+    let resp = fast_client()
+        .get(url)
+        .basic_auth(user, Some(password))
+        .send()
+        .ok()?;
+    if resp.status().as_u16() != 200 {
+        return None;
+    }
+    body_of(resp, BODY_LIMIT)
+}
+
 fn get_limited(url: &str, limit: usize) -> Option<String> {
     let resp = fast_client().get(url).send().ok()?;
     if resp.status().as_u16() != 200 {

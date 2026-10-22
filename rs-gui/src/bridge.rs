@@ -55,13 +55,17 @@ pub const BINDINGS: [&str; 26] = [
     "ccKeyMapSet",
 ];
 
-/// 插件托管的 4 个绑定（Go `app/plugin_bindings.go`；P7b 落地）。
-/// ui.html 的实际调用面 = 这 4 个 + `BINDINGS`，由 `tests/ui_html.rs` 反向锁定。
-pub const PLUGIN_BINDINGS: [&str; 4] = [
+/// 插件托管的 4 个绑定（Go `app/plugin_bindings.go`；P7b 落地）+ 1 个 Rust 期新增。
+/// ui.html 的实际调用面 = 这些 + `BINDINGS`，由 `tests/ui_html.rs` 反向锁定。
+///
+/// `ccTuiProbe` 是 Go 时代**没有**的扩展（Go 那 4 个逐字不变、顺序不变，扩展只能追加在尾部）：
+/// 插件没点火时，界面也要能看出"用户自己开着的 opencode TUI 是否就绪"。
+pub const PLUGIN_BINDINGS: [&str; 5] = [
     "ccPluginList",
     "ccPluginLog",
     "ccPluginStart",
     "ccPluginStop",
+    "ccTuiProbe",
 ];
 
 /// 注水专线浮窗的 3 个绑定（Go `app/main.go` 的 `bindFaxLauncher` + `runFaxWindow`；
@@ -419,6 +423,10 @@ impl Bridge {
                 Err(e) => Ok(jsons::json_err(&e)),
             },
 
+            // 探测用户自己开着的 opencode（TUI 后台服务），插件没点火时也能看。
+            // 只读 service.json + 打一次本地 /api/info；**不启动任何进程**。
+            "ccTuiProbe" => Ok(tui_probe()),
+
             /* ---------------- 注水专线浮窗 3 绑定（Go `app/main.go`） ---------------- */
 
             // 拉起独立 --fax 子进程；已有浮窗则只置前（Go `bindFaxLauncher` 的闭包体）
@@ -468,8 +476,7 @@ pub fn str_arg(args: &[Value], i: usize) -> Result<String, String> {
     }
 }
 
-pub fn bool_arg(args: &[Value], i: usize) -> Result<bool, String> {
-    match args.get(i) {
+pub fn bool_arg(args: &[Value], i: usize) -> Result<bool, String> {    match args.get(i) {
         Some(Value::Bool(b)) => Ok(*b),
         Some(Value::Null) | None => Ok(false),
         Some(Value::String(s)) => Ok(s == "true"),
@@ -485,6 +492,118 @@ pub fn int_arg(args: &[Value], i: usize) -> i64 {
         Some(Value::Number(n)) => n.as_i64().unwrap_or(0),
         Some(Value::String(s)) => s.trim().parse::<i64>().unwrap_or(0),
         _ => 0,
+    }
+}
+
+/* ---------------- 用户自己开着的 opencode（TUI 后台服务）探测 ---------------- */
+
+/// 读 `service.json` 并探一次 `/api/info`，**不启动任何进程**。
+///
+/// 用途：插件没点火（拉杆没拉）时，界面也要能显示"你的 TUI 已经就绪，拉杆即可接管"。
+/// 只认官方落点：`%LOCALAPPDATA%\state\opencode\` 与 `~\.local\state\opencode\`。
+/// 返回 `{"ok":true,"running":bool,"url":...,"version":...,"pid":...}`；
+/// 没有 service.json / 探活失败时 `running:false`（不是错误——用户没开 TUI 很正常）。
+fn tui_probe() -> String {
+    #[derive(serde::Deserialize)]
+    struct Reg {
+        url: Option<String>,
+        hostname: Option<String>,
+        port: Option<u16>,
+        password: Option<String>,
+        version: Option<String>,
+        pid: Option<u32>,
+    }
+
+    fn candidates() -> Vec<std::path::PathBuf> {
+        let mut out = Vec::new();
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            if !local.trim().is_empty() {
+                out.push(
+                    std::path::Path::new(local.trim())
+                        .join("state")
+                        .join("opencode")
+                        .join("service.json"),
+                );
+            }
+        }
+        if let Ok(home) = std::env::var("USERPROFILE") {
+            if !home.trim().is_empty() {
+                out.push(
+                    std::path::Path::new(home.trim())
+                        .join(".local")
+                        .join("state")
+                        .join("opencode")
+                        .join("service.json"),
+                );
+            }
+        }
+        out
+    }
+
+    for path in candidates() {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(reg) = serde_json::from_str::<Reg>(&text) else {
+            continue;
+        };
+        let url = match reg.url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
+            Some(u) => u.trim_end_matches('/').to_string(),
+            None => {
+                let host = reg.hostname.as_deref().unwrap_or("127.0.0.1");
+                let Some(port) = reg.port else { continue };
+                format!("http://{host}:{port}")
+            }
+        };
+        let password = reg.password.unwrap_or_default();
+        // 探活：opencode serve 的 /api/info 需要 Basic `opencode:<password>`
+        let alive = httpc::get_with_basic(&format!("{url}/api/info"), "opencode", &password).is_some();
+        let mut obj = vec![
+            ("ok", json!(true)),
+            ("running", json!(alive)),
+            ("url", json!(url)),
+        ];
+        if alive {
+            if let Some(v) = reg.version {
+                obj.push(("version", json!(v)));
+            }
+            if let Some(p) = reg.pid {
+                obj.push(("pid", json!(p)));
+            }
+        }
+        return jsons::marshal(&jsons::obj(&obj));
+    }
+    jsons::marshal(&jsons::obj(&[
+        ("ok", json!(true)),
+        ("running", json!(false)),
+    ]))
+}
+
+#[cfg(test)]
+mod tui_probe_tests {
+    use super::tui_probe;
+
+    /// 两条路径都指向空临时目录时，必须安全回 running:false（不 panic、不报错）。
+    #[test]
+    fn tui_probe_without_service_json_is_false() {
+        let root = std::env::temp_dir().join(format!("pd-tui-probe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let old_local = std::env::var("LOCALAPPDATA").ok();
+        let old_home = std::env::var("USERPROFILE").ok();
+        std::env::set_var("LOCALAPPDATA", &root);
+        std::env::set_var("USERPROFILE", &root);
+        let out = tui_probe();
+        match old_local {
+            Some(v) => std::env::set_var("LOCALAPPDATA", v),
+            None => std::env::remove_var("LOCALAPPDATA"),
+        }
+        match old_home {
+            Some(v) => std::env::set_var("USERPROFILE", v),
+            None => std::env::remove_var("USERPROFILE"),
+        }
+        assert!(out.contains("\"running\":false"), "{out}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
 
