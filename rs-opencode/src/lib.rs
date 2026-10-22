@@ -94,6 +94,9 @@ pub struct Server {
     managed: tokio::sync::Mutex<Option<server::ManagedServer>>,
     /// 启动参数 `--attach`（安装完成后重试初始化时沿用同一模式）。
     attach_mode: AtomicBool,
+    /// 当前是否接管了用户自己开着的 opencode（而不是我们 spawn 的）。
+    /// 接管来的服务在退出时**不杀**（那是用户的 TUI 后端）。
+    adopted: AtomicBool,
     /// 是否已有安装完成监视任务（避免重复 POST /install/start 叠加 watcher）。
     install_watch: AtomicBool,
     /// 初始化串行化：启动初始化与「安装完成后的重试」不会各 spawn 一个 serve。
@@ -155,6 +158,7 @@ impl Server {
             install_watch: AtomicBool::new(false),
             init_lock: tokio::sync::Mutex::new(()),
             bridge_exe: Mutex::new(None),
+            adopted: AtomicBool::new(false),
         })
     }
 
@@ -220,8 +224,9 @@ impl Server {
         }
     }
 
-    /// 后台初始化：attach（仅 `--attach`）或自己 spawn。
-    async fn initialize(self: Arc<Self>, attach: bool) {
+    /// 后台初始化：**优先接管用户已经开着的 opencode**（TUI 的后台服务），
+    /// 接不到才自己 spawn 一个。`adopt=false`（`--no-attach`）时跳过接管。
+    async fn initialize(self: Arc<Self>, adopt: bool) {
         // 启动初始化与「安装完成后重试」可能撞车：串行化，且已就绪就不再 spawn 第二个 serve。
         let _init_guard = self.init_lock.lock().await;
         {
@@ -230,7 +235,7 @@ impl Server {
                 return;
             }
         }
-        if attach {
+        if adopt {
             if let Some(reg) = discover::read_service_registration() {
                 let up = Upstream::new(self.client.clone(), &reg.url, &reg.password);
                 match up.info(INFO_TIMEOUT).await {
@@ -239,19 +244,20 @@ impl Server {
                             .or(reg.version.clone())
                             .unwrap_or_else(|| "unknown".to_string());
                         self.set_ready(&reg.url, &reg.password, &version).await;
+                        self.adopted.store(true, Ordering::Relaxed);
                         logf(&format!(
-                            "attach：复用 opencode {version} @ {}（pid {:?}）",
+                            "接管已运行的 opencode {version} @ {}（pid {:?}）——退出时不会停止它",
                             reg.url, reg.pid
                         ));
                         return;
                     }
                     Err(e) => logf(&format!(
-                        "attach：service.json 指向的 opencode 不可达（{}），改为自己 spawn",
+                        "已运行的 opencode 不可达（{}），改为自己启动一个",
                         e.message
                     )),
                 }
             } else {
-                logf("attach：未找到 service.json，改为自己 spawn");
+                logf("没有正在运行的 opencode，自己启动一个");
             }
         }
 
@@ -516,6 +522,7 @@ async fn handle_health(State(s): State<Arc<Server>>, _req: Request) -> Response 
                             "opencode": opencode,
                             "models": models,
                             "ready": true,
+                            "adopted": s.adopted.load(Ordering::Relaxed),
                         }),
                     )
                 }
@@ -1541,7 +1548,7 @@ async fn shutdown_signal() {
 
 // ------------------------------ 可编程入口 ------------------------------
 
-/// 插件子模式命令行参数（与 `rs-vibex` 的 `Args` 同形，外加 `--attach`）。
+/// 插件子模式命令行参数（与 `rs-vibex` 的 `Args` 同形，外加 `--no-attach`）。
 #[derive(clap::Parser, Debug, Clone)]
 #[command(
     name = "rs-opencode",
@@ -1556,9 +1563,9 @@ pub struct Args {
     pub host: String,
     #[arg(long, default_value_t = 8784)]
     pub port: u16,
-    /// 附着到 service.json 里已在运行的 opencode serve（默认自己 spawn）
-    #[arg(long)]
-    pub attach: bool,
+    /// 不接管已在运行的 opencode，强制自己起一个（默认是"能接管就接管"）
+    #[arg(long = "no-attach")]
+    pub no_attach: bool,
     /// MCP stdio 桥接子进程（由 opencode 拉起；值是本轮临时桥目录）
     #[arg(long = "mcp-bridge", value_name = "DIR", hide = true)]
     pub mcp_bridge: Option<PathBuf>,
@@ -1590,7 +1597,9 @@ pub async fn run(args: Args) -> Result<(), String> {
         cfg.opencode_version
     ));
     let srv = Server::new(cfg);
-    srv.set_attach_mode(args.attach);
+    // 默认接管用户已经开着的 opencode（TUI 后台服务）；--no-attach 强制自己起。
+    let adopt = !args.no_attach;
+    srv.set_attach_mode(adopt);
     let addr = format!("{}:{}", args.host, args.port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
@@ -1598,9 +1607,8 @@ pub async fn run(args: Args) -> Result<(), String> {
     logf(&format!("listening on {addr}"));
 
     let boot = srv.clone();
-    let attach = args.attach;
     tokio::spawn(async move {
-        boot.initialize(attach).await;
+        boot.initialize(adopt).await;
     });
 
     let serve =

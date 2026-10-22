@@ -111,25 +111,64 @@ fn find_in_appdata() -> Option<PathBuf> {
 
 /// 用户自己装过 opencode 的常见位置（按简报顺序），PATH 之前。
 ///
+/// **宁可多找，不可误报"没装"**：用户已经装了却被判成未安装、又提示去装一遍，
+/// 是最伤人的错。所以除了官方脚本/npm 的固定落点，还扫桌面客户端目录和
+/// Scoop/Chocolatey，并在 `%LOCALAPPDATA%\Programs` 下按名字兜底找一层。
 /// 只认真实存在的文件；`.cmd` 启动器解析不出目标 exe 就跳过，不瞎猜路径。
 fn find_user_install() -> Option<(PathBuf, &'static str)> {
     if let Some(local) = env_nonempty("LOCALAPPDATA") {
-        let exe = Path::new(&local)
-            .join("Programs")
-            .join("opencode")
-            .join("opencode.exe");
-        if is_file(&exe) {
-            return Some((exe, "localappdata"));
+        // 官方安装包（opencode 自己的安装器）
+        for rel in [
+            vec!["Programs", "opencode", "opencode.exe"],
+            // 桌面客户端（Electron/Tauri 壳，内置 CLI）
+            vec!["Programs", "opencode-desktop", "opencode.exe"],
+            vec!["Programs", "OpenCode", "opencode.exe"],
+            vec!["opencode", "opencode.exe"],
+        ] {
+            let exe = rel
+                .iter()
+                .fold(Path::new(&local).to_path_buf(), |p, seg| p.join(seg));
+            if is_file(&exe) {
+                return Some((exe, "localappdata"));
+            }
+        }
+        // 桌面客户端把 CLI 放在 resources 里的情况：扫一层 Programs 下的
+        // `*opencode*` 目录，只认直接子文件里的 opencode.exe（不深挖，避免慢）。
+        if let Some(found) = scan_programs_for_opencode(Path::new(&local).join("Programs")) {
+            return Some((found, "localappdata-scan"));
         }
     }
 
     if let Some(home) = env_nonempty("USERPROFILE") {
+        // 官方 install 脚本的落点（Windows 上 $HOME/.opencode/bin/opencode.exe）
         let exe = Path::new(&home)
             .join(".opencode")
             .join("bin")
             .join("opencode.exe");
         if is_file(&exe) {
             return Some((exe, "userprofile"));
+        }
+        // Scoop / Chocolatey（非管理员安装也常见）
+        for rel in [
+            vec!["scoop", "shims", "opencode.exe"],
+            vec!["scoop", "apps", "opencode", "current", "opencode.exe"],
+        ] {
+            let exe = rel
+                .iter()
+                .fold(Path::new(&home).to_path_buf(), |p, seg| p.join(seg));
+            if is_file(&exe) {
+                return Some((exe, "scoop"));
+            }
+        }
+    }
+
+    if let Some(programdata) = env_nonempty("PROGRAMDATA") {
+        let exe = Path::new(&programdata)
+            .join("chocolatey")
+            .join("bin")
+            .join("opencode.exe");
+        if is_file(&exe) {
+            return Some((exe, "chocolatey"));
         }
     }
 
@@ -144,6 +183,16 @@ fn find_user_install() -> Option<(PathBuf, &'static str)> {
         if is_file(&pkg_exe) {
             return Some((pkg_exe, "npm"));
         }
+        // 旧包名（install 脚本里提到的 @opencode-ai/cli-*）也认
+        let legacy = npm
+            .join("node_modules")
+            .join("@opencode-ai")
+            .join("cli")
+            .join("bin")
+            .join("opencode.exe");
+        if is_file(&legacy) {
+            return Some((legacy, "npm-legacy"));
+        }
 
         let shim = npm.join("opencode.cmd");
         if let Ok(text) = std::fs::read_to_string(&shim) {
@@ -151,6 +200,33 @@ fn find_user_install() -> Option<(PathBuf, &'static str)> {
                 if is_file(&exe) {
                     return Some((exe, "npm-shim"));
                 }
+            }
+        }
+    }
+    None
+}
+
+/// 在 `%LOCALAPPDATA%\Programs` 下按名字兜底找 `opencode.exe`：
+/// 只看两层（`Programs/<dir>/opencode.exe` 与 `Programs/<dir>/bin/opencode.exe`），
+/// 目录名含 `opencode` 才进去，避免无谓遍历。
+fn scan_programs_for_opencode(programs: PathBuf) -> Option<PathBuf> {
+    let entries = std::fs::read_dir(&programs).ok()?;
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let name = dir
+            .file_name()
+            .map(|s| s.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        if !name.contains("opencode") {
+            continue;
+        }
+        for rel in [vec!["opencode.exe"], vec!["bin", "opencode.exe"]] {
+            let exe = rel.iter().fold(dir.clone(), |p, seg| p.join(seg));
+            if is_file(&exe) {
+                return Some(exe);
             }
         }
     }
@@ -405,6 +481,30 @@ mod tests {
         assert_eq!(parse_cmd_shim(exe_shim, &dir), None);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_programs_finds_desktop_layout() {
+        let root = std::env::temp_dir().join(format!(
+            "rs-opencode-scan-{}-{}",
+            std::process::id(),
+            crate::random_hex(4)
+        ));
+        // 非 opencode 目录：不该被扫
+        std::fs::create_dir_all(root.join("SomeOtherApp")).unwrap();
+        std::fs::write(root.join("SomeOtherApp").join("opencode.exe"), b"x").unwrap();
+        assert!(scan_programs_for_opencode(root.clone()).is_none());
+
+        // 桌面客户端布局：Programs/opencode-desktop/opencode.exe
+        let dir = root.join("opencode-desktop");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("opencode.exe"), b"x").unwrap();
+        assert_eq!(
+            scan_programs_for_opencode(root.clone()),
+            Some(dir.join("opencode.exe"))
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

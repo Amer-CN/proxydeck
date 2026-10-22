@@ -8560,7 +8560,9 @@ var PT_I18N = {
       if (V.mode === 'oc') {
         var ocReady = h.ok === true && h.ready === true;
         PTApp.dot('ocHealth', ocReady, !ocReady, ocReady ? 'ok' : (h.reason || '未就绪'));
-        pSet(V, 'StHealthSub', ocReady ? '本地回环' : (h.reason || 'opencode 未就绪'));
+        pSet(V, 'StHealthSub', ocReady
+          ? (h.adopted === true ? '接管已运行的 TUI' : '自启 opencode')
+          : (h.reason || 'opencode 未就绪'));
         if (typeof h.models === 'number') {
           pSet(V, 'StModels', h.models);
           pSet(V, 'StModelsSub', 'opencode ' + (h.opencode || '?'));

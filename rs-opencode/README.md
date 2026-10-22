@@ -35,13 +35,28 @@ curl -N -H 'content-type: application/json' -d '{"messages":[{"role":"user","con
 4. 都没有 → `/health` 返回 `{"ok":false,"reason":"opencode_not_installed"}`，
    `/v1/*` 返回 503。**第一版不做一键安装。**
 
-默认**自己 spawn** `opencode serve`（端口在 20000–29999 里挑空闲、密码走
-`OPENCODE_SERVER_PASSWORD`、退出时 taskkill），不干扰用户 TUI。Windows 上子进程还会
-挂进一个 `KILL_ON_JOB_CLOSE` 的 Job Object：父进程被 `taskkill /F` / `TerminateProcess`
-强杀时，内核关闭最后一个 job 句柄并带走 `opencode serve`，不再留孤儿。`--attach` 才读
-`%LOCALAPPDATA%\state\opencode\service.json` / `~/.local/state/opencode/service.json`
-复用已有服务；探活不通会自动退回 spawn。opencode 自己的数据目录（登录态/Go 订阅）
-**不动**。
+默认**优先接管你已经在运行的 opencode**（TUI 的后台服务）：读
+`%LOCALAPPDATA%\state\opencode\service.json` / `~/.local/state/opencode/service.json`，
+`/api/info` 探活通过就直接用——同一个登录态、同一个数据库，**退出时不会停掉你的 TUI**。
+探不到才自己 spawn 一个 `opencode serve`（端口 20000–29999 挑空闲、密码走
+`OPENCODE_SERVER_PASSWORD`、退出时 taskkill），`--no-attach` 可强制自己起。
+Windows 上自 spawn 的子进程会挂进 `KILL_ON_JOB_CLOSE` 的 Job Object：父进程被
+`taskkill /F` / `TerminateProcess` 强杀时由内核带走，不留孤儿。
+
+**识别 opencode 的落点（宁可多找，绝不误报"没安装"）**：
+
+1. `PROXYDECK_OPENCODE_EXE`（显式指定）
+2. 本插件自装目录 `%APPDATA%\ProxyDeck\opencode\<版本>\`
+3. `%LOCALAPPDATA%\Programs\opencode\`、`opencode-desktop\`、`OpenCode\`，以及
+   `%LOCALAPPDATA%\Programs\*opencode*\`（桌面客户端布局，扫两层）
+4. `%USERPROFILE%\.opencode\bin\`（官方 install 脚本落点）、Scoop（`scoop\shims`、
+   `scoop\apps\opencode\current`）
+5. `%PROGRAMDATA%\chocolatey\bin\`
+6. npm 全局：`@opencode\cli\bin\`、旧包名 `@opencode-ai\cli\bin\`、`opencode.cmd` shim
+7. `PATH`
+
+只有以上全部落空才报 `opencode_not_installed`；即便如此也不会自动下载，
+必须由界面上的「一键安装」按钮显式触发。已安装的用户**永远不会被提示重装**。
 
 ## 配置
 
