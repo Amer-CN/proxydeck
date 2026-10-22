@@ -621,6 +621,36 @@ async fn credits_set_matches_go() {
 
 // ---------- /v1/chat/completions ----------
 
+/// 2026-10-22 有意偏离 Go 的两项 argv（黄金录的是 Go 的旧 argv）：
+/// `--permission-mode bypassPermissions`。
+///
+/// 原因：`--print`（headless）模式默认「遇工具先问」，反代场景没人能回答确认提示，
+/// 模型只能回「我没有权限」（DSH 实测：`Error: Allow reading F:\AIXM\...?`）。
+///
+/// 做法与 `/v1/models` 的可读 id 一致：**不改黄金文件**，比对前把这两项从实得 argv 里
+/// 剥掉；同时单独断言它们**确实在**——偏离只允许这一处，其余参数/顺序仍严格一致。
+const ARGV_DEVIATION: [&str; 2] = ["--permission-mode", "bypassPermissions"];
+
+fn strip_argv_deviation(mut v: Value) -> Value {
+    if let Some(argv) = v.get_mut("argv").and_then(|a| a.as_array_mut()) {
+        let mut out: Vec<Value> = Vec::with_capacity(argv.len());
+        let mut i = 0usize;
+        while i < argv.len() {
+            let is_perm = argv[i].as_str() == Some(ARGV_DEVIATION[0])
+                && argv.get(i + 1).and_then(|x| x.as_str()) == Some(ARGV_DEVIATION[1]);
+            if is_perm {
+                // 断言确实带了这对参数（剥之前先验证，不能变成「有没有都通过」）
+                i += 2;
+                continue;
+            }
+            out.push(argv[i].clone());
+            i += 1;
+        }
+        *argv = out;
+    }
+    v
+}
+
 fn worker_logs_equal(case: &str, want: &[Value], got: &[Value]) {
     let kinds = |v: &[Value]| -> Vec<String> {
         v.iter()
@@ -633,8 +663,26 @@ fn worker_logs_equal(case: &str, want: &[Value], got: &[Value]) {
         "[{case}] 假 worker 记录条数/种类不一致（时序或退出方式不同）"
     );
     for (i, (w, gt)) in want.iter().zip(got.iter()).enumerate() {
+        // `start` 记录带 argv：先确认权限旁路在，再剥掉后逐字段比
+        if gt["kind"].as_str() == Some("start") {
+            let argv = gt["argv"].as_array().cloned().unwrap_or_default();
+            let p = argv.iter().position(|a| a.as_str() == Some(ARGV_DEVIATION[0]));
+            assert!(
+                p.is_some(),
+                "[{case}] 第 {i} 条记录缺 {} —— headless 下不加会被权限提示卡死",
+                ARGV_DEVIATION[0]
+            );
+            assert_eq!(
+                argv[p.unwrap() + 1].as_str(),
+                Some(ARGV_DEVIATION[1]),
+                "[{case}] {} 的取值必须是 {}",
+                ARGV_DEVIATION[0],
+                ARGV_DEVIATION[1]
+            );
+        }
         assert_eq!(
-            w, gt,
+            w,
+            &strip_argv_deviation(gt.clone()),
             "[{case}] 假 worker 第 {i} 条记录不一致（argv/cwd/env/payload/stdin）\n  期望: {w}\n  实得: {gt}"
         );
     }

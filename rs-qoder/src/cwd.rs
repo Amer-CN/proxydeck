@@ -37,6 +37,16 @@ fn trim_left_cutset(seg: &[u8]) -> &[u8] {
             k += 1;
             continue;
         }
+        // **有意偏离 Go**：客户端常把路径写成 `Working directory: "F:\dir"`（带引号）。
+        // Go 版不跳开引号，于是随后的扫描在第一个 `"` 上立刻 break、候选变成空串，
+        // 整条提示词都提取不到目录 → worker 退回临时目录 → 模型读项目文件时被判
+        // 「工作目录之外」而要授权（2026-10-22 DSH 实测：模型回
+        // `Error: Allow reading F:\AIXM\...?`）。跳过开引号即可正常提取，
+        // 收尾引号由扫描循环的 `'"'` 分支负责截断。
+        if matches!(seg[k], b'"' | b'`' | b'\'') {
+            k += 1;
+            continue;
+        }
         break;
     }
     &seg[k..]
@@ -146,10 +156,25 @@ mod tests {
         // 长度不足/没有盘符冒号 → 不算命中
         assert_eq!(extract("cwd: ab"), "");
         assert_eq!(extract("cwd: abcd"), "");
-        // 引号/反引号/单引号是**终止符**：只在路径已经起头之后才截断（Go 的 TrimLeft 不跳引号，
-        // 所以路径前面直接跟引号时整段抽不到——这条按 Go 逻辑如实断言）
+        // 引号/反引号/单引号是**终止符**：路径起头之后遇到即截断
         assert_eq!(extract("Working directory: C:\\Windows\" quoted"), "C:\\Windows");
-        assert_eq!(extract("Working directory: \"C:\\Windows\" quoted"), "");
+        // **有意偏离 Go**：路径前直接跟开引号也要能提取。
+        // DSH 的系统提示就是 `Current working directory: "F:\AIXM\proxydeck".`，
+        // Go 版在这里返回空串 → worker 退回临时目录 → 模型读项目文件被判「目录外」
+        // 而要授权（2026-10-22 实测现象）。
+        assert_eq!(
+            extract("Working directory: \"C:\\Windows\" quoted"),
+            "C:\\Windows"
+        );
+        assert_eq!(
+            extract("Current working directory: \"F:\\AIXM\\proxydeck\"."),
+            "F:\\AIXM\\proxydeck"
+        );
+        // 反引号/单引号同理
+        assert_eq!(extract("cwd: `C:\\Windows`"), "C:\\Windows");
+        assert_eq!(extract("cwd: 'C:\\Windows'"), "C:\\Windows");
+        // 纯引号内容（不是目录）仍不算命中
+        assert_eq!(extract("cwd: \"ab\""), "");
     }
 
     #[test]

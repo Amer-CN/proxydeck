@@ -259,6 +259,12 @@ pub fn child_env(
 
 /// worker 命令行参数（官方 App 的精简集；`--bare` **绝不能带**——实测会拒绝普通用户消息，
 /// 报 `bare_session_control_only`）。
+///
+/// `--permission-mode bypassPermissions`：**必须有**。`--print`（headless）模式默认
+/// 「遇工具先问」，而反代场景没人能回答那个确认提示 → 模型只能回「我没有权限」。
+/// 2026-10-22 DSH 实测原话：
+/// `Error: Allow reading F:\AIXM\proxydeck\Cargo.toml?`。
+/// 与官方 App 的 bypassPermissions 同语义（`can_use_tool` 分支的注释已写明这个意图）。
 pub fn worker_args(worker_path: &Path, model: &str) -> Vec<String> {
     vec![
         worker_path.to_string_lossy().to_string(),
@@ -269,6 +275,8 @@ pub fn worker_args(worker_path: &Path, model: &str) -> Vec<String> {
         "stream-json".into(),
         "--model".into(),
         model.to_string(),
+        "--permission-mode".into(),
+        "bypassPermissions".into(),
         "--disable-builtin-skills".into(),
         "--setting-sources".into(),
         String::new(),
@@ -950,6 +958,10 @@ mod tests {
                 "stream-json",
                 "--model",
                 "Auto",
+                // 2026-10-22 新增（有意偏离 Go）：headless 下必须旁路权限确认，
+                // 否则工具调用会弹确认提示而无人应答，模型只能回「没有权限」。
+                "--permission-mode",
+                "bypassPermissions",
                 "--disable-builtin-skills",
                 "--setting-sources",
                 "",
@@ -957,6 +969,9 @@ mod tests {
             ]
         );
         assert!(!args.iter().any(|a| a == "--bare"), "--bare 绝不能带");
+        // 权限旁路必须紧跟在 `--permission-mode` 后面（CLI 是位置取值）
+        let i = args.iter().position(|a| a == "--permission-mode").unwrap();
+        assert_eq!(args[i + 1], "bypassPermissions");
     }
 
     #[test]

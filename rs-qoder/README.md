@@ -181,9 +181,26 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
       未超阈值继续等（短队列正常完成，流式/非流式都实跑验过）。计时用墙钟而不是累加
       `waitTime`（后者随每轮询重复下发，累加会重复计数）。
     * 流式响应只在**提交（首个内容 chunk）之前**回 429；提交后再来的排队状态只写日志
-      （不能改回头）。上游没给 `retryAfterSeconds` 时 `Retry-After: 0`。
+      （不能改回头）。上游没给 `retryAfterSeconds` 时用 30 秒兜底（上游自己的重试节奏；
+      回 0 会让客户端立刻重试、加剧排队）。
     * 排队超时放弃时 `abort` worker 任务，并靠 `kill_on_drop` 杀掉排队中的 node 子进程
       （实测无残留）。
+15. **worker 权限旁路（2026-10-22，有意偏离 Go）**：`worker_args()` 追加
+    `--permission-mode bypassPermissions`。
+    * 起因（DSH 实测）：`--print`（headless）模式默认「遇工具先问」，而反代场景没人能回答
+      那个确认提示 —— 模型只能回用户「我没有权限」。实测原话：
+      `Error: Allow reading F:\AIXM\proxydeck\Cargo.toml?`。
+    * 与官方 App 的 bypassPermissions 同语义（`can_use_tool` 分支注释早就写明这个意图，
+      只是真正生效要靠这个 CLI 参数）。
+    * 黄金门禁：不改基准文件，比对前从实得 argv 里剥掉这对参数（`ARGV_DEVIATION`），
+      并**单独断言它确实在**；其余参数与顺序仍逐字比 Go。
+16. **工作目录提取兼容带引号路径（2026-10-22，有意偏离 Go）**：`cwd::trim_left_cutset`
+    现在会跳过开引号（`"` / `` ` `` / `'`）。
+    * 起因（DSH 实测）：DSH 的系统提示是 `Current working directory: "F:\AIXM\proxydeck".`，
+      **路径带引号**。Go 版不跳开引号 → 扫描在第一个 `"` 上 break → 候选为空 →
+      worker 退回临时目录 `E:\Temp` → 模型读项目文件被判「工作目录之外」而弹授权。
+    * 修好后 `worker cwd=` 日志显示真实项目目录；实测同一请求从「权限提示」变成
+      正确读出 `Cargo.toml` 的 9 个 workspace 成员（含行号）。
 
 ## 未覆盖
 
