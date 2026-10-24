@@ -27,6 +27,112 @@ use std::path::{Path, PathBuf};
 
 use crate::Region;
 
+// ---------- 服务端权威清单（live） ----------
+
+/// 服务端下发的模型条目（`pd-init` 控制响应里的 `response.models[]`）。
+///
+/// **这才是权威清单**：客户端本地 `dynamic-text/*.json` 只是 key→显示名的字典，
+/// 上游增删改它不会跟着变（2026-10-24 实测：本地字典还是 10-15 的，服务端已经
+/// 把 DeepSeek-V4-Flash 改名 DeepSeek-Flash、Kimi-K3 改名 Kimi-K3.1-Pro，
+/// 并下线了 Cantus / Qwen3.7-Plus / Qwen3.7-Max）。
+///
+/// 只保留对用户有意义的字段；原始条目还有 `serverModel` / `thinking_config` 等
+/// 我们暂时用不到的嵌套结构。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LiveModel {
+    /// 传给 `--model` 的真 id（如 `dfmodel`）
+    pub value: String,
+    /// 显示名（如 `DeepSeek-Flash`）——`/v1/models` 的 `id` 用它
+    pub display_name: String,
+    pub model_id: String,
+    pub description: String,
+    pub price_factor: f64,
+    pub original_price_factor: f64,
+    pub max_input_tokens: i64,
+    pub max_output_tokens: i64,
+    pub is_vl: bool,
+    pub is_reasoning: bool,
+    pub is_free: bool,
+    pub is_new: bool,
+    pub is_default: bool,
+    pub default_effort: String,
+    pub efforts: Vec<String>,
+    pub context_windows: Vec<i64>,
+    pub default_context_window: i64,
+    pub tags: Vec<String>,
+}
+
+impl LiveModel {
+    /// 解析一条；`value` 与 `displayName` 缺任何一个就丢弃（没它们没法用）。
+    fn parse(v: &serde_json::Value) -> Option<LiveModel> {
+        let s = |k: &str| -> String {
+            v.get(k)
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        let value = s("value");
+        let display_name = s("displayName");
+        if value.trim().is_empty() || display_name.trim().is_empty() {
+            return None;
+        }
+        let f = |k: &str| v.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
+        let i = |k: &str| v.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
+        let b = |k: &str| v.get(k).and_then(|x| x.as_bool()).unwrap_or(false);
+        let strs = |k: &str| -> Vec<String> {
+            v.get(k)
+                .and_then(|x| x.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let ints = |k: &str| -> Vec<i64> {
+            v.get(k)
+                .and_then(|x| x.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_i64()).collect())
+                .unwrap_or_default()
+        };
+        Some(LiveModel {
+            model_id: {
+                let m = s("modelId");
+                if m.is_empty() {
+                    value.clone()
+                } else {
+                    m
+                }
+            },
+            value,
+            display_name,
+            description: s("description"),
+            price_factor: f("priceFactor"),
+            original_price_factor: f("originalPriceFactor"),
+            max_input_tokens: i("maxInputTokens"),
+            max_output_tokens: i("maxOutputTokens"),
+            is_vl: b("isVl"),
+            is_reasoning: b("isReasoning"),
+            is_free: b("isFree"),
+            is_new: b("isNew"),
+            is_default: b("isDefault"),
+            default_effort: s("defaultEffort"),
+            efforts: strs("efforts"),
+            context_windows: ints("availableContextWindows"),
+            default_context_window: i("defaultContextWindow"),
+            tags: strs("tags"),
+        })
+    }
+}
+
+/// 解析 `models` 数组。非数组 / 空 / 全条目不可用 ⇒ 空（调用方回落）。
+pub fn parse_live(models: &serde_json::Value) -> Vec<LiveModel> {
+    let Some(arr) = models.as_array() else {
+        return Vec::new();
+    };
+    arr.iter().filter_map(LiveModel::parse).collect()
+}
+
 /// 质量档位（不是模型）：`model.<key>.label` 里的这三条不进模型目录。
 pub const QUALITY_TIERS: [&str; 4] = ["lite", "efficient", "performance", "ultimate"];
 
@@ -492,5 +598,65 @@ mod tests {
         for tier in QUALITY_TIERS {
             assert!(!keys.contains(&tier), "真实目录里的 {tier} 是质量档位");
         }
+    }
+
+    // ---------- 服务端权威清单（live） ----------
+
+    /// 实测原样（2026-10-24 从 `pd-init` 控制响应导出，只截掉用不到的嵌套）。
+    const LIVE_FIXTURE: &str = r#"[
+      {"value":"auto","displayName":"Auto","description":"","modelId":"auto","source":"system",
+       "isDefault":true,"isEnabled":true,"isReasoning":true,"isVl":true,"priceFactor":0.5,
+       "maxInputTokens":200000,"maxOutputTokens":32000,"availableContextWindows":[200000],
+       "defaultContextWindow":200000,"tags":[]},
+      {"value":"dfmodel","displayName":"DeepSeek-Flash","description":"","modelId":"dfmodel",
+       "isVl":true,"isFree":true,"isNew":true,"priceFactor":0,"originalPriceFactor":0.1,
+       "maxInputTokens":180000,"maxOutputTokens":32000,"efforts":["high","max","low"],
+       "defaultEffort":"high","availableContextWindows":[200000,400000,1000000],
+       "defaultContextWindow":200000,"tags":["free"]},
+      {"value":"kmodel_latest","displayName":"Kimi-K3.1-Pro","modelId":"kmodel_latest",
+       "priceFactor":1,"maxInputTokens":180000,"maxOutputTokens":32000}
+    ]"#;
+
+    #[test]
+    fn parses_live_catalog() {
+        let v: serde_json::Value = serde_json::from_str(LIVE_FIXTURE).unwrap();
+        let got = parse_live(&v);
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[1].value, "dfmodel");
+        assert_eq!(got[1].display_name, "DeepSeek-Flash");
+        assert!(got[1].is_vl && got[1].is_free && got[1].is_new);
+        assert_eq!(got[1].max_input_tokens, 180000);
+        assert_eq!(got[1].context_windows, vec![200000, 400000, 1000000]);
+        assert_eq!(got[1].efforts, vec!["high", "max", "low"]);
+        assert_eq!(got[1].default_effort, "high");
+        assert!(got[0].is_default);
+        assert_eq!(got[2].display_name, "Kimi-K3.1-Pro");
+    }
+
+    /// 没有 `value` / `displayName` 的条目没法用，必须丢弃；非数组 ⇒ 空。
+    #[test]
+    fn live_parse_drops_unusable_entries() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"[{"value":"x"},{"displayName":"Y"},{"value":"ok","displayName":"OK"}]"#,
+        )
+        .unwrap();
+        let got = parse_live(&v);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].value, "ok");
+        // 缺 `modelId` 时用 `value` 兜底
+        assert_eq!(got[0].model_id, "ok");
+        assert!(parse_live(&serde_json::json!({})).is_empty());
+        assert!(parse_live(&serde_json::json!([])).is_empty());
+        assert!(parse_live(&serde_json::json!("nope")).is_empty());
+    }
+
+    /// 落盘再读回来必须逐字段一致（重启后 `/v1/models` 直接可用）。
+    #[test]
+    fn live_roundtrips_through_json() {
+        let v: serde_json::Value = serde_json::from_str(LIVE_FIXTURE).unwrap();
+        let got = parse_live(&v);
+        let bytes = serde_json::to_vec(&got).unwrap();
+        let back: Vec<LiveModel> = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(got, back);
     }
 }

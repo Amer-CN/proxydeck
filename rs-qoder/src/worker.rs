@@ -87,6 +87,10 @@ pub enum WorkerEvent {
         wait_time_sec: i64,
         retry_after_sec: i64,
     },
+    /// 服务端下发的权威模型清单（`pd-init` 控制响应里的 `response.models`）。
+    /// 每个请求都会带，lib 侧据此刷新内存 + 磁盘缓存，`/v1/models` 就不再靠
+    /// 本地标签字典猜（那份字典不随上游增删同步）。
+    Models(Vec<crate::catalog::LiveModel>),
 }
 
 impl WorkerEvent {
@@ -432,6 +436,19 @@ pub async fn run_worker(
                     .and_then(|r| r.get("request_id"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
+                // 服务端权威模型清单：`response.response.models`。每个请求都带，
+                // 有事件通道就投递，让 lib 侧刷新 `/v1/models`。
+                if let Some(models) = resp
+                    .and_then(|r| r.get("response"))
+                    .and_then(|r| r.get("models"))
+                {
+                    let parsed = crate::catalog::parse_live(models);
+                    if !parsed.is_empty() {
+                        if let Some(tx) = &events {
+                            let _ = tx.send(WorkerEvent::Models(parsed));
+                        }
+                    }
+                }
                 if !inited && resp.is_some() && rid == "pd-init" {
                     inited = true;
                     let user_msg = obj(vec![

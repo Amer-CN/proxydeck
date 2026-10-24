@@ -152,22 +152,36 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
     端口、cwd 解析、积分账本、请求/响应形状；随区域变的只有登录态目录名、worker 相对路径、
     额度接口域名，以及 `/v1/models` 读的那份目录文件（`qoder-cn.json` / `qoder.json`；
     两区文件实测逐字节相同，所以解析出的条目也一致）。
-13. **`/v1/models` 的目录是动态的（有意偏离 Go 黄金）**：Go 版是写死目录；Rust 版
-    在启动时读 Qoder 客户端的 `resources\dynamic-text\{qoder-cn,qoder}.json`，取
-    `model.<key>.label`（**排除**四个质量档位 `lite`/`efficient`/`performance`/`ultimate`），
-    `en` 打底、`zh` 只补缺失的 key（保证 id 恒为 ASCII），按 worker key 字节序输出（13 条）。
-    文件缺失 / 坏 JSON / 解析空 ⇒ 回落内置静态表（同一份 13 条），`/v1/models` 永不 500。
-    * **`lite` 是档位不是模型（实证）**：直传 `lite` 上游回
-      `ModelNotFoundError: Model "lite" is not available in the current QoderCN catalog`（404）；
-      它和 `efficient`/`performance`/`ultimate` 构成「轻量/经济/性能/极致」四档阶梯。
+13. **`/v1/models` 的目录是动态的（有意偏离 Go 黄金），且以服务端清单为准**：
+    Go 版是写死目录。Rust 版三级来源，**从新到旧**：
+
+    | 优先级 | 来源 | 说明 |
+    |---|---|---|
+    | ① | **服务端清单** | worker 的 `pd-init` 控制响应里 `response.models[]`（每请求都带），落盘到 `%USERPROFILE%\.qoder-plugin-models-{cn,intl}.json`，重启后冷启直接可用 |
+    | ② | 客户端标签字典 | `resources\dynamic-text\{qoder-cn,qoder}.json` 的 `model.<key>.label`（排除四个质量档位），`en` 打底、`zh` 只补缺 |
+    | ③ | 内置静态表 | 13 条，前两级都拿不到时兜底，`/v1/models` 永不 500 |
+
+    **为什么必须用服务端清单**：客户端本地字典只是 key→显示名的映射，**不随上游增删
+    改名同步**。2026-10-24 实测它就停在 10-15 那份，而服务端当时已经是：
+    * 改名：`dfmodel` DeepSeek-V4-Flash→**DeepSeek-Flash**；`kmodel_latest`
+      Kimi-K3→**Kimi-K3.1-Pro**；`kmodel` Kimi-K2.7-Code→**Kimi-K2.8-Preview**；
+      `mmodel` MiniMax-M3→**MiniMax-M3.1-Flash**
+    * 下线：Cantus(`cmodel`)、Qwen3.7-Plus(`qmodel`)、Qwen3.7-Max(`qmodel_latest`)
+      —— 仍能解析并转发，但上游已不认（502），这是上游行为不是代理的锅
+
+    服务端条目还带 `priceFactor`/`maxInputTokens`/`isVl`/`isReasoning`/`efforts`/
+    `availableContextWindows`/`tags` 等元数据，一并透到 `/v1/models` 每条的 `qoder`
+    对象里（GUI 甲板的「模型矩阵」就是喂这个接口，上游一变矩阵自己就变，UI 不用改）。
+    * `lite` 是**质量档位**不是模型（实证：直传上游回
+      `ModelNotFoundError: Model "lite" is not available in the current QoderCN catalog`），
+      它与 `efficient`/`performance`/`ultimate` 构成「轻量/经济/性能/极致」四档阶梯。
     * `QODER_STATIC_MODELS=1` 强制静态表（黄金门禁与可复现对照用；显式构造的 `AppState`
       本来就固定走静态表——它是黄金回放的测试缝）。
-    * `q37fmodel`(Qwen3.7-Flash) / `gm51model`(GLM-5.2) 已从目录里消失，**不再进
-      `/v1/models`**，但上游仍能跑通 ⇒ 保留在 `QODER_LEGACY_MODELS`，旧调用方继续可用。
+    * `q37fmodel`(Qwen3.7-Flash) / `gm51model`(GLM-5.2) 仍保留在 `QODER_LEGACY_MODELS`，
+      旧调用方不会因为在目录里没有就被本地拒掉。
     * 黄金门禁为此拆成两条**更窄**的断言：响应体「信封」（data 数组以外的键序/分隔/换行）
-      仍与 Go 逐字节一致；目录本身与**手写**的新期望体逐字节一致。`resolve` 的黄金比对
-      只对四个新增模型（`Cantus`/`cmodel`/`Kimi-K3`/`kmodel_latest`）列了显式新期望，
-      其余输入（含旧代号与全部拒绝样本）仍逐字比 Go。
+      仍与 Go 逐字节一致；目录本身与**手写**的期望体逐字节一致。`resolve` 的黄金比对
+      只对新增模型列了显式新期望，其余输入（含旧代号与全部拒绝样本）仍逐字比 Go。
 14. **上游排队状态透出（Go 侧没有这一层）**：worker 的 `type=system` /
     `subtype=model_queue_status` 以前落在 `_ => {}` 被静默丢弃；现在解析
     `modelKey`/`queueCount`/`waitTime`/`retryAfterSeconds`（兼容字段平铺、`message` 是

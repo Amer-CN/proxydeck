@@ -253,6 +253,9 @@ pub struct AppState {
     credits: Mutex<CreditsState>,
     /// 实时额度缓存（Go `usageCache`）；**只在 `refresh=1` 时才去拉**。
     usage_cache: Mutex<Option<UsageQuota>>,
+    /// 服务端权威模型清单缓存（来自 worker 的 `pd-init` 控制响应）。
+    /// `None` = 还没拿到过，此时 `/v1/models` 回落本地字典/静态表。
+    live_models: Mutex<Option<Vec<catalog::LiveModel>>>,
     http: reqwest::Client,
 }
 
@@ -295,6 +298,7 @@ impl AppState {
             auth_cache: Mutex::new(None),
             credits: Mutex::new(CreditsState::default()),
             usage_cache: Mutex::new(None),
+            live_models: Mutex::new(None),
             http: reqwest::Client::builder()
                 .build()
                 .expect("建 reqwest 客户端"),
@@ -355,8 +359,72 @@ impl AppState {
     }
 
     /// 按本次启动的目录解析模型（`/v1/chat/completions` 用这条，不直接用纯函数）。
+    ///
+    /// 顺序：服务端 live 清单 → 本地字典/静态表 → 旧代号。live 优先是因为它才是
+    /// 上游真正认的 id（本地字典不随上游改名/下线同步）。
     pub fn resolve_model(&self, requested: &str) -> String {
+        if let Some(live) = self.live_models_snapshot() {
+            if let Some(hit) = resolve_live(&live, requested) {
+                return hit;
+            }
+        }
         resolve_model_in(&self.models, requested)
+    }
+
+    /// 服务端清单快照（克隆一份，避免持锁调用）。空 ⇒ `None`。
+    pub fn live_models_snapshot(&self) -> Option<Vec<catalog::LiveModel>> {
+        let guard = self.live_models.lock().unwrap_or_else(|e| e.into_inner());
+        guard.as_ref().filter(|v| !v.is_empty()).cloned()
+    }
+
+    /// 吸收一次服务端清单（每个请求都会带一份）并落盘，供重启后冷启使用。
+    pub fn absorb_live_models(&self, models: Vec<catalog::LiveModel>) {
+        if models.is_empty() {
+            return;
+        }
+        {
+            let mut guard = self.live_models.lock().unwrap_or_else(|e| e.into_inner());
+            // 内容没变就不重复写盘（每请求都会来一份）
+            if guard.as_ref().map(|old| old == &models).unwrap_or(false) {
+                return;
+            }
+            *guard = Some(models.clone());
+        }
+        println!(
+            "qoder-plugin: 服务端模型清单 {} 条（{}）",
+            models.len(),
+            models
+                .iter()
+                .map(|m| m.display_name.as_str())
+                .collect::<Vec<_>>()
+                .join(" / ")
+        );
+        if let Some(path) = live_cache_path(self.region) {
+            match serde_json::to_vec(&models) {
+                Ok(bytes) => {
+                    if let Err(e) = std::fs::write(&path, &bytes) {
+                        println!("qoder-plugin: 模型清单落盘失败 {e}");
+                    }
+                }
+                Err(e) => println!("qoder-plugin: 模型清单序列化失败 {e}"),
+            }
+        }
+    }
+
+    /// 启动时从磁盘恢复上次的清单（拿不到就保持 `None`，走本地字典兜底）。
+    pub fn load_live_models_from_disk(&self) {
+        let Some(path) = live_cache_path(self.region) else { return };
+        let Ok(text) = std::fs::read(&path) else { return };
+        match serde_json::from_slice::<Vec<catalog::LiveModel>>(&text) {
+            Ok(v) if !v.is_empty() => {
+                let n = v.len();
+                let mut guard = self.live_models.lock().unwrap_or_else(|e| e.into_inner());
+                *guard = Some(v);
+                println!("qoder-plugin: 从磁盘恢复模型清单 {n} 条（{path:?}）");
+            }
+            Ok(_) => {}
+            Err(e) => println!("qoder-plugin: 磁盘模型清单解析失败 {e}（忽略）"),
+        }
     }
 
     /// Go `currentAuth()`：内存缓存，`expiresAt` 临近过期（<30s）或解不出时重读文件
@@ -509,6 +577,43 @@ pub fn resolve_model_in(models: &[(String, String)], requested: &str) -> String 
         }
     }
     String::new()
+}
+
+/// 服务端清单里解析：`displayName` / `value` / `modelId` 任意一个等值命中即返回
+/// `value`（那是 `--model` 认的真 id）。
+///
+/// `auto` 特殊：上游语义是「自动路由」，`resolve_model` 那张静态表里固定回 `Auto`，
+/// 这里保持一致（否则 `/v1/models` 发的 `Auto` 会解析成 `auto`，与 Go 口径不符）。
+pub fn resolve_live(live: &[catalog::LiveModel], requested: &str) -> Option<String> {
+    if requested.is_empty() {
+        return None;
+    }
+    let base = resolve_model(requested);
+    if base == "Auto" {
+        return Some("Auto".to_string());
+    }
+    for m in live {
+        if m.display_name.eq_ignore_ascii_case(requested)
+            || m.value.eq_ignore_ascii_case(requested)
+            || m.model_id.eq_ignore_ascii_case(requested)
+        {
+            return Some(m.value.clone());
+        }
+    }
+    None
+}
+
+/// 服务端清单的磁盘缓存路径（按区域分文件，CN/INTL 不互相覆盖）。
+///
+/// 放 `%USERPROFILE%` 下与 `credits` 账本同级：这是「每个用户一份」的缓存，
+/// 不该混进仓库或安装目录。
+fn live_cache_path(region: Region) -> Option<PathBuf> {
+    let home = std::env::var_os("USERPROFILE")?;
+    let name = match region {
+        Region::Cn => ".qoder-plugin-models-cn.json",
+        Region::Intl => ".qoder-plugin-models-intl.json",
+    };
+    Some(PathBuf::from(home).join(name))
 }
 
 /// Go `flattenMessages`：按顺序 `role: content` 拼接，`system→[System]\n`、
@@ -975,6 +1080,30 @@ pub fn decode_set_body(body: &[u8]) -> Result<f64, String> {
 /// 客户端只读 `id` 字段，发内部代号会让界面显示一串 `qmodel_38max` 之类看不懂的名字。
 /// `st.resolve_model` 同时认可读名、目录 key 与旧代号，所以旧调用方不受影响。
 async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
+    // 服务端清单优先（worker 的 `pd-init` 控制响应里那条）；没拿到才回落
+    // 本地字典 / 内置静态表。GUI 甲板的「模型矩阵」就是喂这个接口，所以
+    // 上游增删改名在这里自动生效，UI 不用跟着改。
+    if let Some(live) = st.live_models_snapshot() {
+        let data: Vec<J> = live
+            .iter()
+            .map(|m| {
+                let mut fields = vec![
+                    ("id", s(&m.display_name)),
+                    ("display_name", s(&m.display_name)),
+                    ("object", s("model")),
+                    ("owned_by", s("qoder")),
+                    ("qoder", live_model_meta(m)),
+                ];
+                // 上游显式标了默认模型就带上
+                if m.is_default {
+                    fields.push(("default", J::Bool(true)));
+                }
+                obj(fields)
+            })
+            .collect();
+        let out = obj(vec![("object", s("list")), ("data", J::Arr(data))]);
+        return json_bytes(StatusCode::OK, &[], (out.to_go() + "\n").into_bytes());
+    }
     let data: Vec<J> = st
         .models
         .iter()
@@ -988,6 +1117,38 @@ async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
         .collect();
     let out = obj(vec![("object", s("list")), ("data", J::Arr(data))]);
     json_bytes(StatusCode::OK, &[], (out.to_go() + "\n").into_bytes())
+}
+
+/// `/v1/models` 每条附带的元数据（GUI 悬停/矩阵可用；字段名对齐各家习惯）。
+fn live_model_meta(m: &catalog::LiveModel) -> J {
+    obj(vec![
+        ("worker_key", s(&m.value)),
+        ("price_factor", J::Float(m.price_factor)),
+        ("original_price_factor", J::Float(m.original_price_factor)),
+        ("max_input_tokens", J::Int(m.max_input_tokens)),
+        ("max_output_tokens", J::Int(m.max_output_tokens)),
+        ("default_context_window", J::Int(m.default_context_window)),
+        (
+            "context_windows",
+            J::Arr(
+                m.context_windows
+                    .iter()
+                    .map(|v| J::Int(*v))
+                    .collect(),
+            ),
+        ),
+        ("vision", J::Bool(m.is_vl)),
+        ("reasoning", J::Bool(m.is_reasoning)),
+        ("free", J::Bool(m.is_free)),
+        ("new", J::Bool(m.is_new)),
+        ("default_effort", s(&m.default_effort)),
+        (
+            "efforts",
+            J::Arr(m.efforts.iter().map(|v| s(v)).collect()),
+        ),
+        ("tags", J::Arr(m.tags.iter().map(|v| s(v)).collect())),
+        ("description", s(&m.description)),
+    ])
 }
 
 // ---------- /v1/chat/completions ----------
@@ -1093,6 +1254,10 @@ async fn handle_chat_once(
     ));
     let mut queue = QueueWatch::default();
     while let Some(ev) = ev_rx.recv().await {
+        if let worker::WorkerEvent::Models(v) = &ev {
+            st.absorb_live_models(v.clone());
+            continue;
+        }
         if let Some(q) = queue.observe(&ev, Instant::now()) {
             task.abort(); // 别把排队中的 worker 留在后台
             println!(
@@ -1236,6 +1401,11 @@ async fn handle_chat_stream(
             // 排队状态不是内容增量：继续等第一个真增量。
             continue;
         }
+        if let worker::WorkerEvent::Models(v) = &ev {
+            // 服务端清单也不是内容增量（每个请求都会带一次）。
+            st.absorb_live_models(v.clone());
+            continue;
+        }
         break ev;
     };
 
@@ -1306,6 +1476,8 @@ fn emit_chunk(
 ) {
     let data = match ev {
         WorkerEvent::Text(t) => chunk_json(id, model, &t, "", created),
+        // 服务端模型清单：只更新缓存，绝不外发（不是内容增量）
+        WorkerEvent::Models(_) => return,
         WorkerEvent::Thinking(t) => chunk_reasoning_json(id, model, &t, "", created),
         // 已提交 200 之后又来的排队状态：没有改回 429 的时机，记日志后跳过
         // （绝不能当内容增量发出去）。
@@ -1544,6 +1716,9 @@ pub async fn run(args: Args) -> Result<(), String> {
     );
 
     let state = Arc::new(state);
+    // 冷启动：先恢复上次落盘的服务端清单，`/v1/models` 一上线就是最新的
+    // （恢复不到就走本地字典，等第一个请求带回来再刷新）。
+    state.load_live_models_from_disk();
     let app = router(state);
     let addr: std::net::SocketAddr = format!("{}:{}", args.host, args.port)
         .parse()
