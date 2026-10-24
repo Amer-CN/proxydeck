@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::extract::State;
-use axum::http::{header, HeaderMap, Method, StatusCode};
+use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use futures_util::{StreamExt, TryStreamExt};
@@ -189,22 +189,106 @@ pub const CONV_HEADERS: &[&str] = &[
 ///
 /// 用 crate 自带的 `atrest::getrandom_fill`（Windows 走 RtlGenRandom = Go 的
 /// `crypto/rand`），不新增依赖；随机源不可用时如实报 502，不编可预测 ID。
+pub fn new_uuid_v4() -> Result<String, String> {
+    let mut b = [0u8; 16];
+    crate::atrest::getrandom_fill(&mut b)?;
+    // RFC 4122 v4：版本 nibble 置 4，variant 置 10xx。
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    Ok(format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-\
+         {:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10],
+        b[11], b[12], b[13], b[14], b[15]
+    ))
+}
+
 pub fn new_conversation_ids() -> Result<[String; 3], String> {
-    let mut ids = [String::new(), String::new(), String::new()];
-    for slot in ids.iter_mut() {
-        let mut b = [0u8; 16];
-        crate::atrest::getrandom_fill(&mut b)?;
-        // RFC 4122 v4：版本 nibble 置 4，variant 置 10xx。
-        b[6] = (b[6] & 0x0f) | 0x40;
-        b[8] = (b[8] & 0x3f) | 0x80;
-        *slot = format!(
-            "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-\
-             {:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10],
-            b[11], b[12], b[13], b[14], b[15]
-        );
+    Ok([new_uuid_v4()?, new_uuid_v4()?, new_uuid_v4()?])
+}
+
+/// `n` 字节随机数的 hex 串（traceparent / b3 用：trace 16B→32 hex，span 8B→16 hex）。
+pub fn new_hex(n: usize) -> Result<String, String> {
+    let mut b = vec![0u8; n];
+    crate::atrest::getrandom_fill(&mut b)?;
+    let mut s = String::with_capacity(n * 2);
+    for x in b {
+        s.push_str(&format!("{:02x}", x));
     }
-    Ok(ids)
+    Ok(s)
+}
+
+/// 官方网关身份头的一组值（2026-10-24 取自 CN WorkBuddy 5.8.3 `app.asar` 的
+/// `applyGatewayHeaders` / `applyTraceHeaders`）。
+///
+/// 上游 11128 的判定不只看三个 conversation 头：官方桌面端每条 chat 请求还带
+/// `X-Request-ID`、`traceparent` / `b3` / `X-B3-*` / `X-Trace-ID`、`x-codebuddy-request`、
+/// `X-Agent-Intent/Purpose`、`X-IDE-*`、`X-Private-Data`、`X-Product`。
+/// 这些不是“越多越好”的装饰——它们是官方客户端本来就有的固定形态，缺了才像第三方。
+///
+/// 三组会话 ID 每请求生成一次，换号/退避重试复用同一组（上游按会话分桶，
+/// 轮次换 ID 会被当新会话，见 9router#4944）。
+pub struct IdentityHeaders {
+    conv: [String; 3],
+    request_id: String,
+    trace_id: String,
+    span_id: String,
+    parent_span_id: String,
+}
+
+impl IdentityHeaders {
+    pub fn new() -> Result<Self, String> {
+        Ok(Self {
+            conv: new_conversation_ids()?,
+            request_id: new_uuid_v4()?,
+            trace_id: new_hex(16)?,
+            span_id: new_hex(8)?,
+            parent_span_id: new_hex(8)?,
+        })
+    }
+
+    /// 应用到出站头。INTL 暂只发结构头，品牌头（X-IDE-*/X-Private-Data）等端点复核后再加。
+    pub fn apply(&self, h: &mut HeaderMap, region: crate::region::Region) -> Result<(), String> {
+        let mut put = |k: &'static str, v: &str| -> Result<(), String> {
+            let name = HeaderName::from_static(k);
+            let val = HeaderValue::from_str(v)
+                .map_err(|e| format!("身份头 {k} 非法: {e}"))?;
+            h.insert(name, val);
+            Ok(())
+        };
+        put("x-conversation-id", &self.conv[0])?;
+        put("x-conversation-request-id", &self.conv[1])?;
+        put("x-conversation-message-id", &self.conv[2])?;
+        put("x-request-id", &self.request_id)?;
+        put("x-requested-with", "XMLHttpRequest")?;
+        put("x-agent-intent", "craft")?;
+        put("x-agent-purpose", "conversation")?;
+        put("x-codebuddy-request", "1")?;
+        put("x-product", "SaaS")?;
+        put(
+            "traceparent",
+            &format!("00-{}-{}-01", self.trace_id, self.span_id),
+        )?;
+        put(
+            "b3",
+            &format!(
+                "{}-{}-1-{}",
+                self.trace_id, self.span_id, self.parent_span_id
+            ),
+        )?;
+        put("x-b3-traceid", &self.trace_id)?;
+        put("x-b3-spanid", &self.span_id)?;
+        put("x-b3-parentspanid", &self.parent_span_id)?;
+        put("x-b3-sampled", "1")?;
+        put("x-trace-id", &self.trace_id)?;
+        if region == crate::region::Region::Cn {
+            put("x-ide-type", "WorkBuddy")?;
+            put("x-ide-name", "WorkBuddy")?;
+            put("x-ide-version", "0.0.0")?;
+            put("x-private-data", "true")?;
+        }
+        Ok(())
+    }
 }
 
 /// Go `writeErr`：`Content-Type: application/json` + `{"error":{"message":…,"type":"upstream_error"}}`
@@ -409,17 +493,14 @@ pub async fn handle_chat(
         Ok(h) => h,
         Err(e) => return write_err(502, &e),
     };
-    // INTL 会话关联头（2026-10-19 上游新增网关校验）：三个 ID 每请求生成一次，
-    // 后续各轮（换号/退避重试）复用同一组——上游只验存在与形态，官方抓包同样
-    // 是每请求新 ID；重试轮次换 ID 会被上游按新会话分桶（9router#4944），故不换。
-    // `hdr` 只来自凭据层、从不含这三个头，逐轮插入即等价于 GitHub 修复的 blank-only 填充。
-    let conv_ids: Option<[String; 3]> = if st.region == crate::region::Region::Intl {
-        match new_conversation_ids() {
-            Ok(ids) => Some(ids),
-            Err(e) => return write_err(502, &e),
-        }
-    } else {
-        None
+    // 官方网关身份头（2026-10-24 取 CN 5.8.3 app.asar `applyGatewayHeaders`）：
+    // 三组 conversation ID + X-Request-ID + traceparent/b3 + x-codebuddy-request +
+    // X-Agent-* + X-Product（CN 另加 X-IDE-*/X-Private-Data）。每请求生成一次，
+    // 换号/退避重试复用同一组——上游按会话分桶，轮次换 ID 会被当新会话（9router#4944）。
+    // `hdr` 只来自凭据层、从不含这些头，逐轮插入即等价于 GitHub 修复的 blank-only 填充。
+    let identity = match IdentityHeaders::new() {
+        Ok(v) => v,
+        Err(e) => return write_err(502, &e),
     };
 
     // 限流窗口内 hy4-preview 请求体层改写 fallback（agent 零感知）；兜底关闭时不改写、不 trip。
@@ -476,17 +557,8 @@ pub async fn handle_chat(
         attempt = attempt.wrapping_add(1);
         let url = format!("{}/v2/chat/completions", st.base_url);
         let mut out_hdr = hdr.clone();
-        if let Some(ids) = conv_ids.as_ref() {
-            for (name, val) in CONV_HEADERS.iter().zip(ids.iter()) {
-                // from_str 只对不可见 ASCII 失败——UUID 只含 hex 与连字符，恒成功；
-                // 万一失败就当本轮没带（= 改前行为），不 panic 不编值。
-                if let (Ok(n), Ok(v)) = (
-                    axum::http::HeaderName::from_bytes(name.as_bytes()),
-                    axum::http::HeaderValue::from_str(val),
-                ) {
-                    out_hdr.insert(n, v);
-                }
-            }
+        if let Err(e) = identity.apply(&mut out_hdr, st.region) {
+            return write_err(502, &e);
         }
         let req = st
             .http
@@ -1370,5 +1442,46 @@ mod tests {
         assert_eq!(FLAGGED_COOLDOWN_MS, 3_600_000);
         assert_eq!(flagged_until(1_000), 1_000 + 3_600_000);
         assert_eq!(flagged_until(i64::MAX), i64::MAX, "溢出饱和而非回绕");
+    }
+
+    /// 身份头形态守门：值必须是官方客户端同款（UUIDv4 / 32hex trace / traceparent 00-…-01），
+    /// 且 CN 带品牌头、INTL 暂不带。防止后来者“顺手删掉”或把三个 ID 写成同一个。
+    #[test]
+    fn identity_headers_match_official_gateway_shape() {
+        let id = IdentityHeaders::new().expect("随机源应可用");
+        let mut h = HeaderMap::new();
+        id.apply(&mut h, crate::region::Region::Cn).unwrap();
+        for k in [
+            "x-conversation-id",
+            "x-conversation-request-id",
+            "x-conversation-message-id",
+            "x-request-id",
+        ] {
+            let v = h
+                .get(k)
+                .unwrap_or_else(|| panic!("{k} 缺失"))
+                .to_str()
+                .unwrap();
+            assert_eq!(v.len(), 36, "{k}={v} 长度不对");
+            assert_eq!(v.chars().nth(14), Some('4'), "{k}={v} 不是 UUIDv4");
+            let variant = v.chars().nth(19).unwrap();
+            assert!(
+                matches!(variant, '8' | '9' | 'a' | 'b'),
+                "{k}={v} variant 不对"
+            );
+        }
+        let trace = h.get("x-trace-id").unwrap().to_str().unwrap();
+        assert_eq!(trace.len(), 32);
+        assert!(trace.chars().all(|c| c.is_ascii_hexdigit()));
+        let tp = h.get("traceparent").unwrap().to_str().unwrap();
+        assert!(tp.starts_with("00-") && tp.ends_with("-01"), "traceparent={tp}");
+        assert_eq!(h.get("x-ide-type").unwrap(), "WorkBuddy");
+        assert_eq!(h.get("x-product").unwrap(), "SaaS");
+        assert_eq!(h.get("x-codebuddy-request").unwrap(), "1");
+
+        let mut hi = HeaderMap::new();
+        id.apply(&mut hi, crate::region::Region::Intl).unwrap();
+        assert!(hi.get("x-ide-type").is_none(), "INTL 暂不发品牌头");
+        assert!(hi.get("x-trace-id").is_some());
     }
 }

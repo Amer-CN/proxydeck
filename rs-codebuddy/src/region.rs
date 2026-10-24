@@ -99,7 +99,11 @@ pub static REGION_CN: RegionCfg = RegionCfg {
     // 2026-10-13：WorkBuddy CN 桌面端 5.7.x 把 auth.domain 从 www.codebuddy.cn 改成
     // www.workbuddy.cn——两条并认（P5b 使用）。
     domain_suffixes: &["codebuddy.cn", "workbuddy.cn"],
-    user_agent: "codebuddy2openai-go/1.0",
+    // P0 对齐（2026-10-24）：官方 CN 桌面端 5.8.3 的欢迎 UA 形态是 `WorkBuddy/<版本>`
+    // （app.asar 的 TTS/Discord 路径同款：`WorkBuddy/${version}`）。旧值
+    // `codebuddy2openai-go/1.0` 是项目自证名——所有用户共享同一个常量，一旦被上游
+    // 指纹化就是“批量识别载体”，必须先消掉。
+    user_agent: "WorkBuddy/5.8.3",
     force_system: false,
     no_refresh: false,
     no_probe: false,
@@ -109,7 +113,10 @@ pub static REGION_CN: RegionCfg = RegionCfg {
 pub static REGION_INTL: RegionCfg = RegionCfg {
     base_url: "https://www.codebuddy.ai",
     domain_suffixes: &["workbuddy.ai"],
-    user_agent: "CLI/2.63.2 CodeBuddy/2.63.2",
+    // 官方 CodeBuddy CLI 的 UA 是 `CLI/<ver> CodeBuddy/<ver>`（community #84 实证形态）。
+    // 旧值停在 2.63.2 且缺第三段（`OpenAI/JS <sdk>`）；第三段尚未被独立复核，先只把
+    // 版本号对齐到 2.168.2，形态保持两段，避免引入未证实的字段。
+    user_agent: "CLI/2.168.2 CodeBuddy/2.168.2",
     force_system: true,
     no_refresh: true,
     no_probe: true,
