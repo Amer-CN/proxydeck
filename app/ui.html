@@ -2720,7 +2720,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v4.5.0</span>
+                    <span class="v ver" id="etchVer">v4.6.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3492,13 +3492,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v4.5.0">v4.5.0</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v4.6.0">v4.6.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v4.5.0</div>
+                    <div class="s" id="buildNo">v4.6.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">v4.5.0</span>
+                  <span class="pt-val" id="verChip">v4.6.0</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -9461,6 +9461,14 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+    { v: 'v4.6.0', date: '2026-10-25', groups: [
+      { label: '⚠️ 重要提示', items: [
+        '国内版：风控升级，已尽力适配，不保证稳定、不保证不封号',
+        '国际版：已完成适配，风险降低，不保证不被限制',
+        '第三方工具，账号风险自担；建议先用小号，勿用主账号' ] },
+      { label: '🐛 Bug 修复', items: [
+        'WorkBuddy 出站 UA 去掉项目名，改成官方形态',
+        '补官方会话与追踪身份头，少一点第三方味' ] } ] },
     { v: 'v4.5.0', date: '2026-10-22', groups: [
       { label: '🚀 新功能', items: [
         'OPENCODE 甲板：不用点火也能看到 TUI 是否就绪',
@@ -10031,6 +10039,14 @@ var PT_I18N = {
         '或拨下设置页的<b>「彻底关机」拨杆</b>连全部后台一起退出。',
       btn: '知道了'
     },
+    risk: {
+      title: '⚠ 账号风险提示',
+      body: '国内版：上游风控持续升级。我们已尽力适配（请求形态对齐、提示词扰动），但<b>不保证稳定，也不保证不封号</b>。' +
+        '<br><br>国际版：已完成新一轮适配，拦截风险降低，但<b>同样不保证不被限制</b>。' +
+        '<br><br>这是第三方工具，不是官方客户端，账号风险由使用者承担。建议<b>先用小号验证，不要用主账号</b>；' +
+        '求稳请用官方客户端。已触发限制的账号，我们无法解封。',
+      btn: '我已知晓'
+    },
     upd: {
       title: '⚡ 发现新版本',
       body: function () {
@@ -10064,7 +10080,13 @@ var PT_I18N = {
       (d.go ? '<button type="button" class="ibtn2 accent" data-notice-go>' + d.go + '</button>' : '') +
       '<button type="button" class="ibtn2' + (d.go ? '' : ' accent') + '" data-notice-ok>' + d.btn + '</button>' +
       '</div></div></div>';
-    function closeNotice() { root.innerHTML = ''; pumpNotice(); }
+    function closeNotice() {
+      /* 风险公告按版本记一次：✕ / 点遮罩关闭也算已知晓，避免每次启动都拦一道 */
+      if (kind === 'risk') {
+        try { localStorage.setItem('riskNoticeSeen', UI_CUR); } catch (e) {}
+      }
+      root.innerHTML = ''; pumpNotice();
+    }
     root.querySelector('.modal-close').onclick = closeNotice;
     root.querySelector('.modal-mask').onclick = function (e) {
       if (e.target.classList.contains('modal-mask')) closeNotice();
@@ -10732,7 +10754,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v4.5.0';
+  var UI_CUR = 'v4.6.0';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   var cbQuotaUserId = ''; // WorkBuddy 积分面板选中的账号（空串=默认最新号；区域感知：切区后失效重选）
   function verCmp(a, b) {
@@ -10929,6 +10951,10 @@ var PT_I18N = {
     logInto($('logStream'), 'sys', HAS_BRIDGE ? 'WebView2 桥接已连接 · 代理核心待命' : '演示模式 · 无原生桥接');
     pollState();
     probeStoredKey(); /* 存储 key 探活：页面初始化探一次（30 分钟周期见「轮询启动」） */
+    /* 账号风险公告：每个版本首次启动弹一次（与更新提示分开；✕ 关闭也会记录） */
+    try {
+      if ((localStorage.getItem('riskNoticeSeen') || '') !== UI_CUR) queueNotice('risk', true);
+    } catch (e) { queueNotice('risk', true); }
     if (HAS_BRIDGE) {
       (async function checkUpdate() {
         window._UPDATE = { latest: UI_CUR, url: '', dl_url: '', dl_size: 0 };

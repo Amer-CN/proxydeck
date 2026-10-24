@@ -260,6 +260,22 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   外部引用保留、无 `$ref` 原样），零残留即过。11133 另有自动退避重试
   （上限 2 次）＋失败现场 `diag-11133-*.json` 落数据目录（上限 10 份）兜底
 
+- **11140 与 11128 是两回事（2026-10-24 实测定案）**：11128 是渠道校验（请求形态/内容指纹，
+  补会话头/扰动可过）；**11140 = 账号级限制**（`403 request illegal` +
+  「账号存在异常行为，已被限制使用」），改头/换号/重登都无效，只能走官方申诉。
+  国内/国际都有；国际版社区大量「封号」实为 11128 误判（`workbuddy2api-panel` #197）。
+- **官方网关身份头（2026-10-24 取 CN 5.8.3 `app.asar` 的 `applyGatewayHeaders`）**：官方每条
+  chat 带 `X-Conversation-ID/-Request-ID/-Message-ID`、`X-Request-ID`、
+  `traceparent`/`b3`/`X-B3-*`/`X-Trace-ID`、`x-codebuddy-request: 1`、
+  `X-Agent-Intent: craft` / `X-Agent-Purpose: conversation`、`X-IDE-Type/Name: WorkBuddy`、
+  `X-IDE-Version: 0.0.0`、`X-Private-Data: true`、`X-Product: SaaS`。
+  `rs-codebuddy` P0 已落地（`chat.rs::IdentityHeaders`）；CN UA 改 `WorkBuddy/5.8.3`
+  （旧值 `codebuddy2openai-go/1.0` 是项目自证名，已删）；INTL UA 对齐
+  `CLI/2.168.2 CodeBuddy/2.168.2`。
+- **封号轴是账号/行为层，不是单条请求**：同机同请求头仍可一号 200 一号 11140；
+  多账号池、同 IP、自动签到、uid 进 id 都会放大关联风险。P1/P2 方向（设备身份持久化、
+  conversation 连续性、TLS/HTTP2 指纹、行为节流）已论证，未落地。
+
 ### B.AI / b.ai（8891）——已重新接入（v3.5.0），但保留当年实测结论
 - **现状**：`internal/bai`，COMMAND 键副页，Go 栈透明转发 `https://api.b.ai`；
   模型矩阵走 GUI 专用旁路 `/model/matrix`（详见 `docs/bai-model-matrix-design.md`）

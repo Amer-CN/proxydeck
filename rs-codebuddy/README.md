@@ -31,6 +31,17 @@
 | 17 | 区域差异：base_url / 候选池 / 强制 system / 探测开关 / UA 常量 / 凭据过滤后缀 | `region.go` 全文 | `src/region.rs` |
 | 18 | 数据目录判定链（`PROXYDECK_DATA_DIR` → 便携标记 → `%APPDATA%\ProxyDeck`） | `internal/appdir/appdir.go` | `src/datadir.rs` |
 
+### P5d：官方身份层（2026-10-24，P0 风控适配）
+
+| 项 | 值 | 证据 |
+|---|---|---|
+| CN UA | `WorkBuddy/5.8.3` | CN 5.8.3 `app.asar` 的 `WorkBuddy/${version}`（TTS / Discord / QQ 路径同款） |
+| INTL UA | `CLI/2.168.2 CodeBuddy/2.168.2` | community #84 的官方 CLI UA 形态（第三段 `OpenAI/JS` 未独立复核，暂不加） |
+| 身份头 | `chat.rs::IdentityHeaders`：三组 conversation ID + `X-Request-ID` + `traceparent`/`b3`/`X-B3-*`/`X-Trace-ID` + `x-codebuddy-request: 1` + `X-Agent-Intent/Purpose` + `X-Product: SaaS`；CN 另带 `X-IDE-Type/Name: WorkBuddy`、`X-IDE-Version: 0.0.0`、`X-Private-Data: true` | CN 5.8.3 `app.asar` 的 `applyGatewayHeaders` / `applyTraceHeaders`（逐字） |
+| 黄金 | `tests/golden/golden-codebuddy-go.json` 的 UA 期望已同步（**有意偏离 Go 基线**，不是笔误） | 提交 `fix(codebuddy): 出站身份头对齐官方桌面端` |
+
+三组会话 ID 每请求生成一次、换号/重试复用同一组；上游只验存在与形态（9router#4944 / PR #22）。
+
 ### P5b：账号池 / 凭据 / 额度 / failover
 
 | # | 合同 | Go 位置 | Rust 位置 |
