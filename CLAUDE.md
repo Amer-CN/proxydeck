@@ -264,6 +264,9 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   补会话头/扰动可过）；**11140 = 账号级限制**（`403 request illegal` +
   「账号存在异常行为，已被限制使用」），改头/换号/重登都无效，只能走官方申诉。
   国内/国际都有；国际版社区大量「封号」实为 11128 误判（`workbuddy2api-panel` #197）。
+  **已落地分流（v4.6.1）**：11140 + 账号限制文案 → 标死该号并换健康号（有界）；
+  全池被限 → 403 + 申诉指引；纯内容策略的 11140 → 原样透传、不标号。
+  判据见 `rs-codebuddy/src/chat.rs::is_account_restricted_body`。
 - **官方网关身份头（2026-10-24 取 CN 5.8.3 `app.asar` 的 `applyGatewayHeaders`）**：官方每条
   chat 带 `X-Conversation-ID/-Request-ID/-Message-ID`、`X-Request-ID`、
   `traceparent`/`b3`/`X-B3-*`/`X-Trace-ID`、`x-codebuddy-request: 1`、
