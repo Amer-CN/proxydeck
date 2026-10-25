@@ -223,22 +223,74 @@ pub const CONV_HEADERS: &[&str] = &[
 ///
 /// 用 crate 自带的 `atrest::getrandom_fill`（Windows 走 RtlGenRandom = Go 的
 /// `crypto/rand`），不新增依赖；随机源不可用时如实报 502，不编可预测 ID。
+/// 把 16 字节按 RFC 4122 的 8-4-4-4-12 形态输出（版本/variant 位由调用方负责）。
+fn format_uuid(b: &[u8; 16]) -> String {
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-\
+         {:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10],
+        b[11], b[12], b[13], b[14], b[15]
+    )
+}
+
 pub fn new_uuid_v4() -> Result<String, String> {
     let mut b = [0u8; 16];
     crate::atrest::getrandom_fill(&mut b)?;
     // RFC 4122 v4：版本 nibble 置 4，variant 置 10xx。
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
-    Ok(format!(
-        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-\
-         {:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10],
-        b[11], b[12], b[13], b[14], b[15]
-    ))
+    Ok(format_uuid(&b))
 }
 
 pub fn new_conversation_ids() -> Result<[String; 3], String> {
     Ok([new_uuid_v4()?, new_uuid_v4()?, new_uuid_v4()?])
+}
+
+/// 会话级 `X-Conversation-ID`：同一场对话跨轮稳定，官方客户端就是这么发的。
+///
+/// 优先吃客户端显式给的 `prompt_cache_key` / `conversation_id` / `conversationId`；
+/// 没有就取「首条 system + 首条 user」做键（agent 客户端每轮都带完整历史，故稳定）。
+/// 哈希输入带账号 uid：**不同账号的同一段对话得到不同 ID**，避免上游按会话把多号关联。
+/// 输出仍是 v4 UUID 形态（上游只验形态，9router#4944）。
+pub fn conversation_id_for(body: &Map<String, Value>, uid: &str) -> String {
+    let explicit = ["prompt_cache_key", "conversation_id", "conversationId"]
+        .iter()
+        .find_map(|k| body.get(*k).and_then(|v| v.as_str()))
+        .filter(|s| !s.is_empty());
+    let mut key = String::new();
+    if let Some(s) = explicit {
+        key.push_str(s);
+    } else if let Some(Value::Array(msgs)) = body.get("messages") {
+        let mut got_system = false;
+        let mut got_user = false;
+        for m in msgs {
+            let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            let content = m.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            if role == "system" && !got_system {
+                key.push_str(content);
+                key.push('\u{1f}');
+                got_system = true;
+            } else if role == "user" && !got_user {
+                key.push_str(content);
+                key.push('\u{1f}');
+                got_user = true;
+            }
+            if got_system && got_user {
+                break;
+            }
+        }
+    }
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(uid.as_bytes());
+    h.update(b"\x1e");
+    h.update(key.as_bytes());
+    let d = h.finalize();
+    let mut b = [0u8; 16];
+    b.copy_from_slice(&d[..16]);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    format_uuid(&b)
 }
 
 /// `n` 字节随机数的 hex 串（traceparent / b3 用：trace 16B→32 hex，span 8B→16 hex）。
@@ -260,8 +312,9 @@ pub fn new_hex(n: usize) -> Result<String, String> {
 /// `X-Agent-Intent/Purpose`、`X-IDE-*`、`X-Private-Data`、`X-Product`。
 /// 这些不是“越多越好”的装饰——它们是官方客户端本来就有的固定形态，缺了才像第三方。
 ///
-/// 三组会话 ID 每请求生成一次，换号/退避重试复用同一组（上游按会话分桶，
-/// 轮次换 ID 会被当新会话，见 9router#4944）。
+/// 第一组 `X-Conversation-ID` 跨轮稳定（见 [`conversation_id_for`]）；请求 ID / 消息 ID
+/// 每请求新生成。换号/退避重试复用同一组（上游按会话分桶，轮次换 ID 会被当新会话，
+/// 见 9router#4944）。
 pub struct IdentityHeaders {
     conv: [String; 3],
     request_id: String,
@@ -271,9 +324,14 @@ pub struct IdentityHeaders {
 }
 
 impl IdentityHeaders {
-    pub fn new() -> Result<Self, String> {
+    /// `body` 用来派生稳定的会话 ID；`uid` 参与哈希，防止跨账号同会话。
+    pub fn new(body: &Map<String, Value>, uid: &str) -> Result<Self, String> {
         Ok(Self {
-            conv: new_conversation_ids()?,
+            conv: [
+                conversation_id_for(body, uid),
+                new_uuid_v4()?,
+                new_uuid_v4()?,
+            ],
             request_id: new_uuid_v4()?,
             trace_id: new_hex(16)?,
             span_id: new_hex(8)?,
@@ -532,7 +590,7 @@ pub async fn handle_chat(
     // X-Agent-* + X-Product（CN 另加 X-IDE-*/X-Private-Data）。每请求生成一次，
     // 换号/退避重试复用同一组——上游按会话分桶，轮次换 ID 会被当新会话（9router#4944）。
     // `hdr` 只来自凭据层、从不含这些头，逐轮插入即等价于 GitHub 修复的 blank-only 填充。
-    let identity = match IdentityHeaders::new() {
+    let identity = match IdentityHeaders::new(&backend, &acc_uid) {
         Ok(v) => v,
         Err(e) => return write_err(502, &e),
     };
@@ -1528,7 +1586,7 @@ mod tests {
     /// 且 CN 带品牌头、INTL 暂不带。防止后来者“顺手删掉”或把三个 ID 写成同一个。
     #[test]
     fn identity_headers_match_official_gateway_shape() {
-        let id = IdentityHeaders::new().expect("随机源应可用");
+        let id = IdentityHeaders::new(&Map::new(), "u-test").expect("随机源应可用");
         let mut h = HeaderMap::new();
         id.apply(&mut h, crate::region::Region::Cn).unwrap();
         for k in [
@@ -1590,5 +1648,50 @@ mod tests {
         assert!(has_field_code(r#"{"code" : "11140" }"#, "11140"));
         assert!(!has_field_code(r#"{"code":111400}"#, "11140"));
         assert!(!has_field_code(r#"{"requestId":"11140"}"#, "11140"));
+    }
+
+    /// 会话 ID 跨轮稳定、跨账号隔离；显式 conversation_id 优先。
+    #[test]
+    fn conversation_id_is_stable_and_account_scoped() {
+        let mut body = Map::new();
+        body.insert(
+            "messages".into(),
+            serde_json::json!([
+                {"role":"system","content":"You are a helpful assistant."},
+                {"role":"user","content":"hi"},
+                {"role":"assistant","content":"hello"},
+                {"role":"user","content":"next"}
+            ]),
+        );
+        let a1 = conversation_id_for(&body, "u-1");
+        assert_eq!(a1, conversation_id_for(&body, "u-1"));
+        assert_eq!(a1.len(), 36);
+        assert_eq!(a1.as_bytes()[14], b'4');
+        assert_ne!(
+            a1,
+            conversation_id_for(&body, "u-2"),
+            "跨账号必须不同，避免上游按会话关联多号"
+        );
+
+        // 追加轮次后首条 system/user 不变 → 同一会话
+        body.insert(
+            "messages".into(),
+            serde_json::json!([
+                {"role":"system","content":"You are a helpful assistant."},
+                {"role":"user","content":"hi"},
+                {"role":"assistant","content":"hello"},
+                {"role":"user","content":"next"},
+                {"role":"assistant","content":"ok"},
+                {"role":"user","content":"again"}
+            ]),
+        );
+        assert_eq!(a1, conversation_id_for(&body, "u-1"));
+
+        // 显式 conversation_id 优先，且仍按账号隔离
+        body.insert("conversation_id".into(), serde_json::json!("conv-xyz"));
+        let c1 = conversation_id_for(&body, "u-1");
+        assert_ne!(c1, a1);
+        assert_eq!(c1, conversation_id_for(&body, "u-1"));
+        assert_ne!(c1, conversation_id_for(&body, "u-2"));
     }
 }

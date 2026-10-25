@@ -276,8 +276,10 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   （旧值 `codebuddy2openai-go/1.0` 是项目自证名，已删）；INTL UA 对齐
   `CLI/2.168.2 CodeBuddy/2.168.2`。
 - **封号轴是账号/行为层，不是单条请求**：同机同请求头仍可一号 200 一号 11140；
-  多账号池、同 IP、自动签到、uid 进 id 都会放大关联风险。P1/P2 方向（设备身份持久化、
-  conversation 连续性、TLS/HTTP2 指纹、行为节流）已论证，未落地。
+  多账号池、同 IP、自动签到、uid 进 id 都会放大关联风险。**P1 已落地**：
+  `X-Conversation-ID` 跨轮稳定（`chat.rs::conversation_id_for`，显式
+  conversation_id / prompt_cache_key 优先，否则首条 system+user + uid 哈希；
+  跨账号隔离）；设备身份持久化、TLS/HTTP2 指纹、行为节流仍待做。
 
 ### B.AI / b.ai（8891）——已重新接入（v3.5.0），但保留当年实测结论
 - **现状**：`internal/bai`，COMMAND 键副页，Go 栈透明转发 `https://api.b.ai`；

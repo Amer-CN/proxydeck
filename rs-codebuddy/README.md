@@ -47,6 +47,10 @@
 无账号限制文案的 11140 按请求级拒绝透传，不误标账号。证据：2026-10-24 账号 `516235a0` 真实报错
 （`403 request illegal` + 「账号存在异常行为，已被限制使用」）。
 
+**会话连续性（v4.6.2 待发）**：`chat.rs::conversation_id_for` 优先吃客户端显式
+`conversation_id` / `conversationId` / `prompt_cache_key`，否则用首条 system+user 内容 +
+账号 uid 哈希，输出 v4 UUID；跨轮稳定、跨账号隔离（避免上游按会话把多号关联）。
+
 ### P5b：账号池 / 凭据 / 额度 / failover
 
 | # | 合同 | Go 位置 | Rust 位置 |
