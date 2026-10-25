@@ -135,8 +135,17 @@ pub fn is_transient_reject(err_body: &str) -> bool {
 /// 故是否命中只取决于「11128 之后那个字节不是词字符」——与 Go 的 `\b` 逐条等价
 /// （数字是词字符，其后是 `,`/`}`/`"`/行尾都成立；`111280`/`"11128x"` 都不成立）。
 pub fn is_flagged_body(err_body: &str) -> bool {
+    has_field_code(err_body, "11128")
+}
+
+/// 字段级业务码判定：只认 JSON 里的 `"code"` 字段（数字/字符串两种形态），
+/// 裸子串不算——`requestId`/正文里出现同数字串不应误判。
+///
+/// 等价于 Go 的 `"code"\s*:\s*"?<code>"?\b`（见 `is_flagged_body` 原注释）。
+fn has_field_code(err_body: &str, code: &str) -> bool {
     let b = err_body.as_bytes();
     let needle = b"\"code\"";
+    let cb = code.as_bytes();
     let mut i = 0usize;
     while i + needle.len() <= b.len() {
         if &b[i..i + needle.len()] == needle {
@@ -153,8 +162,8 @@ pub fn is_flagged_body(err_body: &str) -> bool {
                 if b.get(j) == Some(&b'"') {
                     j += 1;
                 }
-                if b[j..].starts_with(b"11128") {
-                    let after = b.get(j + 5).copied();
+                if b[j..].starts_with(cb) {
+                    let after = b.get(j + cb.len()).copied();
                     // Go 的 `\b`：后面不能是 [0-9A-Za-z_]
                     let word = after
                         .map(|c| c.is_ascii_alphanumeric() || c == b'_')
@@ -168,6 +177,31 @@ pub fn is_flagged_body(err_body: &str) -> bool {
         i += 1;
     }
     false
+}
+
+/// 11140 里的**账号级限制**子类（2026-10-24 实测定案）。
+///
+/// 11140 是 403 `request illegal` 的家族：既可能是“账号存在异常行为，已被限制使用”
+/// （账号级，重登/换头都无效），也可能是纯内容策略拒绝（账号无过）。两者处置相反：
+/// 前者标死该号并换号；后者原样透传、不碰账号。判据是 code=11140 **且**命中
+/// 账号限制文案（中/繁/英三套，官方客户端混用）。
+pub fn is_account_restricted_body(err_body: &str) -> bool {
+    if !has_field_code(err_body, "11140") {
+        return false;
+    }
+    if err_body.contains("账号存在异常行为") || err_body.contains("帳號存在異常行為") {
+        return true;
+    }
+    let lower = err_body.to_ascii_lowercase();
+    lower.contains("restricted due to unusual activity") || lower.contains("account has been restricted")
+}
+
+/// 账号级 11140 的对外文案：保留上游 requestId，明确“本工具无法解封、需官方申诉”。
+pub fn restricted_message(err_body: &str) -> String {
+    format!(
+        "11140 账号级限制：账号存在异常行为，已被限制使用。该限制需在官方客户端提交反馈申诉，本工具无法解除。上游原文：{}",
+        truncate(err_body, 400)
+    )
 }
 
 /// 11128 治理的冷却到期时点（epoch 毫秒）：Go `time.Now().Add(flaggedCooldown)`。
@@ -537,6 +571,7 @@ pub async fn handle_chat(
     let mut exhausted_resent = 0usize; // 额度耗尽换号重发计数，上限 = 池大小
     let mut transient_resent = 0usize; // 11133 原地重试计数，上限 TRANSIENT_MAX_RETRY
     let mut flagged_resent = 0usize; // 11128 按号封禁换号计数，上限 = 池大小（全封防循环）
+    let mut restricted_resent = 0usize; // 11140 账号限制换号计数，上限 = 池大小（全限防循环）
     let mut stream_head_resent = 0usize; // 流内嗅探判错换号计数，上限 = 池大小（**不冷却账号**）
     let mut hy4_tripped = false; // hy4 模型级兜底重放只允许一次
     // Go `for attempt := 0; ; attempt++` 的**轮次**语义：先判后增，首轮 `attempt == 0`。
@@ -755,6 +790,51 @@ pub async fn handle_chat(
                     p.size()
                 );
             }
+        }
+
+        // 11140 账号级限制（2026-10-24 实测定案）：403 + code 11140 +
+        // 「账号存在异常行为，已被限制使用」。与 401/403 凭据失效不同——重登/换头都无效，
+        // 肇事号必须标死；池里还有健康号时换号（客户端零感知），全池都被限时如实回
+        // 403 + 申诉指引，不无限换号。纯内容策略的 11140（无账号限制文案）不碰账号，原样透传。
+        if status == 403 && has_field_code(&err_body, "11140") {
+            if !is_account_restricted_body(&err_body) {
+                println!(
+                    "[codebuddy] 11140 非账号限制文案，按请求级拒绝透传，不标号：{}",
+                    truncate(&err_body, 200)
+                );
+                return write_err(403, &err_body);
+            }
+            if let Some(p) = st.pool.as_ref() {
+                if !acc_uid.is_empty() {
+                    p.mark_dead(&acc_uid);
+                    if restricted_resent < p.size() {
+                        if let Some(next) = p.pick() {
+                            let nhdr = match st.cred.headers_for(&next.auth_path) {
+                                Ok(h) => h,
+                                Err(e) => return write_err(502, &e),
+                            };
+                            println!(
+                                "[codebuddy] 账号 {} 被上游限制(11140)，标死并换 {} 重发",
+                                crate::pool::uid_short(&acc_uid),
+                                crate::pool::uid_short(&next.uid)
+                            );
+                            p.dec_load(&acc_uid);
+                            p.touch(&next.uid);
+                            p.inc_load(&next.uid);
+                            hdr = nhdr;
+                            acc_uid = next.uid.clone();
+                            acc_path = next.auth_path.clone();
+                            if let Some(g) = load_guard.as_mut() {
+                                g.uid = acc_uid.clone();
+                            }
+                            restricted_resent += 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+            println!("[codebuddy] 11140 账号限制（无可换健康号），回 403 + 申诉指引");
+            return write_err(403, &restricted_message(&err_body));
         }
 
         // 11129 结构诊断（GPT-6 工具定义校验失败）：只记出站 tools 定义与 tool_choice +
@@ -1483,5 +1563,32 @@ mod tests {
         id.apply(&mut hi, crate::region::Region::Intl).unwrap();
         assert!(hi.get("x-ide-type").is_none(), "INTL 暂不发品牌头");
         assert!(hi.get("x-trace-id").is_some());
+    }
+
+    /// 11140 家族分流守门：账号限制文案（中/繁/英）才标死；纯内容策略不能误伤账号。
+    #[test]
+    fn restricted_11140_is_distinguished_from_content_policy() {
+        let zh = r#"{"code":11140,"msg":"request illegal","displayMsg":{"zh":"账号存在异常行为，已被限制使用"},"requestId":"rid"}"#;
+        assert!(is_account_restricted_body(zh));
+        assert!(restricted_message(zh).contains("11140"));
+        assert!(restricted_message(zh).contains("申诉"));
+        let en = r#"{"code":11140,"displayMsg":{"en":"Your account has been restricted due to unusual activity"}}"#;
+        assert!(is_account_restricted_body(en));
+        let policy = r#"{"code":11140,"msg":"request illegal"}"#;
+        assert!(!is_account_restricted_body(policy));
+        assert!(!is_account_restricted_body(r#"{"code":11128,"msg":"x"}"#));
+        // 字段级：requestId/正文里的同数字串不算；111400 也不算（词边界）
+        assert!(!is_account_restricted_body(r#"{"requestId":"11140"}"#));
+        assert!(!is_account_restricted_body(
+            r#"{"code":111400,"displayMsg":{"zh":"账号存在异常行为"}}"#
+        ));
+    }
+
+    #[test]
+    fn field_code_matcher_is_field_level() {
+        assert!(has_field_code(r#"{"code":11140}"#, "11140"));
+        assert!(has_field_code(r#"{"code" : "11140" }"#, "11140"));
+        assert!(!has_field_code(r#"{"code":111400}"#, "11140"));
+        assert!(!has_field_code(r#"{"requestId":"11140"}"#, "11140"));
     }
 }

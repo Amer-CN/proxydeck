@@ -350,6 +350,35 @@ fn flagged_spec(flagged: &[&str]) -> Value {
     json!({"per_user": Value::Object(table)})
 }
 
+/// 11140 账号级限制的官方报文（2026-10-24 实测同款）。
+const RESTRICTED_BODY_11140: &str = r#"{"code":11140,"msg":"request illegal","displayMsg":{"zh":"账号存在异常行为，已被限制使用"},"displayTips":{"zh":"系统检测到该账号存在异常使用行为，如需申诉请提交反馈"},"requestId":"rid-11140"}"#;
+
+/// 假上游 spec：`restricted` 里的号恒回 403/11140（账号限制文案），其余号回 200 SSE。
+fn restricted_spec(restricted: &[&str]) -> Value {
+    let bad = json!([{
+        "status": 403,
+        "headers": {"Content-Type": "application/json"},
+        "body": RESTRICTED_BODY_11140,
+    }]);
+    let ok = json!([{
+        "status": 200,
+        "headers": {"Content-Type": "text/event-stream"},
+        "body": OK_SSE,
+    }]);
+    let mut table = serde_json::Map::new();
+    for uid in ["u-wire", "u-wire2"] {
+        table.insert(
+            uid.to_string(),
+            if restricted.contains(&uid) {
+                bad.clone()
+            } else {
+                ok.clone()
+            },
+        );
+    }
+    json!({"per_user": Value::Object(table)})
+}
+
 /// 上游命中的 uid 序列（按发生顺序；Go 侧打点计数同义）。
 fn hit_uids(up: &FakeUpstream) -> Vec<String> {
     up.hits()
@@ -535,6 +564,108 @@ async fn flagged11128_all_pool_flagged_passes_through_bounded() {
             account_field(&text, uid, "cooling"),
             json!(true),
             "全池被封时 {uid} 应被冷却——实得快照：{text}"
+        );
+    }
+    rp.finish();
+}
+
+/// 场景五：11140 账号级限制 → 标死肇事号、换健康号成功；不按“凭据失效”重复换号，
+/// 也不把“限制”写成“冷却”（两者是不同的池状态）。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn restricted11140_marks_dead_and_swaps_to_healthy() {
+    let env = EnvGuard::set(&[]);
+    let up = FakeUpstream::start(&restricted_spec(&["u-wire"])).await;
+    let sc = scenario();
+    let rp = start_real_replay(
+        "p5c-11140-swap",
+        Region::Cn,
+        &sc,
+        Some(up.base.clone()),
+        &env,
+    )
+    .await;
+
+    let r = send(
+        &rp.app.base,
+        "POST",
+        "/v1/chat/completions",
+        Some(CLEAN_PAYLOAD),
+    )
+    .await;
+    assert_eq!(
+        r.status,
+        200,
+        "换到健康号后应 200（实得 {}：{}）",
+        r.status,
+        r.text()
+    );
+    assert_eq!(
+        hit_uids(&up),
+        vec!["u-wire", "u-wire2"],
+        "应先打限制号、再换健康号"
+    );
+
+    let snap = send(&rp.app.base, "GET", "/v1/accounts", None).await;
+    let text = snap.text();
+    assert_eq!(
+        account_field(&text, "u-wire", "dead"),
+        json!(true),
+        "限制号应标死——实得快照：{text}"
+    );
+    assert_eq!(
+        account_field(&text, "u-wire", "cooling"),
+        json!(false),
+        "账号限制不是限流，不该进冷却——实得快照：{text}"
+    );
+    assert_eq!(
+        account_field(&text, "u-wire2", "dead"),
+        json!(false),
+        "健康号不该被标死——实得快照：{text}"
+    );
+    rp.finish();
+}
+
+/// 场景六：全池 11140 → 有界换号（池大小发）后回 403 + 申诉指引，不无限重试。
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn restricted11140_all_pool_returns_actionable_403() {
+    let env = EnvGuard::set(&[]);
+    let up = FakeUpstream::start(&restricted_spec(&["u-wire", "u-wire2"])).await;
+    let sc = scenario();
+    let rp = start_real_replay(
+        "p5c-11140-all",
+        Region::Cn,
+        &sc,
+        Some(up.base.clone()),
+        &env,
+    )
+    .await;
+
+    let r = send(
+        &rp.app.base,
+        "POST",
+        "/v1/chat/completions",
+        Some(CLEAN_PAYLOAD),
+    )
+    .await;
+    assert_eq!(
+        r.status,
+        403,
+        "全池被限应回 403（实得 {}：{}）",
+        r.status,
+        r.text()
+    );
+    let body = r.text();
+    assert!(body.contains("11140"), "应点名 11140：{body}");
+    assert!(body.contains("申诉"), "应给申诉指引：{body}");
+    assert_eq!(up.hits().len(), 2, "换号必须有界（池大小 2 发）");
+
+    let snap = send(&rp.app.base, "GET", "/v1/accounts", None).await;
+    let text = snap.text();
+    for uid in ["u-wire", "u-wire2"] {
+        assert_eq!(
+            account_field(&text, uid, "dead"),
+            json!(true),
+            "{uid} 应标死——实得快照：{text}"
         );
     }
     rp.finish();
