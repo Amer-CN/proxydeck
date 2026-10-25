@@ -280,6 +280,13 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   `X-Conversation-ID` 跨轮稳定（`chat.rs::conversation_id_for`，显式
   conversation_id / prompt_cache_key 优先，否则首条 system+user + uid 哈希；
   跨账号隔离）；设备身份持久化、TLS/HTTP2 指纹、行为节流仍待做。
+- **TLS/HTTP2 指纹（2026-10-25 实测，未对齐）**：本地 CONNECT 代理抓 ClientHello 算 JA3。
+  ProxyDeck（reqwest default-tls → SChannel）`68caad18…`；官方桌面 Electron/Chromium
+  cipher/curve 组为 `4865-4866-4867-49195-49199-…` + `10-4588-29-23-24`（扩展顺序随机化，
+  JA3 多变）；官方 CLI Node/OpenSSL `67ae7553…`。三者互不相同——当前上游闸门是 HTTP 层
+  （11128），未见 TLS 执法证据；若将来启用，需评估 `rquest`/BoringSSL 的 Chromium 指纹，
+  rustls 只能靠近 OpenSSL、仍非 Chromium。测量脚本与完整数据见
+  `.work/tls-fingerprint-2026-10-25.md`（未入库）。
 
 ### B.AI / b.ai（8891）——已重新接入（v3.5.0），但保留当年实测结论
 - **现状**：`internal/bai`，COMMAND 键副页，Go 栈透明转发 `https://api.b.ai`；
