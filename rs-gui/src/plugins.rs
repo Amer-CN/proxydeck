@@ -127,6 +127,9 @@ pub fn plugin_defs() -> Vec<PluginDef> {
         // OpenAI 兼容接口（不打包 opencode；未安装时 /health 如实报 not_installed）。
         // 顺序放在 vibex 之后，不插队（`ccPluginList` 输出顺序依赖它）。
         PluginDef::new("opencode", "OpenCode", "", "", &[], 8784, "/health", "opencode"),
+        // 华为云码道（8793）：2026-10-26 接入——上游是原生 OpenAI 协议，本插件做
+        // AK/SK 签名、本机登录态导入与流式/非流式适配。顺序放在最后，不插队。
+        PluginDef::new("codearts", "CodeArts 码道", "", "", &[], 8793, "/health", "codearts"),
     ]
 }
 
@@ -782,9 +785,10 @@ mod tests {
                 "qoder",
                 "qoder-intl",
                 "vibex",
-                "opencode"
+                "opencode",
+                "codearts"
             ],
-            "顺序与 Go pluginDefs 一致（ccPluginList 输出顺序依赖它）；qoder-intl 为 2026-10-20 新增，opencode 为 2026-10-21 新增"
+            "顺序与 Go pluginDefs 一致（ccPluginList 输出顺序依赖它）；qoder-intl 为 2026-10-20 新增，opencode 为 2026-10-21 新增，codearts 为 2026-10-26 新增"
         );
         let ports: Vec<(String, u16)> = defs.iter().map(|d| (d.id.clone(), d.port)).collect();
         assert_eq!(
@@ -799,6 +803,7 @@ mod tests {
                 ("qoder-intl".to_string(), 8791),
                 ("vibex".to_string(), 8790),
                 ("opencode".to_string(), 8784),
+                ("codearts".to_string(), 8793),
             ]
         );
         // 八个都是原生内置插件（Go pluginDefs 同款）

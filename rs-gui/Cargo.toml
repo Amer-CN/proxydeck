@@ -17,6 +17,7 @@ path = "src/main.rs"
 # P7d-1 起七路齐了：bai / codebuddy / comate / qoder / tuanjie / vibex / proxy；
 # 2026-10-21 起再接入 OpenCode（`--plugin-opencode --port N`，端口 8784）。
 rs-bai = { path = "../rs-bai" }
+rs-codearts = { path = "../rs-codearts" }
 rs-codebuddy = { path = "../rs-codebuddy" }
 rs-comate = { path = "../rs-comate" }
 # OpenCode：把本机 `opencode serve` 翻成 OpenAI 兼容接口（8784）。

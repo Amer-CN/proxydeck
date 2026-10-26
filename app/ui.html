@@ -2342,7 +2342,9 @@ body.pt-try { background: var(--pt-paper); }
 .pt-sc-body .sh-v.crit { color: var(--pt-sc-accent); }
 .pt-drum i:nth-child(7) { --y: 6; } /* B.AI/注水检测接在绕接格与 COMMAND 真格之后（B.AI 紧挨真格） */
 .pt-drum i:nth-child(8) { --y: 7; } /* 无物理键的副页也要在 Mode 鼓轮上有一格 */
-.pt-drum i:nth-child(9) { --y: 8; } /* 末格：设置（注水检测是独立窗口，不上鼓轮） */
+.pt-drum i:nth-child(9) { --y: 8; } /* 2026-10-26：CODEARTS 插在 OPENCODE 与设置之间 */
+
+.pt-drum i:nth-child(10) { --y: 9; } /* 末格顺延：设置 */
 
 /* 账号矩阵子页面头部（自动探测/手动添加一行；注水检测已独立成子页面） */
 .mx-head { display: flex; justify-content: flex-end; gap: 8px; margin: 10px 0; }
@@ -2592,6 +2594,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <i data-mode="ext"><span>VIBEX</span></i>
                   <!-- 第 8 格：OPENCODE（2026-10-21 接入，占原预留格 idx7） -->
                   <i data-mode="oc"><span>OPENCODE</span></i>
+                  <i data-mode="ca"><span>CODEARTS</span></i>
                   <i data-mode="set"><span data-i18n="app.settings">设置</span></i>
                 </span>
               </span>
@@ -2780,6 +2783,24 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-dots">
                     <span class="pt-dot" data-dot="ocModels"><span>模型</span><b></b></span>
                     <span class="pt-dot" data-dot="ocHealth"><span>健康</span><b></b></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- CODEARTS 屏体（码道 · 8793） -->
+              <div class="pt-sc-body ca" data-body="ca">
+                <div class="sc-unified">
+                  <div class="run-line">
+                    <span class="pt-dot grn" data-dot="caRun"><span class="run-name">CODEARTS · 8793</span><b></b></span>
+                  </div>
+                  <div class="pt-system-readout">
+                    <span class="pt-silk">Uptime</span>
+                    <div class="pt-odo pt-sc" data-odo="caUptime">0:00:00</div>
+                  </div>
+                  <div class="pt-sc-sep"></div>
+                  <div class="pt-dots">
+                    <span class="pt-dot" data-dot="caModels"><span>模型</span><b></b></span>
+                    <span class="pt-dot" data-dot="caHealth"><span>健康</span><b></b></span>
                   </div>
                 </div>
               </div>
@@ -3690,6 +3711,64 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                </div></div>
               </div>
 
+              <!-- —————— CODEARTS 甲板（码道 · 本机登录态 → OpenAI 兼容；点火目标 8793） —————— -->
+              <div class="pt-deck" data-deck="ca">
+               <div class="pt-deck-scroll"><div class="inner">
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.ignite">点火拉杆</div>
+                    <div class="s">拉到底点火（8793）· 拉回熄火 · 复用本机码道登录态</div>
+                  </div>
+                </div></div>
+                <button type="button" class="pt-activation" data-ignite="caRun" data-lever-mode="activate"
+                        aria-label="点火拉杆">
+                  <span class="rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                  <span class="legend">IGNITE</span>
+                  <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
+                </button>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.baseUrl">BASE URL</div>
+                    <div class="s" data-i18n="app.s.copy">点击复制</div>
+                  </div>
+                  <span class="pt-val click" id="caEndpoint">http://127.0.0.1:8793/v1</span>
+                </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label"><div class="t">协议适配</div></div>
+                  <span class="pt-val">码道 snap-access · SDK-HMAC-SHA256 · 积分通道</span>
+                </div></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label"><div class="s">凭据优先读本机码道登录态（只读、不续期）；额度与桌面端共享，不承诺无限量。</div></div>
+                </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-subhead"><span class="pt-silk sm">账号 · ACCOUNT</span></div>
+                <div class="pt-grid">
+                  <div class="pt-readout"><span class="rk">当前账号</span>
+                    <span class="rv" id="caAccount">—</span><span class="rs" id="caExpiry">—</span></div>
+                  <div class="pt-readout"><span class="rk">可用积分</span>
+                    <span class="rv" id="caCredit">—</span><span class="rs">剩余 / 总额</span></div>
+                </div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
+                  <button type="button" class="ibtn2" id="caRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
+                <div class="pt-grid">
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
+                    <span class="rv" id="caStModels">—</span><span class="rs" id="caStModelsSub">实时拉取</span></div>
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.health">健康检查</span>
+                    <span class="rv" id="caStHealth">—<span class="u">ms</span></span><span class="rs" id="caStHealthSub">本地回环</span></div>
+                </div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.models">模型矩阵 · Models</span>
+                  <span class="pt-val" id="caModelCount">OFFLINE</span></div>
+                <div id="caModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.modelRef">模型参考</button>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
+                  <button type="button" class="ibtn2" id="caClearLog" data-i18n="app.btn.clear">清空</button></div>
+                <div class="pt-log" id="caLog"></div>
+               </div></div>
+              </div>
+
               <!-- —————— Comate 甲板 —————— -->
               <div class="pt-deck" data-deck="comate">
                <div class="pt-deck-scroll"><div class="inner">
@@ -4440,7 +4519,7 @@ var PT_I18N = {
 
   /* ══════════════════ 3. 状态与模式 ══════════════════ */
   var st = { mode: 'cmd', soundSet: 1 };
-  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'ext', 'oc', 'water', 'keymap'];
+  var MODES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'set', 'ext', 'oc', 'ca', 'water', 'keymap'];
   /* 双击翻页映射：主键 → 副页（cmd 的副页是 B.AI；tj 的副页是 COMATE；cb 的副页是 Qoder） */
   var ALT_MODE = { cmd: 'bai', bai: 'cmd', tj: 'comate', comate: 'tj', cb: 'qoder', qoder: 'cb' };
   /* 副页时主键显示的键名（保持按压 + 灯变蓝 + 名字切换，状态一目了然） */
@@ -4448,7 +4527,7 @@ var PT_I18N = {
   /* 鼓轮 9 格 DOM [cmd,bai,tj,comate,cb,qoder,ext,oc,set]；居中格 = children[--i]（CSS 按 --y−--i 定位，
      cell 的 --y 与 children 序号一致）。顺序即终态：主页 COMMAND 开头，第 8 格（idx7）为 OPENCODE
      （2026-10-21 接入，填掉原预留格），设置 idx8；后来者只填预留格，不调顺序。 */
-  var DRUM_IDX = { cmd: 0, bai: 1, tj: 2, comate: 3, cb: 4, qoder: 5, ext: 6, oc: 7, set: 8 };
+  var DRUM_IDX = { cmd: 0, bai: 1, tj: 2, comate: 3, cb: 4, qoder: 5, ext: 6, oc: 7, ca: 8, set: 9 };
   /* 实体键面子记忆：每物理键记住离开时的那张脸（1-4 键动态，索引记忆；
      单脸键恒显示该脸，多脸键在离开时的那张脸上保持键名）。 */
   var keyFace = { cmd: 'cmd', tj: 'tj', cb: 'cb' };
@@ -4477,9 +4556,9 @@ var PT_I18N = {
      （同步写快路＋透传桥落盘）；启动时业务层拉一次桥文件值经 window.__keymapApplyFile
      覆盖快路（无文件时不调不回写，快路绝不覆盖文件值）；
      window.__provGet/__provSet 保留为兼容垫（派生布尔值，旧调用点照常工作）。 */
-  var SUP_FACES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext', 'oc'];
-  var SUP_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX', oc: 'OPENCODE' };
-  var KEYMAP_DEF = [['cmd'], ['tj', 'comate'], ['cb', 'qoder'], ['ext', 'oc']];
+  var SUP_FACES = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext', 'oc', 'ca'];
+  var SUP_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX', oc: 'OPENCODE', ca: 'CODEARTS' };
+  var KEYMAP_DEF = [['cmd'], ['tj', 'comate'], ['cb', 'qoder'], ['ext', 'oc', 'ca']];
   var KEYMAP_KEY = 'keyMap.v1';
   function keyMapClone(m) { return m.map(function (k) { return k.slice(); }); }
   function keyMapValid(m) {
@@ -4536,7 +4615,7 @@ var PT_I18N = {
     return faces[0];
   }
   function provGet() {
-    return { bai: isMapped('bai'), comate: isMapped('comate'), qoder: isMapped('qoder'), ext: isMapped('ext'), oc: isMapped('oc') };
+    return { bai: isMapped('bai'), comate: isMapped('comate'), qoder: isMapped('qoder'), ext: isMapped('ext'), oc: isMapped('oc'), ca: isMapped('ca') };
   }
   function provEnabled(m) {
     if (SUP_FACES.indexOf(m) >= 0) return isMapped(m);
@@ -4550,15 +4629,15 @@ var PT_I18N = {
   window.__provSet = function (cfg) {
     if (!cfg || typeof cfg !== 'object') { paint(); return true; }
     var km = keyMapClone(keyMapGet());
-    var homeOf = { bai: 'cmd', comate: 'tj', qoder: 'cb', ext: 'ext', oc: 'ext' };
-    ['bai', 'comate', 'qoder', 'ext', 'oc'].forEach(function (k) {
+    var homeOf = { bai: 'cmd', comate: 'tj', qoder: 'cb', ext: 'ext', oc: 'ext', ca: 'ext' };
+    ['bai', 'comate', 'qoder', 'ext', 'oc', 'ca'].forEach(function (k) {
       if (typeof cfg[k] !== 'boolean') return;
       var idx = -1;
       for (var ai = 0; ai < km.length; ai++) if (km[ai].indexOf(k) >= 0) idx = ai;
       if (cfg[k] && idx < 0) {
         var home = homeOf[k], hi = -1;
         for (var hi2 = 0; hi2 < km.length; hi2++) if (km[hi2].indexOf(home) >= 0) hi = hi2;
-        if ((k === 'ext' || k === 'oc') && hi < 0 && km.length < 4) km.push([k]);
+        if ((k === 'ext' || k === 'oc' || k === 'ca') && hi < 0 && km.length < 4) km.push([k]);
         else if (hi >= 0) km[hi].push(k);
         else if (km.length) km[0].push(k);
       } else if (!cfg[k] && idx >= 0) {
@@ -4584,9 +4663,9 @@ var PT_I18N = {
     paint();
     return true;
   };
-  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, oc: 7, comate: 8, water: 9, keymap: 10 };
+  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, oc: 7, comate: 8, water: 9, keymap: 10, ca: 11 };
   /* 上屏 Wheel 音量条只亮着主页可见；set/water 里它挡住屏体右侧读数 */
-  var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate', 'qoder', 'oc'];
+  var VU_HOME = ['cmd', 'tj', 'cb', 'bai', 'comate', 'qoder', 'oc', 'ca'];
   /* lx（灵犀+设置）与 no 共用第 4 颗键：已停在 no 时再点该键进 lx（双职责），
      鼓轮/传送带各自有独立位；键盘方向键沿 MODES 全链可达。 */
   var modeListeners = [];
@@ -4773,14 +4852,14 @@ var PT_I18N = {
       b.classList.toggle('cur', b.dataset.body === m);
       /* B类供应商显隐：上屏屏体同步隐藏 */
       if (b.dataset.body === 'bai' || b.dataset.body === 'comate' ||
-          b.dataset.body === 'qoder' || b.dataset.body === 'ext' || b.dataset.body === 'oc') {
+          b.dataset.body === 'qoder' || b.dataset.body === 'ext' || b.dataset.body === 'oc' || b.dataset.body === 'ca') {
         b.style.display = provEnabled(b.dataset.body) ? '' : 'none';
       }
     });
     /* B类供应商显隐：鼓轮禁用格只变暗占位（nth-child/children 下标定位，禁止 display:none 抽格） */
     $$('.pt-drum i[data-mode]').forEach(function (cell) {
       var cm = cell.getAttribute('data-mode');
-      var off = (cm === 'bai' || cm === 'comate' || cm === 'qoder' || cm === 'ext' || cm === 'oc') && !provEnabled(cm);
+      var off = (cm === 'bai' || cm === 'comate' || cm === 'qoder' || cm === 'ext' || cm === 'oc' || cm === 'ca') && !provEnabled(cm);
       cell.classList.toggle('off', off);
       if (off) cell.setAttribute('aria-disabled', 'true');
       else cell.removeAttribute('aria-disabled');
@@ -7597,7 +7676,9 @@ var PT_I18N = {
     /* VIBEX 甲板（8790）——端点/状态灯/模型列表/拉杆全走通用插件视图 */
     ext: { id: 'vibex', port: 8790, pfx: 'vibex', mode: 'vibex', uptime: null, phase: 'idle' },
     /* OPENCODE 甲板（8784）——本机 opencode serve → OpenAI 兼容，同款通用插件视图 */
-    oc: { id: 'opencode', port: 8784, pfx: 'oc', mode: 'oc', uptime: null, phase: 'idle' }
+    oc: { id: 'opencode', port: 8784, pfx: 'oc', mode: 'oc', uptime: null, phase: 'idle' },
+  /* CODEARTS 甲板（8793）——码道本机登录态 → OpenAI 兼容 */
+  ca: { id: 'codearts', port: 8793, pfx: 'ca', mode: 'ca', uptime: null, phase: 'idle' }
   };
 
   /* ---------------- WorkBuddy 甲板：国内版 ⇄ 国际版（同甲板区域切换，不增甲板/模式键） ----------------
@@ -8034,14 +8115,14 @@ var PT_I18N = {
   }
 
   /* ================= 插件通用 ================= */
-  var PLUGIN_MODES = ['tj', 'cb', 'bai', 'comate', 'qoder', 'ext', 'oc']; /* 通用插件视图遍历源（启停/刷新/日志） */
+  var PLUGIN_MODES = ['tj', 'cb', 'bai', 'comate', 'qoder', 'ext', 'oc', 'ca']; /* 通用插件视图遍历源（启停/刷新/日志） */
   async function refreshPluginView(mode) {
     var V = PV[mode];
     if (!V) return;
     /* oc：先探一次"用户自己开着的 opencode TUI"，与插件是否点火无关 */
     if (mode === 'oc') ocProbeTui();
     /* B类供应商显隐：隐藏页不展示不请求（矩阵/统计/日志一律不拉，后端不动） */
-    if ((mode === 'bai' || mode === 'comate' || mode === 'qoder' || mode === 'ext' || mode === 'oc') &&
+    if ((mode === 'bai' || mode === 'comate' || mode === 'qoder' || mode === 'ext' || mode === 'oc' || mode === 'ca') &&
         typeof window.__provGet === 'function') {
       try { if (!window.__provGet()[mode]) return; } catch (e) {}
     }
@@ -8206,6 +8287,7 @@ var PT_I18N = {
       V.healthMs = null; /* cb/ba 甲板「本地回环」读数同步回「不通」 */
       if (V.mode === 'cb') PTApp.dot('cbProbe', false, false, ''); /* 模型探测灯随停堆熄灭 */
       if (V.mode === 'oc') PTApp.dot('ocModels', false, false, ''); /* OpenCode 模型灯随停堆熄灭 */
+      if (V.mode === 'ca') PTApp.dot('caModels', false, false, ''); /* CodeArts 模型灯随停堆熄灭 */
       if (V.mode === 'qoder') { PTApp.dot('qoderCredits', false, false, ''); PTApp.dot('qoderQuota', false, false, ''); }
     }
   }
@@ -8352,6 +8434,15 @@ var PT_I18N = {
         PTApp.dot('ocModels', false, true, '未就绪');
         return;
       }
+      if (V.mode === 'ca' && d && d.error) {
+        var caErr = String((d.error && d.error.message) || '码道未就绪');
+        mcEl.textContent = 'NOT READY';
+        mlBox.innerHTML = '<div class="pt-models-empty">// ' + esc(caErr) + '</div>';
+        pSet(V, 'StModels', '—'); pSet(V, 'StModelsSub', '码道未就绪');
+        V.lastModels = null;
+        PTApp.dot('caModels', false, true, '未就绪');
+        return;
+      }
       if (isMatrix && d.ok === false) {
         var noKey = d.err === 'need_key';
         mcEl.textContent = noKey ? 'NO KEY' : 'ERR';
@@ -8368,6 +8459,7 @@ var PT_I18N = {
         V.lastModels = null;
         if (V.mode === 'cb') PTApp.dot('cbProbe', false, false, '');
         if (V.mode === 'oc') PTApp.dot('ocModels', false, false, '0 个');
+        if (V.mode === 'ca') PTApp.dot('caModels', false, false, '0 个');
         return;
       }
       var key = ids.join('\u0001');
@@ -8387,6 +8479,7 @@ var PT_I18N = {
          oc 上屏「模型」灯同口径（8784 的真实模型数） */
       if (V.mode === 'cb') PTApp.dot('cbProbe', true, false, ids.length + ' 个');
       if (V.mode === 'oc') PTApp.dot('ocModels', true, false, ids.length + ' 个');
+      if (V.mode === 'ca') PTApp.dot('caModels', true, false, ids.length + ' 个');
       var groups = {};
       /* nameMap: 有 display_name 且与 id 不同的条目（Qoder qmodel_38max→Qwen3.8-Max）：
          chip 显示界面名、复制仍复制可用名（id）；tj 甲板不用 display_name——团结上游
@@ -8417,6 +8510,7 @@ var PT_I18N = {
         (V.mode === 'tj' ? '<br>// 点右上「↻ 刷新」重试（已无轮询自动重试）' : '') + '</div>';
       if (V.mode === 'cb') PTApp.dot('cbProbe', false, false, '');
       if (V.mode === 'oc') PTApp.dot('ocModels', false, true, 'ERR');
+      if (V.mode === 'ca') PTApp.dot('caModels', false, true, 'ERR');
     }
   }
 
@@ -8424,7 +8518,7 @@ var PT_I18N = {
     /* bai 没有 /model/info，这个路径会被透传代理原样打到 api.b.ai ——
        3 秒一轮的轮询等于持续对境外无意义请求（同刚修掉的 /v1/models 空打）；
        opencode 同样没有 /model/info（只有 /v1/models），别每轮白打一个 404。 */
-    if (V.mode === 'bai' || V.mode === 'oc') return;
+    if (V.mode === 'bai' || V.mode === 'oc' || V.mode === 'ca') return;
     try {
       var r = await fetch('http://127.0.0.1:' + V.port + '/model/info', { signal: AbortSignal.timeout(3000) });
       var list = await r.json();
@@ -8623,6 +8717,30 @@ var PT_I18N = {
         var crEl = $('qoderStCredits');
         if (crEl) crEl.style.color = h.credits.quotaExceeded ? 'var(--danger, #c0392b)' : '';
       }
+      /* CODEARTS 屏灯：/health 的 ready（本机登录态或账号文件）；模型数取后端缓存。 */
+      if (V.mode === 'ca') {
+        var caReady = h.ready === true;
+        PTApp.dot('caHealth', caReady, !caReady, caReady ? 'ok' : (h.reason || '未就绪'));
+        pSet(V, 'StHealthSub', caReady ? (h.account || '本机登录态') : (h.reason || '未就绪'));
+        var accEl = $('caAccount'); if (accEl) accEl.textContent = h.account || '未登录';
+        var expEl = $('caExpiry'); if (expEl) expEl.textContent = h.expiresAt || '—';
+        if (typeof h.models === 'number') {
+          pSet(V, 'StModels', h.models);
+          pSet(V, 'StModelsSub', caReady ? 'codearts · 积分通道' : (h.reason || '未就绪'));
+          PTApp.dot('caModels', caReady, !caReady, caReady ? h.models + ' 个' : '未就绪');
+        }
+        if (caReady && !V.quotaLoaded) {
+          V.quotaLoaded = true;
+          fetch('http://127.0.0.1:' + V.port + '/v1/quota', { signal: AbortSignal.timeout(5000) })
+            .then(function (r) { return r.json(); })
+            .then(function (q) {
+              var c = (q && q.credit) || {};
+              var el = $('caCredit');
+              if (el) el.textContent = (c.remain == null ? '未知' : (c.remain + ' / ' + c.total));
+            })
+            .catch(function () { var el = $('caCredit'); if (el) el.textContent = '未知'; });
+        }
+      }
     } catch (e) { V.healthMs = null; }
     /* 团结/WorkBuddy 积分卡都不轮询——拉杆启动拉一次 + 手动刷新，轮询只留本地（官网 429 保护） */
     /* 消耗 TOP：团结由 loadTuanjieQuota（启动/手动刷新）渲染积分口径，
@@ -8631,7 +8749,7 @@ var PT_I18N = {
       var entries = null, bmode = 'tokens';
       /* bai 走本地 /v1/stats（插件侧自建统计，不再透传打到 api.b.ai 的境外空请求）；
          opencode 没有 /v1/stats（是协议翻译层，不落本地用量），别每 3 秒白打一个 404 */
-      if (V.id !== 'tuanjie' && V.mode !== 'oc') {
+      if (V.id !== 'tuanjie' && V.mode !== 'oc' && V.mode !== 'ca') {
         var ds = await (await fetch('http://127.0.0.1:' + V.port + '/v1/stats', { signal: AbortSignal.timeout(3000) })).json();
         var models = ds.models || {};
         entries = Object.keys(models).map(function (name) {
@@ -10240,6 +10358,13 @@ var PT_I18N = {
       '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8790）；拉回最左熄火。<br>' +
       '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8790/v1</code>（甲板上点击即复制）。<br>' +
       '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>',
+    ca:
+      '<h3>使用帮助 · GUIDE · CodeArts</h3><div class="m-body">' +
+      '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8793）；拉回最左熄火。<br>' +
+      '<b>【凭据】</b>优先只读本机码道桌面端登录态（DPAPI + AES-GCM），不续期、不写回；没有桌面端时读 <code>codearts-accounts.json</code>。<br>' +
+      '<b>【接入】</b>任意 OpenAI 兼容客户端：Base URL 填 <code>http://127.0.0.1:8793/v1</code>（甲板上点击即复制）。<br>' +
+      '<b>【额度】</b>积分与码道桌面端共享；额度用尽时上游如实报错，插件不会静默换模型。<br>' +
+      '<b>【模型矩阵】</b>点火后自动拉取，点击模型名一键复制。</div>',
     oc:
       '<h3>使用帮助 · GUIDE · OpenCode</h3><div class="m-body">' +
       '<b>【点火与熄火】</b>「点火拉杆」从左<b>拉到最右</b>点火（8784）；拉回最左熄火。<br>' +
@@ -10381,7 +10506,8 @@ var PT_I18N = {
     bai: refForBai,
     comate: refForComate,
     ext: refForExt,
-    oc: refForNamed(8784, 'OpenCode')
+    oc: refForNamed(8784, 'OpenCode'),
+    ca: refForNamed(8793, 'CodeArts')
   };
 
   function setModelFilter(mode) {
@@ -10423,9 +10549,9 @@ var PT_I18N = {
 
     /* —— B类键位自由组合：独立配置子页（设置页只留入口行） —— */
     (function bindKeymapPage() {
-      var KM_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX', oc: 'OPENCODE' };
-      var KM_PORT = { cmd: '55990', tj: '8788', comate: '8786', cb: '8787', qoder: '8785', bai: '8891', ext: '8790', oc: '8784' };
-      var KM_ALL = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext', 'oc'];
+      var KM_LABEL = { cmd: 'COMMAND', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX', oc: 'OPENCODE', ca: 'CODEARTS' };
+      var KM_PORT = { cmd: '55990', tj: '8788', comate: '8786', cb: '8787', qoder: '8785', bai: '8891', ext: '8790', oc: '8784', ca: '8793' };
+      var KM_ALL = ['cmd', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext', 'oc', 'ca'];
       function kmGet() {
         try {
           if (typeof window.__keymapGet === 'function') return window.__keymapGet();
@@ -10661,7 +10787,7 @@ var PT_I18N = {
          团结/WorkBuddy 强制实时拉一次积分，B.AI/Comate/Qoder/OpenCode 无积分卡只刷视图 */
       var rf = $(V.pfx + 'Refresh');
       if (rf) rf.onclick = async function () {
-        if (mode === 'bai' || mode === 'comate' || mode === 'ext' || mode === 'oc') {
+        if (mode === 'bai' || mode === 'comate' || mode === 'ext' || mode === 'oc' || mode === 'ca') {
           /* B.AI 的「↻ 刷新」与拉杆点火同权：复用同一个闩锁去强制刷一次模型矩阵，
              否则改走缓存端点之后这颗按钮按下去不会有任何变化 */
           if (mode === 'bai') V.fetchOnRun = true;
@@ -10671,6 +10797,7 @@ var PT_I18N = {
             try { await fetch('http://127.0.0.1:' + V.port + '/v1/models?refresh=1'); } catch (e) {}
             await vibexRefreshAccounts();
           }
+          if (mode === 'ca') { V.quotaLoaded = false; V.lastModels = null; }
           refreshPluginView(mode); plog(V, 'sys', '手动刷新'); return;
         }
         if (mode === 'qoder') {
@@ -10904,6 +11031,7 @@ var PT_I18N = {
     if (m === 'tj') { loadTuanjieAccounts(); loadTuanjieInflight(); loadTuanjieActivity(); } /* 进甲板即时刷，不等 3s tick */
     /* OPENCODE 甲板：进板即查一次安装状态（插件没在跑就静默失败，保留现有文案） */
     if (m === 'oc') { ocInstall.syncedForRun = false; ocInstallRefresh(); }
+    if (m === 'ca') { PV.ca.quotaLoaded = false; }
     if (m !== 'cmd') refreshPluginView(m);
     else pollState();
   });

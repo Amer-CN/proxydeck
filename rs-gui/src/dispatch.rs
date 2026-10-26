@@ -50,6 +50,9 @@ pub enum Mode {
 pub fn plugin_crate(id: &str) -> Option<&'static str> {
     match id {
         "bai" => Some("rs-bai"),
+        // 华为云码道（8793）：2026-10-26 接入；`rs-codearts` 自带 `--plugin-codearts` 护栏，
+        // 与 rs-opencode 同形。凭据优先读本机码道登录态，失败再读账号文件。
+        "codearts" => Some("rs-codearts"),
         "codebuddy" | "codebuddy-intl" => Some("rs-codebuddy"),
         "comate" => Some("rs-comate"),
         // OpenCode（8784）：2026-10-21 接入；`rs-opencode` 提供 `pub async fn run(args)`，
@@ -70,7 +73,7 @@ pub fn plugin_crate(id: &str) -> Option<&'static str> {
 /// vibex → tuanjie → codebuddy → codebuddy-intl → bai → comate → qoder → qoder-intl；
 /// OpenCode 作为 2026-10-21 新增项**放在最后**，既有顺序一字不动。
 /// 顺序只在多个 `--plugin-*` 并存时有意义（与 Go 同：vibex 优先）。}
-pub const PLUGIN_FLAGS: [&str; 9] = [
+pub const PLUGIN_FLAGS: [&str; 10] = [
     "plugin-vibex",
     "plugin-tuanjie",
     "plugin-codebuddy",
@@ -80,6 +83,8 @@ pub const PLUGIN_FLAGS: [&str; 9] = [
     "plugin-qoder",
     "plugin-qoder-intl",
     "plugin-opencode",
+    // 华为云码道（8793）：2026-10-26 新增，放在最后，既有顺序一字不动。
+    "plugin-codearts",
 ];
 
 /// 把 Go 风格的「单横线长选项」规范化为 clap 认的 `--flag`（短选项/负值原样保留）。
@@ -297,6 +302,17 @@ pub fn run(argv: Vec<String>) -> i32 {
                             return 2;
                         }
                         block_on(rs_opencode::run(a))
+                    }
+                    Err(e) => Err(e.to_string()),
+                },
+                "rs-codearts" => match rs_codearts::Args::try_parse_from(&sub) {
+                    Ok(a) => {
+                        // 与单独跑 rs-codearts 时同一条护栏与文案（退出码 2）
+                        if !a.plugin_codearts {
+                            eprintln!("请用 --plugin-codearts 启动（码道 CodeArts 插件服务模式）");
+                            return 2;
+                        }
+                        block_on(rs_codearts::run(a))
                     }
                     Err(e) => Err(e.to_string()),
                 },
@@ -607,6 +623,7 @@ mod tests {
         assert_eq!(plugin_crate("qoder"), Some("rs-qoder"));
         assert_eq!(plugin_crate("vibex"), Some("rs-vibex"));
         assert_eq!(plugin_crate("opencode"), Some("rs-opencode"));
+        assert_eq!(plugin_crate("codearts"), Some("rs-codearts"));
         // 未知 id 仍如实报「没有承载」（不静默当成功）
         assert_eq!(plugin_crate("zz-nope"), None);
     }

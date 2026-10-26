@@ -1,0 +1,25 @@
+[package]
+name = "rs-codearts"
+version = "0.1.0"
+edition = "2021"
+description = "ProxyDeck 华为云码道 CodeArts 插件（8793）：上游 OpenAI 兼容，本地做签名/账号/聚合"
+
+[[bin]]
+name = "rs-codearts"
+path = "src/main.rs"
+
+[dependencies]
+aes-gcm = "0.11"
+axum = "0.8"
+base64 = "0.22"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+hex = "0.4"
+hmac = "0.12"
+# 上游是华为云 HTTPS；显式声明 TLS 栈（TLS 指纹差异是圆桌点名的风险项，本项目一律显式写）。
+reqwest = { version = "0.13", features = ["default-tls", "http2", "stream", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync"] }

@@ -15,6 +15,7 @@
 #   rs-gui      —— 宿主外壳 + 单 exe 多子模式分发器（唯一产出 exe 的成品目标）
 #   rs-proxy    —— COMMAND 代理核心（55990）
 #   rs-bai      —— B.AI 插件（8891）
+#   rs-codearts —— 华为云码道插件（8793）
 #   rs-codebuddy—— WorkBuddy 插件（8787 / 8789）
 #   rs-comate   —— Comate 插件（8786）
 #   rs-qoder    —— Qoder 插件（8785）
@@ -26,6 +27,7 @@
 resolver = "2"
 members = [
     "rs-bai",
+    "rs-codearts",
     "rs-codebuddy",
     "rs-comate",
     "rs-gui",

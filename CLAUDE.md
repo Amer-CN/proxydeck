@@ -27,11 +27,12 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 ├─ rs-qoder/                  Qoder 插件（8785）
 ├─ rs-vibex/                  VibeX 插件（8790）
 ├─ rs-bai/                    B.AI 插件（8891）
+├─ rs-codearts/               华为云码道插件（8793，本机登录态自动导入）
 ├─ app/                       只剩两个原件：ui.html（UI 唯一源）+ icon.ico
-└─ Cargo.toml                 工作区（8 个 crate）
+└─ Cargo.toml                 工作区（逐条列全的成员清单）
 ```
 
-- 端口约定：COMMAND 代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891 / VibeX 8790
+- 端口约定：COMMAND 代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891 / VibeX 8790 / 码道 8793
 - 插件 = spawn 本 exe 的 `--plugin-<id> --port <n>` 子进程，独立常驻，关 GUI 不中断
 - **升版本必须同步的位置**（**Rust 时代清单，2026-10-18 重写**；Go 时代的
   `app/main.go appVersion` 已不参与构建，只剩历史参考）：
