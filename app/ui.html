@@ -4576,11 +4576,25 @@ var PT_I18N = {
     return true;
   }
   var keyMapCache = null;
+  /* 2026-10-26：老用户的 keyMap.v1 里没有 CODEARTS（ca）。加载时一次性补到 ext 那一键，
+     否则 provEnabled('ca') 为假、甲板与鼓轮格都会被判成「未映射」而隐藏。
+     不写回 localStorage / keymap.json——只在内存里补，用户真去键位页改键时才落盘。 */
+  function keyMapEnsureCa(m) {
+    var has = false;
+    for (var i = 0; i < m.length; i++) if (m[i].indexOf('ca') >= 0) has = true;
+    if (has) return m;
+    var t = -1;
+    for (var j = 0; j < m.length; j++) if (m[j].indexOf('ext') >= 0) t = j;
+    if (t < 0) t = m.length - 1;
+    m[t] = m[t].concat(['ca']);
+    return keyMapValid(m) ? m : keyMapClone(KEYMAP_DEF);
+  }
   function keyMapGet() {
     if (keyMapCache) return keyMapCache;
     var c = null;
     try { c = JSON.parse(localStorage.getItem(KEYMAP_KEY) || 'null'); } catch (e) { c = null; }
     if (!keyMapValid(c)) c = keyMapClone(KEYMAP_DEF);
+    else c = keyMapEnsureCa(c);
     keyMapCache = c;
     return keyMapCache;
   }
@@ -4657,6 +4671,7 @@ var PT_I18N = {
      启动时文件值覆盖快路值，绝不能反过来把快路值回写成文件（无文件时调用方直接不调这里）。 */
   window.__keymapApplyFile = function (m) {
     if (!keyMapValid(m)) return false;
+    m = keyMapEnsureCa(keyMapClone(m));
     keyMapCache = keyMapClone(m);
     try { localStorage.setItem(KEYMAP_KEY, JSON.stringify(keyMapCache)); } catch (e) {}
     rebuildKeys();
