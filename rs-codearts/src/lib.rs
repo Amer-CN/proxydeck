@@ -120,6 +120,8 @@ pub struct Server {
     started: Instant,
     models: Mutex<Option<ModelsCache>>,
     local_cache: Mutex<Option<import::Imported>>,
+    /// 本轮已自动归档过的本机登录态身份（避免每次请求都写盘）。
+    archived: Mutex<std::collections::HashSet<String>>,
     /// 续期结果（`codearts-refreshed.json`）。
     refreshed: Mutex<store::Store>,
     /// 账号健康度（轮转依据）。
@@ -153,10 +155,13 @@ impl Server {
             local_cache: Mutex::new(None),
             refreshed: Mutex::new(refreshed),
             health: Mutex::new(std::collections::HashMap::new()),
+            archived: Mutex::new(std::collections::HashSet::new()),
         })
     }
 
     /// 读本机登录态；失败时退回上次成功的结果（桌面端短暂写文件时不至于瞬间掉线）。
+    /// 读到有效登录态后自动把快照归档进账号文件（桌面端换号登录即自动攒池，
+    /// 与 WorkBuddy 一样零手工；同一身份本轮只写一次）。
     fn local_session(&self) -> Option<import::Imported> {
         if !self.allow_local {
             return None;
@@ -166,9 +171,62 @@ impl Server {
                 if let Ok(mut c) = self.local_cache.lock() {
                     *c = Some(s.clone());
                 }
+                self.maybe_archive_local(&s.account);
                 Some(s)
             }
             Err(_) => self.local_cache.lock().ok().and_then(|c| c.clone()),
+        }
+    }
+
+    /// 本机登录态自动归档：账号文件里还没有该身份（且没被删过）就存一份快照。
+    fn maybe_archive_local(&self, account: &Account) {
+        if !account.has_credentials() {
+            return;
+        }
+        let id = account.identity();
+        if let Ok(done) = self.archived.lock() {
+            if done.contains(&id) {
+                return;
+            }
+        }
+        let mut cfg = match self.load_config() {
+            Ok(c) => c,
+            Err(_) => Config {
+                accounts: Vec::new(),
+                channel: config::DEFAULT_CHANNEL.to_string(),
+                removed: Vec::new(),
+                path: self.accounts_path.clone(),
+            },
+        };
+        if cfg.removed.iter().any(|x| x == &id) {
+            if let Ok(mut done) = self.archived.lock() {
+                done.insert(id);
+            }
+            return;
+        }
+        let has = cfg
+            .accounts
+            .iter()
+            .any(|a| a.identity() == id || (a.display_name() == account.display_name() && a.domain_id == account.domain_id));
+        if has {
+            if let Ok(mut done) = self.archived.lock() {
+                done.insert(id);
+            }
+            return;
+        }
+        let mut snap = account.clone();
+        if snap.name.trim().is_empty() {
+            snap.name = snap.display_name();
+        }
+        cfg.upsert(snap);
+        if cfg.save().is_ok() {
+            println!(
+                "codearts-plugin: 本机登录态已自动归档（{}），账号池 +1",
+                account.display_name()
+            );
+            if let Ok(mut done) = self.archived.lock() {
+                done.insert(id);
+            }
         }
     }
 
@@ -226,32 +284,91 @@ impl Server {
         }
     }
 
-    /// 账号全集（本机 + 文件、应用 overlay、不去重排序），供 `/health` 展示。
+    /// 账号全集：按身份合并为一行。同一身份可能同时存在于
+    /// 文件快照、本机实时登录态、续期 overlay 三处——取三者中过期最晚的凭据
+    /// （桌面端每小时自己轮转，本机登录态；overlay 存的是插件上次续期的结果）。
+    /// `enabled` 开关取文件项（没有文件项默认启用）。已删除（removed 名单）
+    /// 的身份不再出现，也不再自动归档。
     fn all_accounts(&self) -> Vec<(Account, &'static str)> {
         let overlay = self.refreshed.lock().ok().map(|s| s.clone()).unwrap_or_default();
-        let mut out: Vec<(Account, &'static str)> = Vec::new();
-        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let cfg = self.load_config().ok();
+        let removed: &[String] = cfg
+            .as_ref()
+            .map(|c| c.removed.as_slice())
+            .unwrap_or(&[]);
+        let mut order: Vec<String> = Vec::new();
+        let mut groups: std::collections::HashMap<String, (Option<Account>, Option<Account>)> =
+            std::collections::HashMap::new();
+        // 文件快照（应用 overlay）。
+        if let Some(c) = cfg.as_ref() {
+            for a in c.accounts.iter().filter(|a| a.has_credentials()) {
+                let mut a = a.clone();
+                if removed.iter().any(|x| x == &a.identity()) {
+                    continue;
+                }
+                if let Some(o) = overlay.overlay(&a) {
+                    a = o;
+                }
+                let id = a.identity();
+                groups
+                    .entry(id.clone())
+                    .and_modify(|g| {
+                        if g.0.is_none() {
+                            g.0 = Some(a.clone());
+                        }
+                    })
+                    .or_insert_with(|| {
+                        order.push(id);
+                        (Some(a), None)
+                    });
+            }
+        }
+        // 本机实时登录态。
         if let Some(local) = self.local_session() {
             if local.account.has_credentials() {
                 let mut a = local.account;
-                if let Some(o) = overlay.overlay(&a) {
-                    a = o;
+                if !removed.iter().any(|x| x == &a.identity()) {
+                    if let Some(o) = overlay.overlay(&a) {
+                        a = o;
+                    }
+                    let id = a.identity();
+                    groups
+                        .entry(id.clone())
+                        .and_modify(|g| {
+                            if g.1.is_none() {
+                                g.1 = Some(a.clone());
+                            }
+                        })
+                        .or_insert_with(|| {
+                            order.push(id);
+                            (None, Some(a))
+                        });
                 }
-                seen.insert(a.identity());
-                out.push((a, "local"));
             }
         }
-        if let Ok(cfg) = self.load_config() {
-            for a in cfg.accounts.iter().filter(|a| a.enabled && a.has_credentials()) {
-                let mut a = a.clone();
-                if let Some(o) = overlay.overlay(&a) {
-                    a = o;
+        fn score(a: &Account) -> i64 {
+            a.expires_unix().unwrap_or(-1)
+        }
+        let mut out: Vec<(Account, &'static str)> = Vec::new();
+        for id in order {
+            let Some((file, live)) = groups.remove(&id) else {
+                continue;
+            };
+            let enabled = file.as_ref().map(|f| f.enabled).unwrap_or(true);
+            let (mut a, source) = match (file, live) {
+                (Some(f), Some(l)) => {
+                    if score(&l) >= score(&f) {
+                        (l, "local")
+                    } else {
+                        (f, "file")
+                    }
                 }
-                if !seen.insert(a.identity()) {
-                    continue;
-                }
-                out.push((a, "file"));
-            }
+                (Some(f), None) => (f, "file"),
+                (None, Some(l)) => (l, "local"),
+                (None, None) => continue,
+            };
+            a.enabled = enabled;
+            out.push((a, source));
         }
         out
     }
@@ -260,6 +377,9 @@ impl Server {
     fn candidates(&self) -> Result<Vec<(Account, &'static str)>, String> {
         let mut out: Vec<(Account, &'static str, bool)> = Vec::new();
         for (a, source) in self.all_accounts() {
+            if !a.enabled {
+                continue;
+            }
             let id = a.identity();
             let h = self.health_of(&id);
             if h.dead {
@@ -301,22 +421,7 @@ impl Server {
         }
         match refresh::refresh_token(self.up.client(), &self.sts_url, account).await {
             Ok(r) => {
-                let mut new = account.clone();
-                new.access_key = r.access_key.clone();
-                new.secret_key = r.secret_key.clone();
-                new.security_token = r.security_token.clone();
-                new.expires_at = if r.expires_at.is_empty() {
-                    None
-                } else {
-                    Some(r.expires_at.clone())
-                };
-                new.refresh_token = Some(r.refresh_token.clone());
-                if let Ok(mut st) = self.refreshed.lock() {
-                    st.put(account, &r);
-                    if let Err(e) = st.save(&self.overlay_path) {
-                        eprintln!("codearts-plugin: 续期落盘失败: {e}");
-                    }
-                }
+                let new = self.apply_refresh(account, &r);
                 println!(
                     "codearts-plugin: 账号 {} 续期成功（新过期 {}）",
                     account.display_name(),
@@ -332,6 +437,136 @@ impl Server {
                 (account.clone(), Some(format!("续期失败: {e}")))
             }
         }
+    }
+
+    /// 账号导入解析：完整 secretStorage 会话 / 单 session / 普通 Account 三种写法。
+    fn parse_import(v: &Value) -> Result<Vec<Account>, String> {
+        if v.get("session").is_some() {
+            return Ok(vec![import::account_from_value(v)?]);
+        }
+        let cfg = Config::from_value(v.clone(), std::path::Path::new("import"))?;
+        if cfg.accounts.is_empty() {
+            return Err("导入内容里没有可用账号".to_string());
+        }
+        Ok(cfg.accounts)
+    }
+
+    /// 把导入的账号合并进账号文件并落盘，返回全量视图。
+    fn save_imported(&self, accounts: Vec<Account>) -> Result<Vec<Value>, String> {
+        let mut cfg = self.load_config().unwrap_or(Config {
+            accounts: Vec::new(),
+            channel: config::DEFAULT_CHANNEL.to_string(),
+            removed: Vec::new(),
+            path: self.accounts_path.clone(),
+        });
+        for mut a in accounts {
+            if a.name.trim().is_empty() {
+                a.name = a.display_name();
+            }
+            if !a.enabled {
+                a.enabled = true;
+            }
+            let id = a.identity();
+            cfg.removed.retain(|x| x != &id);
+            cfg.upsert(a);
+        }
+        cfg.save()?;
+        Ok(self
+            .all_accounts()
+            .iter()
+            .map(|(a, s)| self.account_view(a, s))
+            .collect())
+    }
+
+    /// 强制续期（忽略是否过期）。本机登录态且桌面运行中且未显式允许 → 拒绝。
+    async fn force_refresh(&self, account: &Account, source: &str) -> Result<Account, String> {
+        if !account.can_refresh() {
+            return Err("该账号缺少续期材料（refresh_token / DPoP 私钥 / PKCE）".to_string());
+        }
+        if source == "local" && !self.allow_local_refresh && self.codearts_running() {
+            return Err("码道桌面端在运行：为避免把桌面端踢下线，默认不主动续期本机登录态（可用 --allow-local-refresh 覆盖）".to_string());
+        }
+        let r = refresh::refresh_token(self.up.client(), &self.sts_url, account).await?;
+        let new = self.apply_refresh(account, &r);
+        println!(
+            "codearts-plugin: 账号 {} 手动续期成功（新过期 {}）",
+            account.display_name(),
+            r.expires_at
+        );
+        Ok(new)
+    }
+
+    /// 把续期结果应用到账号并落盘 overlay。
+    /// 同时把新凭据写回账号文件（无 domainId 的账号 identity 取自 AK 尾段，
+    /// AK 轮转后 identity 会变；不写回的话启用/停用/删除就找不到它了）。
+    fn apply_refresh(&self, account: &Account, r: &refresh::Refreshed) -> Account {
+        let mut new = account.clone();
+        new.access_key = r.access_key.clone();
+        new.secret_key = r.secret_key.clone();
+        new.security_token = r.security_token.clone();
+        new.expires_at = if r.expires_at.is_empty() {
+            None
+        } else {
+            Some(r.expires_at.clone())
+        };
+        new.refresh_token = Some(r.refresh_token.clone());
+        if let Ok(mut st) = self.refreshed.lock() {
+            st.put(account, r);
+            if let Err(e) = st.save(&self.overlay_path) {
+                eprintln!("codearts-plugin: 续期落盘失败: {e}");
+            }
+        }
+        // 同步写回账号文件：让文件里的凭据保持可用状态，
+        // 续期后 identity 变化也不会让启用/停用/删除找不到账号。
+        let old_id = account.identity();
+        let old_name = account.display_name();
+        let old_domain = account.domain_id.clone();
+        if let Ok(mut cfg) = self.load_config() {
+            let mut changed = false;
+            for e in cfg.accounts.iter_mut() {
+                let same_id = e.identity() == old_id;
+                let same_name =
+                    e.display_name() == old_name && e.domain_id == old_domain;
+                if same_id || same_name {
+                    e.access_key = r.access_key.clone();
+                    e.secret_key = r.secret_key.clone();
+                    e.security_token = r.security_token.clone();
+                    e.expires_at = if r.expires_at.is_empty() {
+                        None
+                    } else {
+                        Some(r.expires_at.clone())
+                    };
+                    e.refresh_token = Some(r.refresh_token.clone());
+                    changed = true;
+                }
+            }
+            if changed {
+                if let Err(e) = cfg.save() {
+                    eprintln!("codearts-plugin: 账号文件回写失败: {e}");
+                }
+            }
+        }
+        new
+    }
+
+    /// 账号视图（绝不输出密钥类字段）。
+    fn account_view(&self, a: &Account, source: &str) -> Value {
+        let id = a.identity();
+        let h = self.health_of(&id);
+        json!({
+            "identity": id,
+            "name": a.display_name(),
+            "source": source,
+            "enabled": a.enabled,
+            "akTail": Config::ak_tail(a),
+            "expiresAt": a.expires_at,
+            "expired": a.is_expired(),
+            "refreshable": a.can_refresh(),
+            "dead": h.dead,
+            "cooling": h.cooldown_until.map(|t| t > Instant::now()).unwrap_or(false),
+            "failures": h.failures,
+            "domainId": a.domain_id,
+        })
     }
 }
 
@@ -377,6 +612,12 @@ pub fn router(state: Arc<Server>) -> Router {
         .route("/v1/models", any(handle_models))
         .route("/v1/chat/completions", any(handle_chat))
         .route("/v1/quota", any(handle_quota))
+        .route("/accounts", any(handle_accounts))
+        .route("/accounts/import", any(handle_import))
+        .route("/accounts/import-local", any(handle_import_local))
+        .route("/accounts/refresh", any(handle_account_refresh))
+        .route("/accounts/enable", any(handle_enable))
+        .route("/accounts/remove", any(handle_remove))
         .fallback(any(handle_not_found))
         .layer(axum::middleware::from_fn(cors))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
@@ -426,7 +667,7 @@ async fn handle_health(State(st): State<Arc<Server>>) -> Response {
         let id = a.identity();
         let h = st.health_of(&id);
         let cooling = h.cooldown_until.map(|t| t > Instant::now()).unwrap_or(false);
-        if first.is_none() && !h.dead {
+        if first.is_none() && a.enabled && !h.dead {
             first = Some((a.clone(), *source));
         }
         pool.push(json!({
@@ -828,6 +1069,148 @@ fn parse_credit(raw: &Value) -> (Option<f64>, Option<f64>, Option<f64>, Option<f
 
 async fn handle_not_found() -> Response {
     error_response(404, "not found", "not_found")
+}
+
+// ---------------------------------------------------------------------------
+// 账号管理：GET /accounts，POST /accounts/{import,import-local,refresh,enable}
+// ---------------------------------------------------------------------------
+
+/// 账号池清单（密钥一律只露 AK 尾段）。
+async fn handle_accounts(State(st): State<Arc<Server>>) -> Response {
+    let list: Vec<Value> = st
+        .all_accounts()
+        .iter()
+        .map(|(a, s)| st.account_view(a, s))
+        .collect();
+    json_response(
+        StatusCode::OK,
+        &json!({
+            "accounts": list,
+            "codeartsRunning": st.codearts_running(),
+            "localRefreshAllowed": st.allow_local_refresh,
+            "accountsPath": st.accounts_path.display().to_string(),
+        }),
+    )
+}
+
+/// 导入账号：接受完整 secretStorage 会话 / 单 session / 普通 Account 三种写法。
+async fn handle_import(State(st): State<Arc<Server>>, body: Bytes) -> Response {
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return error_response(400, &format!("请求体不是合法 JSON: {e}"), "invalid_json"),
+    };
+    let accounts = match Server::parse_import(&v) {
+        Ok(a) => a,
+        Err(e) => return error_response(400, &e, "invalid_request"),
+    };
+    match st.save_imported(accounts) {
+        Ok(list) => json_response(StatusCode::OK, &json!({ "accounts": list })),
+        Err(e) => error_response(500, &e, "save_failed"),
+    }
+}
+
+/// 把当前本机登录态快照一份进账号文件（桌面端可换号登录再导，实现多号池）。
+async fn handle_import_local(State(st): State<Arc<Server>>) -> Response {
+    if !st.allow_local {
+        return error_response(400, "本机导入已用 --no-local 关闭", "local_disabled");
+    }
+    let Some(local) = st.local_session() else {
+        return error_response(503, "未找到本机码道登录态（桌面端尚未登录）", "no_local");
+    };
+    if !local.account.has_credentials() {
+        return error_response(503, "本机登录态不完整", "no_local");
+    }
+    let mut a = local.account;
+    if a.name.trim().is_empty() {
+        a.name = a.display_name();
+    }
+    match st.save_imported(vec![a]) {
+        Ok(list) => json_response(StatusCode::OK, &json!({ "accounts": list })),
+        Err(e) => error_response(500, &e, "save_failed"),
+    }
+}
+
+/// 对单个账号强制续期（忽略过期时间）。
+async fn handle_account_refresh(State(st): State<Arc<Server>>, body: Bytes) -> Response {
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return error_response(400, &format!("请求体不是合法 JSON: {e}"), "invalid_json"),
+    };
+    let identity = v.get("identity").and_then(|x| x.as_str()).unwrap_or("");
+    if identity.is_empty() {
+        return error_response(400, "缺少 identity", "invalid_request");
+    }
+    let Some((account, source)) = st
+        .all_accounts()
+        .into_iter()
+        .find(|(a, _)| a.identity() == identity)
+    else {
+        return error_response(404, "找不到该账号", "not_found");
+    };
+    match st.force_refresh(&account, source).await {
+        Ok(new) => json_response(
+            StatusCode::OK,
+            &json!({ "account": st.account_view(&new, source) }),
+        ),
+        Err(e) => error_response(502, &e, "refresh_failed"),
+    }
+}
+
+/// 启用/停用账号文件里的账号（本机登录态不受影响，用 --no-local 关）。
+async fn handle_enable(State(st): State<Arc<Server>>, body: Bytes) -> Response {
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return error_response(400, &format!("请求体不是合法 JSON: {e}"), "invalid_json"),
+    };
+    let identity = v.get("identity").and_then(|x| x.as_str()).unwrap_or("");
+    let enabled = v.get("enabled").and_then(|x| x.as_bool()).unwrap_or(true);
+    if identity.is_empty() {
+        return error_response(400, "缺少 identity", "invalid_request");
+    }
+    let mut cfg = match st.load_config() {
+        Ok(c) => c,
+        Err(e) => return error_response(500, &e, "load_failed"),
+    };
+    let Some(slot) = cfg.accounts.iter_mut().find(|a| a.identity() == identity) else {
+        return error_response(
+            404,
+            "账号文件里没有该账号（本机登录态只能整体用 --no-local 关闭）",
+            "not_found",
+        );
+    };
+    slot.enabled = enabled;
+    if let Err(e) = cfg.save() {
+        return error_response(500, &e, "save_failed");
+    }
+    json_response(StatusCode::OK, &json!({ "identity": identity, "enabled": enabled }))
+}
+
+/// 删除账号文件里的账号快照（本机登录态不受影响）。
+async fn handle_remove(State(st): State<Arc<Server>>, body: Bytes) -> Response {
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return error_response(400, &format!("请求体不是合法 JSON: {e}"), "invalid_json"),
+    };
+    let identity = v.get("identity").and_then(|x| x.as_str()).unwrap_or("");
+    if identity.is_empty() {
+        return error_response(400, "缺少 identity", "invalid_request");
+    }
+    let mut cfg = match st.load_config() {
+        Ok(c) => c,
+        Err(e) => return error_response(500, &e, "load_failed"),
+    };
+    let before = cfg.accounts.len();
+    cfg.accounts.retain(|a| a.identity() != identity);
+    if cfg.accounts.len() == before {
+        return error_response(404, "账号文件里没有该账号", "not_found");
+    }
+    if !cfg.removed.iter().any(|x| x == identity) {
+        cfg.removed.push(identity.to_string());
+    }
+    if let Err(e) = cfg.save() {
+        return error_response(500, &e, "save_failed");
+    }
+    json_response(StatusCode::OK, &json!({ "identity": identity, "removed": true }))
 }
 
 pub async fn run(args: Args) -> Result<(), String> {

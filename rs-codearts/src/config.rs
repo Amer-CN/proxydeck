@@ -12,7 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// 默认通道：`credit`（积分）。`benefit`（每日免费 Token）2026-10 已下线，
@@ -24,7 +24,7 @@ fn default_true() -> bool {
 }
 
 /// 单账号。
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct Account {
     /// 显示名；没写就用 `account.label` / `account.id` / AK 尾段。
     #[serde(default)]
@@ -70,7 +70,7 @@ pub struct Account {
     pub account: Option<SessionAccount>,
 }
 
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct SessionAccount {
     #[serde(default)]
     pub id: String,
@@ -148,6 +148,8 @@ pub struct Config {
     pub accounts: Vec<Account>,
     pub channel: String,
     pub path: PathBuf,
+    /// 已删除的账号身份（删了就不再自动归档回来）。
+    pub removed: Vec<String>,
 }
 
 impl Config {
@@ -157,6 +159,7 @@ impl Config {
             return Ok(Self {
                 accounts: Vec::new(),
                 channel: DEFAULT_CHANNEL.to_string(),
+                removed: Vec::new(),
                 path: path.to_path_buf(),
             });
         }
@@ -169,16 +172,25 @@ impl Config {
 
     /// 支持数组 / `{accounts:[...]}` / 单个 session 对象。
     pub fn from_value(v: Value, path: &Path) -> Result<Self, String> {
-        let (accounts, channel) = match v {
-            Value::Array(items) => (items, DEFAULT_CHANNEL.to_string()),
+        let (accounts, channel, removed) = match v {
+            Value::Array(items) => (items, DEFAULT_CHANNEL.to_string(), Vec::new()),
             Value::Object(mut map) => {
                 let channel = map
                     .get("channel")
                     .and_then(|c| c.as_str())
                     .unwrap_or(DEFAULT_CHANNEL)
                     .to_string();
+                let removed: Vec<String> = map
+                    .get("removed")
+                    .and_then(|r| r.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 if let Some(Value::Array(items)) = map.remove("accounts") {
-                    (items, channel)
+                    (items, channel, removed)
                 } else if map.contains_key("accessKey")
                     || map.contains_key("access_key")
                     || map.contains_key("access_key_id")
@@ -191,7 +203,7 @@ impl Config {
                             acct.entry(k).or_insert(val);
                         }
                     }
-                    (vec![Value::Object(acct)], channel)
+                    (vec![Value::Object(acct)], channel, removed)
                 } else {
                     return Err("配置文件里既没有 accounts 数组，也不像单个 session".to_string());
                 }
@@ -210,6 +222,7 @@ impl Config {
         Ok(Self {
             accounts: out,
             channel,
+            removed,
             path: path.to_path_buf(),
         })
     }
@@ -240,6 +253,54 @@ impl Config {
     /// 是否发 `maas_type: benefit`。
     pub fn is_benefit(&self) -> bool {
         self.channel.eq_ignore_ascii_case("benefit")
+    }
+
+    /// 落盘（创建我们自己的 `{channel, accounts}` 结构）。
+    pub fn save(&self) -> Result<(), String> {
+        if let Some(dir) = self.path.parent() {
+            if !dir.as_os_str().is_empty() {
+                std::fs::create_dir_all(dir)
+                    .map_err(|e| format!("创建目录 {} 失败: {e}", dir.display()))?;
+            }
+        }
+        let v = serde_json::json!({
+            "channel": self.channel,
+            "accounts": self.accounts,
+            "removed": self.removed,
+        });
+        let text = serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?;
+        let tmp = self.path.with_extension("json.tmp");
+        std::fs::write(&tmp, text).map_err(|e| format!("写 {} 失败: {e}", tmp.display()))?;
+        std::fs::rename(&tmp, &self.path).map_err(|e| format!("落盘 {} 失败: {e}", self.path.display()))
+    }
+
+    /// 按 identity 合并（同一个人/同 AK 尾段 → 替换，否则追加）。
+    /// 另外按「显示名 + domainId」也视为同一账号：桌面端重登后 AK 变了，
+    /// 但 domainId 和显示名不变，旧条目才不会越积越多。
+    pub fn upsert(&mut self, account: Account) -> Account {
+        let id = account.identity();
+        let named = !account.display_name().is_empty();
+        if let Some(slot) = self.accounts.iter_mut().find(|a| {
+            a.identity() == id
+                || (named
+                    && a.display_name() == account.display_name()
+                    && a.domain_id == account.domain_id)
+        }) {
+            *slot = account.clone();
+        } else {
+            self.accounts.push(account.clone());
+        }
+        account
+    }
+
+    /// AK 尾 8 位（界面展示用，不泄完整密钥）。
+    pub fn ak_tail(a: &Account) -> String {
+        let ak = a.access_key.trim();
+        if ak.len() > 8 {
+            format!("…{}", &ak[ak.len() - 8..])
+        } else {
+            ak.to_string()
+        }
     }
 }
 

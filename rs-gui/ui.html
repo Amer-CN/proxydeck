@@ -3850,6 +3850,19 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <div class="pt-readout"><span class="rk">可用积分</span>
                     <span class="rv" id="mdCredit">—</span><span class="rs">剩余 / 总额</span></div>
                 </div>
+                <div class="pt-subhead"><span class="pt-silk sm">账号池 · ACCOUNTS</span>
+                  <span class="pt-val" id="mdAccCount">—</span>
+                  <button type="button" class="ibtn2" id="mdAccRefresh" title="重拉账号池">↻ 刷新</button></div>
+                <div id="mdAccList" role="list"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t">攒账号池</div>
+                    <div class="s">桌面端登录哪个号插件就自动记下哪个号：换号登录后稍等一次健康检查，池子里就多一个。停用/删都只动快照，不动桌面</div>
+                  </div>
+                </div></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <button type="button" class="ibtn2 accent" id="mdAccImportLocalBtn" title="手动把当前本机登录态存一份快照">⇪ 同步本机登录态</button>
+                </div></div>
                 <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
                   <button type="button" class="ibtn2" id="mdRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
                 <div class="pt-grid">
@@ -8657,6 +8670,91 @@ var PT_I18N = {
     cbHy4Timer = setInterval(tick, 1000);
   }
 
+
+  /* ================= CODEARTS 甲板：账号池 =================
+     /accounts 枚举（含启用/过期/判死/冷却），三种 JSON 写法导入，
+     「导入本机登录态」把当前桌面登录态存一份快照（桌面端换号再导 = 多号池）。
+     操作全部走后端；成功后即时重渲染列表。 */
+  function mdAccState(a) {
+    if (a.dead) return '已判死';
+    if (!a.enabled) return '已停用';
+    if (a.cooling) return '冷却中';
+    if (a.expired) return a.refreshable ? '已过期（可续期）' : '已过期';
+    return '可用';
+  }
+  function renderMdAccounts(list) {
+    var box = $('mdAccList'); if (!box) return;
+    var cnt = $('mdAccCount');
+    if (!list || !list.length) {
+      if (cnt) cnt.textContent = '0 个';
+      box.innerHTML = '<div class="pt-models-empty">// 暂无账号：先点火插件，再粘贴导入或导入本机</div>';
+      return;
+    }
+    if (cnt) cnt.textContent = list.length + ' 个';
+    var h = '';
+    list.forEach(function (a) {
+      var st = mdAccState(a);
+      var meta = (a.source === 'local' ? '本机' : '文件') + ' · AK…' + esc(a.akTail || '') +
+        ' · 到期 ' + esc(a.expiresAt || '未知') + ' · ' + st;
+      var aria = esc((a.name || '') + '，' + st);
+      h += '<div class="acc-row' + ((!a.enabled || a.dead) ? ' off' : '') + '" role="listitem" aria-label="' + aria + '">' +
+        '<div><div class="a-name">' + esc(a.name || a.identity) + '</div><div class="a-meta">' + meta + '</div></div>' +
+        '<div class="acc-act">' +
+        '<button type="button" class="ibtn2" data-md-act="refresh" data-id="' + esc(a.identity) + '" aria-label="续期 ' + esc(a.name) + '">刷新</button>' +
+        '<button type="button" class="ibtn2" data-md-act="toggle" data-id="' + esc(a.identity) + '" aria-label="' + (a.enabled ? '停用 ' : '启用 ') + esc(a.name) + '">' + (a.enabled ? '停用' : '启用') + '</button>' +
+        '<button type="button" class="ibtn2" data-md-act="remove" data-id="' + esc(a.identity) + '" aria-label="删除快照 ' + esc(a.name) + '">删</button>' +
+        '</div></div>';
+    });
+    if (box.__sig !== h) { box.__sig = h; box.innerHTML = h; }
+  }
+  async function loadMdAccounts(V) {
+    bindMdAccounts();
+    try {
+      var r = await fetch('http://127.0.0.1:' + V.port + '/accounts', { signal: AbortSignal.timeout(5000) });
+      var d = await r.json();
+      renderMdAccounts(d.accounts || []);
+    } catch (e) {
+      var box = $('mdAccList');
+      if (box) box.innerHTML = '<div class="pt-models-empty">// 插件未启动或拉取失败</div>';
+    }
+  }
+  function mdAccPost(path, body) {
+    return fetch('http://127.0.0.1:' + PV.md.port + '/accounts/' + path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: typeof body === 'string' ? body : JSON.stringify(body)
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      var em = d && d.error && (d.error.message || d.error);
+      if (d && d.error) { toast('err', '账号操作失败', String(em)); return d; }
+      renderMdAccounts((d && d.accounts) || []);
+      toast('ok', '账号已更新', '');
+      return d;
+    }).catch(function (e) { toast('err', '账号操作失败', String(e)); });
+  }
+  function bindMdAccounts() {
+    var box = $('mdAccList');
+    if (box && !box.__bound) {
+      box.__bound = true;
+      box.addEventListener('click', function (ev) {
+        var b = ev.target.closest ? ev.target.closest('[data-md-act]') : null;
+        if (!b) return;
+        var act = b.getAttribute('data-md-act'), id = b.getAttribute('data-id');
+        if (act === 'refresh') { mdAccPost('refresh', { identity: id }); return; }
+        if (act === 'toggle') {
+          var on = b.textContent.trim() !== '停用';
+          mdAccPost('enable', { identity: id, enabled: on }); return;
+        }
+        if (act === 'remove') {
+          if (!window.confirm('确定删除该账号快照？（不影响桌面端登录）')) return;
+          mdAccPost('remove', { identity: id }); return;
+        }
+      });
+    }
+    var lb = $('mdAccImportLocalBtn');
+    if (lb && !lb.__bound) { lb.__bound = true; lb.onclick = function () { mdAccPost('import-local', {}); }; }
+    var rb = $('mdAccRefresh');
+    if (rb && !rb.__bound) { rb.__bound = true; rb.onclick = function () { PV.md.accLoaded = false; PV.md.quotaLoaded = false; PV.md.lastModels = null; refreshPluginView('md'); plog(PV.md, 'sys', '手动刷新'); }; }
+  }
+
   async function loadPluginStats(V, mode) {
     var t0 = performance.now();
     try {
@@ -8756,6 +8854,7 @@ var PT_I18N = {
           pSet(V, 'StModelsSub', mdReady ? '码道 · 积分通道' : (h.reason || '未就绪'));
           PTApp.dot('mdModels', mdReady, !mdReady, mdReady ? h.models + ' 个' : '未就绪');
         }
+        if (mdReady && !V.accLoaded) { V.accLoaded = true; loadMdAccounts(V); }
         if (mdReady && !V.quotaLoaded) {
           V.quotaLoaded = true;
           fetch('http://127.0.0.1:' + V.port + '/v1/quota', { signal: AbortSignal.timeout(5000) })
@@ -10825,7 +10924,7 @@ var PT_I18N = {
             try { await fetch('http://127.0.0.1:' + V.port + '/v1/models?refresh=1'); } catch (e) {}
             await vibexRefreshAccounts();
           }
-          if (mode === 'md') { V.quotaLoaded = false; V.lastModels = null; }
+          if (mode === 'md') { V.quotaLoaded = false; V.lastModels = null; V.accLoaded = false; }
           refreshPluginView(mode); plog(V, 'sys', '手动刷新'); return;
         }
         if (mode === 'qoder') {
@@ -11059,7 +11158,7 @@ var PT_I18N = {
     if (m === 'tj') { loadTuanjieAccounts(); loadTuanjieInflight(); loadTuanjieActivity(); } /* 进甲板即时刷，不等 3s tick */
     /* OPENCODE 甲板：进板即查一次安装状态（插件没在跑就静默失败，保留现有文案） */
     if (m === 'oc') { ocInstall.syncedForRun = false; ocInstallRefresh(); }
-    if (m === 'md') { PV.md.quotaLoaded = false; }
+    if (m === 'md') { PV.md.quotaLoaded = false; PV.md.accLoaded = false; }
     if (m !== 'cmd') refreshPluginView(m);
     else pollState();
   });

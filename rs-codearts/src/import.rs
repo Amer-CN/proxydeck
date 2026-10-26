@@ -132,7 +132,7 @@ fn decrypt_secret(master: &[u8], raw: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|_| "AES-256-GCM 解密失败（DPAPI 主密钥不匹配？）".to_string())
 }
 
-fn account_from_value(v: &Value) -> Result<Account, String> {
+pub(crate) fn account_from_value(v: &Value) -> Result<Account, String> {
     let s = v.get("session").ok_or("登录态里没有 session")?;
     let get = |k: &str| s.get(k).and_then(|x| x.as_str()).unwrap_or_default().to_string();
     let expires_ms = s.get("expiresAt").and_then(|x| x.as_i64()).unwrap_or(0);

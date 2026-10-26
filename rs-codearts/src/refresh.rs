@@ -295,8 +295,9 @@ mod tests {
     fn test_account() -> Account {
         // 固定标量 1；对应公钥可复现。
         let signing = SigningKey::from_slice(&[1u8; 32]).unwrap();
-        use p256::elliptic_curve::sec1::ToEncodedPoint;
-        let point = signing.verifying_key().to_encoded_point(false);
+        let point = signing
+            .verifying_key()
+            .to_encoded_point(false);
         let x = b64url(point.x().unwrap());
         let y = b64url(point.y().unwrap());
         let d = b64url(&[1u8; 32]);
