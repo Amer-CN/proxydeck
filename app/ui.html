@@ -4524,7 +4524,7 @@ var PT_I18N = {
   /* 鼓轮 9 格 DOM [cmd,bai,tj,comate,cb,qoder,ext,oc,set]；居中格 = children[--i]（CSS 按 --y−--i 定位，
      cell 的 --y 与 children 序号一致）。顺序即终态：主页 COMMAND 开头，第 8 格（idx7）为 OPENCODE
      （2026-10-21 接入，填掉原预留格），设置 idx8；后来者只填预留格，不调顺序。 */
-  var DRUM_IDX = { cmd: 0, md: 0, bai: 1, tj: 2, comate: 3, cb: 4, qoder: 5, ext: 6, oc: 7, set: 8 };
+  var DRUM_IDX = { cmd: 0, md: 0, bai: 1, tj: 2, comate: 3, cb: 4, qoder: 5, ext: 6, oc: 7, set: 8, water: 8, keymap: 8 };
   /* 实体键面子记忆：每物理键记住离开时的那张脸（1-4 键动态，索引记忆；
      单脸键恒显示该脸，多脸键在离开时的那张脸上保持键名）。 */
   var keyFace = { cmd: 'cmd', tj: 'tj', cb: 'cb' };
@@ -4855,6 +4855,14 @@ var PT_I18N = {
         var sp0 = cell0.querySelector('span');
         if (sp0) sp0.textContent = lbl0;
         cell0.classList.toggle('cjk', /[\u4e00-\u9fff]/.test(lbl0));
+      }
+      /* 设置格是 set/water/keymap 共用槽：子页进来时把刻度字换成页名，避免鼓轮停在上一个模式 */
+      var cellSet = drum.children[DRUM_IDX.set];
+      if (cellSet) {
+        var lblSet = (m === 'water') ? '注水检测' : ((m === 'keymap') ? '键位组合' : '设置');
+        var spSet = cellSet.querySelector('span');
+        if (spSet) spSet.textContent = lblSet;
+        cellSet.classList.toggle('cjk', /[\u4e00-\u9fff]/.test(lblSet));
       }
     }
     var track = $('.pt-track');
