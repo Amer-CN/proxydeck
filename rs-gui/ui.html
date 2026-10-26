@@ -4451,14 +4451,15 @@ var PT_I18N = {
      同一段滚动被算两遍：声音比滚动密，且停手后还在继续吐齿。
      实测证据（CDP 打 12 格滚轮）：26 次发声 / 每格约 2.2 声；只滚 1 格时
      三声落在 1ms、25ms、**391ms**——最后那声余响就是用户感知的「音效延迟」。
-     惯性积分整段删除：响度改为定值 0.95（原公式区间 0.68~1.0 之内）。 */
+     惯性积分整段删除：响度改为定值 0.95（原公式区间 0.68~1.0 之内）。
+     2026-10-28 用户嫌还是偏响：降到 0.70（约小 2.6dB）。 */
   function sfxEmit() {
     if (sfxAccum < TICK_STEP) return;
     if (sfxSimT - sfxLastInteract > IDLE_MUTE) { sfxAccum = 0; return; }
     if (sfxSimT - sfxLastTick < MIN_GAP) return;
     sfxLastTick = sfxSimT;
     sfxAccum = Math.min(sfxAccum, TICK_STEP * 2) - TICK_STEP;
-    sfxTick(0.95);
+    sfxTick(0.70);
   }
   function sfxFrame(t) {
     sfxRaf = 0;
