@@ -128,8 +128,9 @@ pub fn plugin_defs() -> Vec<PluginDef> {
         // 顺序放在 vibex 之后，不插队（`ccPluginList` 输出顺序依赖它）。
         PluginDef::new("opencode", "OpenCode", "", "", &[], 8784, "/health", "opencode"),
         // 华为云码道（8793）：2026-10-26 接入——上游是原生 OpenAI 协议，本插件做
-        // AK/SK 签名、本机登录态导入与流式/非流式适配。顺序放在最后，不插队。
-        PluginDef::new("codearts", "CodeArts 码道", "", "", &[], 8793, "/health", "codearts"),
+        // AK/SK 签名、本机登录态导入与流式/非流式适配。GUI 里叫「码道」，
+        // 入口是第一键 COMMAND 的副页（不新增鼓轮格）。
+        PluginDef::new("codearts", "码道", "", "", &[], 8793, "/health", "codearts"),
     ]
 }
 
