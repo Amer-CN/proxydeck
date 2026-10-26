@@ -4434,7 +4434,7 @@ var PT_I18N = {
     var src = c.createBufferSource();
     src.buffer = sfxNoiseBuf(c); src.playbackRate.value = rate;
     var bp = c.createBiquadFilter();
-    bp.type = 'bandpass'; bp.frequency.value = 4300 * rate; bp.Q.value = 3.0;
+    bp.type = 'bandpass'; bp.frequency.value = 4600 * rate; bp.Q.value = 3.0;
     var ng = c.createGain();
     ng.gain.setValueAtTime(1.0, when);
     ng.gain.exponentialRampToValueAtTime(0.001, when + 0.011);
@@ -4452,14 +4452,16 @@ var PT_I18N = {
      实测证据（CDP 打 12 格滚轮）：26 次发声 / 每格约 2.2 声；只滚 1 格时
      三声落在 1ms、25ms、**391ms**——最后那声余响就是用户感知的「音效延迟」。
      惯性积分整段删除：响度改为定值 0.95（原公式区间 0.68~1.0 之内）。
-     2026-10-28 用户嫌还是偏响：降到 0.70（约小 2.6dB）。 */
+     2026-10-28 用户嫌还是偏响：降到 0.70（约小 2.6dB）。
+     同日用户反馈“像降调不是变小”：实为 Stevens 效应（高频噪声变小声听感偏低）+
+     attack 被掩蔽发闷。改 0.55 并把中心频率 4300→4600 补一点亮度，对冲发闷感。 */
   function sfxEmit() {
     if (sfxAccum < TICK_STEP) return;
     if (sfxSimT - sfxLastInteract > IDLE_MUTE) { sfxAccum = 0; return; }
     if (sfxSimT - sfxLastTick < MIN_GAP) return;
     sfxLastTick = sfxSimT;
     sfxAccum = Math.min(sfxAccum, TICK_STEP * 2) - TICK_STEP;
-    sfxTick(0.70);
+    sfxTick(0.55);
   }
   function sfxFrame(t) {
     sfxRaf = 0;
