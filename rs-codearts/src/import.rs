@@ -168,6 +168,10 @@ fn account_from_value(v: &Value) -> Result<Account, String> {
             .get("domainId")
             .and_then(|x| x.as_str())
             .map(|x| x.to_string()),
+        client_id: s
+            .get("clientId")
+            .and_then(|x| x.as_str())
+            .map(|x| x.to_string()),
         plugin_name: Some("snap_AIIDE".to_string()),
         plugin_version: Some("5.1.0".to_string()),
         ide_name: Some("CodeArts".to_string()),

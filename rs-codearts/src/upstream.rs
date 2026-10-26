@@ -77,6 +77,11 @@ impl Upstream {
         &self.base
     }
 
+    /// 供续期模块复用的 HTTP client（同一套 TLS/代理配置）。
+    pub fn client(&self) -> &reqwest::Client {
+        &self.client
+    }
+
     fn url(&self, path: &str) -> String {
         format!("{}{}", self.base, path)
     }

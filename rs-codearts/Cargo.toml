@@ -16,6 +16,8 @@ bytes = "1"
 clap = { version = "4", features = ["derive"] }
 futures-util = "0.3"
 hex = "0.4"
+# DPoP 刷新：ES256 JWS（P-256）+ JWK 解析/签名。
+p256 = { version = "0.13", features = ["ecdsa"] }
 hmac = "0.12"
 # 上游是华为云 HTTPS；显式声明 TLS 栈（TLS 指纹差异是圆桌点名的风险项，本项目一律显式写）。
 reqwest = { version = "0.13", features = ["default-tls", "http2", "stream", "json"] }

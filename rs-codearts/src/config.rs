@@ -51,6 +51,9 @@ pub struct Account {
     pub dpop_private_jwk: Option<Value>,
     #[serde(default, alias = "domainId")]
     pub domain_id: Option<String>,
+    /// OAuth client_id（这版码道是 `codearts`；旧 VS Code 版是 `codearts-agent`）。
+    #[serde(default, alias = "clientId")]
+    pub client_id: Option<String>,
 
     /// 身份头覆盖（上游换版本时可改配置，不必改代码）。
     #[serde(default)]
@@ -116,6 +119,26 @@ impl Account {
             Some(t) => t <= now_unix() + 60,
             None => false,
         }
+    }
+
+    /// 账号稳定身份（续期 overlay 的键）：`domainId|显示名`，缺 domain 用 AK 尾段。
+    pub fn identity(&self) -> String {
+        let domain = self.domain_id.clone().unwrap_or_default();
+        let name = self.display_name();
+        if domain.is_empty() {
+            let ak = self.access_key.trim();
+            let tail = if ak.len() > 8 { &ak[ak.len() - 8..] } else { ak };
+            format!("ak|{tail}|{name}")
+        } else {
+            format!("{domain}|{name}")
+        }
+    }
+
+    /// 是否具备续期三件套：refresh_token + DPoP 私钥 + PKCE verifier。
+    pub fn can_refresh(&self) -> bool {
+        self.refresh_token.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(false)
+            && self.dpop_private_jwk.is_some()
+            && self.code_verifier.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(false)
     }
 }
 

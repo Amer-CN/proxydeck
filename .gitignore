@@ -49,6 +49,8 @@ codebuddy-pool.json
 codebuddy-pool-intl.json
 # 码道账号池（可能含 STS 临时凭据，绝不入库）
 codearts-accounts.json
+# 码道 DPoP 续期结果（同样含临时凭据）
+codearts-refreshed.json
 
 # 状态目录分离（2026-10-14）：默认状态文件已移到 %APPDATA%\ProxyDeck\，
 # 下面是「便携模式 / go run 从仓库根跑」时可能落在仓库里的残留形态，一律不入库

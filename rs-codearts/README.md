@@ -10,12 +10,30 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/health` | 本地应答；`ready` / `account` / `expiresAt` / `models` |
+| GET | `/health` | 本地应答；`ready` / `account` / `expiresAt` / `models` / `pool` |
 | GET | `/v1/models` | 上游 `/v1/model/builtin`，10 分钟缓存 |
 | POST | `/v1/chat/completions` | 流式透传；`stream:false` 本地聚合 |
 | GET | `/v1/quota` | 上游 `/snap-manager/v1/statistics/plugin`（积分） |
 
 客户端配置：`base_url = http://127.0.0.1:8793/v1`，`api_key` 随便填（本机回环无鉴权）。
+
+## 账号池与续期
+
+- **多账号轮转**：本机登录态 + `codearts-accounts.json` 里的账号组成候选池。
+  凭据失效（`APIG.0301/0303`、`STS5.*`、`invalid_grant`）→ 标死换下一个；
+  429 / 5xx / `TM.00001041`（并发 3）→ 冷却 30 秒换下一个；客户端参数错误直接透出。
+  本机登录态在“码道桌面端运行中”被拒时只冷却 120 秒（桌面端随后会自己刷新），
+  不永久标死。
+- **DPoP 自动续期**：账号过期且带 `refresh_token + DPoP 私钥 + PKCE verifier` 时，
+  按官方 Electron 版同一套流程续期：
+  `POST https://sts.cn-north-4.myhuaweicloud.com/v1/oauth2/tokens`，
+  form `client_id=codearts & code_verifier & grant_type=refresh_token & refresh_token`，
+  头 `DPoP: ES256 JWS`（header 带 `jwk`，payload `htm/htu/iat/jti`）。
+- **续期结果落盘**：`codearts-refreshed.json`（数据目录，gitignore），按
+  `domainId|显示名` 覆盖“更晚过期”的那份；**不写码道自己的 `secretStorage`**，
+  避免和桌面端抢状态。
+- **本机登录态默认不主动续期**（`--allow-local-refresh` 可开）：`refresh_token`
+  单次轮转，和桌面端同时续期会把桌面端踢下线；桌面端每小时自己刷新，插件跟随即可。
 
 ## 凭据从哪来
 
