@@ -24,6 +24,7 @@
 pub mod config;
 pub mod datadir;
 pub mod import;
+pub mod protocol;
 pub mod refresh;
 pub mod signer;
 pub mod sse;
@@ -575,6 +576,10 @@ async fn handle_chat(State(st): State<Arc<Server>>, body: Bytes) -> Response {
     };
     if req.get("messages").and_then(|x| x.as_array()).is_none() {
         return error_response(400, "缺少 messages 数组", "invalid_request");
+    }
+    // 上游对空 role 直接 400（InferHub.001001044）；对齐参考实现做规整。
+    if let Err(e) = protocol::normalize_messages(&mut req) {
+        return error_response(400, &e, "invalid_request");
     }
     let wants_stream = req
         .get("stream")

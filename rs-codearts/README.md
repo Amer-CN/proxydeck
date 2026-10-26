@@ -79,6 +79,11 @@
    不当作普通 400 让客户端无限重试。
 7. `maas_type` 只有在账号文件写 `"channel":"benefit"` 时才发。2026-10 实测福利通道已整体
    下线（`4000 invalid channel`），默认 `credit`。
+8. **请求体规整（`protocol.rs`）**：客户端可能发空 `role`（DSH 等 agent 框架会塞内部条目），
+   上游直接回 `InferHub.001001044.400 Message role cannot empty`。对齐参考实现
+   HITZY2002 `chatMessagesToOpenAI`：空 role → `user`（有 `tool_calls` → `assistant`、
+   有 `tool_call_id` → `tool`）；`role` 去空白转小写；`developer` → `system`；
+   缺 `content` 且无 `tool_calls` 的补空串。
 
 ## 实测记录（2026-10-26，本机）
 
