@@ -3708,64 +3708,6 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                </div></div>
               </div>
 
-              <!-- —————— 码道甲板（华为云码道 · 本机登录态 → OpenAI 兼容；点火目标 8793） —————— -->
-              <div class="pt-deck" data-deck="md">
-               <div class="pt-deck-scroll"><div class="inner">
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t" data-i18n="app.ignite">点火拉杆</div>
-                    <div class="s">拉到底点火（8793）· 拉回熄火 · 复用本机码道登录态</div>
-                  </div>
-                </div></div>
-                <button type="button" class="pt-activation" data-ignite="mdRun" data-lever-mode="activate"
-                        aria-label="点火拉杆">
-                  <span class="rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-                  <span class="legend">IGNITE</span>
-                  <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
-                </button>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label">
-                    <div class="t" data-i18n="app.baseUrl">BASE URL</div>
-                    <div class="s" data-i18n="app.s.copy">点击复制</div>
-                  </div>
-                  <span class="pt-val click" id="mdEndpoint">http://127.0.0.1:8793/v1</span>
-                </div></div>
-                <div class="pt-div"></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label"><div class="t">协议适配</div></div>
-                  <span class="pt-val">码道 snap-access · SDK-HMAC-SHA256 · 积分通道</span>
-                </div></div>
-                <div class="pt-row"><div class="pt-rowline">
-                  <div class="pt-label"><div class="s">凭据优先读本机码道登录态（只读、不续期）；额度与桌面端共享，不承诺无限量。</div></div>
-                </div></div>
-                <div class="pt-div"></div>
-                <div class="pt-subhead"><span class="pt-silk sm">账号 · ACCOUNT</span></div>
-                <div class="pt-grid">
-                  <div class="pt-readout"><span class="rk">当前账号</span>
-                    <span class="rv" id="mdAccount">—</span><span class="rs" id="mdExpiry">—</span></div>
-                  <div class="pt-readout"><span class="rk">可用积分</span>
-                    <span class="rv" id="mdCredit">—</span><span class="rs">剩余 / 总额</span></div>
-                </div>
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
-                  <button type="button" class="ibtn2" id="mdRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
-                <div class="pt-grid">
-                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
-                    <span class="rv" id="mdStModels">—</span><span class="rs" id="mdStModelsSub">实时拉取</span></div>
-                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.health">健康检查</span>
-                    <span class="rv" id="mdStHealth">—<span class="u">ms</span></span><span class="rs" id="mdStHealthSub">本地回环</span></div>
-                </div>
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.models">模型矩阵 · Models</span>
-                  <span class="pt-val" id="mdModelCount">OFFLINE</span></div>
-                <div id="mdModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
-                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
-                  <button type="button" class="ibtn2" data-i18n="app.btn.modelRef">模型参考</button>
-                  <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
-                  <button type="button" class="ibtn2" id="mdClearLog" data-i18n="app.btn.clear">清空</button></div>
-                <div class="pt-log" id="mdLog"></div>
-               </div></div>
-              </div>
-
               <!-- —————— Comate 甲板 —————— -->
               <div class="pt-deck" data-deck="comate">
                <div class="pt-deck-scroll"><div class="inner">
@@ -3866,6 +3808,64 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                   <button type="button" class="ibtn2" id="kmAddKey" title="新增一键（最多4键）">＋ 添加键</button>
                   <button type="button" class="ibtn2" id="kmReset" title="回到默认映射（B.AI不在任何键下）">恢复默认</button>
                 </div></div>
+               </div></div>
+              </div>
+
+              <!-- —————— 码道甲板（华为云码道 · 本机登录态 → OpenAI 兼容；点火目标 8793） —————— -->
+              <div class="pt-deck" data-deck="md">
+               <div class="pt-deck-scroll"><div class="inner">
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.ignite">点火拉杆</div>
+                    <div class="s">拉到底点火（8793）· 拉回熄火 · 复用本机码道登录态</div>
+                  </div>
+                </div></div>
+                <button type="button" class="pt-activation" data-ignite="mdRun" data-lever-mode="activate"
+                        aria-label="点火拉杆">
+                  <span class="rack" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                  <span class="legend">IGNITE</span>
+                  <span class="handle" aria-hidden="true"><span class="grip"><i></i><i></i><i></i><i></i><i></i><b></b><i></i><i></i><i></i><i></i><i></i></span></span>
+                </button>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label">
+                    <div class="t" data-i18n="app.baseUrl">BASE URL</div>
+                    <div class="s" data-i18n="app.s.copy">点击复制</div>
+                  </div>
+                  <span class="pt-val click" id="mdEndpoint">http://127.0.0.1:8793/v1</span>
+                </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label"><div class="t">协议适配</div></div>
+                  <span class="pt-val">码道 snap-access · SDK-HMAC-SHA256 · 积分通道</span>
+                </div></div>
+                <div class="pt-row"><div class="pt-rowline">
+                  <div class="pt-label"><div class="s">凭据优先读本机码道登录态（只读、不续期）；额度与桌面端共享，不承诺无限量。</div></div>
+                </div></div>
+                <div class="pt-div"></div>
+                <div class="pt-subhead"><span class="pt-silk sm">账号 · ACCOUNT</span></div>
+                <div class="pt-grid">
+                  <div class="pt-readout"><span class="rk">当前账号</span>
+                    <span class="rv" id="mdAccount">—</span><span class="rs" id="mdExpiry">—</span></div>
+                  <div class="pt-readout"><span class="rk">可用积分</span>
+                    <span class="rv" id="mdCredit">—</span><span class="rs">剩余 / 总额</span></div>
+                </div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.credits">统计 · Credits</span>
+                  <button type="button" class="ibtn2" id="mdRefresh" data-i18n="app.btn.refresh">↻ 刷新</button></div>
+                <div class="pt-grid">
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.models">可用模型</span>
+                    <span class="rv" id="mdStModels">—</span><span class="rs" id="mdStModelsSub">实时拉取</span></div>
+                  <div class="pt-readout"><span class="rk" data-i18n="app.rk.health">健康检查</span>
+                    <span class="rv" id="mdStHealth">—<span class="u">ms</span></span><span class="rs" id="mdStHealthSub">本地回环</span></div>
+                </div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.models">模型矩阵 · Models</span>
+                  <span class="pt-val" id="mdModelCount">OFFLINE</span></div>
+                <div id="mdModelList"><div class="pt-models-empty">// 启动插件后自动拉取</div></div>
+                <div class="pt-subhead"><span class="pt-silk sm" data-i18n="app.log">插件日志 · Log</span>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.modelRef">模型参考</button>
+                  <button type="button" class="ibtn2" data-i18n="app.btn.help">使用帮助</button>
+                  <button type="button" class="ibtn2" id="mdClearLog" data-i18n="app.btn.clear">清空</button></div>
+                <div class="pt-log" id="mdLog"></div>
                </div></div>
               </div>
 
@@ -4674,7 +4674,7 @@ var PT_I18N = {
     paint();
     return true;
   };
-  var TRACK_IDX = { cmd: 0, md: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, oc: 7, comate: 8, water: 9, keymap: 10 };
+  var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, oc: 7, comate: 8, water: 9, keymap: 10, md: 11 };
   /* 上屏 Wheel 音量条只亮着主页可见；set/water 里它挡住屏体右侧读数 */
   var VU_HOME = ['cmd', 'md', 'tj', 'cb', 'bai', 'comate', 'qoder', 'oc'];
   /* lx（灵犀+设置）与 no 共用第 4 颗键：已停在 no 时再点该键进 lx（双职责），
