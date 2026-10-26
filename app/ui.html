@@ -10787,7 +10787,7 @@ var PT_I18N = {
     /* —— 插件启停 —— */
     PLUGIN_MODES.forEach(bindPluginToggle);
     vibexBindAcc(); /* VIBEX 甲板账号行：⚡自动探测 + 手动粘贴兜底（DOM 常驻，一次性绑） */
-    ['tjEndpoint', 'cbEndpoint', 'baEndpoint', 'comateEndpoint', 'qoderEndpoint', 'vibexEndpoint', 'ocEndpoint'].forEach(function (id) {
+    ['tjEndpoint', 'cbEndpoint', 'baEndpoint', 'comateEndpoint', 'qoderEndpoint', 'vibexEndpoint', 'ocEndpoint', 'mdEndpoint'].forEach(function (id) {
       var el = $(id);
       if (el) el.onclick = function () { copyText(el.textContent, 'Base URL'); };
     });
