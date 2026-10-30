@@ -279,8 +279,9 @@ git status --short
   源码留档 `.work/rust-rewrite/hdr-echo/main.go`，产物已删。
 * 探针 `tests/zz_probe.rs`——**已删除的一次性探针**，按 P2/P3 惯例登记留痕
   （便于事后核对 `git status` 干净是「删干净了」而不是「从没建过」）。
-  内容不在了，但**构建痕迹可查**，据此复原了它的身份：目标名
-  `zz_probe-a90363bcf71f1e78`（`E:\cargo-target\rs-vibex\debug\deps\`，exe 11,528,704 B /
+  内容不在了，但**构建痕迹当时可查**（该 target 目录已于 2026-10-30 随
+  `E:\cargo-target` 清场回收，现只能依据本条实测记录），据此复原了它的身份：目标名
+  `zz_probe-a90363bcf71f1e78`（原 `E:\cargo-target\rs-vibex\debug\deps\`，exe 11,528,704 B /
   mtime 2026-10-15 03:17:52 / SHA-256 前 16 位 `090009CF19ED9AB7`；`.d` 依赖文件只列
   `tests\zz_probe.rs`）；`--list` 显示它只有一个用例 **`probe_non_ascii_header`**，
   二进制里的字符串为 `http://127.0.0.1:18799/x`、`username`/`userid`、`小明`、

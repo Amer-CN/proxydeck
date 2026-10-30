@@ -115,7 +115,9 @@ $env:CARGO_TARGET_DIR='E:\cargo-target\rs-codearts'
 cargo test
 
 # 起测试端口（不要碰生产端口；生产由 GUI 点火）
-E:\cargo-target\rs-codearts\debug\rs-codearts.exe --plugin-codearts --port 18793
+# target 是一次性缓存（2026-10-30 已清场回收），先 build 再跑，别直接抄 exe 路径
+cargo build
+& "$env:CARGO_TARGET_DIR\debug\rs-codearts.exe" --plugin-codearts --port 18793
 curl http://127.0.0.1:18793/health
 ```
 

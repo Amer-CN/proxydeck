@@ -541,9 +541,14 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
 - `.work/` 现状（2026-10-27 盘点，gitignore 不入库）：`refs/`（第三方参考实现 clone）+ 本轮码道工作的 patch/bump/CDP 验证/test 脚本 + `task-codearts.md`（协议设计简报）。其它会话的历史文件未动。
 - **构建缓存不要放进仓库盘**：Rust 的 `CARGO_TARGET_DIR` 曾散落在 `E:\cargo-target`
-  累积到 **115.5GB**（`rs-gui` 一个目录 40.9GB），2026-10-18 清场回收 102GB。
-  以后每次 `--release` 构建用完即删；`target/` 已在 `.gitignore`，
-  但**仓库内误留的 `rs-*/target/` 也会长到 1GB+**，发版后顺手看一眼。
+  累积到 **115.5GB**（`rs-gui` 一个目录 40.9GB），2026-10-18 清场回收 102GB；
+  **2026-10-30 再次清场**（9 个目录，10-20~10-27 生成，`rs-gui` 26.28GB /
+  `rs-qoder` 23.47GB，同一张依赖图被各 crate 各编一遍），整目录删除实测释放
+  **67.14GB**（E: 可用 11.8MB → 62.5GiB），12 天又攒回约 67GB。此后「用完即删」
+  由 `build-rs.ps1` 收尾：`-CleanTarget` 在产物拷出并逐字节校验后执行
+  `cargo clean --target-dir $targetDir`，`-Final` 默认自动清理（`-KeepTarget`
+  仅供调试显式保留）。`target/` 已在 `.gitignore`，但**仓库内误留的
+  `rs-*/target/` 也会长到 1GB+**，发版后顺手看一眼。
 - **已清理（用户 2026-09-12 明确要求删）**：`.probe/`（24MB 探测草稿）、
   `docs/glm53flash-litellm-probe-report.md`、`docs/reasoning-effort-verification.md`
   均已删除（代码零引用；此前 09-10 不入库裁决的执行）。
@@ -562,10 +567,13 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 
 ```powershell
 # 构建（发版走干净树：git worktree add --detach <tag>，别在脏树上编）
+# 打包用 build-rs.ps1 -Final：产物拷到仓库根并校验后，脚本自动 cargo clean 回收 target
 cargo build --release -p rs-gui --locked
+pwsh -File build-rs.ps1 -Final -ConfirmOverwrite
 
-# 单 crate 构建/测试（各 crate 用独立 target 目录，别共用）
+# 单 crate 构建/测试（各 crate 用独立 target 目录，别共用；用完 cargo clean）
 cd rs-tuanjie; $env:CARGO_TARGET_DIR='E:\cargo-target\rs-tuanjie'; cargo test
+cargo clean --target-dir 'E:\cargo-target\rs-tuanjie'   # 收尾，别让它再攒到几十 GB
 
 # 界面合同门禁（3 条：逐字节副本 / 版本号唯一降序 / v4 不跳版 + 与 CHANGELOG 同集合）
 cd rs-gui; cargo test --test ui_html

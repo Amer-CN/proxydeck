@@ -248,7 +248,8 @@ pwsh -NoProfile -File .work/p7c/_p7c-mutations.ps1
 
 `_p7atest.ps1` 沿用 P6/P5 的火绒规避（链接后立刻把测试 exe 拷到工作区再跑），
 并**加固为「编译失败即抛错」**：绝不回落到旧二进制假装通过（已实测：
-参数写错时它确实抛错而不是跑旧包）。构建目录固定 `CARGO_TARGET_DIR=E:\cargo-target\rs-gui`。
+参数写错时它确实抛错而不是跑旧包）。构建目录固定 `CARGO_TARGET_DIR=E:\cargo-target\rs-gui`
+（一次性缓存，2026-10-30 已清场；首次从零重编，发版打包由 `build-rs.ps1` 收尾清理）。
 ⚠ 多目标要用 `-Command "& '…' -Targets a,b,c"` 写法：`-File` 会把 `a,b,c` 当成单个目标名。
 
 **P7c 门禁的形状**：GUI 没有 HTTP 合同，故 G/H 两道各自锁一半边——

@@ -707,10 +707,16 @@ Rust 侧由 `p8c_diff.rs` 解出同一结果。内容全是合成串（`SYNTHETI
 
 **行为零变化的证据**（真跑二进制，非推断）：
 
+> ⚠ 下面命令里的 `E:\cargo-target` 是**一次性构建缓存**，已于 2026-10-30 清场回收；
+> 重跑前先设 `CARGO_TARGET_DIR` 并 `cargo build`，别直接抄 exe 路径。
+
 ```powershell
 # ①「测试缝 + 8788」拒绝路径：文案与退出码逐字不变
+cd rs-tuanjie
+$env:CARGO_TARGET_DIR='E:\cargo-target\rs-tuanjie'
+cargo build                      # 清场后首次跑必须先构建
 $env:RS_TUANJIE_TEST_BASES='http://127.0.0.1:1 http://127.0.0.1:1'
-E:\cargo-target\rs-tuanjie\debug\rs-tuanjie.exe --plugin-tuanjie --port 8788
+& "$env:CARGO_TARGET_DIR\debug\rs-tuanjie.exe" --plugin-tuanjie --port 8788
 #   拒绝：RS_TUANJIE_TEST_BASES 不允许与生产端口 8788 同时使用
 #   exit=2
 # ② 测试端口下的启动日志三行不变（经 rs-gui 分发器起时实测）
