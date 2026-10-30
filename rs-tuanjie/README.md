@@ -707,13 +707,14 @@ Rust 侧由 `p8c_diff.rs` 解出同一结果。内容全是合成串（`SYNTHETI
 
 **行为零变化的证据**（真跑二进制，非推断）：
 
-> ⚠ 下面命令里的 `E:\cargo-target` 是**一次性构建缓存**，已于 2026-10-30 清场回收；
-> 重跑前先设 `CARGO_TARGET_DIR` 并 `cargo build`，别直接抄 exe 路径。
+> ⚠ 下面命令用的是**共享构建缓存** `E:\cargo-target\workspace`（2026-10-30 起所有
+> crate 共用；本机 `.cargo/config.toml` 已钉）。若缓存已被回收，先 `cargo build`
+> 再跑，别直接抄 exe 路径。
 
 ```powershell
 # ①「测试缝 + 8788」拒绝路径：文案与退出码逐字不变
 cd rs-tuanjie
-$env:CARGO_TARGET_DIR='E:\cargo-target\rs-tuanjie'
+$env:CARGO_TARGET_DIR='E:\cargo-target\workspace'
 cargo build                      # 清场后首次跑必须先构建
 $env:RS_TUANJIE_TEST_BASES='http://127.0.0.1:1 http://127.0.0.1:1'
 & "$env:CARGO_TARGET_DIR\debug\rs-tuanjie.exe" --plugin-tuanjie --port 8788
@@ -836,7 +837,7 @@ cargo build -p rs-tuanjie --features diff-runner --bin p8b3-diff-run
 #           P8b 第三片：+13 单测 + 6 HTTP 合同；
 #           P8b 第四/五片 + P8c：见下 cargo test 的实数）
 cd rs-tuanjie
-$env:CARGO_TARGET_DIR="E:\cargo-target\rs-tuanjie"   # F: 盘空间紧张，构建产物放 E:
+$env:CARGO_TARGET_DIR="E:\cargo-target\workspace"   # F: 盘空间紧张，构建产物放 E:
 cargo test              # P7d-1 实测：178 单测(+1 ignored) + 12 + 5 + 7 + 22 + 2 + 1 + 15(+1 ignored) + 3 + 1(p8c) 全绿
                         # P8d-3 起单测 182（+4：反竞品脱敏的向量门禁、ASCII 字符类还原、
                         #                    ReplaceAll 替换、脱敏→重排的顺序证据）

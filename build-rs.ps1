@@ -6,17 +6,18 @@ so every comment and string here stays ASCII on purpose.
 What it does
 ------------
   1. cargo build --release --bin rs-gui   (workspace root; CARGO_TARGET_DIR is pinned
-     to E:\cargo-target\rs-gui unless already set)
+     to E:\cargo-target\workspace unless already set)
   2. hashes the release binary with SHA-256 and prints size + hash
   3. verifies the binary really runs: `<exe> --version` must exit 0 and print
      "ProxyDeck <version> (proxy core <version>)"
   4. reads the Windows version resource back out of the produced exe
      (FileVersion must be non-empty = the .rc landed in the binary)
   5. copies the binary to -OutName (default: a TEST NAME)
-  6. optionally reclaims the target dir after the copy is verified:
-     `cargo clean --target-dir <dir>` (-CleanTarget; implied by -Final unless
-     -KeepTarget is given). Put the cleanup here, not in a doc line: the E:
-     cache grew to 115.5 GB by 2026-10-18 and back to ~67 GB by 2026-10-30.
+  6. reclaims cache after the copy is verified. With the shared target dir:
+     -Final cleans only release artifacts (keeps the debug cache); -CleanTarget
+     cleans the whole shared target dir; -KeepTarget opts out (debug only).
+     Put cleanup here, not in a doc line: the E: cache grew to 115.5 GB by
+     2026-10-18 and back to ~67 GB by 2026-10-30 when each crate had its own dir.
 
 Hard rule (brief P7d-2): the DEFAULT output name is a test name and the script
 NEVER overwrites a running ProxyDeck.exe. `-Final` changes the output name to
@@ -31,13 +32,14 @@ Usage
   # custom test name / custom target dir
   pwsh -File build-rs.ps1 -OutName ProxyDeck.try2.exe
 
-  #  # release packaging (needs both flags on purpose; auto-cleans the target dir)
+  #  # release packaging (needs both flags on purpose; cleans release artifacts only)
   #  pwsh -File build-rs.ps1 -Final -ConfirmOverwrite -OutDir .
   #
-  # delete the target dir after a successful build+copy (reclaims disk):
+  # reclaim the whole shared target dir (explicit disk clean):
   pwsh -File build-rs.ps1 -CleanTarget
   #
-  # -Final already implies -CleanTarget; -KeepTarget is a debug-only opt-out.
+  # -Final implies a release-profile clean; -CleanTarget is the full clean;
+  # -KeepTarget is a debug-only opt-out.
   # Cargo args default to --locked (the workspace Cargo.lock is committed, so a
   # silent lock rewrite is a smell: it means a dependency changed under us).
   # Pass -CargoArgs @() to allow cargo to update the lock.
@@ -62,7 +64,7 @@ param(
   # Data directory for the --version run (kept out of the real one).
   [string]$DataDir = '',
 
-  # After a successful copy+hash check, run `cargo clean --target-dir $targetDir`.
+  # After a successful copy+hash check, clean the WHOLE shared target dir.
   [switch]$CleanTarget,
 
   # Debug-only opt-out: keep the target dir even for -Final.
@@ -74,9 +76,9 @@ Set-StrictMode -Version Latest
 
 $root = $PSScriptRoot
 
-# -- target dir pinned per repo discipline (F: is nearly full, builds go to E:) --
+# -- shared target dir (all crates compile into ONE cache; F: has little room) --
 if (-not $env:CARGO_TARGET_DIR) {
-  $env:CARGO_TARGET_DIR = 'E:\cargo-target\rs-gui'
+  $env:CARGO_TARGET_DIR = 'E:\cargo-target\workspace'
 }
 # Normalize once: cargo build runs from the repo root while cargo clean runs
 # from the caller's cwd, so a relative target dir must not be resolved twice.
@@ -84,13 +86,16 @@ $targetDir = [System.IO.Path]::GetFullPath($env:CARGO_TARGET_DIR)
 $env:CARGO_TARGET_DIR = $targetDir
 $releaseDir = Join-Path $targetDir 'release'
 
-# -Final is release packaging: after the verified copy, reclaim the cache by
-# default. -KeepTarget exists only for debugging a failed final build.
+# Cleanup policy for the SHARED target dir:
+#   -Final       -> clean release artifacts only (keep the debug cache for daily work)
+#   -CleanTarget -> clean the whole shared target dir (explicit disk reclaim)
+#   -KeepTarget  -> opt out (debug only)
 if ($CleanTarget -and $KeepTarget) {
   Write-Host "[refused] -CleanTarget and -KeepTarget are mutually exclusive." -ForegroundColor Red
   exit 1
 }
-$cleanAfter = ($CleanTarget -or ($Final -and -not $KeepTarget))
+$cleanMode = if ($CleanTarget) { 'all' } elseif ($Final -and -not $KeepTarget) { 'release' } else { 'none' }
+$cleanAfter = ($cleanMode -ne 'none')
 
 # Never hand an obviously wrong path to cargo clean.
 if ($cleanAfter) {
@@ -135,7 +140,10 @@ Write-Host ("root        : {0}" -f $root)
 Write-Host ("target dir  : {0}" -f $targetDir)
 Write-Host ("output      : {0}" -f $outFull)
 Write-Host ("mode        : {0}" -f $(if ($Final) { 'FINAL (release name)' } else { 'test name (default)' }))
-Write-Host ("cleanup     : {0}" -f $(if ($cleanAfter) { 'cargo clean after verified copy' } else { 'keep target dir' }))
+if ($cleanMode -eq 'all') { $cleanupText = 'cargo clean (whole shared target)' }
+elseif ($cleanMode -eq 'release') { $cleanupText = 'cargo clean --release (keep debug cache)' }
+else { $cleanupText = 'keep target dir' }
+Write-Host ("cleanup     : {0}" -f $cleanupText)
 Write-Host ""
 
 # -- 1. cargo build -----------------------------------------------------------
@@ -228,16 +236,19 @@ if ($landedHash -ne $hash) {
   Write-Host ("[failed] hash mismatch after copy: {0} != {1}" -f $landedHash, $hash) -ForegroundColor Red
   exit 1
 }
-# -- 6. reclaim the target dir (only after the artifact is safely copied) -----
+# -- 6. reclaim cache (only after the artifact is safely copied) ---------------
 if ($cleanAfter) {
+  $cleanArgs = @('clean')
+  if ($cleanMode -eq 'release') { $cleanArgs += '--release' }
+  $cleanArgs += @('--target-dir', $targetDir)
   Write-Host ""
-  Write-Host ("[clean] cargo clean --target-dir {0}" -f $targetDir)
-  & cargo clean --target-dir $targetDir
+  Write-Host ("[clean] cargo {0}" -f ($cleanArgs -join ' '))
+  & cargo @cleanArgs
   if ($LASTEXITCODE -ne 0) {
     Write-Host ("[failed] cargo clean exit {0}; artifact is valid but the cache was NOT reclaimed" -f $LASTEXITCODE) -ForegroundColor Red
     exit 1
   }
-  if (Test-Path -LiteralPath $targetDir) {
+  if ($cleanMode -eq 'all' -and (Test-Path -LiteralPath $targetDir)) {
     $left = @(Get-ChildItem -LiteralPath $targetDir -Force -ErrorAction SilentlyContinue)
     if ($left.Count -eq 0) {
       Remove-Item -LiteralPath $targetDir -Force -ErrorAction SilentlyContinue
@@ -246,10 +257,13 @@ if ($cleanAfter) {
       exit 1
     }
   }
-  Write-Host "        target dir reclaimed"
+  Write-Host ("        cache reclaimed ({0})" -f $cleanMode)
 }
 Write-Host ""
 Write-Host ("[ok] {0}" -f $outFull)
 Write-Host ("     sha256 {0}" -f $hash)
-Write-Host ("     target dir {0} (out dir {1}){2}" -f $targetDir, $outDirFull, $(if ($cleanAfter) { ' [cleaned]' } else { '' }))
+if ($cleanMode -eq 'all') { $cleanTag = ' [cleaned: all]' }
+elseif ($cleanMode -eq 'release') { $cleanTag = ' [cleaned: release]' }
+else { $cleanTag = '' }
+Write-Host ("     target dir {0} (out dir {1}){2}" -f $targetDir, $outDirFull, $cleanTag)
 exit 0

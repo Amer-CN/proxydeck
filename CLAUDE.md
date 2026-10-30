@@ -540,15 +540,18 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 - `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
 - `.work/` 现状（2026-10-27 盘点，gitignore 不入库）：`refs/`（第三方参考实现 clone）+ 本轮码道工作的 patch/bump/CDP 验证/test 脚本 + `task-codearts.md`（协议设计简报）。其它会话的历史文件未动。
-- **构建缓存不要放进仓库盘**：Rust 的 `CARGO_TARGET_DIR` 曾散落在 `E:\cargo-target`
-  累积到 **115.5GB**（`rs-gui` 一个目录 40.9GB），2026-10-18 清场回收 102GB；
-  **2026-10-30 再次清场**（9 个目录，10-20~10-27 生成，`rs-gui` 26.28GB /
-  `rs-qoder` 23.47GB，同一张依赖图被各 crate 各编一遍），整目录删除实测释放
-  **67.14GB**（E: 可用 11.8MB → 62.5GiB），12 天又攒回约 67GB。此后「用完即删」
-  由 `build-rs.ps1` 收尾：`-CleanTarget` 在产物拷出并逐字节校验后执行
-  `cargo clean --target-dir $targetDir`，`-Final` 默认自动清理（`-KeepTarget`
-  仅供调试显式保留）。`target/` 已在 `.gitignore`，但**仓库内误留的
-  `rs-*/target/` 也会长到 1GB+**，发版后顺手看一眼。
+- **构建缓存纪律（2026-10-30 用户裁决：磁盘优先）**：Rust 的 target 曾散落成
+  `E:\cargo-target\rs-*` 9 份，同一张依赖图各编一遍，12 天攒到 67GB。2026-10-30
+  整目录清场（实测释放 67.14GB，E: 11.8MB → 62.5GiB）后改为：
+  ① **所有 crate 共用 `E:\cargo-target\workspace`**（本机 `.cargo/config.toml`
+  已钉，gitignored；`build-rs.ps1` 默认同路径）——不要再给单个 crate 设独立 target；
+  ② `[profile.dev]`/`[profile.test]` 关 `incremental`，第三方依赖 `debug=0`，
+  自家 crate 保留 `debug=1`（Cargo.toml 有注释；需要完整调试时用环境变量覆盖）；
+  ③ 发版 `build-rs.ps1 -Final` 只清 release 产物（保留 debug 缓存），
+  `-CleanTarget` 清整个共享 target；
+  ④ `tools/clean-cargo-target.ps1` 在 target 超过阈值（默认 10GiB）且无 cargo
+  进程时做整目录回收（新配置全量测试后共享 target 约 3.1GB，incremental 为空）；
+  `target/` 已在 `.gitignore`，仓库内误留的 `rs-*/target/` 也顺手清。
 - **已清理（用户 2026-09-12 明确要求删）**：`.probe/`（24MB 探测草稿）、
   `docs/glm53flash-litellm-probe-report.md`、`docs/reasoning-effort-verification.md`
   均已删除（代码零引用；此前 09-10 不入库裁决的执行）。
@@ -567,13 +570,15 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 
 ```powershell
 # 构建（发版走干净树：git worktree add --detach <tag>，别在脏树上编）
-# 打包用 build-rs.ps1 -Final：产物拷到仓库根并校验后，脚本自动 cargo clean 回收 target
+# 打包用 build-rs.ps1 -Final：产物拷到仓库根并校验后，脚本清 release 产物
 cargo build --release -p rs-gui --locked
 pwsh -File build-rs.ps1 -Final -ConfirmOverwrite
 
-# 单 crate 构建/测试（各 crate 用独立 target 目录，别共用；用完 cargo clean）
-cd rs-tuanjie; $env:CARGO_TARGET_DIR='E:\cargo-target\rs-tuanjie'; cargo test
-cargo clean --target-dir 'E:\cargo-target\rs-tuanjie'   # 收尾，别让它再攒到几十 GB
+# 测试（所有 crate 共用 E:\cargo-target\workspace；本机 .cargo/config.toml 已钉）
+cd rs-tuanjie; cargo test
+# 需要整目录回收时（先看体积，超阈值才清；无 cargo 进程才动手）：
+pwsh -File tools/clean-cargo-target.ps1 -DryRun
+pwsh -File tools/clean-cargo-target.ps1
 
 # 界面合同门禁（3 条：逐字节副本 / 版本号唯一降序 / v4 不跳版 + 与 CHANGELOG 同集合）
 cd rs-gui; cargo test --test ui_html

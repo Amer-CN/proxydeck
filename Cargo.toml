@@ -5,8 +5,9 @@
 # 本轮不迁移任何成员到 `version.workspace = true` / `edition.workspace = true`
 # ——各 crate 自己的 `version = "0.1.0"` 原样保留（见下方「版本统一口径」）。
 #
-# 怎么用（在仓库根跑，和以前按 crate 跑等价）：
-#   $env:CARGO_TARGET_DIR = 'E:\cargo-target\rs-gui'   # F: 盘空间紧张，产物放 E:
+# 怎么用（在仓库根跑）：
+#   所有 crate 共用 E:\cargo-target\workspace（本机 `.cargo/config.toml` 已钉，
+#   gitignored；`build-rs.ps1` 默认也指这里）。不要再给单个 crate 设独立 target。
 #   cargo build                        # 全部成员（debug）
 #   cargo test                         # 全部成员的测试
 #   cargo build --release -p rs-gui    # 只编宿主 exe
@@ -80,3 +81,25 @@ members = [
 # 「profiles for the non root package will be ignored」warning，而口径完全一样）。
 [profile.release]
 opt-level = 2
+
+# ── 磁盘优先的 dev/test profile（2026-10-30 用户裁决）────────────────────────
+# 默认 dev profile 同时开 full debug info 与 incremental，再叠加「每 crate 一个
+# target」的旧习惯，12 天能把 E: 长到 67GB。这里做两件事：
+#   * incremental = false：不再保留 target/debug/incremental（单 crate 曾 8.9GB）
+#   * 第三方依赖 debug = 0：依赖不需要源码级调试信息；workspace 自己的 crate
+#     仍保留 debug = 1（行号可读）。需要完整调试时用环境变量临时覆盖：
+#       $env:CARGO_PROFILE_DEV_DEBUG='2'; $env:CARGO_INCREMENTAL='1'
+# release profile 不受影响；完整测试仍按原命令跑。
+[profile.dev]
+debug = 1
+incremental = false
+
+[profile.dev.package."*"]
+debug = 0
+
+[profile.test]
+debug = 1
+incremental = false
+
+[profile.test.package."*"]
+debug = 0

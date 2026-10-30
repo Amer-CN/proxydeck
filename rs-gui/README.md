@@ -239,7 +239,7 @@ Rust 侧把**同一串命令、同一套场景前置**再跑一遍，两边跑�
 # 单元测试 + 行为测试（P7d-1 实测：lib 114 含插件托管 13 条 + 外壳行为 5 条；集成 5+5+9+2）
 pwsh -NoProfile -Command "& 'F:\AIXM\proxydeck\.work\p7a\_p7atest.ps1' -Targets lib,bridge_contract,ui_html,command_dispatch,shell_contract"
 # 或直接跑全量（P7d-2 起 `rs-gui` 是根 workspace 成员，这条仍可用；也可在仓库根 cargo test）
-cargo test --manifest-path rs-gui/Cargo.toml --all-targets       # CARGO_TARGET_DIR=E:\cargo-target\rs-gui
+cargo test --manifest-path rs-gui/Cargo.toml --all-targets       # CARGO_TARGET_DIR=E:\cargo-target\workspace
 # P7d-2 新增：Windows 资源合同（图标逐字节 / 版本号与 APP_VERSION 同源 / 资源 ID 约定）
 cargo test --manifest-path rs-gui/Cargo.toml --test winres_contract
 # 突变检验（证明门禁有判别力；18 条全部必须被抓住）
@@ -248,8 +248,10 @@ pwsh -NoProfile -File .work/p7c/_p7c-mutations.ps1
 
 `_p7atest.ps1` 沿用 P6/P5 的火绒规避（链接后立刻把测试 exe 拷到工作区再跑），
 并**加固为「编译失败即抛错」**：绝不回落到旧二进制假装通过（已实测：
-参数写错时它确实抛错而不是跑旧包）。构建目录固定 `CARGO_TARGET_DIR=E:\cargo-target\rs-gui`
-（一次性缓存，2026-10-30 已清场；首次从零重编，发版打包由 `build-rs.ps1` 收尾清理）。
+参数写错时它确实抛错而不是跑旧包）。构建目录固定为共享的
+`CARGO_TARGET_DIR=E:\cargo-target\workspace`（2026-10-30 起所有 crate 共用一份；
+首次从零重编，发版打包由 `build-rs.ps1` 清 release 产物，整目录回收用
+`tools/clean-cargo-target.ps1`）。
 ⚠ 多目标要用 `-Command "& '…' -Targets a,b,c"` 写法：`-File` 会把 `a,b,c` 当成单个目标名。
 
 **P7c 门禁的形状**：GUI 没有 HTTP 合同，故 G/H 两道各自锁一半边——
@@ -389,7 +391,7 @@ G 管「与 Go 同形」（差分 / 源码锚 / 真值表），H 管「真起进
 **P7d-2 门禁实测**（命令与真实输出存档在 `.work/p7d2/`）：
 
 ```powershell
-# 1) workspace 全绿（8 成员，一次 cargo test；CARGO_TARGET_DIR=E:\cargo-target\rs-gui）
+# 1) workspace 全绿（8 成员，一次 cargo test；CARGO_TARGET_DIR=E:\cargo-target\workspace）
 cargo build            # Finished dev profile，0 warning
 cargo test --workspace # 全绿（lib/集成/文档测试逐条见 .work/p7d2/ws-test-final2.txt）
 # 2) release 产物（测试名）能启动并过 --version + 版本资源进 exe（脚本内置 3 道）
@@ -434,9 +436,9 @@ python .work/p7d2/pe-res.py ProxyDeck.rs-build.exe
 **门禁实测**（命令与真实输出见 `.work/p7d1/`）：
 
 ```powershell
-$env:CARGO_TARGET_DIR='E:\cargo-target\rs-gui';     cargo test --manifest-path rs-gui\Cargo.toml
+$env:CARGO_TARGET_DIR='E:\cargo-target\workspace';     cargo test --manifest-path rs-gui\Cargo.toml
 #   lib 114 passed / bridge_contract 5 / command_dispatch 5 / shell_contract 9 / ui_html 2 → 0 failed
-$env:CARGO_TARGET_DIR='E:\cargo-target\rs-tuanjie'; cargo test --manifest-path rs-tuanjie\Cargo.toml
+$env:CARGO_TARGET_DIR='E:\cargo-target\workspace'; cargo test --manifest-path rs-tuanjie\Cargo.toml
 #   178(+1 ignored) + 12 + 5 + 7 + 22 + 2 + 1 + 15(+1 ignored) + 3 + 1 → 0 failed
 go test ./internal/tuanjie -count=1   # 只读不改 Go；本轮未跑（见下方边界）
 ```
@@ -542,7 +544,7 @@ go test ./internal/tuanjie -count=1   # 只读不改 Go；本轮未跑（见下�
 ```powershell
 # 起测试实例（临时数据目录，不动 %APPDATA%\ProxyDeck；也不要和正式 GUI 同时开着看）
 $env:PROXYDECK_DATA_DIR = 'F:\AIXM\proxydeck\.work\p7c\manual-data'
-$env:CARGO_TARGET_DIR    = 'E:\cargo-target\rs-gui'
+$env:CARGO_TARGET_DIR    = 'E:\cargo-target\workspace'
 cargo run --manifest-path rs-gui\Cargo.toml            # = rs-gui 无参 → GUI
 ```
 

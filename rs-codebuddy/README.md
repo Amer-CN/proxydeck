@@ -102,7 +102,7 @@
 
 ```powershell
 cd rs-codebuddy
-$env:CARGO_TARGET_DIR="E:\cargo-target\rs-codebuddy"   # F: 盘紧张时的外置目标目录
+$env:CARGO_TARGET_DIR="E:\cargo-target\workspace"   # 所有 crate 共用；F: 盘紧张时的外置缓存
 cargo test                                            # 61 单测 + 3 P5a 黄金 + 8 合同 + 5 P5b 门禁 + 2 hy4 + 3 刷新 + 2 P5c 黄金 + 7 P5c 接线 = 91
 cargo test -- --nocapture                             # 看「跳过/allowance」汇总行
 

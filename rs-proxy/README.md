@@ -11,7 +11,7 @@
 
 ```powershell
 # 构建注意：F: 盘紧张，target 指到 E:
-$env:CARGO_TARGET_DIR = 'E:\cargo-target\rs-proxy'
+$env:CARGO_TARGET_DIR = 'E:\cargo-target\workspace'
 cd rs-proxy
 cargo run -- --port 18790            # 测试端口，别用 55990
 ```
@@ -190,7 +190,7 @@ pwsh -File .work/rust-rewrite/_p6test.ps1 -Targets http_contract
 ## 六、构建与测试
 
 ```powershell
-$env:CARGO_TARGET_DIR = 'E:\cargo-target\rs-proxy'
+$env:CARGO_TARGET_DIR = 'E:\cargo-target\workspace'
 cd rs-proxy
 cargo test                                    # 见下方门禁三条
 # 火绒会删刚链接的 exe，若 `cargo test` 报 os error 5，用绕行脚本：

@@ -233,7 +233,7 @@ git status --short
 
 > ⚠ **构建目录**：本机 `F:` 盘已满（`0 B` 可用，主要是 P0~P3 三个 crate 的 `target/` 缓存
 > 约 7.5 GB），故本轮 `cargo` 全程用外置 target 目录：
-> `$env:CARGO_TARGET_DIR="E:\cargo-target\rs-vibex"`（那个目录不入库）。
+> `$env:CARGO_TARGET_DIR="E:\cargo-target\workspace"`（所有 crate 共用；那个目录不入库）。
 > 磁盘腾出来后去掉这个环境变量即可回到默认行为。
 
 ## 五、P4 执行结果（2026-10-15，executor 实测）
@@ -395,7 +395,7 @@ test result: FAILED. 2 passed; 1 failed
 ### 4. 验收命令与真实输出
 
 ```powershell
-cd rs-vibex; $env:CARGO_TARGET_DIR="E:\cargo-target\rs-vibex"; cargo test
+cd rs-vibex; $env:CARGO_TARGET_DIR="E:\cargo-target\workspace"; cargo test
 #   unittests src\lib.rs   : 37 passed; 0 failed
 #   unittests src\main.rs  :  0 passed
 #   tests\golden_vibex.rs  :  3 passed; 0 failed

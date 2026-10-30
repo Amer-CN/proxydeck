@@ -111,7 +111,7 @@
 ```powershell
 # 单测（签名向量 / SSE 聚合 / 账号解析）
 cd rs-codearts
-$env:CARGO_TARGET_DIR='E:\cargo-target\rs-codearts'
+$env:CARGO_TARGET_DIR='E:\cargo-target\workspace'
 cargo test
 
 # 起测试端口（不要碰生产端口；生产由 GUI 点火）

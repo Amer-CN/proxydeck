@@ -56,3 +56,6 @@ codearts-refreshed.json
 # 下面是「便携模式 / go run 从仓库根跑」时可能落在仓库里的残留形态，一律不入库
 *.migrated
 portable
+
+# 本机 Cargo 共享 target（绝对路径，只对本机有效，不入库；见 CLAUDE.md 构建缓存纪律）
+.cargo/config.toml
