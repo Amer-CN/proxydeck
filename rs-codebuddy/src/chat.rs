@@ -658,10 +658,19 @@ pub async fn handle_chat(
     // 零值 Server（无池）行为不变。
     let mut acc_uid = String::new();
     let mut acc_path = String::new();
+    let mut acc_proxy = String::new();
     if let Some(p) = st.pool.as_ref() {
         if let Some(a) = p.pick() {
             acc_uid = a.uid.clone();
             acc_path = a.auth_path.clone();
+            acc_proxy = a.proxy_url.clone();
+            if !acc_proxy.is_empty() {
+                println!(
+                    "[codebuddy] 账号 {} 走独立出口 {}",
+                    crate::pool::uid_short(&a.uid),
+                    crate::redact_proxy(&acc_proxy)
+                );
+            }
             p.touch(&a.uid);
             p.inc_load(&a.uid);
             println!(
@@ -757,8 +766,7 @@ pub async fn handle_chat(
         if let Err(e) = identity.apply(&mut out_hdr, st.region) {
             return write_err(502, &e);
         }
-        let req = st
-            .http
+        let req = st.http_for(&acc_proxy)
             .post(&url)
             .headers(out_hdr)
             .body(gjson::to_go_bytes(&Value::Object(backend.clone())));
@@ -798,6 +806,7 @@ pub async fn handle_chat(
                             hdr = nhdr;
                             acc_uid = next.uid.clone();
                             acc_path = next.auth_path.clone();
+                            acc_proxy = next.proxy_url.clone();
                             if let Some(g) = load_guard.as_mut() {
                                 g.uid = acc_uid.clone();
                             }
@@ -861,6 +870,7 @@ pub async fn handle_chat(
                             hdr = nhdr;
                             acc_uid = next.uid.clone();
                             acc_path = next.auth_path.clone();
+                            acc_proxy = next.proxy_url.clone();
                             if let Some(g) = load_guard.as_mut() {
                                 g.uid = acc_uid.clone();
                             }
@@ -881,11 +891,13 @@ pub async fn handle_chat(
             break (200u16, Some(resp));
         }
         let status = resp.status().as_u16();
+        let http_ver = resp.version();
         let err_body = read_err_body(resp).await;
         println!(
-            "[codebuddy] chat model={} status={} err={}",
+            "[codebuddy] chat model={} status={} ver={:?} err={}",
             sent_model,
             status,
+            http_ver,
             truncate(&err_body, 200)
         );
         // 11128 专项诊断（内容指纹拦截，固定前缀便于 grep）
@@ -940,6 +952,7 @@ pub async fn handle_chat(
                         hdr = nhdr;
                         acc_uid = next.uid.clone();
                         acc_path = next.auth_path.clone();
+                        acc_proxy = next.proxy_url.clone();
                         if let Some(g) = load_guard.as_mut() {
                             g.uid = acc_uid.clone();
                         }
@@ -996,6 +1009,7 @@ pub async fn handle_chat(
                             hdr = nhdr;
                             acc_uid = next.uid.clone();
                             acc_path = next.auth_path.clone();
+                            acc_proxy = next.proxy_url.clone();
                             if let Some(g) = load_guard.as_mut() {
                                 g.uid = acc_uid.clone();
                             }
@@ -1049,6 +1063,7 @@ pub async fn handle_chat(
                     hdr = nhdr;
                     acc_uid = next.uid.clone();
                     acc_path = next.auth_path.clone();
+                    acc_proxy = next.proxy_url.clone();
                     if let Some(g) = load_guard.as_mut() {
                         g.uid = acc_uid.clone();
                     }
@@ -1131,6 +1146,7 @@ pub async fn handle_chat(
                     hdr = nhdr;
                     acc_uid = next.uid.clone();
                     acc_path = next.auth_path.clone();
+                    acc_proxy = next.proxy_url.clone();
                     if let Some(g) = load_guard.as_mut() {
                         g.uid = acc_uid.clone();
                     }
@@ -1167,6 +1183,7 @@ pub async fn handle_chat(
                     hdr = nhdr;
                     acc_uid = next.uid.clone();
                     acc_path = next.auth_path.clone();
+                    acc_proxy = next.proxy_url.clone();
                     if let Some(g) = load_guard.as_mut() {
                         g.uid = acc_uid.clone();
                     }
@@ -1200,6 +1217,7 @@ pub async fn handle_chat(
                         hdr = nhdr;
                         acc_uid = next.uid.clone();
                         acc_path = next.auth_path.clone();
+                        acc_proxy = next.proxy_url.clone();
                         if let Some(g) = load_guard.as_mut() {
                             g.uid = acc_uid.clone();
                         }
@@ -1844,7 +1862,6 @@ mod tests {
         ));
     }
 
-    #[test]
     /// 11158 / 11145 / 11115 三族的判定（reidev 错误码表，2026-11-05 抄）。
     #[test]
     fn error_families_11158_11145_11115() {

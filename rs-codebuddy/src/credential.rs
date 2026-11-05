@@ -136,6 +136,9 @@ pub struct SessionInfo {
     pub nickname: String,
     pub enterprise_id: String,
     pub enterprise_name: String,
+    /// 该账号的出站代理（社区约定：auth 文件里的 `proxy_url` / `proxyUrl` / `proxy`，
+    /// 也认放在 `auth` 里的写法）。空串 = 直连（沿用全局 client）。
+    pub proxy_url: String,
 }
 
 /// `flexString` 语义：字符串原样收；对象/数组/数字/null 一律收成空串（不报错）。
@@ -199,6 +202,16 @@ pub fn parse_session_info(bytes: &[u8]) -> Result<SessionInfo, String> {
             .and_then(|a| a.get("enterpriseName"))
             .and_then(|d| d.as_str())
             .unwrap_or("")
+            .to_string(),
+        proxy_url: ["proxy_url", "proxyUrl", "proxy"]
+            .iter()
+            .find_map(|k| {
+                v.get(*k)
+                    .or_else(|| auth.and_then(|a| a.get(*k)))
+                    .and_then(|x| x.as_str())
+            })
+            .unwrap_or("")
+            .trim()
             .to_string(),
     })
 }
@@ -506,7 +519,7 @@ impl RealCredential {
         set_header(&mut h, "X-Refresh-Token", &refresh_token)?;
         set_header(&mut h, "X-Auth-Refresh-Source", "plugin")?;
         let url = format!("{}/v2/plugin/auth/token/refresh", self.base_url);
-        let body = refresh_post_blocking(url, h, "{}".to_string())?;
+        let body = refresh_post_blocking(url, h, "{}".to_string(), s.proxy_url.clone())?;
         let out: Value = serde_json::from_str(&body).map_err(|_| {
             // 与 Go 的**已知差异**：Go `json.Unmarshal` 失败时 `out.Code` 为零值 0、`out.Data`
             // 为 `nil`，于是文案是 `刷新 token 失败(code=0): ` 且**没有尾巴**（`len(out.Data)==0`
@@ -652,6 +665,7 @@ fn refresh_post_blocking(
     url: String,
     headers: HeaderMap,
     body: String,
+    proxy_url: String,
 ) -> Result<String, String> {
     let (tx, rx) = mpsc::channel::<Result<String, String>>();
     std::thread::spawn(move || {
@@ -661,8 +675,19 @@ fn refresh_post_blocking(
                 .build()
                 .map_err(|e| format!("刷新 token 网络失败: {e}"))?;
             rt.block_on(async move {
-                let client = reqwest::Client::builder()
-                    .timeout(Duration::from_secs(20))
+                let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(20));
+                // 按号代理（社区教科书）：刷新 token 也走该号的出口，避免登录 IP 与
+                // 调用 IP 不一致被关联；代理串非法时回落直连（不打印用户名密码）。
+                if !proxy_url.trim().is_empty() {
+                    match reqwest::Proxy::all(proxy_url.trim()) {
+                        Ok(p) => builder = builder.proxy(p),
+                        Err(e) => println!(
+                            "[codebuddy] 账号代理 {} 不可用，刷新 token 回落直连：{e}",
+                            crate::redact_proxy(proxy_url.trim())
+                        ),
+                    }
+                }
+                let client = builder
                     .build()
                     .map_err(|e| format!("刷新 token 网络失败: {e}"))?;
                 client
@@ -848,6 +873,27 @@ mod tests {
         assert!(d2[2].contains(".local"));
         // 全空 → 零候选
         assert!(candidate_auth_dirs("", "", "").is_empty());
+    }
+
+    /// 按号代理：社区约定 auth 文件里的 `proxy_url` / `proxyUrl` / `proxy`，
+    /// 顶层与 `auth` 内两种放法都认（cpa-multi-plugins 系项目的凭证就是带 proxy_url）。
+    #[test]
+    fn session_proxy_url_is_parsed_from_known_keys() {
+        let s = parse_session_info(
+            br#"{"auth":{"accessToken":"a","domain":"d"},"account":{"uid":"u-1"},"proxy_url":"http://127.0.0.1:7890"}"#,
+        )
+        .unwrap();
+        assert_eq!(s.proxy_url, "http://127.0.0.1:7890");
+        let s2 = parse_session_info(
+            br#"{"auth":{"accessToken":"a","domain":"d","proxyUrl":" socks5://127.0.0.1:1080 "},"account":{"uid":"u-2"}}"#,
+        )
+        .unwrap();
+        assert_eq!(s2.proxy_url, "socks5://127.0.0.1:1080", "auth 内写法也认且 trim");
+        let s3 = parse_session_info(
+            br#"{"auth":{"accessToken":"a","domain":"d"},"account":{"uid":"u-3"}}"#,
+        )
+        .unwrap();
+        assert!(s3.proxy_url.is_empty());
     }
 
     #[test]

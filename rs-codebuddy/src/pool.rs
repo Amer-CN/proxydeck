@@ -47,6 +47,9 @@ pub struct Account {
     pub last_used: i64,
     /// 进行中请求数（`handleChat` Inc/Dec，GUI「进行中 N」）。
     pub inflight: i64,
+    /// 该账号的出站代理（auth 文件里的 proxy_url；空串 = 直连）。社区教科书的「按号代理」：
+    /// 每个号走自己的出口 IP，防多号同 IP 连坐（dsh-connect-workbuddy#150 实测六号同封）。
+    pub proxy_url: String,
     /// 11158（模型不在账号套餐内）命中的模型名：**内存态黑名单**，Pick 时按模型跳过。
     /// 社区实测 11158 由账号类型定死，冷却到期再试只会再撞一次（workbuddy2api-panel）。
     pub blocked_models: BTreeSet<String>,
@@ -549,7 +552,7 @@ pub fn scan_auth_files(region: Region) -> Vec<Account> {
             let Ok(info) = e.metadata() else { continue };
             let path = e.path();
             let parsed = parse_auth_info(&path);
-            let Some((domain, uid, nick)) = parsed else {
+            let Some((domain, uid, nick, proxy_url)) = parsed else {
                 println!("[codebuddy] 账号池扫描：跳过无法解析或区域不符的文件 {name}");
                 continue;
             };
@@ -579,6 +582,7 @@ pub fn scan_auth_files(region: Region) -> Vec<Account> {
                 use_count: 0,
                 last_used: i64::MIN,
                 inflight: 0,
+                proxy_url,
                 blocked_models: BTreeSet::new(),
                 mtime: info.modified().unwrap_or(SystemTime::UNIX_EPOCH),
             });
@@ -622,13 +626,13 @@ pub fn scan_auth_files(region: Region) -> Vec<Account> {
 }
 
 /// `parseAuthInfo`：读 `*.info` 的 domain/uid/昵称（建池用；token 等其余字段不落输出）。
-pub fn parse_auth_info(path: &Path) -> Option<(String, String, String)> {
+pub fn parse_auth_info(path: &Path) -> Option<(String, String, String, String)> {
     let b = std::fs::read(path).ok()?;
     let s = credential::parse_session_info(&b).ok()?;
     if s.uid.is_empty() {
         return None;
     }
-    Some((s.domain, s.uid, s.nickname))
+    Some((s.domain, s.uid, s.nickname, s.proxy_url))
 }
 
 /// `uidShort` 日志用 uid 前 8 位（不打 token、不打完整 uid）。
@@ -686,6 +690,7 @@ mod tests {
             use_count: 0,
             last_used: i64::MIN,
             inflight: 0,
+            proxy_url: String::new(),
             blocked_models: BTreeSet::new(),
             mtime: SystemTime::UNIX_EPOCH,
         };
@@ -735,6 +740,7 @@ mod tests {
                     use_count: 0,
                     last_used: i64::MIN,
                     inflight: 0,
+            proxy_url: String::new(),
                     blocked_models: BTreeSet::new(),
                     mtime: SystemTime::UNIX_EPOCH,
                 }],

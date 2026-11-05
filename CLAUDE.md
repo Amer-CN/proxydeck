@@ -297,8 +297,12 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记「该号不接该模型」
 黑名单并换号（全池黑 → 400 `model_unavailable`）、`11145` 并入额度耗尽、`11115`/prompt too long
 不罚号；④ 风控波保护：15 分钟 2 个号被 11140 → 其余号暂停 30 分钟（`/v1/wave` 可解除，
-`CODEBUDDY_WAVE_PAUSE_SECS=0` 关闭）。未做：按号代理分散出口、TLS 指纹复刻（要换 BoringSSL/uTLS
-栈，当前 reqwest+SChannel 做不了），社区证据表明是最后才需要的轴。
+`CODEBUDDY_WAVE_PAUSE_SECS=0` 关闭）；⑤ 按号代理：auth 文件写 `proxy_url`/`proxyUrl`/`proxy`
+（顶层或 `auth` 内），该号对话与刷新 token 都走该出口，每代理独立 client。未做：TLS 指纹复刻
+（要换 BoringSSL/uTLS 栈，当前 reqwest+SChannel 做不了），社区证据表明是最后才需要的轴。
+验证按号代理时（本地 CONNECT 代理 + 注入 proxy_url）实测：代理侧收到 CONNECT、上游 HTTP/2.0；
+期间 **账号 516235a0 被上游 11140 限制**（此后直连与代理都 403，非代理引入），
+正好实测到 11140 分流：插件回 403 + 申诉文案并标死该号。
 
 ### B.AI / b.ai（8891）——已重新接入（v3.5.0），但保留当年实测结论
 - **现状**：`internal/bai`，COMMAND 键副页，Go 栈透明转发 `https://api.b.ai`；

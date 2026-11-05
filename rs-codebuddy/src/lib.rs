@@ -51,7 +51,8 @@ pub mod wave;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use axum::body::Body;
 use axum::extract::State;
@@ -166,6 +167,9 @@ pub struct AppState {
     pub desensitize: bool,
     /// 按模型消耗统计（Go `Server.stats` + `codebuddy-stats(-intl).json`）。
     pub stats: Arc<Stats>,
+    /// 按账号代理缓存（key = proxy_url）。社区教科书的「按号代理」：每个号走自己的
+    /// 出口 IP，防多号同 IP 连坐（dsh-connect-workbuddy#150：六号同封）。空串走 `http`。
+    pub http_by_proxy: Mutex<HashMap<String, reqwest::Client>>,
     /// 风控波保护：15 分钟 2 个号被 11140 → 本域暂停派发 30 分钟（见 wave.rs）。
     pub wave: crate::wave::WaveGuard,
 }
@@ -186,6 +190,7 @@ impl AppState {
             failover: Failover::load(""),
             desensitize: false,
             stats: Arc::new(Stats::new(PathBuf::new())),
+            http_by_proxy: Mutex::new(HashMap::new()),
             wave: crate::wave::WaveGuard::from_env(),
         }
     }
@@ -280,6 +285,7 @@ impl AppState {
             failover: Failover::load(&fail_path),
             desensitize,
             stats: Arc::new(Stats::load(stats_path)),
+            http_by_proxy: Mutex::new(HashMap::new()),
             wave: crate::wave::WaveGuard::from_env(),
         };
         Ok((state, cred_arc))
@@ -293,6 +299,55 @@ pub fn build_client() -> reqwest::Client {
         .connect_timeout(std::time::Duration::from_secs(30))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new())
+}
+
+impl AppState {
+    /// 取该账号出站用的 client：没配代理 → 共享的 `http`；配了 → 按 proxy_url 缓存的
+    /// 独立 client（连接池/握手与直连隔离，互不串）。代理串非法时回落直连并记一行日志
+    /// （不打印用户名密码）。
+    pub fn http_for(&self, proxy_url: &str) -> reqwest::Client {
+        let url = proxy_url.trim();
+        if url.is_empty() {
+            return self.http.clone();
+        }
+        if let Ok(g) = self.http_by_proxy.lock() {
+            if let Some(c) = g.get(url) {
+                return c.clone();
+            }
+        }
+        let built = reqwest::Proxy::all(url).and_then(|p| {
+            reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(30))
+                .proxy(p)
+                .build()
+        });
+        match built {
+            Ok(c) => {
+                if let Ok(mut g) = self.http_by_proxy.lock() {
+                    g.insert(url.to_string(), c.clone());
+                }
+                c
+            }
+            Err(e) => {
+                println!(
+                    "[codebuddy] 账号代理 {} 不可用，本次回落直连：{e}",
+                    redact_proxy(url)
+                );
+                self.http.clone()
+            }
+        }
+    }
+}
+
+/// 日志用：去掉代理 URL 里的用户名密码。
+pub fn redact_proxy(url: &str) -> String {
+    match url.split_once("://") {
+        Some((scheme, rest)) => match rest.split_once('@') {
+            Some((_cred, host)) => format!("{scheme}://***@{host}"),
+            None => url.to_string(),
+        },
+        None => url.to_string(),
+    }
 }
 
 // ---------- 路由 ----------
@@ -798,5 +853,39 @@ mod tests {
         assert_eq!(parse_uid_refresh(Some("uid=a%2Db")), ("a-b".to_string(), false));
         assert_eq!(parse_uid_refresh(Some("uid=a+b")), ("a b".to_string(), false));
         assert_eq!(parse_uid_refresh(Some("refresh=1")), (String::new(), true));
+    }
+
+    /// 按号代理：空串走共享 client 且不建缓存；配了代理按 URL 缓存；非法串回落直连。
+    #[test]
+    fn http_for_caches_proxy_clients_and_defaults_direct() {
+        let cred = Arc::new(crate::cred::StubCredential::from_json(&serde_json::json!({})).unwrap());
+        let st = AppState::new(
+            crate::region::Region::Cn,
+            cred,
+            "http://127.0.0.1:1".to_string(),
+            PathBuf::new(),
+        );
+        let _ = st.http_for("");
+        let _ = st.http_for("   ");
+        assert_eq!(st.http_by_proxy.lock().unwrap().len(), 0, "空串不许建缓存");
+        let _ = st.http_for("http://127.0.0.1:7890");
+        let _ = st.http_for(" http://127.0.0.1:7890 ");
+        assert_eq!(st.http_by_proxy.lock().unwrap().len(), 1, "同一代理只建一个 client");
+        let _ = st.http_for("not a proxy url");
+        assert_eq!(
+            st.http_by_proxy.lock().unwrap().len(),
+            1,
+            "非法代理串回落直连，不污染缓存"
+        );
+    }
+
+    #[test]
+    fn redact_proxy_strips_credentials() {
+        assert_eq!(redact_proxy("http://127.0.0.1:7890"), "http://127.0.0.1:7890");
+        assert_eq!(
+            redact_proxy("http://user:pass@127.0.0.1:7890"),
+            "http://***@127.0.0.1:7890"
+        );
+        assert_eq!(redact_proxy("socks5://u:p@h:1080"), "socks5://***@h:1080");
     }
 }

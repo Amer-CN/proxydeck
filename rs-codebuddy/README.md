@@ -72,12 +72,18 @@
 | 会话 ID 形态 | `X-Conversation-ID` = uuidv7（36 位带连字符）；`X-Conversation-Request-ID` / `-Message-ID` = uuidv7 去连字符（32 hex）；`X-Request-ID` 与消息 ID **同值** | `chat.rs::new_uuid_v7*` / `conversation_id_for` |
 | 错误码分类 | `11158` → 记「该号不接该模型」黑名单并换号，全池都黑回 400 `model_unavailable`；`11145` 并入额度耗尽（与 14018 同处置）；`11115`/prompt too long 不罚账号、回可读 400 | `chat.rs` + `pool.rs::pick_for_model` |
 | 风控波保护 | 15 分钟内同域 **2 个号**被 11140 账号级限制 → 其余号暂停派发 **30 分钟**；`GET/POST /v1/wave` 查状态/立即解除；`CODEBUDDY_WAVE_PAUSE_SECS=0` 关闭（全池都被限时不暂停，保留原 403+申诉指引） | `wave.rs` |
+| 按号代理 | auth 文件里写 `proxy_url` / `proxyUrl` / `proxy`（顶层或 `auth` 内）→ 该号的**对话与刷新 token 都走这个出口**，每个代理一个独立 client（连接池隔离）；`http://` / `https://` / `socks5://` 都行；不写 = 直连。日志只打脱敏后的 `host` | `credential.rs::proxy_url` / `pool.rs::Account::proxy_url` / `lib.rs::AppState::http_for` |
 
-**未做（有意的）**：按号代理分散出口 IP、TLS 指纹复刻（uTLS 复刻官方 Electron/Node 的
-ClientHello）。两者都要动依赖/部署面：前者要解析凭据里的 `proxy_url` 并为每个号建独立
-连接池，后者要引入 BoringSSL/uTLS 一类的栈；当前 `reqwest` + SChannel 栈做不了
-逐字节复刻。社区证据表明这两条是**最后才需要**的轴（上游闸门目前是 HTTP 层），
-留作后续版本，不阻塞本次对齐。
+**按号代理验证（2026-11-05）**：本地起一个 CONNECT 代理 → 给 auth 文件注入
+`proxy_url=http://127.0.0.1:18888` → 18787 实测：代理侧收到 `CONNECT copilot.tencent.com:443`、
+插件日志打出「账号 … 走独立出口」、上游回 HTTP/2.0。验证过程中该账号（516235a0）被上游
+11140 限制，此后**直连与走代理都回 403**——属账号级风控波，不是代理引入的；插件按设计
+回 403 + 申诉文案。要复测按号代理请换一个健康号。
+
+**未做（有意的）**：TLS 指纹复刻（uTLS 复刻官方 Electron/Node 的 ClientHello）。
+要引入 BoringSSL/uTLS 一类的栈，当前 `reqwest` + SChannel 栈做不了逐字节复刻；
+社区证据表明这条是**最后才需要**的轴（上游闸门目前是 HTTP 层），留作后续版本。
+按号代理已在本次落地（见上表），不写 `proxy_url` 的号仍走直连，行为不变。
 
 ### P5b：账号池 / 凭据 / 额度 / failover
 
