@@ -29,6 +29,7 @@ pub mod refresh;
 pub mod signer;
 pub mod sse;
 pub mod store;
+pub mod toolrefs;
 pub mod upstream;
 
 use std::net::SocketAddr;
@@ -874,6 +875,17 @@ async fn handle_chat(State(st): State<Arc<Server>>, body: Bytes) -> Response {
     if let Err(e) = protocol::normalize_messages(&mut req) {
         return error_response(400, &e, "invalid_request");
     }
+    // 工具参数里的 `$ref`/`$defs` 上游一律不认（Moonshot 风格校验器会判「无限递归」，
+    // 整轮 400）。内联掉再发；没有这类工具的请求原样不动。
+    let inlined = toolrefs::sanitize_tool_refs(&mut req);
+    if inlined > 0 {
+        static LOGGED: std::sync::Once = std::sync::Once::new();
+        LOGGED.call_once(|| {
+            eprintln!(
+                "codearts-plugin: 已内联工具 schema 的 $ref（本请求 {inlined} 个工具；上游不认 $defs）"
+            );
+        });
+    }
     let wants_stream = req
         .get("stream")
         .and_then(|x| x.as_bool())
@@ -998,6 +1010,10 @@ async fn finish_chat(resp: reqwest::Response, model: &str, wants_stream: bool) -
         };
         let mut agg = sse::Aggregate::default();
         agg.feed(&text);
+        // 上游把业务错误塞在 SSE 事件里（HTTP 200）：别聚合成空答案，照实报错。
+        if let Some(e) = agg.error.take() {
+            return up_error_response(&e);
+        }
         json_response(StatusCode::OK, &agg.into_response(model))
     }
 }

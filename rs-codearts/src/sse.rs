@@ -50,6 +50,9 @@ pub struct Aggregate {
     pub reasoning: String,
     pub finish_reason: Option<String>,
     pub usage: Option<Value>,
+    /// 流里出现的业务错误（HTTP 200 + `error_code`）。非流式聚合必须把它抛出去，
+    /// 否则会回一个 200 空答案（2026-11-05 实测踩过：工具 schema 400 被吞成空回复）。
+    pub error: Option<UpError>,
     tool_calls: BTreeMap<usize, ToolAcc>,
 }
 
@@ -76,6 +79,9 @@ impl Aggregate {
             let Ok(v) = serde_json::from_str::<Value>(payload) else {
                 continue;
             };
+            if self.error.is_none() {
+                self.error = embedded_error(&v);
+            }
             if self.id.is_empty() {
                 self.id = v.get("id").and_then(|x| x.as_str()).unwrap_or_default().to_string();
             }
@@ -221,5 +227,14 @@ mod tests {
         let buf = b"data:{\"error_code\":\"InferHub.002002009.404\",\"error_msg\":\"not registered\"}\n\n";
         let err = preflight_error(buf).expect("应识别为错误");
         assert_eq!(err.status, 404);
+    }
+    /// HTTP 200 的 SSE 里塞业务错误：聚合器必须把它留下来，非流式路径才能如实报错。
+    #[test]
+    fn aggregate_captures_embedded_error() {
+        let mut a = Aggregate::default();
+        a.feed("data: {\"error_code\":\"InferHub.001001014.406\",\"error_msg\":\"Tool type is invalid\"}\n\n");
+        let e = a.error.expect("必须捕获业务错误");
+        assert_eq!(e.status, 406);
+        assert!(e.message.contains("Tool type is invalid"), "{}", e.message);
     }
 }
