@@ -41,17 +41,23 @@ impl UpError {
         let code = code.into();
         let message = message.into();
         let lower = format!("{code} {message}").to_lowercase();
+        // 网关还有一条与凭据无关的伪装错误：请求体超限时它回 APIG.0301
+        // 「calc ak sk signature fail: body too large」。别当凭据错误去冷却/标死账号，
+        // 真正该说的是「上下文太大」（2026-11-05 实测：40+ 张历史截图 base64 后 18MB >
+        // 上游 15 MiB 单请求上限）。
+        let too_large = lower.contains("body too large");
         // APIG.0602 = 「the security token has expired」：华为 STS 临时令牌寿命比
         // `session.expiresAt` 短，到点后上游就回这个码。它必须当凭据错误处理，否则
         // 插件既不续期也不换号，会把 400 原样透给客户端（2026-11-05 实测踩过）。
-        let credential = lower.contains("apig.0301")
-            || lower.contains("apig.0303")
-            || lower.contains("apig.0602")
-            || lower.contains("security token has expired")
-            || lower.contains("sts5.")
-            || lower.contains("invalid_grant")
-            || lower.contains("invalid dpop")
-            || lower.contains("credentials_error");
+        let credential = !too_large
+            && (lower.contains("apig.0301")
+                || lower.contains("apig.0303")
+                || lower.contains("apig.0602")
+                || lower.contains("security token has expired")
+                || lower.contains("sts5.")
+                || lower.contains("invalid_grant")
+                || lower.contains("invalid dpop")
+                || lower.contains("credentials_error"));
         Self {
             status,
             code,
@@ -59,6 +65,14 @@ impl UpError {
             credential,
         }
     }
+}
+
+/// 上游网关的「请求体超限」伪装错误（APIG.0301 + `body too large`）。
+/// 实测上限在 15 MiB 附近（15,699,930 B 过、15,759,930 B 挂）。
+pub fn is_body_too_large(e: &UpError) -> bool {
+    format!("{} {}", e.code, e.message)
+        .to_lowercase()
+        .contains("body too large")
 }
 
 impl std::fmt::Display for UpError {
@@ -439,5 +453,22 @@ mod tests {
         let e = error_from_body(404, body);
         assert!(!e.credential, "业务错误被当成凭据错误：{e}");
         assert_eq!(e.status, 404);
+    }
+    /// 网关超限的伪装错误：APIG.0301 + body too large，不能当凭据问题。
+    #[test]
+    fn body_too_large_is_not_credential() {
+        let body = br#"{"message":"Incorrect IAM authentication information: calc ak sk signature fail:body too large","code":"APIG.0301"}"#;
+        let e = error_from_body(401, body);
+        assert!(!e.credential, "超限不该冷却/标死账号：{e}");
+        assert!(is_body_too_large(&e), "{e}");
+    }
+
+    /// 同码但没超限 → 仍然是凭据错误。
+    #[test]
+    fn signature_fail_without_too_large_is_credential() {
+        let body = br#"{"message":"Incorrect IAM authentication information: calc ak sk signature fail","code":"APIG.0301"}"#;
+        let e = error_from_body(401, body);
+        assert!(e.credential, "{e}");
+        assert!(!is_body_too_large(&e));
     }
 }

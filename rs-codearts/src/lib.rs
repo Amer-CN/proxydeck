@@ -673,6 +673,16 @@ fn error_response(status: u16, message: &str, code: &str) -> Response {
 
 /// 上游错误 → 对外响应。凭据类错误固定 502 并给出可操作提示。
 fn up_error_response(e: &UpError) -> Response {
+    // 先认「请求体超限」：网关把它伪装成 APIG.0301 签名失败，真拿它当凭据问题
+    // 会误导用户去重新登录（实际是上下文/图片太大）。
+    if upstream::is_body_too_large(e) {
+        return error_response(
+            413,
+            "请求体过大：码道上游单次请求上限约 15 MiB，当前上下文（通常是历史截图）已超限。\
+             请压缩上下文或开新会话；纯文字会话不受影响。",
+            "body_too_large",
+        );
+    }
     if e.credential {
         return error_response(
             502,
