@@ -47,6 +47,7 @@ pub mod region;
 pub mod sse;
 pub mod stats;
 pub mod toolrefs;
+pub mod wave;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -165,6 +166,8 @@ pub struct AppState {
     pub desensitize: bool,
     /// 按模型消耗统计（Go `Server.stats` + `codebuddy-stats(-intl).json`）。
     pub stats: Arc<Stats>,
+    /// 风控波保护：15 分钟 2 个号被 11140 → 本域暂停派发 30 分钟（见 wave.rs）。
+    pub wave: crate::wave::WaveGuard,
 }
 
 impl AppState {
@@ -183,6 +186,7 @@ impl AppState {
             failover: Failover::load(""),
             desensitize: false,
             stats: Arc::new(Stats::new(PathBuf::new())),
+            wave: crate::wave::WaveGuard::from_env(),
         }
     }
 
@@ -276,6 +280,7 @@ impl AppState {
             failover: Failover::load(&fail_path),
             desensitize,
             stats: Arc::new(Stats::load(stats_path)),
+            wave: crate::wave::WaveGuard::from_env(),
         };
         Ok((state, cred_arc))
     }
@@ -302,6 +307,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/chat/completions", any(chat::handle_chat))
         .route("/quota", any(handle_quota))
         .route("/v1/failover", any(handle_failover))
+        .route("/v1/wave", any(handle_wave))
         .route("/v1/accounts", any(handle_accounts))
         .route("/v1/stats", any(handle_stats))
         .fallback(any(handle_fallback))
@@ -385,6 +391,35 @@ pub async fn handle_stats(State(st): State<Arc<AppState>>) -> Response {
 }
 
 /// Go `handleHealth`（不看方法）。
+/// `/v1/wave`：风控波暂停状态（GET）与立即解除（POST）。
+///
+/// 社区教科书（workbuddy2api-hub / reidev）：15 分钟内同域 2 个号被 11140 限制，
+/// 其余号暂停派发 30 分钟，等风控波过去；面板可一键解除。本机用这个端点解除。
+pub async fn handle_wave(State(st): State<Arc<AppState>>, method: Method) -> Response {
+    if method == Method::POST {
+        st.wave.resume();
+        println!("[codebuddy] 风控波暂停已手动解除");
+    }
+    let now = gotime::now_millis();
+    let paused_until = st.wave.active_until(now);
+    models::json_response(gjson::obj(vec![
+        ("paused", Value::Bool(paused_until.is_some())),
+        (
+            "paused_until",
+            Value::Number(paused_until.unwrap_or(i64::MIN).into()),
+        ),
+        (
+            "hits",
+            Value::Number((st.wave.hits(now) as i64).into()),
+        ),
+        (
+            "pause_secs",
+            Value::Number((st.wave.pause_ms() / 1000).into()),
+        ),
+        ("enabled", Value::Bool(st.wave.enabled())),
+    ]))
+}
+
 pub async fn handle_health(State(st): State<Arc<AppState>>) -> Response {
     let cfg = st.region.cfg();
     let mut resp: Map<String, Value> = Map::new();

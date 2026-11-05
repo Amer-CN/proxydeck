@@ -9,7 +9,7 @@
 //!   调用统计。**持久化只落 Enabled/Removed**（数据目录 `codebuddy-pool(-intl).json`）；
 //!   `Dead`/`Exhausted`/冷却/统计一律**内存态**（重启清零——如实登记，见 crate README）。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::SystemTime;
@@ -47,6 +47,9 @@ pub struct Account {
     pub last_used: i64,
     /// 进行中请求数（`handleChat` Inc/Dec，GUI「进行中 N」）。
     pub inflight: i64,
+    /// 11158（模型不在账号套餐内）命中的模型名：**内存态黑名单**，Pick 时按模型跳过。
+    /// 社区实测 11158 由账号类型定死，冷却到期再试只会再撞一次（workbuddy2api-panel）。
+    pub blocked_models: BTreeSet<String>,
     /// 文件 mtime（建池去重/排序用；**不**出现在响应里，Go 用局部结构体承载）。
     mtime: SystemTime,
 }
@@ -172,6 +175,15 @@ impl AccountPool {
 
     /// `Pick` 轮询选一个可用号；全池不可用 → `None`（调用方如实透传上游响应，不编造）。
     pub fn pick(&self) -> Option<Account> {
+        self.pick_for_model("")
+    }
+
+    /// 同 `pick`，但跳过「这个模型被 11158 拉黑」的号；`model` 为空时等价 `pick`。
+    ///
+    /// 11158（`model ... is not allowed for user type ...`）是账号类型定死的，
+    /// 冷却到期再试只会再撞一次；社区做法是记进该号的模型黑名单、直接换号
+    /// （reidev `docs/official-client.md` 错误码表，2026-11-05 抄来）。
+    pub fn pick_for_model(&self, model: &str) -> Option<Account> {
         let mut g = lock(&self.inner);
         let now = gotime::now_millis();
         let n = g.accounts.len();
@@ -181,15 +193,69 @@ impl AccountPool {
             if a.dead || a.exhausted || !a.enabled || a.removed || a.is_cooling(now) {
                 continue;
             }
+            if !model.is_empty() && a.blocked_models.contains(model) {
+                continue;
+            }
             let out = a.clone();
             g.index = (idx + 1) % n;
             return Some(out);
         }
         println!(
-            "[codebuddy] 账号池 {} 个号全部不可用（冷却/停用/移除/凭据失效/额度耗尽），本次无可用号",
+            "[codebuddy] 账号池 {} 个号全部不可用（冷却/停用/移除/凭据失效/额度耗尽/模型黑名单），本次无可用号",
             n
         );
         None
+    }
+
+    /// 11158：把这个号拉黑这个模型（内存态，重启清零）。
+    pub fn mark_model_blocked(&self, uid: &str, model: &str) {
+        if uid.is_empty() || model.is_empty() {
+            return;
+        }
+        let mut g = lock(&self.inner);
+        for a in g.accounts.iter_mut() {
+            if a.uid == uid {
+                if a.blocked_models.insert(model.to_string()) {
+                    println!(
+                        "[codebuddy] 账号 {} 不支持模型 {}（11158），记入该号模型黑名单",
+                        uid_short(uid),
+                        model
+                    );
+                }
+                return;
+            }
+        }
+    }
+
+    /// 该号该模型是否已被 11158 拉黑。
+    pub fn model_blocked(&self, uid: &str, model: &str) -> bool {
+        let g = lock(&self.inner);
+        g.accounts
+            .iter()
+            .any(|a| a.uid == uid && a.blocked_models.contains(model))
+    }
+
+    /// 清掉某号的模型黑名单（GUI「恢复」/重新扫描时用）；找不到 uid 返回 false。
+    pub fn clear_model_blocks(&self, uid: &str) -> bool {
+        let mut g = lock(&self.inner);
+        for a in g.accounts.iter_mut() {
+            if a.uid == uid {
+                let had = !a.blocked_models.is_empty();
+                a.blocked_models.clear();
+                return had;
+            }
+        }
+        false
+    }
+
+    /// 还活着的号数（凭据未失效、未被移出/停用）。风控波只保护「还有号可救」的池：
+    /// 全池都被限制时暂停没有意义，保留原来的 403 + 申诉指引。
+    pub fn alive_count(&self) -> usize {
+        let g = lock(&self.inner);
+        g.accounts
+            .iter()
+            .filter(|a| !a.dead && a.enabled && !a.removed)
+            .count()
     }
 
     /// `MarkLimited`：收到 6004/配额 429 时给当前号记冷却（until = 上游报文里的重置时点）。
@@ -513,6 +579,7 @@ pub fn scan_auth_files(region: Region) -> Vec<Account> {
                 use_count: 0,
                 last_used: i64::MIN,
                 inflight: 0,
+                blocked_models: BTreeSet::new(),
                 mtime: info.modified().unwrap_or(SystemTime::UNIX_EPOCH),
             });
         }
@@ -598,6 +665,55 @@ mod tests {
 
     /// `IncLoad`/`DecLoad` 必须配对且钳在 0（门禁对 `inflight` 的取值做了归一，
     /// 这条单测是它独立的正面对冲）。
+    /// 11158 的模型黑名单：`pick_for_model` 跳过被拉黑的号，`pick()` 不受影响；
+    /// 全池都黑 → None（调用方据此回 400 model_unavailable，不报 503）。
+    #[test]
+    fn pick_for_model_skips_11158_blocked_pairs() {
+        let _env = crate::test_env::lock();
+        let dir = std::env::temp_dir().join("rs-codebuddy-pool-model-block");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("CODEBUDDY_POOL_DIR", dir.to_string_lossy().to_string());
+        let acct = |uid: &str| Account {
+            uid: uid.to_string(),
+            nickname: "n".to_string(),
+            auth_path: format!("{uid}.info"),
+            limited_until: i64::MIN,
+            dead: false,
+            exhausted: false,
+            enabled: true,
+            removed: false,
+            use_count: 0,
+            last_used: i64::MIN,
+            inflight: 0,
+            blocked_models: BTreeSet::new(),
+            mtime: SystemTime::UNIX_EPOCH,
+        };
+        let p = AccountPool {
+            inner: Mutex::new(PoolInner {
+                accounts: vec![acct("u-1"), acct("u-2")],
+                index: 0,
+            }),
+            state_path: String::new(),
+        };
+        assert_eq!(p.pick_for_model("gpt-6").map(|a| a.uid).as_deref(), Some("u-1"));
+        p.mark_model_blocked("u-1", "gpt-6");
+        assert!(p.model_blocked("u-1", "gpt-6"));
+        assert!(!p.model_blocked("u-1", "glm-5.2"), "别的模型不受影响");
+        assert_eq!(
+            p.pick_for_model("gpt-6").map(|a| a.uid).as_deref(),
+            Some("u-2"),
+            "被拉黑的号必须跳过"
+        );
+        p.mark_model_blocked("u-2", "gpt-6");
+        assert!(p.pick_for_model("gpt-6").is_none(), "全池都黑 → None");
+        assert!(p.pick().is_some(), "pick() 不带模型过滤，仍有可用号");
+        assert!(p.clear_model_blocks("u-1"));
+        assert!(!p.clear_model_blocks("nope"));
+        assert_eq!(p.pick_for_model("gpt-6").map(|a| a.uid).as_deref(), Some("u-1"));
+        std::env::remove_var("CODEBUDDY_POOL_DIR");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     #[test]
     fn inflight_inc_dec_pairs_and_clamps() {
         let _env = crate::test_env::lock();
@@ -619,6 +735,7 @@ mod tests {
                     use_count: 0,
                     last_used: i64::MIN,
                     inflight: 0,
+                    blocked_models: BTreeSet::new(),
                     mtime: SystemTime::UNIX_EPOCH,
                 }],
                 index: 0,

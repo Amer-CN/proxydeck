@@ -209,6 +209,35 @@ pub fn flagged_until(now_ms: i64) -> i64 {
     now_ms.saturating_add(FLAGGED_COOLDOWN_MS)
 }
 
+/// 11158：模型不在这个账号的套餐/用户类型内（`model ... is not allowed for user type
+/// [personal_free_user]`）。社区定案：由账号类型定死，冷却到期再试只会再撞一次，应记进
+/// **该号的模型黑名单**并换号（reidev `docs/official-client.md` 错误码表）。
+pub fn is_model_not_allowed_body(err_body: &str) -> bool {
+    has_field_code(err_body, "11158")
+        || err_body.contains("not allowed for user type")
+        || err_body.contains("account type does not support")
+        || err_body.contains("当前账号类型暂不支持该模型")
+        || err_body.contains("model_not_in_plan")
+}
+
+/// 上下文超长（上游 11115 / `prompt is too long: N > M maximum`）：与账号无关，
+/// 换号也一样超。不罚账号、不换号，回可读 400 让客户端去压缩上下文。
+pub fn is_context_too_long_body(err_body: &str) -> bool {
+    if has_field_code(err_body, "11115") {
+        return true;
+    }
+    let l = err_body.to_ascii_lowercase();
+    l.contains("prompt is too long")
+        || l.contains("context_length_exceeded")
+        || l.contains("maximum context length")
+        || l.contains("too many tokens")
+}
+
+/// 额度耗尽家族：14018（既有）+ 11145（TokenPlan 算力豆用完，reidev 错误码表）。
+pub fn is_quota_exhausted_body(err_body: &str) -> bool {
+    crate::failover::is_exhausted_body(err_body) || has_field_code(err_body, "11145")
+}
+
 /// INTL 会话关联头（2026-10-19 上游网关新增校验）：`www.codebuddy.ai` 的 chat
 /// 缺这三个头即回 400/11128（`request illegal` + channel verification）。
 /// 证据：mmqz/cpa-multi-plugins#43（Global，补头后 200）/#44（Intl，补头后
@@ -242,8 +271,38 @@ pub fn new_uuid_v4() -> Result<String, String> {
     Ok(format_uuid(&b))
 }
 
+/// 官方 5.9.3 / 5.9.4 的会话 ID 形态：**uuidv7**（前 48 位是毫秒时间戳，带连字符 36 位）。
+/// 请求/消息 ID 是同一套 uuidv7 去掉连字符（32 hex）。上游只验形态，但形状对不上
+/// 就是一条稳定可查的指纹（见 reidev `docs/official-client.md` 的 `uuidv7()` 记载）。
+fn new_uuid_v7_bytes(now_ms: i64) -> Result<[u8; 16], String> {
+    let mut b = [0u8; 16];
+    crate::atrest::getrandom_fill(&mut b)?;
+    let ts = now_ms as u64;
+    b[0] = (ts >> 40) as u8;
+    b[1] = (ts >> 32) as u8;
+    b[2] = (ts >> 24) as u8;
+    b[3] = (ts >> 16) as u8;
+    b[4] = (ts >> 8) as u8;
+    b[5] = ts as u8;
+    // 版本 nibble 置 7，variant 置 10xx。
+    b[6] = (b[6] & 0x0f) | 0x70;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    Ok(b)
+}
+
+/// uuidv7（36 位带连字符）。
+pub fn new_uuid_v7() -> Result<String, String> {
+    Ok(format_uuid(&new_uuid_v7_bytes(crate::gotime::now_millis())?))
+}
+
+/// uuidv7 去连字符（32 hex），官方 `X-Conversation-Request-ID` / `-Message-ID` 的形态。
+pub fn new_uuid_v7_compact() -> Result<String, String> {
+    let b = new_uuid_v7_bytes(crate::gotime::now_millis())?;
+    Ok(format_uuid(&b).replace('-', ""))
+}
+
 pub fn new_conversation_ids() -> Result<[String; 3], String> {
-    Ok([new_uuid_v4()?, new_uuid_v4()?, new_uuid_v4()?])
+    Ok([new_uuid_v7()?, new_uuid_v7_compact()?, new_uuid_v7_compact()?])
 }
 
 /// 会话级 `X-Conversation-ID`：同一场对话跨轮稳定，官方客户端就是这么发的。
@@ -288,7 +347,9 @@ pub fn conversation_id_for(body: &Map<String, Value>, uid: &str) -> String {
     let d = h.finalize();
     let mut b = [0u8; 16];
     b.copy_from_slice(&d[..16]);
-    b[6] = (b[6] & 0x0f) | 0x40;
+    // 与官方同形态：uuidv7（版本 nibble 7）。时间戳位由哈希给出（跨轮稳定优先，
+    // 官方是建会话时取一次 uuidv7，之后不变；我们派生不了真实时刻，但形态必须一致）。
+    b[6] = (b[6] & 0x0f) | 0x70;
     b[8] = (b[8] & 0x3f) | 0x80;
     format_uuid(&b)
 }
@@ -326,13 +387,16 @@ pub struct IdentityHeaders {
 impl IdentityHeaders {
     /// `body` 用来派生稳定的会话 ID；`uid` 参与哈希，防止跨账号同会话。
     pub fn new(body: &Map<String, Value>, uid: &str) -> Result<Self, String> {
+        let conv = [
+            conversation_id_for(body, uid),
+            new_uuid_v7_compact()?,
+            new_uuid_v7_compact()?,
+        ];
+        // 官方 `X-Conversation-Message-ID` 与 `X-Request-ID` 同值（同一条模型消息）。
+        let request_id = conv[2].clone();
         Ok(Self {
-            conv: [
-                conversation_id_for(body, uid),
-                new_uuid_v4()?,
-                new_uuid_v4()?,
-            ],
-            request_id: new_uuid_v4()?,
+            conv,
+            request_id,
             trace_id: new_hex(16)?,
             span_id: new_hex(8)?,
             parent_span_id: new_hex(8)?,
@@ -354,7 +418,21 @@ impl IdentityHeaders {
         put("x-request-id", &self.request_id)?;
         put("x-requested-with", "XMLHttpRequest")?;
         put("x-agent-intent", "craft")?;
+        put("x-agent-type", "main")?;
         put("x-agent-purpose", "conversation")?;
+        // 官方 5.9.3（CN）/ 5.9.4（INTL）内置 CLI 2.165.0 起固定发 local-agent。
+        put("x-agent-runtime", "local-agent")?;
+        // 官方对话由 OpenAI Node SDK 6.25.0 组包，SDK 自带的 8 个 X-Stainless-* 原样出站。
+        // 这是 Rust 反代天然没有的指纹；OS/Arch 照官方桌面端（macOS arm64）报，不取网关宿主。
+        // 依据：reidev `docs/official-client.md`「对话请求另有这些头和字段」。
+        put("x-stainless-retry-count", "0")?;
+        put("x-stainless-timeout", "1200")?;
+        put("x-stainless-lang", "js")?;
+        put("x-stainless-package-version", "6.25.0")?;
+        put("x-stainless-os", "MacOS")?;
+        put("x-stainless-arch", "arm64")?;
+        put("x-stainless-runtime", "node")?;
+        put("x-stainless-runtime-version", "v22.21.1")?;
         put("x-codebuddy-request", "1")?;
         put("x-product", "SaaS")?;
         put(
@@ -385,6 +463,25 @@ impl IdentityHeaders {
 
 /// Go `writeErr`：`Content-Type: application/json` + `{"error":{"message":…,"type":"upstream_error"}}`
 /// + `json.Encoder` 的末尾换行。
+/// 风控波暂停时的 503：带 `Retry-After`，文案告诉用户怎么提前解除。
+pub fn wave_pause_response(until_ms: i64) -> Response {
+    let now = crate::gotime::now_millis();
+    let wait = ((until_ms - now).max(0) / 1000) as u64;
+    let mut resp = write_err(
+        503,
+        &format!(
+            "风控波保护：15 分钟内已有 {} 个账号被上游限制（11140），本域暂停派发约 {} 分钟。\
+             可在官方客户端申诉；要立即恢复请 POST /v1/wave，或设 CODEBUDDY_WAVE_PAUSE_SECS=0 关闭该保护。",
+            crate::wave::WAVE_THRESHOLD,
+            (wait + 59) / 60
+        ),
+    );
+    if let Ok(v) = axum::http::HeaderValue::from_str(&wait.to_string()) {
+        resp.headers_mut().insert(header::RETRY_AFTER, v);
+    }
+    resp
+}
+
 pub fn write_err(status: u16, msg: &str) -> Response {
     let body = gjson::obj(vec![(
         "error",
@@ -498,6 +595,12 @@ pub async fn handle_chat(
         .get("stream")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+
+    // 风控波保护（社区教科书）：本域判定进入风控波后暂停派发，等上游过去再放行。
+    // 解除：POST /v1/wave；关闭：CODEBUDDY_WAVE_PAUSE_SECS=0。
+    if let Some(until) = st.wave.active_until(crate::gotime::now_millis()) {
+        return wave_pause_response(until);
+    }
 
     let mut backend: Map<String, Value> = Map::new();
     for k in PASSTHROUGH_KEYS {
@@ -630,6 +733,7 @@ pub async fn handle_chat(
     let mut transient_resent = 0usize; // 11133 原地重试计数，上限 TRANSIENT_MAX_RETRY
     let mut flagged_resent = 0usize; // 11128 按号封禁换号计数，上限 = 池大小（全封防循环）
     let mut restricted_resent = 0usize; // 11140 账号限制换号计数，上限 = 池大小（全限防循环）
+    let mut model_blocked_resent = 0usize; // 11158 模型不在套餐：换号计数，上限 = 池大小
     let mut stream_head_resent = 0usize; // 流内嗅探判错换号计数，上限 = 池大小（**不冷却账号**）
     let mut hy4_tripped = false; // hy4 模型级兜底重放只允许一次
     // Go `for attempt := 0; ; attempt++` 的**轮次**语义：先判后增，首轮 `attempt == 0`。
@@ -674,7 +778,7 @@ pub async fn handle_chat(
             if !client_wants_stream && st.pool.is_some() && !acc_uid.is_empty() {
                 let mut reader = ChunkReader::new(resp);
                 let peeked = reader.peek(PEEK_WINDOW).await;
-                if crate::failover::is_exhausted_body(&String::from_utf8_lossy(&peeked)) {
+                if is_quota_exhausted_body(&String::from_utf8_lossy(&peeked)) {
                     let p = st.pool.as_ref().expect("上面已判 Some");
                     p.mark_exhausted(&acc_uid);
                     if exhausted_resent < p.size() {
@@ -865,6 +969,16 @@ pub async fn handle_chat(
             if let Some(p) = st.pool.as_ref() {
                 if !acc_uid.is_empty() {
                     p.mark_dead(&acc_uid);
+                    // 风控波只在「还有活号可救」时才暂停：全池都被限时暂停没有意义，
+                    // 保留原来的 403 + 申诉指引（社区口径：暂停的是其余号）。
+                    let now_ms = crate::gotime::now_millis();
+                    if p.alive_count() > 0 && st.wave.note_restricted(now_ms) {
+                        println!(
+                            "[codebuddy] 风控波触发：15 分钟内 {} 个号被 11140 限制，其余号暂停派发 {} 分钟（POST /v1/wave 可解除）",
+                            crate::wave::WAVE_THRESHOLD,
+                            st.wave.pause_ms() / 60_000
+                        );
+                    }
                     if restricted_resent < p.size() {
                         if let Some(next) = p.pick() {
                             let nhdr = match st.cred.headers_for(&next.auth_path) {
@@ -895,6 +1009,66 @@ pub async fn handle_chat(
             return write_err(403, &restricted_message(&err_body));
         }
 
+        // 11115 / prompt too long：上下文超长。同一上下文换哪个号都一样超，
+        // 罚号/换号只会把好号白烧一遍（magpie#3337 同结论），直接回可读 400。
+        if is_context_too_long_body(&err_body) {
+            println!(
+                "[codebuddy] 上下文超长(11115/prompt too long)，不罚账号、不换号：{}",
+                truncate(&err_body, 200)
+            );
+            return write_err(
+                400,
+                &format!(
+                    "上下文超出模型上限（11115 / prompt too long）：{}",
+                    truncate(&err_body, 400)
+                ),
+            );
+        }
+
+        // 11158 模型不在账号套餐（`model ... is not allowed for user type ...`）：
+        // 账号类型定死，冷却再试只会再撞。记进该号模型黑名单并换号；全池都黑 →
+        // 400 model_unavailable（社区口径，不报 503「没有可用账号」误导用户）。
+        if is_model_not_allowed_body(&err_body) && st.pool.is_some() && !acc_uid.is_empty() {
+            let p = st.pool.as_ref().expect("上面已判 Some");
+            p.mark_model_blocked(&acc_uid, &sent_model);
+            if model_blocked_resent < p.size() {
+                if let Some(next) = p.pick_for_model(&sent_model) {
+                    let nhdr = match st.cred.headers_for(&next.auth_path) {
+                        Ok(h) => h,
+                        Err(e) => return write_err(502, &e),
+                    };
+                    println!(
+                        "[codebuddy] 账号 {} 不可用模型 {}（11158），换 {} 重发",
+                        crate::pool::uid_short(&acc_uid),
+                        sent_model,
+                        crate::pool::uid_short(&next.uid)
+                    );
+                    p.dec_load(&acc_uid);
+                    p.touch(&next.uid);
+                    p.inc_load(&next.uid);
+                    hdr = nhdr;
+                    acc_uid = next.uid.clone();
+                    acc_path = next.auth_path.clone();
+                    if let Some(g) = load_guard.as_mut() {
+                        g.uid = acc_uid.clone();
+                    }
+                    model_blocked_resent += 1;
+                    continue;
+                }
+            }
+            println!(
+                "[codebuddy] 全池都不可用模型 {}（11158），回 400 model_unavailable",
+                sent_model
+            );
+            return write_err(
+                400,
+                &format!(
+                    "model_unavailable：当前账号池都无权使用模型 {}（11158）。上游原文：{}",
+                    sent_model,
+                    truncate(&err_body, 300)
+                ),
+            );
+        }
         // 11129 结构诊断（GPT-6 工具定义校验失败）：只记出站 tools 定义与 tool_choice +
         // 完整上游错误，不记 messages 正文、不记认证头。
         if err_body.contains("11129") || err_body.contains("invalid_function_parameters") {
@@ -936,9 +1110,8 @@ pub async fn handle_chat(
                 TRANSIENT_MAX_RETRY
             );
         }
-        // 账号额度耗尽轮换（上游 14018）：判定用业务码，状态码不限。
-        if st.pool.is_some() && !acc_uid.is_empty() && crate::failover::is_exhausted_body(&err_body)
-        {
+        // 账号额度耗尽轮换（上游 14018 / 11145）：判定用业务码，状态码不限。
+        if st.pool.is_some() && !acc_uid.is_empty() && is_quota_exhausted_body(&err_body) {
             let p = st.pool.as_ref().expect("上面已判 Some");
             p.mark_exhausted(&acc_uid);
             if exhausted_resent < p.size() {
@@ -1582,32 +1755,41 @@ mod tests {
         assert_eq!(flagged_until(i64::MAX), i64::MAX, "溢出饱和而非回绕");
     }
 
-    /// 身份头形态守门：值必须是官方客户端同款（UUIDv4 / 32hex trace / traceparent 00-…-01），
-    /// 且 CN 带品牌头、INTL 暂不带。防止后来者“顺手删掉”或把三个 ID 写成同一个。
+    /// 身份头形态守门：值必须是官方客户端同款（uuidv7；请求/消息 ID 是 uuidv7 去连字符
+    /// 的 32 hex；X-Request-ID 与消息 ID 同值），且带上 OpenAI SDK 的 8 个 X-Stainless-*
+    /// 与 X-Agent-Runtime/Type。CN 带品牌头、INTL 暂不带。防止后来者“顺手删掉”。
     #[test]
     fn identity_headers_match_official_gateway_shape() {
         let id = IdentityHeaders::new(&Map::new(), "u-test").expect("随机源应可用");
         let mut h = HeaderMap::new();
         id.apply(&mut h, crate::region::Region::Cn).unwrap();
+        let conv_id = h.get("x-conversation-id").unwrap().to_str().unwrap();
+        assert_eq!(conv_id.len(), 36, "x-conversation-id={conv_id} 长度不对");
+        assert_eq!(
+            conv_id.chars().nth(14),
+            Some('7'),
+            "x-conversation-id={conv_id} 不是 uuidv7"
+        );
+        let variant = conv_id.chars().nth(19).unwrap();
+        assert!(
+            matches!(variant, '8' | '9' | 'a' | 'b'),
+            "x-conversation-id={conv_id} variant 不对"
+        );
         for k in [
-            "x-conversation-id",
             "x-conversation-request-id",
             "x-conversation-message-id",
             "x-request-id",
         ] {
-            let v = h
-                .get(k)
-                .unwrap_or_else(|| panic!("{k} 缺失"))
-                .to_str()
-                .unwrap();
-            assert_eq!(v.len(), 36, "{k}={v} 长度不对");
-            assert_eq!(v.chars().nth(14), Some('4'), "{k}={v} 不是 UUIDv4");
-            let variant = v.chars().nth(19).unwrap();
-            assert!(
-                matches!(variant, '8' | '9' | 'a' | 'b'),
-                "{k}={v} variant 不对"
-            );
+            let v = h.get(k).unwrap_or_else(|| panic!("{k} 缺失")).to_str().unwrap();
+            assert_eq!(v.len(), 32, "{k}={v} 长度不对（官方是去连字符的 32 hex）");
+            assert!(v.chars().all(|c| c.is_ascii_hexdigit()), "{k}={v} 不是 hex");
+            assert_eq!(v.chars().nth(12), Some('7'), "{k}={v} 不是 uuidv7");
         }
+        assert_eq!(
+            h.get("x-request-id").unwrap(),
+            h.get("x-conversation-message-id").unwrap(),
+            "官方 X-Request-ID 与消息 ID 同值"
+        );
         let trace = h.get("x-trace-id").unwrap().to_str().unwrap();
         assert_eq!(trace.len(), 32);
         assert!(trace.chars().all(|c| c.is_ascii_hexdigit()));
@@ -1616,11 +1798,31 @@ mod tests {
         assert_eq!(h.get("x-ide-type").unwrap(), "WorkBuddy");
         assert_eq!(h.get("x-product").unwrap(), "SaaS");
         assert_eq!(h.get("x-codebuddy-request").unwrap(), "1");
+        assert_eq!(h.get("x-agent-type").unwrap(), "main");
+        assert_eq!(h.get("x-agent-runtime").unwrap(), "local-agent");
+        // OpenAI Node SDK 6.25.0 的固定 8 件套（官方桌面端原样出站）
+        for (k, want) in [
+            ("x-stainless-retry-count", "0"),
+            ("x-stainless-timeout", "1200"),
+            ("x-stainless-lang", "js"),
+            ("x-stainless-package-version", "6.25.0"),
+            ("x-stainless-os", "MacOS"),
+            ("x-stainless-arch", "arm64"),
+            ("x-stainless-runtime", "node"),
+            ("x-stainless-runtime-version", "v22.21.1"),
+        ] {
+            assert_eq!(
+                h.get(k).unwrap_or_else(|| panic!("{k} 缺失")),
+                want,
+                "{k} 与官方 SDK 不一致"
+            );
+        }
 
         let mut hi = HeaderMap::new();
         id.apply(&mut hi, crate::region::Region::Intl).unwrap();
         assert!(hi.get("x-ide-type").is_none(), "INTL 暂不发品牌头");
         assert!(hi.get("x-trace-id").is_some());
+        assert!(hi.get("x-stainless-os").is_some(), "SDK 头两域都发");
     }
 
     /// 11140 家族分流守门：账号限制文案（中/繁/英）才标死；纯内容策略不能误伤账号。
@@ -1640,6 +1842,31 @@ mod tests {
         assert!(!is_account_restricted_body(
             r#"{"code":111400,"displayMsg":{"zh":"账号存在异常行为"}}"#
         ));
+    }
+
+    #[test]
+    /// 11158 / 11145 / 11115 三族的判定（reidev 错误码表，2026-11-05 抄）。
+    #[test]
+    fn error_families_11158_11145_11115() {
+        assert!(is_model_not_allowed_body(
+            r#"{"code":11158,"msg":"model [gpt-6] is not allowed for user type [personal_free_user]"}"#
+        ));
+        assert!(is_model_not_allowed_body(r#"{"code":"11158"}"#));
+        assert!(is_model_not_allowed_body(r#"{"msg":"当前账号类型暂不支持该模型"}"#));
+        assert!(!is_model_not_allowed_body(r#"{"code":111580}"#));
+        assert!(!is_model_not_allowed_body(r#"{"requestId":"11158"}"#));
+
+        assert!(is_context_too_long_body(r#"{"code":11115,"msg":"ContextTooLong"}"#));
+        assert!(is_context_too_long_body(
+            "prompt is too long: 100001 tokens > 100000 maximum"
+        ));
+        assert!(is_context_too_long_body(r#"{"code":"context_length_exceeded"}"#));
+        assert!(!is_context_too_long_body(r#"{"code":11150}"#));
+
+        assert!(is_quota_exhausted_body(r#"{"code":11145,"msg":"token plan exhausted"}"#));
+        assert!(is_quota_exhausted_body(r#"{"code":14018,"msg":"x"}"#));
+        assert!(!is_quota_exhausted_body(r#"{"code":11145x}"#));
+        assert!(!is_quota_exhausted_body("nothing here"));
     }
 
     #[test]
@@ -1666,7 +1893,7 @@ mod tests {
         let a1 = conversation_id_for(&body, "u-1");
         assert_eq!(a1, conversation_id_for(&body, "u-1"));
         assert_eq!(a1.len(), 36);
-        assert_eq!(a1.as_bytes()[14], b'4');
+        assert_eq!(a1.as_bytes()[14], b'7', "官方会话 ID 是 uuidv7 形态");
         assert_ne!(
             a1,
             conversation_id_for(&body, "u-2"),

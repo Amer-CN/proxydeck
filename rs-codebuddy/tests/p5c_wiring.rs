@@ -816,7 +816,13 @@ async fn intl_conversation_headers_present_and_stable_across_swap() {
     for h in &hits {
         for name in CONV_TEST_HEADERS {
             let v = h.header(name).unwrap_or_else(|| panic!("{name} 缺失"));
-            assert!(is_uuid_v4(v), "{name} 应是 v4 UUID 形态（实得 {v}）");
+            // 官方 5.9.3/5.9.4 形态：会话 ID 是 uuidv7（36 位），请求/消息 ID 是 uuidv7 去连字符（32 hex）
+            let ok = if name == "x-conversation-id" {
+                v.len() == 36 && v.as_bytes()[14] == b'7' && v.as_bytes()[8] == b'-'
+            } else {
+                v.len() == 32 && v.as_bytes()[12] == b'7' && v.bytes().all(|b| b.is_ascii_hexdigit())
+            };
+            assert!(ok, "{name} 不是官方 uuidv7 形态（实得 {v}）");
         }
     }
     for name in CONV_TEST_HEADERS {

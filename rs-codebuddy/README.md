@@ -49,7 +49,35 @@
 
 **会话连续性（v4.6.2 待发）**：`chat.rs::conversation_id_for` 优先吃客户端显式
 `conversation_id` / `conversationId` / `prompt_cache_key`，否则用首条 system+user 内容 +
-账号 uid 哈希，输出 v4 UUID；跨轮稳定、跨账号隔离（避免上游按会话把多号关联）。
+账号 uid 哈希，输出 **uuidv7**（2026-11-05 起；此前是 v4，官方 5.9.3/5.9.4 实测是 uuidv7）；
+跨轮稳定、跨账号隔离（避免上游按会话把多号关联）。
+
+### 2026-11-05：对齐官方 5.9.3 / 5.9.4（照社区教科书抄）
+
+来源（全部开源、可直接核对）：
+
+- `yreidev/workbuddy2api-panel` 的 [`docs/official-client.md`](https://github.com/yreidev/workbuddy2api-panel/blob/main/docs/official-client.md)：
+  目前全网最细的官方桌面端逐项对照（WorkBuddy 5.9.3 CN / 5.9.4 INTL，内置 CLI 2.165.0）。
+  
+- `ardeyouxipianyi/workbuddy2api-hub` 的
+  [`docs/TROUBLESHOOTING-11-128.md`](https://github.com/ardeyouxipianyi/workbuddy2api-hub/blob/main/docs/TROUBLESHOOTING-11-128.md)：
+  11-128 排障纪律（先区分账号问题/请求问题，别靠轮换账号消错）。
+
+落地的四块：
+
+| 块 | 做法 | 位置 |
+|---|---|---|
+| OpenAI SDK 指纹 | 对话补 `X-Stainless-Retry-Count: 0` / `Timeout: 1200` / `Lang: js` / `Package-Version: 6.25.0` / `OS: MacOS` / `Arch: arm64` / `Runtime: node` / `Runtime-Version: v22.21.1`；`Accept` 已是 `application/json` | `chat.rs::IdentityHeaders::apply` |
+| Agent 头 | 补 `X-Agent-Type: main`、`X-Agent-Runtime: local-agent`（2.165.0 起官方固定发） | 同上 |
+| 会话 ID 形态 | `X-Conversation-ID` = uuidv7（36 位带连字符）；`X-Conversation-Request-ID` / `-Message-ID` = uuidv7 去连字符（32 hex）；`X-Request-ID` 与消息 ID **同值** | `chat.rs::new_uuid_v7*` / `conversation_id_for` |
+| 错误码分类 | `11158` → 记「该号不接该模型」黑名单并换号，全池都黑回 400 `model_unavailable`；`11145` 并入额度耗尽（与 14018 同处置）；`11115`/prompt too long 不罚账号、回可读 400 | `chat.rs` + `pool.rs::pick_for_model` |
+| 风控波保护 | 15 分钟内同域 **2 个号**被 11140 账号级限制 → 其余号暂停派发 **30 分钟**；`GET/POST /v1/wave` 查状态/立即解除；`CODEBUDDY_WAVE_PAUSE_SECS=0` 关闭（全池都被限时不暂停，保留原 403+申诉指引） | `wave.rs` |
+
+**未做（有意的）**：按号代理分散出口 IP、TLS 指纹复刻（uTLS 复刻官方 Electron/Node 的
+ClientHello）。两者都要动依赖/部署面：前者要解析凭据里的 `proxy_url` 并为每个号建独立
+连接池，后者要引入 BoringSSL/uTLS 一类的栈；当前 `reqwest` + SChannel 栈做不了
+逐字节复刻。社区证据表明这两条是**最后才需要**的轴（上游闸门目前是 HTTP 层），
+留作后续版本，不阻塞本次对齐。
 
 ### P5b：账号池 / 凭据 / 额度 / failover
 

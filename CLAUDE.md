@@ -289,6 +289,17 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   rustls 只能靠近 OpenSSL、仍非 Chromium。测量脚本与完整数据见
   `.work/tls-fingerprint-2026-10-25.md`（未入库）。
 
+**2026-11-05 照社区教科书对齐（照抄，不自己研究）**：GitHub 上 `yreidev/workbuddy2api-panel`
+的 `docs/official-client.md`（官方桌面端逐项对照）与 `ardeyouxipianyi/workbuddy2api-hub` 的
+`docs/TROUBLESHOOTING-11-128.md`（排障纪律）是目前最全的两份资料。已落地：
+① 对话补 OpenAI Node SDK 6.25.0 的 8 个 `X-Stainless-*` + `X-Agent-Type: main` +
+`X-Agent-Runtime: local-agent`；② 会话 ID 改官方 uuidv7 形态（conversation 36 位、
+request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记「该号不接该模型」
+黑名单并换号（全池黑 → 400 `model_unavailable`）、`11145` 并入额度耗尽、`11115`/prompt too long
+不罚号；④ 风控波保护：15 分钟 2 个号被 11140 → 其余号暂停 30 分钟（`/v1/wave` 可解除，
+`CODEBUDDY_WAVE_PAUSE_SECS=0` 关闭）。未做：按号代理分散出口、TLS 指纹复刻（要换 BoringSSL/uTLS
+栈，当前 reqwest+SChannel 做不了），社区证据表明是最后才需要的轴。
+
 ### B.AI / b.ai（8891）——已重新接入（v3.5.0），但保留当年实测结论
 - **现状**：`internal/bai`，COMMAND 键副页，Go 栈透明转发 `https://api.b.ai`；
   模型矩阵走 GUI 专用旁路 `/model/matrix`（详见 `docs/bai-model-matrix-design.md`）
