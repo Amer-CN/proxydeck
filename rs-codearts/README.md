@@ -95,6 +95,18 @@
    HITZY2002 `chatMessagesToOpenAI`：空 role → `user`（有 `tool_calls` → `assistant`、
    有 `tool_call_id` → `tool`）；`role` 去空白转小写；`developer` → `system`；
    缺 `content` 且无 `tool_calls` 的补空串。
+9. **`APIG.0602` 必须算凭据错误**（2026-11-05 线上事故）：华为 STS 临时令牌
+   （`session.securityToken`）寿命比 `session.expiresAt` 短，到点后上游回
+   `400 {"code":"APIG.0602","message":"the security token has expired"}`。
+   旧版只认 `APIG.0301/0303/STS5.*`，于是既不给本机登录态续期、也不换号，
+   把上游 400 **原样透给客户端**——DSH 侧连续重试 38 次、约 36 分钟（13:58→14:34），
+   直到码道桌面端 14:40:31 自己刷新登录态才恢复。现在：
+   - `APIG.0602` / 正文 `security token has expired` → 凭据错误 → 换号；
+   - 续期被 4xx 拒（`the refresh token has been used`）的账号直接标死，不再当替补；
+   - 续期后仍过期的账号跳过不发请求，最终回 502
+     「码道登录态失效，请重新打开码道桌面端登录（账号 … 登录态已过期且无法续期）」；
+   - `/health` 的 `account`/`expiresAt` 改报**真正会拿来发请求的账号**
+     （此前按文件顺序挑第一个未判死账号，长期显示早已过期的存档快照）。
 
 ## 实测记录（2026-10-26，本机）
 

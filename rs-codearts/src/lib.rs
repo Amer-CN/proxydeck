@@ -434,7 +434,15 @@ impl Server {
                     "codearts-plugin: 账号 {} 续期失败: {e}",
                     account.display_name()
                 );
-                (account.clone(), Some(format!("续期失败: {e}")))
+                // 4xx / invalid_grant = 续期材料已作废（refresh token 单次轮转，被别人
+                // 用过就再也换不出来）。这种账号继续留在候选池里只会每个请求赔一次
+                // 上游 400，直接标死等用户重新导入；网络抖动与 5xx 不标死，下轮还试。
+                if is_definitive_refresh_failure(&e) {
+                    self.mark_dead(&account.identity());
+                }
+                // note 直接用上游原文；外面再包一层「续期失败」会变成
+                // 「续期失败: 续期失败 HTTP 400…」（2026-11-05 实测踩到）。
+                (account.clone(), Some(e))
             }
         }
     }
@@ -570,6 +578,30 @@ impl Server {
     }
 }
 
+/// 续期失败是否「确定没救」（续期材料作废），而不是网络抖动。
+fn is_definitive_refresh_failure(e: &str) -> bool {
+    let lower = e.to_lowercase();
+    lower.contains("http 400")
+        || lower.contains("http 401")
+        || lower.contains("http 403")
+        || lower.contains("invalid_grant")
+        || lower.contains("refresh token has been used")
+        || lower.contains("invalid refresh token")
+}
+
+/// 续期后仍然过期 = 这份凭据发出去必然 400（APIG.0602），跳过它别浪费一次上游调用。
+fn expired_account_error(account: &Account, note: &Option<String>) -> UpError {
+    UpError::new(
+        502,
+        "credentials_error",
+        format!(
+            "账号 {} 登录态已过期且无法续期（{}）",
+            account.display_name(),
+            note.as_deref().unwrap_or("缺少续期材料")
+        ),
+    )
+}
+
 /// 可重试（换号）的上游错误：限流、5xx、并发上限、网络。
 fn retryable(e: &UpError) -> bool {
     e.status == 429
@@ -662,14 +694,10 @@ async fn handle_health(State(st): State<Arc<Server>>) -> Response {
     let cfg = st.load_config();
     let all = st.all_accounts();
     let mut pool = Vec::new();
-    let mut first: Option<(Account, &'static str)> = None;
     for (a, source) in &all {
         let id = a.identity();
         let h = st.health_of(&id);
         let cooling = h.cooldown_until.map(|t| t > Instant::now()).unwrap_or(false);
-        if first.is_none() && a.enabled && !h.dead {
-            first = Some((a.clone(), *source));
-        }
         pool.push(json!({
             "account": a.display_name(),
             "source": source,
@@ -680,6 +708,15 @@ async fn handle_health(State(st): State<Arc<Server>>) -> Response {
             "failures": h.failures,
         }));
     }
+    // 甲板顶部显示的必须是「真正会被拿去发请求的账号」。早先这里按文件顺序挑第一个
+    // 未判死账号，结果长期显示一份早已过期的存档快照，与真实在用的本机登录态不符
+    // （2026-11-05 实测：顶部写 hw030085737321632/11-04 过期，实际跑的是本机号）。
+    let cands = st.candidates().unwrap_or_default();
+    let first: Option<(Account, &'static str)> = cands
+        .iter()
+        .find(|(a, _)| !a.is_expired())
+        .cloned()
+        .or_else(|| cands.first().cloned());
     let models = st
         .models
         .lock()
@@ -738,7 +775,12 @@ async fn handle_models(State(st): State<Arc<Server>>) -> Response {
     };
     let mut last: Option<UpError> = None;
     for (account, source) in accounts.into_iter().take(st.max_attempts.max(1)) {
-        let (account, _note) = st.ensure_fresh(&account, source).await;
+        let (account, note) = st.ensure_fresh(&account, source).await;
+        if account.is_expired() {
+            // 续期没救回来：换成可读的 502，别再拿死令牌打上游。
+            last = Some(expired_account_error(&account, &note));
+            continue;
+        }
         if let Ok(cache) = st.models.lock() {
             if let Some(c) = cache.as_ref() {
                 if c.access_key == account.access_key && c.at.elapsed() < MODELS_TTL {
@@ -846,7 +888,12 @@ async fn handle_chat(State(st): State<Arc<Server>>, body: Bytes) -> Response {
     };
     let mut last: Option<UpError> = None;
     for (account, source) in accounts.into_iter().take(st.max_attempts.max(1)) {
-        let (account, _note) = st.ensure_fresh(&account, source).await;
+        let (account, note) = st.ensure_fresh(&account, source).await;
+        if account.is_expired() {
+            // 续期没救回来：换成可读的 502，别再拿死令牌打上游。
+            last = Some(expired_account_error(&account, &note));
+            continue;
+        }
         let session_id = upstream::session_id_for(&account);
         match st
             .up
@@ -1004,7 +1051,12 @@ async fn handle_quota(State(st): State<Arc<Server>>) -> Response {
     };
     let mut last: Option<UpError> = None;
     for (account, source) in accounts.into_iter().take(st.max_attempts.max(1)) {
-        let (account, _note) = st.ensure_fresh(&account, source).await;
+        let (account, note) = st.ensure_fresh(&account, source).await;
+        if account.is_expired() {
+            // 续期没救回来：换成可读的 502，别再拿死令牌打上游。
+            last = Some(expired_account_error(&account, &note));
+            continue;
+        }
         match st.up.statistics(&account).await {
             Ok(raw) => {
                 st.mark_ok(&account.identity());
@@ -1248,4 +1300,36 @@ pub async fn run(args: Args) -> Result<(), String> {
     axum::serve(listener, app)
         .await
         .map_err(|e| format!("服务退出: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 2026-11-05 线上原文：四份存档快照的 refresh token 全被用过，每次续期都是这条。
+    #[test]
+    fn spent_refresh_token_is_definitive() {
+        assert!(is_definitive_refresh_failure(
+            "续期失败 HTTP 400 Bad Request: invalid refresh token: 'the refresh token has been used'"
+        ));
+        assert!(is_definitive_refresh_failure("续期失败 HTTP 401 Unauthorized"));
+        assert!(is_definitive_refresh_failure("invalid_grant: bad code_verifier"));
+    }
+
+    /// 网络抖动 / 上游 5xx 不能把账号标死，下轮还要再试。
+    #[test]
+    fn transient_refresh_failure_is_not_definitive() {
+        assert!(!is_definitive_refresh_failure("请求失败: error sending request for url"));
+        assert!(!is_definitive_refresh_failure("续期失败 HTTP 503 Service Unavailable"));
+        assert!(!is_definitive_refresh_failure("续期失败 HTTP 502 Bad Gateway"));
+    }
+
+    /// 续期没救回来的账号：给客户端 502 + 人话，而不是上游 400 原文。
+    #[test]
+    fn expired_account_error_is_credential_502() {
+        let e = expired_account_error(&Account::default(), &Some("续期失败: HTTP 400".into()));
+        assert_eq!(e.status, 502);
+        assert!(e.credential);
+        assert!(e.message.contains("登录态已过期"), "{}", e.message);
+    }
 }

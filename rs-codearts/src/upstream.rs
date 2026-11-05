@@ -41,8 +41,13 @@ impl UpError {
         let code = code.into();
         let message = message.into();
         let lower = format!("{code} {message}").to_lowercase();
+        // APIG.0602 = 「the security token has expired」：华为 STS 临时令牌寿命比
+        // `session.expiresAt` 短，到点后上游就回这个码。它必须当凭据错误处理，否则
+        // 插件既不续期也不换号，会把 400 原样透给客户端（2026-11-05 实测踩过）。
         let credential = lower.contains("apig.0301")
             || lower.contains("apig.0303")
+            || lower.contains("apig.0602")
+            || lower.contains("security token has expired")
             || lower.contains("sts5.")
             || lower.contains("invalid_grant")
             || lower.contains("invalid dpop")
@@ -398,4 +403,41 @@ pub fn openai_error(status: u16, message: &str, code: &str) -> (u16, Value) {
             }
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 2026-11-05 线上原文：凭据过期时上游回 400，错误码在 body 顶层。
+    #[test]
+    fn apig_0602_security_token_expired_is_credential() {
+        let body = br#"{"message":"Bad request: the security token has expired","type":"invalid_request_error","code":"APIG.0602","param":null}"#;
+        let e = error_from_body(400, body);
+        assert_eq!(e.status, 400);
+        assert!(e.credential, "APIG.0602 必须判成凭据错误，否则不会换号：{e}");
+    }
+
+    /// 有的网关只回文本，没有 code 字段，也要认出来。
+    #[test]
+    fn security_token_expired_without_code_is_credential() {
+        let e = error_from_body(400, br#"{"message":"the security token has expired"}"#);
+        assert!(e.credential, "{e}");
+    }
+
+    #[test]
+    fn apig_0301_is_still_credential() {
+        let body = br#"{"error_code":"APIG.0301","error_msg":"Incorrect IAM authentication information"}"#;
+        let e = error_from_body(401, body);
+        assert!(e.credential, "{e}");
+    }
+
+    /// 业务错误不能误判成凭据错误（会把好账号标死）。
+    #[test]
+    fn model_not_found_is_not_credential() {
+        let body = br#"{"error_code":"InferHub.001001044.404","error_msg":"model not found"}"#;
+        let e = error_from_body(404, body);
+        assert!(!e.credential, "业务错误被当成凭据错误：{e}");
+        assert_eq!(e.status, 404);
+    }
 }
