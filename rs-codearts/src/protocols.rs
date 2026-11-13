@@ -127,8 +127,12 @@ pub fn anthropic_to_chat(v: &Value) -> Result<Value, String> {
                     }
                 }
                 if !tool_results.is_empty() {
-                    msgs.push(json!({"role": role, "content": text}));
+                    // OpenAI 要求 role=tool 紧跟在 assistant(tool_calls) 之后；
+                    // 用户文本若存在，放在 tool 结果后面。
                     msgs.extend(tool_results);
+                    if !text.trim().is_empty() {
+                        msgs.push(json!({"role": "user", "content": text}));
+                    }
                     continue;
                 }
                 if role == "assistant" {
@@ -265,129 +269,166 @@ pub fn chat_to_anthropic(v: &Value, model: &str) -> Value {
     })
 }
 
+fn ok_bytes(b: Bytes) -> Result<Bytes, std::io::Error> {
+    Ok(b)
+}
+
 fn sse(event: &str, data: &Value) -> Bytes {
     Bytes::from(format!("event: {event}\ndata: {data}\n\n"))
 }
 
 /// OpenAI chat SSE → Anthropic SSE。
 pub fn anthropic_stream(body: Body, model: String) -> Body {
-    let stream = body.into_data_stream().scan(
-        (Vec::<u8>::new(), false, 0usize, 0i64),
-        move |(buf, started, index, out_tokens), chunk| {
-            let chunk = match chunk {
-                Ok(c) => c,
-                Err(_) => return futures_util::future::ready(Some(vec![])),
+    use std::sync::{Arc, Mutex};
+    #[derive(Default)]
+    struct St {
+        open: Vec<usize>,
+        finish: String,
+        out_tokens: i64,
+        started: bool,
+    }
+    let state: Arc<Mutex<St>> = Arc::new(Mutex::new(St::default()));
+    let st_scan = state.clone();
+    let scan = body.into_data_stream().scan(Vec::<u8>::new(), move |buf, chunk| {
+        let mut out: Vec<Bytes> = Vec::new();
+        let chunk = match chunk {
+            Ok(c) => c,
+            Err(_) => return futures_util::future::ready(Some(out)),
+        };
+        buf.extend_from_slice(&chunk);
+        let mut consumed = 0usize;
+        while let Some(pos) = buf[consumed..].iter().position(|&b| b == b'\n') {
+            let line_end = consumed + pos;
+            let line = String::from_utf8_lossy(&buf[consumed..line_end])
+                .trim()
+                .to_string();
+            consumed = line_end + 1;
+            if !line.starts_with("data:") {
+                continue;
+            }
+            let payload = line[5..].trim();
+            if payload.is_empty() || payload == "[DONE]" {
+                continue;
+            }
+            let v: Value = match serde_json::from_str(payload) {
+                Ok(v) => v,
+                Err(_) => continue,
             };
-            buf.extend_from_slice(&chunk);
-            let mut out: Vec<Bytes> = Vec::new();
-            // 按行切（SSE 的 data 行以 \n 结尾）
-            let mut consumed = 0;
-            while let Some(pos) = buf[consumed..].iter().position(|&b| b == b'\n') {
-                let line_end = consumed + pos;
-                let line = String::from_utf8_lossy(&buf[consumed..line_end])
-                    .trim()
-                    .to_string();
-                consumed = line_end + 1;
-                if !line.starts_with("data:") {
-                    continue;
+            let mut g = st_scan.lock().unwrap();
+            if !g.started {
+                g.started = true;
+                out.push(sse(
+                    "message_start",
+                    &json!({"type":"message_start","message":{
+                        "id": format!("msg_{}", random_hex(12)),
+                        "type": "message", "role": "assistant", "model": model,
+                        "content": [], "stop_reason": null, "usage": {"input_tokens": 0, "output_tokens": 0}
+                    }}),
+                ));
+            }
+            if let Some(delta) = v
+                .get("choices")
+                .and_then(|c| c.get(0))
+                .and_then(|c| c.get("delta"))
+            {
+                if let Some(t) = delta.get("content").and_then(|x| x.as_str()) {
+                    if !t.is_empty() {
+                        if !g.open.contains(&0) {
+                            g.open.push(0);
+                            out.push(sse(
+                                "content_block_start",
+                                &json!({"type":"content_block_start","index":0,
+                                        "content_block":{"type":"text","text":""}}),
+                            ));
+                        }
+                        out.push(sse(
+                            "content_block_delta",
+                            &json!({"type":"content_block_delta","index":0,
+                                    "delta":{"type":"text_delta","text":t}}),
+                        ));
+                    }
                 }
-                let payload = line[5..].trim();
-                if payload.is_empty() || payload == "[DONE]" {
-                    continue;
-                }
-                let v: Value = match serde_json::from_str(payload) {
-                    Ok(v) => v,
-                    Err(_) => continue,
-                };
-                if !*started {
-                    *started = true;
-                    out.push(sse(
-                        "message_start",
-                        &json!({"type":"message_start","message":{
-                            "id": format!("msg_{}", random_hex(12)),
-                            "type": "message", "role": "assistant", "model": model,
-                            "content": [], "stop_reason": null, "usage": {"input_tokens": 0, "output_tokens": 0}
-                        }}),
-                    ));
-                }
-                if let Some(delta) = v
-                    .get("choices")
-                    .and_then(|c| c.get(0))
-                    .and_then(|c| c.get("delta"))
-                {
-                    if let Some(t) = delta.get("content").and_then(|x| x.as_str()) {
-                        if !t.is_empty() {
-                            if *index == 0 {
-                                out.push(sse(
-                                    "content_block_start",
-                                    &json!({"type":"content_block_start","index":0,
-                                            "content_block":{"type":"text","text":""}}),
-                                ));
-                            }
+                if let Some(calls) = delta.get("tool_calls").and_then(|x| x.as_array()) {
+                    for c in calls {
+                        let i = c.get("index").and_then(|x| x.as_u64()).unwrap_or(0) as usize + 1;
+                        if !g.open.contains(&i) {
+                            g.open.push(i);
+                            let f = c.get("function").cloned().unwrap_or(json!({}));
+                            out.push(sse(
+                                "content_block_start",
+                                &json!({"type":"content_block_start","index":i,
+                                    "content_block":{"type":"tool_use",
+                                        "id": c.get("id").cloned().unwrap_or(json!("")),
+                                        "name": f.get("name").cloned().unwrap_or(json!("")),
+                                        "input":{}}}),
+                            ));
+                        }
+                        if let Some(args) = c
+                            .get("function")
+                            .and_then(|f| f.get("arguments"))
+                            .and_then(|x| x.as_str())
+                        {
                             out.push(sse(
                                 "content_block_delta",
-                                &json!({"type":"content_block_delta","index":0,
-                                        "delta":{"type":"text_delta","text":t}}),
+                                &json!({"type":"content_block_delta","index":i,
+                                    "delta":{"type":"input_json_delta","partial_json":args}}),
                             ));
                         }
                     }
-                    if let Some(calls) = delta.get("tool_calls").and_then(|x| x.as_array()) {
-                        for c in calls {
-                            let i = c.get("index").and_then(|x| x.as_u64()).unwrap_or(0) as usize + 1;
-                            if i > *index {
-                                *index = i;
-                                let f = c.get("function").cloned().unwrap_or(json!({}));
-                                out.push(sse(
-                                    "content_block_start",
-                                    &json!({"type":"content_block_start","index":i,
-                                        "content_block":{"type":"tool_use",
-                                            "id": c.get("id").cloned().unwrap_or(json!("")),
-                                            "name": f.get("name").cloned().unwrap_or(json!("")),
-                                            "input":{}}}),
-                                ));
-                            }
-                            if let Some(args) = c
-                                .get("function")
-                                .and_then(|f| f.get("arguments"))
-                                .and_then(|x| x.as_str())
-                            {
-                                out.push(sse(
-                                    "content_block_delta",
-                                    &json!({"type":"content_block_delta","index":i,
-                                        "delta":{"type":"input_json_delta","partial_json":args}}),
-                                ));
-                            }
-                        }
-                    }
-                }
-                if let Some(u) = v.get("usage").and_then(|u| u.get("completion_tokens")).and_then(|x| x.as_i64()) {
-                    *out_tokens = u;
                 }
             }
-            if consumed > 0 {
-                buf.drain(0..consumed);
+            if let Some(fr) = v
+                .get("choices")
+                .and_then(|c| c.get(0))
+                .and_then(|c| c.get("finish_reason"))
+                .and_then(|x| x.as_str())
+            {
+                g.finish = fr.to_string();
             }
-            futures_util::future::ready(Some(out))
-        },
-    );
-    let finish = futures_util::stream::once(async move {
-        vec![
-            sse(
-                "content_block_stop",
-                &json!({"type":"content_block_stop","index":0}),
-            ),
-            sse(
-                "message_delta",
-                &json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},
-                        "usage":{"output_tokens":0}}),
-            ),
-            sse("message_stop", &json!({"type":"message_stop"})),
-        ]
+            if let Some(u) = v
+                .get("usage")
+                .and_then(|u| u.get("completion_tokens"))
+                .and_then(|x| x.as_i64())
+            {
+                g.out_tokens = u;
+            }
+        }
+        if consumed > 0 {
+            buf.drain(0..consumed);
+        }
+        futures_util::future::ready(Some(out))
     });
-    let merged = stream
-        .chain(finish)
-        .flat_map(|v| futures_util::stream::iter(v))
-        .map(|b| Ok::<Bytes, std::io::Error>(b));
+    let st_finish = state.clone();
+    let finish_stream = futures_util::stream::once(async move {
+        let (open, finish, tokens) = {
+            let g = st_finish.lock().unwrap();
+            (g.open.clone(), g.finish.clone(), g.out_tokens)
+        };
+        let mut out: Vec<Bytes> = Vec::new();
+        for i in &open {
+            out.push(sse(
+                "content_block_stop",
+                &json!({"type":"content_block_stop","index": i}),
+            ));
+        }
+        let stop = match finish.as_str() {
+            "tool_calls" => "tool_use",
+            "length" => "max_tokens",
+            "content_filter" => "refusal",
+            _ => "end_turn",
+        };
+        out.push(sse(
+            "message_delta",
+            &json!({"type":"message_delta","delta":{"stop_reason":stop},
+                    "usage":{"output_tokens": tokens}}),
+        ));
+        out.push(sse("message_stop", &json!({"type":"message_stop"})));
+        out
+    });
+    let merged = scan
+        .chain(finish_stream)
+        .flat_map(futures_util::stream::iter)
+        .map(ok_bytes);
     Body::from_stream(merged)
 }
 
@@ -544,103 +585,137 @@ pub fn chat_to_responses(v: &Value, model: &str) -> Value {
 
 /// OpenAI chat SSE → Responses 事件流（只发文本增量与完成事件）。
 pub fn responses_stream(body: Body, model: String) -> Body {
+    use std::sync::{Arc, Mutex};
+    #[derive(Default)]
+    struct St {
+        started: bool,
+        text: String,
+        out_tokens: i64,
+    }
+    let state: Arc<Mutex<St>> = Arc::new(Mutex::new(St::default()));
     let resp_id = format!("resp_{}", random_hex(12));
     let item_id = format!("msg_{}", random_hex(12));
-    let resp_id2 = resp_id.clone();
-    let item_id2 = item_id.clone();
-    let model2 = model.clone();
-    let stream = body.into_data_stream().scan(
-        (Vec::<u8>::new(), false, String::new()),
-        move |(buf, started, acc), chunk| {
-            let chunk = match chunk {
-                Ok(c) => c,
-                Err(_) => return futures_util::future::ready(Some(vec![])),
+    let model_scan = model.clone();
+    let item_scan = item_id.clone();
+    let resp_scan = resp_id.clone();
+    let st_scan = state.clone();
+    let scan = body.into_data_stream().scan(Vec::<u8>::new(), move |buf, chunk| {
+        let mut out: Vec<Bytes> = Vec::new();
+        let chunk = match chunk {
+            Ok(c) => c,
+            Err(_) => return futures_util::future::ready(Some(out)),
+        };
+        buf.extend_from_slice(&chunk);
+        let mut consumed = 0usize;
+        while let Some(pos) = buf[consumed..].iter().position(|&b| b == b'\n') {
+            let line_end = consumed + pos;
+            let line = String::from_utf8_lossy(&buf[consumed..line_end])
+                .trim()
+                .to_string();
+            consumed = line_end + 1;
+            if !line.starts_with("data:") {
+                continue;
+            }
+            let payload = line[5..].trim();
+            if payload.is_empty() || payload == "[DONE]" {
+                continue;
+            }
+            let v: Value = match serde_json::from_str(payload) {
+                Ok(v) => v,
+                Err(_) => continue,
             };
-            buf.extend_from_slice(&chunk);
-            let mut out: Vec<Bytes> = Vec::new();
-            let mut consumed = 0;
-            while let Some(pos) = buf[consumed..].iter().position(|&b| b == b'\n') {
-                let line_end = consumed + pos;
-                let line = String::from_utf8_lossy(&buf[consumed..line_end])
-                    .trim()
-                    .to_string();
-                consumed = line_end + 1;
-                if !line.starts_with("data:") {
-                    continue;
-                }
-                let payload = line[5..].trim();
-                if payload.is_empty() || payload == "[DONE]" {
-                    continue;
-                }
-                let v: Value = match serde_json::from_str(payload) {
-                    Ok(v) => v,
-                    Err(_) => continue,
-                };
-                if !*started {
-                    *started = true;
+            let mut g = st_scan.lock().unwrap();
+            if !g.started {
+                g.started = true;
+                out.push(sse(
+                    "response.created",
+                    &json!({"type":"response.created","response":{
+                        "id": resp_scan, "object": "response", "created_at": crate::config::now_unix(),
+                        "model": model_scan, "status": "in_progress", "output": []
+                    }}),
+                ));
+                out.push(sse(
+                    "response.output_item.added",
+                    &json!({"type":"response.output_item.added","output_index":0,
+                        "item":{"id": item_scan, "type":"message", "role":"assistant",
+                                "status":"in_progress", "content":[]}}),
+                ));
+                out.push(sse(
+                    "response.content_part.added",
+                    &json!({"type":"response.content_part.added","item_id": item_scan,
+                        "output_index":0,"content_index":0,
+                        "part":{"type":"output_text","text":"","annotations":[]}}),
+                ));
+            }
+            if let Some(t) = v
+                .get("choices")
+                .and_then(|c| c.get(0))
+                .and_then(|c| c.get("delta"))
+                .and_then(|d| d.get("content"))
+                .and_then(|x| x.as_str())
+            {
+                if !t.is_empty() {
+                    g.text.push_str(t);
                     out.push(sse(
-                        "response.created",
-                        &json!({"type":"response.created","response":{
-                            "id": resp_id, "object": "response", "created_at": crate::config::now_unix(),
-                            "model": model, "status": "in_progress", "output": []
-                        }}),
+                        "response.output_text.delta",
+                        &json!({"type":"response.output_text.delta","item_id": item_scan,
+                            "output_index":0,"content_index":0,"delta":t}),
                     ));
-                    out.push(sse(
-                        "response.output_item.added",
-                        &json!({"type":"response.output_item.added","output_index":0,
-                            "item":{"id": item_id, "type":"message", "role":"assistant",
-                                    "status":"in_progress", "content":[]}}),
-                    ));
-                    out.push(sse(
-                        "response.content_part.added",
-                        &json!({"type":"response.content_part.added","item_id":item_id,
-                            "output_index":0,"content_index":0,
-                            "part":{"type":"output_text","text":"","annotations":[]}}),
-                    ));
-                }
-                if let Some(t) = v
-                    .get("choices")
-                    .and_then(|c| c.get(0))
-                    .and_then(|c| c.get("delta"))
-                    .and_then(|d| d.get("content"))
-                    .and_then(|x| x.as_str())
-                {
-                    if !t.is_empty() {
-                        acc.push_str(t);
-                        out.push(sse(
-                            "response.output_text.delta",
-                            &json!({"type":"response.output_text.delta","item_id":item_id,
-                                "output_index":0,"content_index":0,"delta":t}),
-                        ));
-                    }
                 }
             }
-            if consumed > 0 {
-                buf.drain(0..consumed);
+            if let Some(u) = v
+                .get("usage")
+                .and_then(|u| u.get("completion_tokens"))
+                .and_then(|x| x.as_i64())
+            {
+                g.out_tokens = u;
             }
-            futures_util::future::ready(Some(out))
-        },
-    );
-    let finish = futures_util::stream::once(async move {
+        }
+        if consumed > 0 {
+            buf.drain(0..consumed);
+        }
+        futures_util::future::ready(Some(out))
+    });
+    let st_finish = state.clone();
+    let finish_stream = futures_util::stream::once(async move {
+        let (text, tokens) = {
+            let g = st_finish.lock().unwrap();
+            (g.text.clone(), g.out_tokens)
+        };
+        let item = json!({
+            "id": item_id, "type": "message", "role": "assistant", "status": "completed",
+            "content": [{"type":"output_text","text":text,"annotations":[]}]
+        });
         vec![
             sse(
                 "response.output_text.done",
-                &json!({"type":"response.output_text.done","item_id":item_id2,
-                    "output_index":0,"content_index":0,"text":""}),
+                &json!({"type":"response.output_text.done","item_id":item_id,
+                    "output_index":0,"content_index":0,"text":text}),
+            ),
+            sse(
+                "response.content_part.done",
+                &json!({"type":"response.content_part.done","item_id":item_id,
+                    "output_index":0,"content_index":0,
+                    "part":{"type":"output_text","text":text,"annotations":[]}}),
+            ),
+            sse(
+                "response.output_item.done",
+                &json!({"type":"response.output_item.done","output_index":0,"item":item}),
             ),
             sse(
                 "response.completed",
                 &json!({"type":"response.completed","response":{
-                    "id": resp_id2, "object": "response", "created_at": crate::config::now_unix(),
-                    "model": model2, "status": "completed", "output": []
+                    "id": resp_id, "object": "response", "created_at": crate::config::now_unix(),
+                    "model": model, "status": "completed", "output": [item],
+                    "usage":{"input_tokens":0,"output_tokens":tokens,"total_tokens":tokens}
                 }}),
             ),
         ]
     });
-    let merged = stream
-        .chain(finish)
-        .flat_map(|v| futures_util::stream::iter(v))
-        .map(|b| Ok::<Bytes, std::io::Error>(b));
+    let merged = scan
+        .chain(finish_stream)
+        .flat_map(futures_util::stream::iter)
+        .map(ok_bytes);
     Body::from_stream(merged)
 }
 
@@ -676,12 +751,16 @@ mod tests {
         assert_eq!(out["messages"][0]["role"], "system");
         assert_eq!(out["tools"][0]["function"]["name"], "read");
         assert_eq!(out["tool_choice"], "auto");
-        // 工具结果翻成 role=tool
-        assert!(out["messages"]
-            .as_array()
-            .unwrap()
+        // 工具结果翻成 role=tool，且必须紧跟在 assistant(tool_calls) 之后（OpenAI 协议要求）
+        let msgs = out["messages"].as_array().unwrap();
+        let tool_idx = msgs
             .iter()
-            .any(|m| m["role"] == "tool" && m["tool_call_id"] == "t1"));
+            .position(|m| m["role"] == "tool" && m["tool_call_id"] == "t1")
+            .expect("应有 tool 消息");
+        assert!(
+            msgs[tool_idx - 1]["tool_calls"].is_array(),
+            "tool 之前必须是带 tool_calls 的 assistant"
+        );
     }
 
     #[test]

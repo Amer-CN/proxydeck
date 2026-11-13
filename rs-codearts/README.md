@@ -88,8 +88,10 @@
    （`TM.00001041` → 429）。
 6. 凭据类错误（`APIG.0301/0303`、`STS5.*`、`invalid_grant`）统一 502 并提示重新登录，
    不当作普通 400 让客户端无限重试。
-7. `maas_type` 只有在账号文件写 `"channel":"benefit"` 时才发。2026-10 实测福利通道已整体
-   下线（`4000 invalid channel`），默认 `credit`。
+7. `maas_type: benefit` 有两种触发：账号文件写 `"channel":"benefit"`（整号福利通道，默认
+   `credit`），或该账号的**福利模型目录**确认了本模型（`benefit=true`）。2026-10/11 实测
+   福利网关整体下线（`4000 invalid channel`），未确认时不发——内置模型误发会被 APIG 路由到
+   不存在的福利 API（`APIG.0101.404`）。
 8. **请求体规整（`protocol.rs`）**：客户端可能发空 `role`（DSH 等 agent 框架会塞内部条目），
    上游直接回 `InferHub.001001044.400 Message role cannot empty`。对齐参考实现
    HITZY2002 `chatMessagesToOpenAI`：空 role → `user`（有 `tool_calls` → `assistant`、
@@ -195,5 +197,7 @@ curl http://127.0.0.1:18793/health
 
 ## 未做（后续）
 
-- 福利领取/签到（上游接口已下线，claim/签到端点全部 4000）。
-（DPoP 自动续期与多账号轮转已落地，见上文账号池与续期一节。）
+- TLS 指纹复刻（见文首「未做（有意的）」）。
+- 福利网关领取：接口已实现并接到看门狗/模型发现里，但上游 2026-11 实测仍回
+  `4000 invalid channel, group not found`（通道下线）；恢复后无需改代码。
+（DPoP 自动续期、多账号轮转、活动签到/邀请领取、OAuth 登录与多协议适配均已落地，见上文。）

@@ -249,14 +249,19 @@ impl Ledger {
             if let Ok(v) = serde_json::from_slice::<Value>(&b) {
                 if let Some(accs) = v.get("accounts").and_then(|a| a.as_object()) {
                     for (k, e) in accs {
-                        let mut en = Entry::default();
-                        en.last_run = e.get("last_run").and_then(|x| x.as_i64()).unwrap_or(0);
-                        en.last_message = e
-                            .get("last_message")
-                            .and_then(|x| x.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        en.last_credits = e.get("last_credits").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                        let mut en = Entry {
+                            last_run: e.get("last_run").and_then(|x| x.as_i64()).unwrap_or(0),
+                            last_message: e
+                                .get("last_message")
+                                .and_then(|x| x.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            last_credits: e
+                                .get("last_credits")
+                                .and_then(|x| x.as_f64())
+                                .unwrap_or(0.0),
+                            settled: BTreeMap::new(),
+                        };
                         if let Some(s) = e.get("settled").and_then(|x| x.as_object()) {
                             for (ck, cv) in s {
                                 if let Some(t) = cv.as_str() {
@@ -414,6 +419,19 @@ mod tests {
         assert_eq!(
             back.entry("u-1").settled.get("USER_LOGIN#1").map(String::as_str),
             Some("2026-11-13")
+        );
+        // 覆盖保存：Windows 上 rename 必须替换已有文件（防止账本永远停在第一版）
+        let mut back = Ledger::load(&path);
+        back.update("u-1", |e| {
+            e.last_run = 43;
+            e.settled.insert("USER_LOGIN#1".into(), "2026-11-14".into());
+        });
+        back.save();
+        let again = Ledger::load(&path);
+        assert_eq!(again.entry("u-1").last_run, 43);
+        assert_eq!(
+            again.entry("u-1").settled.get("USER_LOGIN#1").map(String::as_str),
+            Some("2026-11-14")
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

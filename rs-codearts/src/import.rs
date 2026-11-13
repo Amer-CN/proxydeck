@@ -153,7 +153,7 @@ fn all_secrets(dir: &Path) -> Result<Vec<(PathBuf, u64)>, String> {
             .unwrap_or(0);
         out.push((path, mtime));
     }
-    out.sort_by(|a, b| b.1.cmp(&a.1));
+    out.sort_by_key(|x| std::cmp::Reverse(x.1));
     if out.is_empty() {
         return Err(format!("{} 里没有 .enc 凭据文件（尚未登录）", dir.display()));
     }

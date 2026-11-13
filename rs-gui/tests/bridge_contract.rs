@@ -46,7 +46,9 @@ const GOLDEN: &str = include_str!("golden/bridge-go-reference.json");
 /// 因此少这些键。比对时**只扣除登记项**，其余任何键差异照旧判红
 /// （见 `go_and_rust_bridge_agree_command_by_command` 例外 4）。
 /// 将来若 Go 侧也加了同名插件，把这里清空即可。
-const RUST_ONLY_LIVE_KEYS: &[&str] = &["qoder-intl", "opencode"];
+// 2026-11-13 审查：codearts（8793，v4.7.0 接入）同样不在 Go 黄金基准里。
+// 只登记 Rust 侧已发布的插件键，其余差异照旧判红。
+const RUST_ONLY_LIVE_KEYS: &[&str] = &["qoder-intl", "opencode", "codearts"];
 
 /* ---------------- 归一化（与 Go 采集器同一套哨兵） ---------------- */
 

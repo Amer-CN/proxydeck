@@ -333,7 +333,8 @@ pub async fn serve_callback(listener: tokio::net::TcpListener, st: Arc<crate::Se
     let app = Router::new()
         .route(CALLBACK_PATH, any(cb))
         .with_state(CbState { st, id });
-    let _ = axum::serve(listener, app).await;
+    // 回调监听最多活到登录 TTL 之后一分钟，别让废弃的登录长期占端口。
+    let _ = tokio::time::timeout(LOGIN_TTL + Duration::from_secs(60), axum::serve(listener, app)).await;
 }
 
 /// 轮询登录结果（回调 or 手动提交 code）；成功后换 token 并落账号。

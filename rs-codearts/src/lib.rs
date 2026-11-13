@@ -484,29 +484,14 @@ impl Server {
         if key.is_empty() {
             return false;
         }
-        if let Ok(g) = self.benefit.lock() {
-            if let Some(c) = g.get(uid) {
-                if !c.failed {
-                    return c.ids.contains(&key);
-                }
-            }
-        }
-        // 没有确认的福利目录：只有**不在内置目录里**的种子模型才按福利路由。
-        // 内置目录里的同名模型（如 glm-5.3-flash）加 maas_type 会被 APIG 路由到
-        // 不存在的福利 API（实测 InferHub.APIG.0101.404），必须排除。
-        if let Ok(cache) = self.models.lock() {
-            if let Some(c) = cache.as_ref() {
-                if c.list
-                    .iter()
-                    .any(|m| m.id.eq_ignore_ascii_case(model.trim()))
-                {
-                    return false;
-                }
-            }
-        }
-        seed_benefit_models()
-            .iter()
-            .any(|m| m.eq_ignore_ascii_case(&key))
+        // 只用「本账号确认过的」福利目录。福利网关 2026-11 实测回 4000（通道下线），
+        // 种子兜底会在首次聊天（模型目录还没缓存）时把 glm-5.3-flash 等内置模型
+        // 误加 maas_type，实测直接 APIG.0101.404——所以不再用种子路由。
+        self.benefit
+            .lock()
+            .ok()
+            .and_then(|g| g.get(uid).map(|c| !c.failed && c.ids.contains(&key)))
+            .unwrap_or(false)
     }
 
     // ---------------- OAuth 登录（/login/*） ----------------
@@ -1302,6 +1287,18 @@ async fn handle_messages(State(st): State<Arc<Server>>, body: Bytes) -> Response
     chat["model"] = Value::String(canon.clone());
     chat["stream"] = Value::Bool(stream);
     let resp = chat_core(st, chat).await;
+    if !resp.status().is_success() {
+        return resp; // 上游错误按 JSON 原样返回，别伪装成 SSE 流
+    }
+    if !resp
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.contains("text/event-stream"))
+        .unwrap_or(false)
+    {
+        return resp; // 非 SSE（例如上游直接回整包 JSON）也原样透传
+    }
     if stream {
         let (mut parts, body) = resp.into_parts();
         parts.headers.insert(
@@ -1347,6 +1344,18 @@ async fn handle_responses(State(st): State<Arc<Server>>, body: Bytes) -> Respons
     chat["model"] = Value::String(canon.clone());
     chat["stream"] = Value::Bool(stream);
     let resp = chat_core(st, chat).await;
+    if !resp.status().is_success() {
+        return resp; // 上游错误按 JSON 原样返回，别伪装成 SSE 流
+    }
+    if !resp
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.contains("text/event-stream"))
+        .unwrap_or(false)
+    {
+        return resp; // 非 SSE（例如上游直接回整包 JSON）也原样透传
+    }
     if stream {
         let (mut parts, body) = resp.into_parts();
         parts.headers.insert(
@@ -1717,6 +1726,8 @@ async fn handle_login_start(State(st): State<Arc<Server>>) -> Response {
             Ok(g) => g,
             Err(e) => return error_response(500, &e.to_string(), "login_state"),
         };
+        // 清掉过期的登录会话，避免长期堆积。
+        g.retain(|_, p| p.created.elapsed() < login::LOGIN_TTL);
         g.insert(
             id.clone(),
             login::Pending {
@@ -2132,11 +2143,6 @@ fn claim_credits(v: &Value, c: &activity::Campaign) -> f64 {
     } else {
         c.amount
     }
-}
-
-/// 冷启动种子：福利套餐轮换后新增的模型在首次发现前也要按福利路由。
-fn seed_benefit_models() -> &'static [&'static str] {
-    &["deepseek-v4-flash-0731", "deepseek-v4-pro-0813", "glm-5.3-flash"]
 }
 
 /// 看门狗：续期、保活、活动领取（每 60 秒一拍；`CODEARTS_WATCHDOG=0` 关闭）。
