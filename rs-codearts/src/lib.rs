@@ -23,10 +23,12 @@
 
 pub mod activity;
 pub mod config;
+pub mod login;
 pub mod datadir;
 pub mod import;
 pub mod protocol;
 pub mod refresh;
+pub mod protocols;
 pub mod signer;
 pub mod sse;
 pub mod store;
@@ -140,6 +142,8 @@ pub struct Server {
     unavailable: Mutex<std::collections::HashMap<String, std::collections::HashMap<String, Instant>>>,
     /// 每账号最近一次上游活动（看门狗保活判断用）。
     last_touch: Mutex<std::collections::HashMap<String, Instant>>,
+    /// 待完成的 OAuth 登录（/login/*）。
+    logins: Mutex<std::collections::HashMap<String, login::Pending>>,
 }
 
 /// 福利模型目录缓存（每账号一份，1 小时）。
@@ -189,6 +193,7 @@ impl Server {
             busy: Mutex::new(std::collections::HashMap::new()),
             unavailable: Mutex::new(std::collections::HashMap::new()),
             last_touch: Mutex::new(std::collections::HashMap::new()),
+            logins: Mutex::new(std::collections::HashMap::new()),
         })
     }
 
@@ -502,6 +507,57 @@ impl Server {
         seed_benefit_models()
             .iter()
             .any(|m| m.eq_ignore_ascii_case(&key))
+    }
+
+    // ---------------- OAuth 登录（/login/*） ----------------
+
+    fn set_login_secret(&self, id: &str, secret: &str) {
+        if let Ok(mut g) = self.logins.lock() {
+            if let Some(p) = g.get_mut(id) {
+                p.secret = Some(secret.to_string());
+            }
+        }
+    }
+
+    fn set_login_code(&self, id: &str, code: &str) {
+        if let Ok(mut g) = self.logins.lock() {
+            if let Some(p) = g.get_mut(id) {
+                p.code = Some(code.to_string());
+            }
+        }
+    }
+
+    fn set_login_error(&self, id: &str, msg: &str) {
+        if let Ok(mut g) = self.logins.lock() {
+            if let Some(p) = g.get_mut(id) {
+                p.done = true;
+                p.error = Some(msg.to_string());
+            }
+        }
+    }
+
+    fn set_login_success(&self, id: &str, account: &str) {
+        if let Ok(mut g) = self.logins.lock() {
+            if let Some(p) = g.get_mut(id) {
+                p.done = true;
+                p.account = Some(account.to_string());
+            }
+        }
+    }
+
+    /// 取一次登录的 (code, verifier, port, jwk, done)。
+    fn login_view(&self, id: &str) -> Option<(Option<String>, String, u16, Value, bool)> {
+        self.logins.lock().ok().and_then(|g| {
+            g.get(id).map(|p| {
+                (
+                    p.code.clone(),
+                    p.verifier.clone(),
+                    p.port,
+                    p.jwk.clone(),
+                    p.done,
+                )
+            })
+        })
     }
 
     /// 小写别名 → 上游精确模型 ID（模型目录缓存里能查到就用精确 ID，否则原样返回）。
@@ -980,7 +1036,13 @@ pub fn router(state: Arc<Server>) -> Router {
         .route("/accounts/import", any(handle_import))
         .route("/models/benefit", any(handle_benefit))
         .route("/accounts/import-local", any(handle_import_local))
+        .route("/login/start", any(handle_login_start))
+        .route("/login/status", any(handle_login_status))
+        .route("/login/complete", any(handle_login_complete))
+        .route("/login/list", any(handle_login_list))
         .route("/accounts/refresh", any(handle_account_refresh))
+        .route("/v1/messages", any(handle_messages))
+        .route("/v1/responses", any(handle_responses))
         .route("/accounts/enable", any(handle_enable))
         .route("/accounts/remove", any(handle_remove))
         .fallback(any(handle_not_found))
@@ -1217,8 +1279,107 @@ async fn handle_chat(State(st): State<Arc<Server>>, body: Bytes) -> Response {
             return error_response(400, &format!("请求体不是合法 JSON: {e}"), "invalid_json")
         }
     };
+    if let Some(m) = req.get("model").and_then(|x| x.as_str()) {
+        let canon = st.canonical_model(m.trim());
+        req["model"] = Value::String(canon);
+    }
+    chat_core(st, req).await
+}
+
+/// `POST /v1/messages`：Anthropic 协议 → 内部 chat。
+async fn handle_messages(State(st): State<Arc<Server>>, body: Bytes) -> Response {
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return error_response(400, &format!("请求体不是合法 JSON: {e}"), "invalid_json"),
+    };
+    let model = v.get("model").and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let stream = v.get("stream").and_then(|x| x.as_bool()).unwrap_or(false);
+    let mut chat = match protocols::anthropic_to_chat(&v) {
+        Ok(c) => c,
+        Err(e) => return error_response(400, &e, "invalid_request"),
+    };
+    let canon = st.canonical_model(&model);
+    chat["model"] = Value::String(canon.clone());
+    chat["stream"] = Value::Bool(stream);
+    let resp = chat_core(st, chat).await;
+    if stream {
+        let (mut parts, body) = resp.into_parts();
+        parts.headers.insert(
+            header::CONTENT_TYPE,
+            "text/event-stream; charset=utf-8".parse().unwrap(),
+        );
+        parts.headers.insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
+        return Response::from_parts(parts, protocols::anthropic_stream(body, canon));
+    }
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 32 * 1024 * 1024)
+        .await
+        .unwrap_or_default();
+    match serde_json::from_slice::<Value>(&bytes) {
+        Ok(v2) if status.is_success() => {
+            json_response(StatusCode::OK, &protocols::chat_to_anthropic(&v2, &canon))
+        }
+        _ => {
+            let mut out = Response::new(axum::body::Body::from(bytes));
+            *out.status_mut() = status;
+            out.headers_mut().insert(
+                header::CONTENT_TYPE,
+                "application/json; charset=utf-8".parse().unwrap(),
+            );
+            out
+        }
+    }
+}
+
+/// `POST /v1/responses`：OpenAI Responses 协议 → 内部 chat。
+async fn handle_responses(State(st): State<Arc<Server>>, body: Bytes) -> Response {
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return error_response(400, &format!("请求体不是合法 JSON: {e}"), "invalid_json"),
+    };
+    let model = v.get("model").and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let stream = v.get("stream").and_then(|x| x.as_bool()).unwrap_or(false);
+    let mut chat = match protocols::responses_to_chat(&v) {
+        Ok(c) => c,
+        Err(e) => return error_response(400, &e, "invalid_request"),
+    };
+    let canon = st.canonical_model(&model);
+    chat["model"] = Value::String(canon.clone());
+    chat["stream"] = Value::Bool(stream);
+    let resp = chat_core(st, chat).await;
+    if stream {
+        let (mut parts, body) = resp.into_parts();
+        parts.headers.insert(
+            header::CONTENT_TYPE,
+            "text/event-stream; charset=utf-8".parse().unwrap(),
+        );
+        parts.headers.insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
+        return Response::from_parts(parts, protocols::responses_stream(body, canon));
+    }
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 32 * 1024 * 1024)
+        .await
+        .unwrap_or_default();
+    match serde_json::from_slice::<Value>(&bytes) {
+        Ok(v2) if status.is_success() => {
+            json_response(StatusCode::OK, &protocols::chat_to_responses(&v2, &canon))
+        }
+        _ => {
+            let mut out = Response::new(axum::body::Body::from(bytes));
+            *out.status_mut() = status;
+            out.headers_mut().insert(
+                header::CONTENT_TYPE,
+                "application/json; charset=utf-8".parse().unwrap(),
+            );
+            out
+        }
+    }
+}
+
+/// 已规整/校验过的 chat 请求（/v1/chat/completions 与协议适配器共用）。
+async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
     let model = match req.get("model").and_then(|x| x.as_str()) {
-        Some(m) if !m.trim().is_empty() => st.canonical_model(m.trim()),
+        Some(m) if !m.trim().is_empty() => m.trim().to_string(),
         _ => return error_response(400, "缺少 model 字段", "invalid_request"),
     };
     if req.get("messages").and_then(|x| x.as_array()).is_none() {
@@ -1531,6 +1692,120 @@ fn parse_credit(raw: &Value) -> (Option<f64>, Option<f64>, Option<f64>, Option<f
         }
     });
     (total, used, remain, percent)
+}
+
+/// `POST /login/start`：起本地回调服务，返回华为云授权链接（PKCE + DPoP）。
+async fn handle_login_start(State(st): State<Arc<Server>>) -> Response {
+    let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+        Ok(l) => l,
+        Err(e) => return error_response(500, &format!("回调端口绑定失败: {e}"), "login_bind"),
+    };
+    let port = match listener.local_addr() {
+        Ok(a) => a.port(),
+        Err(e) => return error_response(500, &format!("回调端口读取失败: {e}"), "login_bind"),
+    };
+    let id = upstream::random_hex(8);
+    let ticket_id = upstream::random_hex(16);
+    let (verifier, challenge) = login::pkce();
+    let jwk = match login::new_dpop_jwk() {
+        Ok(j) => j,
+        Err(e) => return error_response(500, &e, "login_key"),
+    };
+    let url = login::authorize_url(&ticket_id, &challenge, port);
+    {
+        let mut g = match st.logins.lock() {
+            Ok(g) => g,
+            Err(e) => return error_response(500, &e.to_string(), "login_state"),
+        };
+        g.insert(
+            id.clone(),
+            login::Pending {
+                url: url.clone(),
+                port,
+                verifier,
+                ticket_id: ticket_id.clone(),
+                jwk,
+                created: Instant::now(),
+                code: None,
+                secret: None,
+                done: false,
+                error: None,
+                account: None,
+            },
+        );
+    }
+    let st_cb = st.clone();
+    let id_cb = id.clone();
+    tokio::spawn(async move { login::serve_callback(listener, st_cb, id_cb).await });
+    let st_worker = st.clone();
+    let id_worker = id.clone();
+    tokio::spawn(async move { login::finish_worker(st_worker, id_worker).await });
+    json_response(
+        StatusCode::OK,
+        &login::start_json(&id, &url, port, &challenge, &ticket_id),
+    )
+}
+
+/// `GET /login/status?id=`：查询登录结果（done/error/account）。
+async fn handle_login_status(
+    State(st): State<Arc<Server>>,
+    axum::extract::RawQuery(query): axum::extract::RawQuery,
+) -> Response {
+    let id = query
+        .as_deref()
+        .and_then(|q| {
+            q.split('&').find_map(|kv| {
+                let mut it = kv.splitn(2, '=');
+                match (it.next(), it.next()) {
+                    (Some("id"), Some(v)) if !v.is_empty() => Some(v.to_string()),
+                    _ => None,
+                }
+            })
+        })
+        .unwrap_or_default();
+    let guard = match st.logins.lock() {
+        Ok(g) => g,
+        Err(e) => return error_response(500, &e.to_string(), "login_state"),
+    };
+    match guard.get(&id) {
+        Some(p) => json_response(StatusCode::OK, &p.status_json(&id)),
+        None => error_response(404, "没有这个登录会话（可能已过期）", "login_not_found"),
+    }
+}
+
+/// `GET /login/list`：列出所有待完成/已完成的登录。
+async fn handle_login_list(State(st): State<Arc<Server>>) -> Response {
+    let guard = match st.logins.lock() {
+        Ok(g) => g,
+        Err(e) => return error_response(500, &e.to_string(), "login_state"),
+    };
+    let items: Vec<Value> = guard.iter().map(|(k, v)| v.status_json(k)).collect();
+    json_response(StatusCode::OK, &json!({ "logins": items }))
+}
+
+/// `POST /login/complete`：远程部署时把浏览器回调 URL 里的 code 手动提交（body: {id, code} 或 {id, url}）。
+async fn handle_login_complete(State(st): State<Arc<Server>>, body: Bytes) -> Response {
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return error_response(400, &format!("请求体不是合法 JSON: {e}"), "invalid_json"),
+    };
+    let id = v.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let mut code = v.get("code").and_then(|x| x.as_str()).unwrap_or("").to_string();
+    if code.is_empty() {
+        if let Some(u) = v.get("url").and_then(|x| x.as_str()) {
+            for kv in u.split('&') {
+                let mut it = kv.splitn(2, '=');
+                if let (Some("code"), Some(val)) = (it.next(), it.next()) {
+                    code = val.to_string();
+                }
+            }
+        }
+    }
+    if id.is_empty() || code.is_empty() {
+        return error_response(400, "缺少 id 或 code", "invalid_request");
+    }
+    st.set_login_code(&id, &code);
+    json_response(StatusCode::OK, &json!({ "ok": true, "id": id }))
 }
 
 /// `/models/benefit`：诊断用——对首个可用账号做一次福利领取 + 目录拉取，返回原始结果。

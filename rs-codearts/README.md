@@ -145,6 +145,39 @@
   失败按 30 分钟缓存、按内置目录路由，不影响正常聊天。
 - `glm-5.3-flash` 等内置模型不再被误加 `maas_type`（修复了实测到的 `APIG.0101.404`）。
 
+### OAuth 登录（/login/*，2026-11-13）
+
+不依赖码道桌面端，直接走华为云 OAuth2（PKCE + DPoP，照抄
+`HITZY2002/codearts2api` 的 `BuildAuthorizeURL` / `ExchangeCode`）：
+
+| 端点 | 作用 |
+|---|---|
+| `POST /login/start` | 在 `127.0.0.1:<随机端口>` 起回调服务，返回授权链接与 `id` |
+| `GET /login/status?id=` | 查询结果（`done` / `error` / `account`） |
+| `POST /login/complete` | 远程部署时手动提交回调 URL 里的 `code`（`{id, code}` 或 `{id, url}`） |
+| `GET /login/list` | 列出所有登录会话 |
+
+流程：`portal/authorize?theme=2&locale=zh-cn&uri_scheme=codearts-agent&client_id=codearts-agent
+&port=…&code_challenge=…&code_challenge_method=SHA-256&ticket_id=…&plugin-name=snap_AIIDE
+&plugin-version=5.2.0` → 浏览器登录 → portal 回调两次（先 `secret+redirect` 307，再 `code`）
+→ `POST sts…/v1/oauth2/tokens`（`grant_type=authorization_code` + `DPoP`）→ 存账号
+（含 `refresh_token`、`code_verifier`、`dpop_private_jwk`、`client_id=codearts-agent`）。
+
+DPoP 私钥**必须**与 refresh_token 一起保存，换密钥刷新会被 STS 拒。
+实测（2026-11-13）：`/login/start` 返回的授权页 HTTP 200（804 B），回调端口监听正常；
+完整登录需人工在浏览器完成（未在本轮验证里走完）。
+
+### 协议适配（2026-11-13）
+
+| 端点 | 做法 |
+|---|---|
+| `POST /v1/messages`（Anthropic） | `system`/文本/图片/`tool_use`/`tool_result`/`tools`/`tool_choice` → chat；回包翻成 `message`（文本 + `tool_use`，`stop_reason` 映射）；流式翻成 `message_start` / `content_block_start|delta|stop` / `message_delta` / `message_stop` |
+| `POST /v1/responses`（OpenAI Responses） | `instructions`/`input`（字符串或 item 数组：`message`/`function_call`/`function_call_output`）→ chat；回包翻成 `response` 对象（`output_text` + `function_call`）；流式翻成 `response.created` / `output_item.added` / `content_part.added` / `output_text.delta` / `output_text.done` / `completed` |
+
+工具调用在流式里按 `tool_use` block / `function_call` 尽力透传；不认识的块丢弃。
+实测（2026-11-13，真实上游 `glm-5.3`）：非流式两个端点均 200 且中文正确；
+流式 Anthropic 收到 `content_block_delta`（"温暖明亮。"）、Responses 收到文本增量。
+
 ## 验证命令
 
 ```powershell
