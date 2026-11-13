@@ -49,26 +49,70 @@ pub struct Imported {
 }
 
 /// 读取本机登录态；失败返回可读原因（调用方决定是否降级到账号文件）。
+///
+/// `secretStorage` 里可能有**多个** `.enc`：桌面端登录/刷新时会写入不同的键，
+/// 其中可能有一份是空壳或非会话数据。这里逐个解密，选 `expiresAt` 最晚的那份
+/// （2026-11-13 实测：最新文件只有 184 B，真正的会话在另一份里）。
 pub fn read_local_session() -> Result<Imported, String> {
     let dir = local_app_dir().ok_or("APPDATA 未设置")?;
     if !dir.is_dir() {
         return Err(format!("未找到码道数据目录 {}", dir.display()));
     }
     let key = read_master_key(&dir.join("Local State"))?;
-    let (enc_path, mtime_ms) = newest_secret(&dir.join("secretStorage"))?;
-    let raw = std::fs::read(&enc_path)
-        .map_err(|e| format!("读 {} 失败: {e}", enc_path.display()))?;
-    let plain = decrypt_secret(&key, &raw)?;
-    let v: Value = serde_json::from_slice(&plain)
-        .map_err(|e| format!("登录态 JSON 解析失败: {e}"))?;
-    let mut account = account_from_value(&v)?;
-    let display = account.display_name();
-    account.name = display;
-    Ok(Imported {
-        account,
-        source: format!("本机码道 ({})", enc_path.file_name().unwrap_or_default().to_string_lossy()),
-        mtime_ms,
-    })
+    let secrets = all_secrets(&dir.join("secretStorage"))?;
+    let mut best: Option<(i64, Imported)> = None;
+    let mut last_err = String::new();
+    for (enc_path, mtime_ms) in secrets {
+        let raw = match std::fs::read(&enc_path) {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = format!("读 {} 失败: {e}", enc_path.display());
+                continue;
+            }
+        };
+        let plain = match decrypt_secret(&key, &raw) {
+            Ok(p) => p,
+            Err(e) => {
+                last_err = format!("{} 解密失败: {e}", enc_path.display());
+                continue;
+            }
+        };
+        let v: Value = match serde_json::from_slice(&plain) {
+            Ok(v) => v,
+            Err(e) => {
+                last_err = format!("{} 登录态 JSON 解析失败: {e}", enc_path.display());
+                continue;
+            }
+        };
+        let mut account = match account_from_value(&v) {
+            Ok(a) => a,
+            Err(e) => {
+                last_err = e;
+                continue;
+            }
+        };
+        let display = account.display_name();
+        account.name = display;
+        let exp = account.expires_unix().unwrap_or(-1);
+        let cand = Imported {
+            account,
+            source: format!(
+                "本机码道 ({})",
+                enc_path.file_name().unwrap_or_default().to_string_lossy()
+            ),
+            mtime_ms,
+        };
+        if best.as_ref().map(|(e, _)| exp > *e).unwrap_or(true) {
+            best = Some((exp, cand));
+        }
+    }
+    match best {
+        Some((_, imported)) => Ok(imported),
+        None if last_err.is_empty() => {
+            Err("secretStorage 里没有可用的 .enc 凭据文件（尚未登录）".to_string())
+        }
+        None => Err(last_err),
+    }
 }
 
 fn read_master_key(local_state: &Path) -> Result<Vec<u8>, String> {
@@ -92,8 +136,8 @@ fn read_master_key(local_state: &Path) -> Result<Vec<u8>, String> {
     Ok(key)
 }
 
-fn newest_secret(dir: &Path) -> Result<(PathBuf, u64), String> {
-    let mut best: Option<(PathBuf, u64)> = None;
+fn all_secrets(dir: &Path) -> Result<Vec<(PathBuf, u64)>, String> {
+    let mut out: Vec<(PathBuf, u64)> = Vec::new();
     let rd = std::fs::read_dir(dir).map_err(|e| format!("读 {} 失败: {e}", dir.display()))?;
     for entry in rd.flatten() {
         let path = entry.path();
@@ -107,11 +151,13 @@ fn newest_secret(dir: &Path) -> Result<(PathBuf, u64), String> {
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
-        if best.as_ref().map(|(_, m)| mtime > *m).unwrap_or(true) {
-            best = Some((path, mtime));
-        }
+        out.push((path, mtime));
     }
-    best.ok_or_else(|| format!("{} 里没有 .enc 凭据文件（尚未登录）", dir.display()))
+    out.sort_by(|a, b| b.1.cmp(&a.1));
+    if out.is_empty() {
+        return Err(format!("{} 里没有 .enc 凭据文件（尚未登录）", dir.display()));
+    }
+    Ok(out)
 }
 
 fn decrypt_secret(master: &[u8], raw: &[u8]) -> Result<Vec<u8>, String> {

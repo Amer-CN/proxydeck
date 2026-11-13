@@ -118,6 +118,33 @@
 - `GET /snap-manager/v1/statistics/plugin` → `usageTotalPackageCredit` 7500 / 已用 120.11。
 - 真实对话：流式 `chat.completion.chunk`、非流式聚合均 200，`reasoning_content` 正常。
 
+## 2026-11-13：活动积分 / 福利 / 看门狗（照社区实现补齐）
+
+来源：`HITZY2002/codearts2api` 的 `internal/upstream/checkin.go` 与
+`Darkstarrd-dev/tinylab` 的 `internal/jethub/codearts_credits.go`（两份互相印证）。
+
+| 块 | 做法 | 位置 |
+|---|---|---|
+| 活动领取 | `GET /v1/ops/delivery?channel=IDE` → `POST /v1/ops/claim`（`{campaignId, channel:"IDE", idempotentKey}`）→ `POST /v1/ops/confirm`（claim 响应 `data.id` 非空才做）。**按 `type` 选活动**，`campaignId` 数字/字符串都兼容；所有 `claimable` 活动都领（`USER_LOGIN` / `NEW_USER_REGISTER` / `INVITE_USER` / `STUDENT_CERTIFIED` …） | `activity.rs` + `upstream.rs` |
+| 账本 | `codearts-activity.json`：签到按自然日（UTC+8）、其他活动每账号一次；失败不影响推理健康 | `activity.rs::Ledger` |
+| 福利模型 | `opengw.developer.huaweicloud.com` 的 `/api/v1/benefit/claim` + `/api/v1/gateway/config`；只有**确认的**福利模型才带 `maas_type: benefit`（内置同名模型不能带，否则 APIG.0101） | `upstream.rs` + `lib.rs::is_benefit_model` |
+| 看门狗 | 60s 一拍：启动/每 30 分钟跑活动；30 分钟内到期的号提前续期；10 分钟无活动打一次积分接口保活 | `lib.rs::background_loop` |
+| 并发闸门 | 单账号默认 3（上游实测上限 3），`CODEARTS_MAX_CONCURRENT` 覆盖 | `lib.rs::permit` |
+| 模型可用性学习 | `002002009 not registered` / `benefit not found` → 记 30 分钟不可用、从 `/v1/models` 过滤；小写别名聊天时归一成精确 ID | `lib.rs::mark_model_unavailable` / `canonical_model` |
+| 本机登录态 | `secretStorage` 有多个 `.enc` 时逐个解密、取 `expiresAt` 最晚（2026-11-13 实测：桌面端新写的是 184 B 空壳，真会话在另一份里） | `import.rs::read_local_session` |
+
+端点：`GET /activity`（账本）、`GET /activity?campaigns=1`（只读预览活动列表）、
+`POST /activity/claim`（立即领取）、`GET /models/benefit`（福利网关诊断）。
+开关：`CODEARTS_WATCHDOG=0`、`CODEARTS_ACTIVITY_AUTO=0`。
+
+**2026-11-13 实测**（本机有效登录态）：
+- 活动列表返回 4 条：`USER_LOGIN`（100/天）、`NEW_USER_REGISTER`（4000，已领）、
+  `INVITE_USER`（1000，当前 `status` 为空＝未获邀请资格）、`STUDENT_CERTIFIED`（4000，未认证）；
+  无可领活动时 `/activity/claim` 返回「无可领取活动」，不报错。
+- 福利网关当前回 `4000 invalid channel, group not found`（通道下线口径，与 2026-10-26 结论一致）；
+  失败按 30 分钟缓存、按内置目录路由，不影响正常聊天。
+- `glm-5.3-flash` 等内置模型不再被误加 `maas_type`（修复了实测到的 `APIG.0101.404`）。
+
 ## 验证命令
 
 ```powershell

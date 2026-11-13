@@ -19,10 +19,26 @@ pub const BUILTIN_MODELS_PATH: &str = "/v1/model/builtin";
 /// 积分套餐与用量。
 pub const STATISTICS_PATH: &str = "/snap-manager/v1/statistics/plugin";
 
+/// 活动积分（签到/新手/邀请/学生）：snap-access 根路径，需 `Agent-Type: PromptCenter`。
+pub const OPS_DELIVERY_PATH: &str = "/v1/ops/delivery?channel=IDE";
+pub const OPS_CLAIM_PATH: &str = "/v1/ops/claim";
+pub const OPS_CONFIRM_PATH: &str = "/v1/ops/confirm";
+
+/// 限时福利（免费套餐）网关：与 snap-access 不同域，签名按该 host 计算。
+pub const BENEFIT_BASE: &str = "https://opengw.developer.huaweicloud.com";
+pub const BENEFIT_CLAIM_PATH: &str = "/api/v1/benefit/claim";
+pub const BENEFIT_CONFIG_PATH: &str = "/api/v1/gateway/config";
+
+/// 福利模型聊天必须追加的请求头（官方 renderer 的 `isFreeBenefit` 路径）。
+pub const MAAS_TYPE_HEADER: &str = "maas_type";
+pub const MAAS_BENEFIT: &str = "benefit";
+
 /// 上游客户端。
 #[derive(Clone)]
 pub struct Upstream {
     base: String,
+    /// 福利网关根（默认 `BENEFIT_BASE`；`CODEARTS_BENEFIT_BASE` 或测试可覆盖）。
+    benefit_base: String,
     client: reqwest::Client,
 }
 
@@ -89,7 +105,20 @@ impl Upstream {
             .pool_idle_timeout(std::time::Duration::from_secs(90))
             .build()
             .map_err(|e| format!("构造 HTTP client 失败: {e}"))?;
-        Ok(Self { base, client })
+        let benefit_base = std::env::var("CODEARTS_BENEFIT_BASE")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| BENEFIT_BASE.to_string());
+        Ok(Self {
+            base,
+            benefit_base,
+            client,
+        })
+    }
+
+    /// 覆盖福利网关根（测试/应急；生产走 `CODEARTS_BENEFIT_BASE`）。
+    pub fn set_benefit_base(&mut self, base: &str) {
+        self.benefit_base = base.trim_end_matches('/').to_string();
     }
 
     pub fn base(&self) -> &str {
@@ -114,7 +143,21 @@ impl Upstream {
         extra: BTreeMap<String, String>,
         account: &Account,
     ) -> Result<reqwest::Response, UpError> {
-        let url = self.url(path);
+        self.signed_url(method, &self.url(path), body, extra, account)
+            .await
+    }
+
+    /// 同 `signed`，但吃**绝对 URL**（福利网关 `opengw.developer.huaweicloud.com`
+    /// 与 snap-access 不同域，签名按 URL 里的 host 计算）。
+    async fn signed_url(
+        &self,
+        method: reqwest::Method,
+        raw_url: &str,
+        body: Vec<u8>,
+        extra: BTreeMap<String, String>,
+        account: &Account,
+    ) -> Result<reqwest::Response, UpError> {
+        let url = raw_url.to_string();
         let mut headers = extra;
         headers.insert("content-type".to_string(), "application/json".to_string());
         headers.insert(
@@ -207,6 +250,7 @@ impl Upstream {
                     .get("display_enabled")
                     .and_then(|x| x.as_bool())
                     .unwrap_or(true),
+                benefit: false,
             });
         }
         Ok(out)
@@ -234,6 +278,220 @@ impl Upstream {
             return Err(err);
         }
         Ok(v)
+    }
+
+    /// 活动列表：签到（`USER_LOGIN`）、新手（`NEW_USER_REGISTER`）、邀请、学生等。
+    /// 需 `Agent-Type: PromptCenter`；签名通道与推理相同（snap-access 根路径）。
+    pub async fn campaigns(
+        &self,
+        account: &Account,
+    ) -> Result<Vec<crate::activity::Campaign>, UpError> {
+        let mut extra = BTreeMap::new();
+        extra.insert("agent-type".to_string(), "PromptCenter".to_string());
+        let resp = self
+            .signed(
+                reqwest::Method::GET,
+                OPS_DELIVERY_PATH,
+                Vec::new(),
+                extra,
+                account,
+            )
+            .await?;
+        let status = resp.status().as_u16();
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| UpError::new(502, "read", e.to_string()))?;
+        if status >= 400 {
+            return Err(error_from_body(status, &bytes));
+        }
+        let v: Value = serde_json::from_slice(&bytes)
+            .map_err(|e| UpError::new(502, "parse", format!("活动列表不是 JSON: {e}")))?;
+        if let Some(err) = embedded_error(&v) {
+            return Err(err);
+        }
+        if let Some(code) = v.get("code").and_then(|x| x.as_i64()) {
+            if code != 0 {
+                let msg = v
+                    .get("message")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("活动列表失败");
+                return Err(UpError::new(400, code.to_string(), msg.to_string()));
+            }
+        }
+        Ok(crate::activity::parse_campaigns(&v))
+    }
+
+    /// 领取一个活动；返回上游 JSON（`data.id` 非空时调用方需再 confirm）。
+    pub async fn claim_campaign(&self, account: &Account, id: &Value) -> Result<Value, UpError> {
+        let id_text = match id {
+            Value::String(s) => s.clone(),
+            Value::Number(n) => n.to_string(),
+            other => other.to_string(),
+        };
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let body = serde_json::json!({
+            "campaignId": id,
+            "channel": "IDE",
+            "idempotentKey": format!("claim_{id_text}_{now_ms}"),
+        });
+        let bytes = serde_json::to_vec(&body).unwrap_or_default();
+        self.post_ops_json(OPS_CLAIM_PATH, bytes, account).await
+    }
+
+    /// 确认领取（claim 返回 `data.id` 时才需要；失败不影响已到账的积分）。
+    pub async fn confirm_campaign(&self, account: &Account, id: &Value) -> Result<(), UpError> {
+        let body = serde_json::json!({ "campaignId": id });
+        let bytes = serde_json::to_vec(&body).unwrap_or_default();
+        self.post_ops_json(OPS_CONFIRM_PATH, bytes, account)
+            .await
+            .map(|_| ())
+    }
+
+    async fn post_ops_json(
+        &self,
+        path: &str,
+        body: Vec<u8>,
+        account: &Account,
+    ) -> Result<Value, UpError> {
+        let mut extra = BTreeMap::new();
+        extra.insert("agent-type".to_string(), "PromptCenter".to_string());
+        let resp = self
+            .signed(reqwest::Method::POST, path, body, extra, account)
+            .await?;
+        let status = resp.status().as_u16();
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| UpError::new(502, "read", e.to_string()))?;
+        if status >= 400 {
+            return Err(error_from_body(status, &bytes));
+        }
+        let v: Value = serde_json::from_slice(&bytes)
+            .map_err(|e| UpError::new(502, "parse", format!("响应不是 JSON: {e}")))?;
+        if let Some(err) = embedded_error(&v) {
+            return Err(err);
+        }
+        if let Some(code) = v.get("code").and_then(|x| x.as_i64()) {
+            if code != 0 {
+                let msg = v
+                    .get("message")
+                    .or_else(|| v.get("msg"))
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("领取失败");
+                return Err(UpError::new(400, code.to_string(), msg.to_string()));
+            }
+        }
+        Ok(v)
+    }
+
+    /// 领取限时福利（幂等：已领返回成功）。官方客户端打开模型菜单即调用。
+    /// 这是对账号的写操作；调用方按配置决定是否自动执行。
+    pub async fn claim_benefit(&self, account: &Account) -> Result<(), UpError> {
+        let url = format!("{}{BENEFIT_CLAIM_PATH}", self.benefit_base);
+        let resp = self
+            .signed_url(
+                reqwest::Method::POST,
+                &url,
+                b"{}".to_vec(),
+                BTreeMap::new(),
+                account,
+            )
+            .await?;
+        let status = resp.status().as_u16();
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| UpError::new(502, "read", e.to_string()))?;
+        if status >= 400 {
+            return Err(error_from_body(status, &bytes));
+        }
+        let v: Value = serde_json::from_slice(&bytes)
+            .map_err(|e| UpError::new(502, "parse", format!("福利领取响应不是 JSON: {e}")))?;
+        let code = v
+            .get("error_code")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string();
+        if !code.is_empty() && code != "0000" {
+            let msg = v
+                .get("error_msg")
+                .and_then(|x| x.as_str())
+                .unwrap_or("福利领取失败");
+            return Err(UpError::new(400, code, msg.to_string()));
+        }
+        Ok(())
+    }
+
+    /// 限时福利模型清单（`/api/v1/gateway/config`），返回条目 `benefit=true`。
+    pub async fn benefit_models(&self, account: &Account) -> Result<Vec<ModelInfo>, UpError> {
+        let url = format!("{}{BENEFIT_CONFIG_PATH}", self.benefit_base);
+        let resp = self
+            .signed_url(reqwest::Method::GET, &url, Vec::new(), BTreeMap::new(), account)
+            .await?;
+        let status = resp.status().as_u16();
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| UpError::new(502, "read", e.to_string()))?;
+        if status >= 400 {
+            return Err(error_from_body(status, &bytes));
+        }
+        let v: Value = serde_json::from_slice(&bytes)
+            .map_err(|e| UpError::new(502, "parse", format!("福利模型清单不是 JSON: {e}")))?;
+        let code = v
+            .get("error_code")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string();
+        if !code.is_empty() && code != "0000" {
+            let msg = v
+                .get("error_msg")
+                .and_then(|x| x.as_str())
+                .unwrap_or("福利模型清单失败");
+            return Err(UpError::new(400, code, msg.to_string()));
+        }
+        let mut out = Vec::new();
+        for m in v
+            .get("result")
+            .and_then(|r| r.get("models"))
+            .and_then(|x| x.as_array())
+            .cloned()
+            .unwrap_or_default()
+        {
+            let id = m
+                .get("model_id")
+                .and_then(|x| x.as_str())
+                .or_else(|| m.get("model_name").and_then(|x| x.as_str()))
+                .unwrap_or("")
+                .to_string();
+            if id.is_empty() {
+                continue;
+            }
+            out.push(ModelInfo {
+                name: m
+                    .get("model_name")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or(&id)
+                    .to_string(),
+                desc: m
+                    .get("model_desc")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                context_window: m.get("context_window").and_then(|x| x.as_i64()),
+                max_tokens: m.get("max_tokens").and_then(|x| x.as_i64()),
+                enable: true,
+                supports_images: false,
+                display_enabled: true,
+                benefit: true,
+                id,
+            });
+        }
+        Ok(out)
     }
 
     /// 发聊天请求（**一律 stream=true**：上游 `glm-5.3` 只支持流式）。
@@ -300,6 +558,8 @@ pub struct ModelInfo {
     pub enable: bool,
     pub supports_images: bool,
     pub display_enabled: bool,
+    /// 限时福利（免费套餐）模型：聊天必须带 `maas_type: benefit` 头。
+    pub benefit: bool,
 }
 
 /// 由 AK 派生稳定会话 id（上游按它统计并发，每账号上限 3）。

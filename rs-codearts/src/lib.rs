@@ -21,6 +21,7 @@
 //! * `glm-5.3` 只支持流式 → 对上游**永远**发 stream=true，客户端要非流式就本地聚合；
 //! * 每账号并发上限 3，`x-ot-session-id` 按 AK 派生并复用，不每请求随机。
 
+pub mod activity;
 pub mod config;
 pub mod datadir;
 pub mod import;
@@ -127,6 +128,27 @@ pub struct Server {
     refreshed: Mutex<store::Store>,
     /// 账号健康度（轮转依据）。
     health: Mutex<std::collections::HashMap<String, AcctHealth>>,
+    /// 活动积分账本（签到/新手/邀请…；落数据目录 `codearts-activity.json`）。
+    ledger: Mutex<activity::Ledger>,
+    /// 每账号最近一次活动运行结果（GET /activity 展示）。
+    activity_state: Mutex<std::collections::HashMap<String, activity::Entry>>,
+    /// 福利模型目录（每账号独立；`benefit=true` 的模型聊天要带 maas_type）。
+    benefit: Mutex<std::collections::HashMap<String, BenefitCatalog>>,
+    /// 单账号并发闸门（上游每账号并发上限 3）。
+    busy: Mutex<std::collections::HashMap<String, Arc<tokio::sync::Semaphore>>>,
+    /// 模型不可用学习（账号 → 模型 → 到期时刻）：`002002009 not registered` 等。
+    unavailable: Mutex<std::collections::HashMap<String, std::collections::HashMap<String, Instant>>>,
+    /// 每账号最近一次上游活动（看门狗保活判断用）。
+    last_touch: Mutex<std::collections::HashMap<String, Instant>>,
+}
+
+/// 福利模型目录缓存（每账号一份，1 小时）。
+pub struct BenefitCatalog {
+    at: Instant,
+    models: Vec<ModelInfo>,
+    ids: std::collections::HashSet<String>,
+    /// 上一轮福利来源不可用（4000/超时）：按失败态缓存，不再按未确认路由。
+    failed: bool,
 }
 
 impl Server {
@@ -143,6 +165,10 @@ impl Server {
             .map(|p| p.join("codearts-refreshed.json"))
             .unwrap_or_else(|| PathBuf::from("codearts-refreshed.json"));
         let refreshed = store::Store::load(&overlay_path);
+        let ledger_path = accounts_path
+            .parent()
+            .map(|p| p.join("codearts-activity.json"))
+            .unwrap_or_else(|| PathBuf::from("codearts-activity.json"));
         Arc::new(Self {
             up,
             accounts_path,
@@ -157,6 +183,12 @@ impl Server {
             refreshed: Mutex::new(refreshed),
             health: Mutex::new(std::collections::HashMap::new()),
             archived: Mutex::new(std::collections::HashSet::new()),
+            ledger: Mutex::new(activity::Ledger::load(&ledger_path)),
+            activity_state: Mutex::new(std::collections::HashMap::new()),
+            benefit: Mutex::new(std::collections::HashMap::new()),
+            busy: Mutex::new(std::collections::HashMap::new()),
+            unavailable: Mutex::new(std::collections::HashMap::new()),
+            last_touch: Mutex::new(std::collections::HashMap::new()),
         })
     }
 
@@ -233,6 +265,303 @@ impl Server {
 
     fn load_config(&self) -> Result<Config, String> {
         Config::load(&self.accounts_path)
+    }
+
+    // ---------------- 活动积分（签到 / 新手 / 邀请…） ----------------
+
+    /// 对单个账号跑一轮活动领取：拉活动列表 → 逐个可领活动 claim（必要时 confirm）→ 记账。
+    /// 任何一步失败都只记录、不影响该账号的推理健康（不冷却、不标死）。
+    async fn run_activity_for(&self, account: &Account) -> Value {
+        let identity = account.identity();
+        let now = crate::config::now_unix();
+        let day = activity::local_day_utc8(now);
+        let settled = self
+            .ledger
+            .lock()
+            .map(|l| l.entry(&identity).settled)
+            .unwrap_or_default();
+        let campaigns = match self.up.campaigns(account).await {
+            Ok(c) => c,
+            Err(e) => {
+                let msg = format!("活动列表失败: {}", e.message);
+                self.record_activity(&identity, now, 0.0, &msg);
+                return serde_json::json!({
+                    "account": account.display_name(),
+                    "ok": false,
+                    "message": msg,
+                    "claimed": []
+                });
+            }
+        };
+        let mut claimed = Vec::new();
+        let mut credits = 0.0f64;
+        let mut msgs: Vec<String> = Vec::new();
+        for c in &campaigns {
+            if !activity::claimable_now(c, &settled, &day, now) {
+                continue;
+            }
+            match self.up.claim_campaign(account, &c.id_json()).await {
+                Ok(v) => {
+                    let need_confirm = v
+                        .get("data")
+                        .and_then(|d| d.get("id"))
+                        .map(|x| !x.is_null())
+                        .unwrap_or(false);
+                    if need_confirm {
+                        let _ = self.up.confirm_campaign(account, &c.id_json()).await;
+                    }
+                    let got = claim_credits(&v, c);
+                    credits += got;
+                    self.settle_activity(&identity, c, &day);
+                    claimed.push(serde_json::json!({
+                        "id": c.id_text(),
+                        "type": c.kind,
+                        "title": c.title,
+                        "credits": got
+                    }));
+                    msgs.push(if got > 0.0 {
+                        format!("{}: +{}", c.title, got)
+                    } else {
+                        format!("{}: 已领取", c.title)
+                    });
+                }
+                Err(e) => {
+                    let m = format!("{}: {}", c.title, e.message);
+                    println!("[codearts] 活动领取失败 {}", m);
+                    msgs.push(m);
+                }
+            }
+        }
+        let msg = if msgs.is_empty() {
+            "无可领取活动".to_string()
+        } else {
+            msgs.join("; ")
+        };
+        self.record_activity(&identity, now, credits, &msg);
+        serde_json::json!({
+            "account": account.display_name(),
+            "ok": true,
+            "message": msg,
+            "credits": credits,
+            "claimed": claimed
+        })
+    }
+
+    fn record_activity(&self, identity: &str, now: i64, credits: f64, msg: &str) {
+        if let Ok(mut l) = self.ledger.lock() {
+            l.update(identity, |e| {
+                e.last_run = now;
+                e.last_credits = credits;
+                e.last_message = msg.to_string();
+            });
+            l.save();
+        }
+        if let Ok(mut st) = self.activity_state.lock() {
+            st.insert(
+                identity.to_string(),
+                activity::Entry {
+                    last_run: now,
+                    last_message: msg.to_string(),
+                    last_credits: credits,
+                    settled: self
+                        .ledger
+                        .lock()
+                        .map(|l| l.entry(identity).settled)
+                        .unwrap_or_default(),
+                },
+            );
+        }
+    }
+
+    fn settle_activity(&self, identity: &str, c: &activity::Campaign, day: &str) {
+        if let Ok(mut l) = self.ledger.lock() {
+            l.update(identity, |e| {
+                e.settled.insert(c.key(), day.to_string());
+                e.settled
+                    .insert(format!("id:{}", c.id_text()), day.to_string());
+            });
+            l.save();
+        }
+    }
+
+    /// 对所有账号（或指定 identity/显示名）跑一轮活动领取。
+    pub async fn run_activities(&self, only: Option<String>) -> Vec<Value> {
+        let mut out = Vec::new();
+        for (a, _src) in self.all_accounts() {
+            if !a.enabled || !a.has_credentials() {
+                continue;
+            }
+            if let Some(o) = &only {
+                if &a.identity() != o && &a.display_name() != o {
+                    continue;
+                }
+            }
+            out.push(self.run_activity_for(&a).await);
+        }
+        out
+    }
+
+    /// 今天的每日签到是否已了结（看门狗/面板判断用）。
+    pub fn login_settled_today(&self, identity: &str) -> bool {
+        let day = activity::local_day_utc8(crate::config::now_unix());
+        self.ledger
+            .lock()
+            .map(|l| {
+                let e = l.entry(identity);
+                e.settled
+                    .iter()
+                    .any(|(k, d)| k.starts_with("USER_LOGIN#") && d == &day)
+            })
+            .unwrap_or(false)
+    }
+
+    // ---------------- 限时福利模型 ----------------
+
+    /// 确保某账号的福利模型目录（1 小时缓存）；首次会先做一次幂等 claim。
+    async fn ensure_benefit(&self, account: &Account) -> Option<Vec<ModelInfo>> {
+        let id = account.identity();
+        if let Ok(g) = self.benefit.lock() {
+            if let Some(c) = g.get(&id) {
+                if c.at.elapsed() < Duration::from_secs(if c.failed { 1800 } else { 3600 }) {
+                    return Some(c.models.clone());
+                }
+            }
+        }
+        let claim_err = self.up.claim_benefit(account).await.err();
+        match self.up.benefit_models(account).await {
+            Ok(models) => {
+                let ids = models
+                    .iter()
+                    .map(|m| m.id.to_lowercase())
+                    .collect::<std::collections::HashSet<_>>();
+                if let Ok(mut g) = self.benefit.lock() {
+                    g.insert(
+                        id,
+                        BenefitCatalog {
+                            at: Instant::now(),
+                            models: models.clone(),
+                            ids,
+                            failed: false,
+                        },
+                    );
+                }
+                Some(models)
+            }
+            Err(e) => {
+                // 福利网关 2026-11 实测回 `4000 invalid channel, group not found`（通道下线）。
+                // 失败也写一份空目录（30 分钟 TTL），别让每个 /v1/models 都去打一次。
+                println!(
+                    "[codearts] 福利目录不可用（{}）：{}；本账号按内置目录路由",
+                    e.code, e.message
+                );
+                if let Some(ce) = claim_err {
+                    println!("[codearts] 福利领取同样失败：{}", ce.message);
+                }
+                if let Ok(mut g) = self.benefit.lock() {
+                    g.insert(
+                        id,
+                        BenefitCatalog {
+                            at: Instant::now(),
+                            models: Vec::new(),
+                            ids: std::collections::HashSet::new(),
+                            failed: true,
+                        },
+                    );
+                }
+                None
+            }
+        }
+    }
+
+    /// 该账号的该模型是否属于限时福利（聊天要带 `maas_type: benefit`）。
+    pub fn is_benefit_model(&self, uid: &str, model: &str) -> bool {
+        let key = model.trim().to_lowercase();
+        if key.is_empty() {
+            return false;
+        }
+        if let Ok(g) = self.benefit.lock() {
+            if let Some(c) = g.get(uid) {
+                if !c.failed {
+                    return c.ids.contains(&key);
+                }
+            }
+        }
+        // 没有确认的福利目录：只有**不在内置目录里**的种子模型才按福利路由。
+        // 内置目录里的同名模型（如 glm-5.3-flash）加 maas_type 会被 APIG 路由到
+        // 不存在的福利 API（实测 InferHub.APIG.0101.404），必须排除。
+        if let Ok(cache) = self.models.lock() {
+            if let Some(c) = cache.as_ref() {
+                if c.list
+                    .iter()
+                    .any(|m| m.id.eq_ignore_ascii_case(model.trim()))
+                {
+                    return false;
+                }
+            }
+        }
+        seed_benefit_models()
+            .iter()
+            .any(|m| m.eq_ignore_ascii_case(&key))
+    }
+
+    /// 小写别名 → 上游精确模型 ID（模型目录缓存里能查到就用精确 ID，否则原样返回）。
+    pub fn canonical_model(&self, model: &str) -> String {
+        let m = model.trim();
+        if m.is_empty() {
+            return m.to_string();
+        }
+        if let Ok(cache) = self.models.lock() {
+            if let Some(c) = cache.as_ref() {
+                if let Some(hit) = c.list.iter().find(|x| x.id.eq_ignore_ascii_case(m)) {
+                    return hit.id.clone();
+                }
+            }
+        }
+        m.to_string()
+    }
+
+    // ---------------- 并发闸门 / 模型可用性学习 ----------------
+
+    /// 单账号并发闸门（上游每账号并发 3；`CODEARTS_MAX_CONCURRENT` 可覆盖）。
+    pub fn permit(&self, uid: &str) -> Arc<tokio::sync::Semaphore> {
+        let limit = crate::config::max_concurrent();
+        let mut g = self.busy.lock().unwrap_or_else(|e| e.into_inner());
+        g.entry(uid.to_string())
+            .or_insert_with(|| Arc::new(tokio::sync::Semaphore::new(limit)))
+            .clone()
+    }
+
+    /// 模型对该账号暂时不可用（`002002009 not registered` / benefit 未领）。
+    pub fn mark_model_unavailable(&self, uid: &str, model: &str, secs: u64) {
+        if let Ok(mut g) = self.unavailable.lock() {
+            g.entry(uid.to_string())
+                .or_default()
+                .insert(model.trim().to_lowercase(), Instant::now() + Duration::from_secs(secs));
+        }
+    }
+
+    pub fn model_available(&self, uid: &str, model: &str) -> bool {
+        let key = model.trim().to_lowercase();
+        if let Ok(g) = self.unavailable.lock() {
+            if let Some(m) = g.get(uid).and_then(|m| m.get(&key)) {
+                return *m <= Instant::now();
+            }
+        }
+        true
+    }
+
+    /// 记录一次成功/失败的上游调用（看门狗保活判断用）。
+    pub fn touch_account(&self, uid: &str) {
+        if let Ok(mut g) = self.last_touch.lock() {
+            g.insert(uid.to_string(), Instant::now());
+        }
+    }
+
+    pub fn idle_for(&self, uid: &str) -> Option<Duration> {
+        self.last_touch
+            .lock()
+            .ok()
+            .and_then(|g| g.get(uid).map(|t| t.elapsed()))
     }
 
     /// 码道桌面端是否在运行（Electron 用户目录的 lockfile）。
@@ -646,7 +975,10 @@ pub fn router(state: Arc<Server>) -> Router {
         .route("/v1/chat/completions", any(handle_chat))
         .route("/v1/quota", any(handle_quota))
         .route("/accounts", any(handle_accounts))
+        .route("/activity", any(handle_activity))
+        .route("/activity/claim", any(handle_activity_claim))
         .route("/accounts/import", any(handle_import))
+        .route("/models/benefit", any(handle_benefit))
         .route("/accounts/import-local", any(handle_import_local))
         .route("/accounts/refresh", any(handle_account_refresh))
         .route("/accounts/enable", any(handle_enable))
@@ -802,14 +1134,25 @@ async fn handle_models(State(st): State<Arc<Server>>) -> Response {
         match st.up.builtin_models(&account).await {
             Ok(list) => {
                 st.mark_ok(&account.identity());
+                // 合并限时福利模型（每账号独立目录；benefit=true 的条目聊天要带 maas_type）。
+                let mut merged = list.clone();
+                if let Some(bm) = st.ensure_benefit(&account).await {
+                    for m in bm {
+                        if !merged.iter().any(|x| x.id.eq_ignore_ascii_case(&m.id)) {
+                            merged.push(m);
+                        }
+                    }
+                }
+                // 过滤掉本账号已知不可用的模型（002002009 / 未领取福利）。
+                merged.retain(|m| st.model_available(&account.identity(), &m.id));
                 if let Ok(mut cache) = st.models.lock() {
                     *cache = Some(ModelsCache {
                         at: Instant::now(),
                         access_key: account.access_key.clone(),
-                        list: list.clone(),
+                        list: merged.clone(),
                     });
                 }
-                return models_response(&list);
+                return models_response(&merged);
             }
             Err(e) => {
                 if e.credential {
@@ -830,23 +1173,33 @@ async fn handle_models(State(st): State<Arc<Server>>) -> Response {
 
 fn models_response(list: &[ModelInfo]) -> Response {
     let created = config::now_unix();
-    let data: Vec<Value> = list
-        .iter()
-        .filter(|m| m.enable)
-        .map(|m| {
-            json!({
-                "id": m.id,
-                "object": "model",
-                "created": created,
-                "owned_by": "codearts",
-                "name": m.name,
-                "description": m.desc,
-                "context_window": m.context_window,
-                "max_tokens": m.max_tokens,
-                "supports_images": m.supports_images,
-            })
-        })
-        .collect();
+    let mut data: Vec<Value> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for m in list.iter().filter(|m| m.enable) {
+        let entry = json!({
+            "id": m.id,
+            "object": "model",
+            "created": created,
+            "owned_by": "codearts",
+            "name": m.name,
+            "description": m.desc,
+            "context_window": m.context_window,
+            "max_tokens": m.max_tokens,
+            "supports_images": m.supports_images,
+            "benefit": m.benefit,
+        });
+        if seen.insert(m.id.clone()) {
+            data.push(entry.clone());
+        }
+        // 官方只给精确 ID；社区实现额外补小写别名（聊天时由 canonical_model 归一回精确 ID）。
+        let lower = m.id.to_lowercase();
+        if lower != m.id && seen.insert(lower.clone()) {
+            let mut alias = entry;
+            alias["id"] = Value::String(lower);
+            alias["alias_of"] = Value::String(m.id.clone());
+            data.push(alias);
+        }
+    }
     json_response(
         StatusCode::OK,
         &json!({ "object": "list", "data": data }),
@@ -865,7 +1218,7 @@ async fn handle_chat(State(st): State<Arc<Server>>, body: Bytes) -> Response {
         }
     };
     let model = match req.get("model").and_then(|x| x.as_str()) {
-        Some(m) if !m.trim().is_empty() => m.trim().to_string(),
+        Some(m) if !m.trim().is_empty() => st.canonical_model(m.trim()),
         _ => return error_response(400, "缺少 model 字段", "invalid_request"),
     };
     if req.get("messages").and_then(|x| x.as_array()).is_none() {
@@ -909,6 +1262,7 @@ async fn handle_chat(State(st): State<Arc<Server>>, body: Bytes) -> Response {
         Err(e) => return error_response(503, &e, "no_account"),
     };
     let mut last: Option<UpError> = None;
+    let mut benefit_claimed_once = false; // 福利未领：本轮只补领一次
     for (account, source) in accounts.into_iter().take(st.max_attempts.max(1)) {
         let (account, note) = st.ensure_fresh(&account, source).await;
         if account.is_expired() {
@@ -916,6 +1270,23 @@ async fn handle_chat(State(st): State<Arc<Server>>, body: Bytes) -> Response {
             last = Some(expired_account_error(&account, &note));
             continue;
         }
+        // 单账号并发闸门：上游按账号统计并发（上限 3），超了回 429/并发错误。
+        // 许可在本轮请求返回后释放（流式响应会提前释放，属近似限流，足够压住突发）。
+        let sem = st.permit(&account.identity());
+        let _permit = match tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            sem.acquire_owned(),
+        )
+        .await
+        {
+            Ok(Ok(p)) => p,
+            _ => {
+                last = Some(UpError::new(429, "busy", "账号并发已满，稍后重试"));
+                continue;
+            }
+        };
+        st.touch_account(&account.identity());
+        let benefit = cfg.is_benefit() || st.is_benefit_model(&account.identity(), &model);
         let session_id = upstream::session_id_for(&account);
         match st
             .up
@@ -923,7 +1294,7 @@ async fn handle_chat(State(st): State<Arc<Server>>, body: Bytes) -> Response {
                 &account,
                 &model,
                 payload.clone(),
-                cfg.is_benefit(),
+                benefit,
                 &session_id,
             )
             .await
@@ -935,6 +1306,23 @@ async fn handle_chat(State(st): State<Arc<Server>>, body: Bytes) -> Response {
                     return finish_chat(resp, &model, wants_stream).await;
                 }
                 let body = resp.bytes().await.unwrap_or_default();
+                let text = String::from_utf8_lossy(&body).to_string();
+                // 模型级不可用（002002009 not registered）：记 30 分钟黑名单，避免反复撞。
+                if is_model_missing_body(&text) {
+                    st.mark_model_unavailable(&account.identity(), &model, 1800);
+                }
+                // 福利模型未领（4004.200 benefit not found）：补一次 claim 后重试一轮。
+                if is_benefit_missing_body(&text) && !benefit_claimed_once {
+                    benefit_claimed_once = true;
+                    println!(
+                        "[codearts] 账号 {} 福利未领（benefit not found），补领后重试",
+                        account.display_name()
+                    );
+                    let _ = st.up.claim_benefit(&account).await;
+                    let _ = st.ensure_benefit(&account).await;
+                    last = Some(upstream::error_from_body(status, &body));
+                    continue;
+                }
                 let e = upstream::error_from_body(status, &body);
                 if e.credential {
                     // 账号失效：本轮直接标死，换下一个
@@ -1145,6 +1533,115 @@ fn parse_credit(raw: &Value) -> (Option<f64>, Option<f64>, Option<f64>, Option<f
     (total, used, remain, percent)
 }
 
+/// `/models/benefit`：诊断用——对首个可用账号做一次福利领取 + 目录拉取，返回原始结果。
+async fn handle_benefit(State(st): State<Arc<Server>>) -> Response {
+    let accounts = match st.candidates() {
+        Ok(v) => v,
+        Err(e) => return error_response(503, &e, "no_account"),
+    };
+    let Some((account, _src)) = accounts.into_iter().next() else {
+        return error_response(503, "没有可用账号", "no_account");
+    };
+    let claim_error = st.up.claim_benefit(&account).await.err().map(|e| e.message);
+    match st.up.benefit_models(&account).await {
+        Ok(models) => json_response(
+            StatusCode::OK,
+            &json!({
+                "account": account.display_name(),
+                "claim_error": claim_error,
+                "count": models.len(),
+                "models": models.iter().map(|m| json!({ "id": m.id, "name": m.name, "benefit": m.benefit })).collect::<Vec<_>>(),
+            }),
+        ),
+        Err(e) => json_response(
+            StatusCode::BAD_GATEWAY,
+            &json!({ "account": account.display_name(), "claim_error": claim_error, "error": e.message, "code": e.code }),
+        ),
+    }
+}
+
+/// `/activity`：活动积分账本（签到/新手/邀请…）与自动领取开关。
+async fn handle_activity(
+    State(st): State<Arc<Server>>,
+    axum::extract::RawQuery(query): axum::extract::RawQuery,
+) -> Response {
+    let now = config::now_unix();
+    let day = activity::local_day_utc8(now);
+    let mut accounts = Vec::new();
+    for (a, src) in st.all_accounts() {
+        let id = a.identity();
+        let e = st
+            .ledger
+            .lock()
+            .map(|l| l.entry(&id))
+            .unwrap_or_default();
+        accounts.push(json!({
+            "identity": id,
+            "account": a.display_name(),
+            "source": src,
+            "enabled": a.enabled,
+            "expired": a.is_expired(),
+            "last_run": e.last_run,
+            "last_message": e.last_message,
+            "last_credits": e.last_credits,
+            "settled": e.settled,
+            "login_settled_today": st.login_settled_today(&a.identity()),
+        }));
+    }
+    // `?campaigns=1`：只读预览各账号活动列表（不领取，便于排障）。
+    let mut campaigns = Vec::new();
+    if query.as_deref().map(|q| q.contains("campaigns=1")).unwrap_or(false) {
+        for (a, _src) in st.all_accounts() {
+            if !a.enabled || !a.has_credentials() {
+                continue;
+            }
+            match st.up.campaigns(&a).await {
+                Ok(list) => campaigns.push(json!({
+                    "account": a.display_name(),
+                    "ok": true,
+                    "items": list.iter().map(|c| json!({
+                        "id": c.id_text(), "type": c.kind, "title": c.title,
+                        "status": c.status, "claimable": c.claimable,
+                        "unit": c.unit, "amount": c.amount,
+                        "start": c.start, "end": c.end,
+                    })).collect::<Vec<_>>(),
+                })),
+                Err(e) => campaigns.push(json!({
+                    "account": a.display_name(), "ok": false, "message": e.message,
+                })),
+            }
+        }
+    }
+
+    json_response(
+        StatusCode::OK,
+        &json!({
+            "day": day,
+            "auto": activity_auto_enabled(),
+            "watchdog": watchdog_enabled(),
+            "accounts": accounts,
+            "campaigns": campaigns,
+        }),
+    )
+}
+
+/// `POST /activity/claim`：立即对所有账号（或 body.identity 指定一个）跑一轮活动领取。
+async fn handle_activity_claim(State(st): State<Arc<Server>>, body: Bytes) -> Response {
+    let only = serde_json::from_slice::<Value>(&body)
+        .ok()
+        .and_then(|v| v.get("identity").and_then(|x| x.as_str()).map(str::to_string));
+    let results = st.run_activities(only).await;
+    json_response(StatusCode::OK, &json!({ "results": results }))
+}
+
+fn activity_auto_enabled() -> bool {
+    std::env::var("CODEARTS_ACTIVITY_AUTO").map(|v| v != "0").unwrap_or(true)
+}
+
+fn watchdog_enabled() -> bool {
+    std::env::var("CODEARTS_WATCHDOG").map(|v| v != "0").unwrap_or(true)
+}
+
 async fn handle_not_found() -> Response {
     error_response(404, "not found", "not_found")
 }
@@ -1316,6 +1813,10 @@ pub async fn run(args: Args) -> Result<(), String> {
         args.allow_local_refresh,
         args.max_attempts,
     );
+    if watchdog_enabled() {
+        let bg = state.clone();
+        tokio::spawn(async move { background_loop(bg).await });
+    }
     let app = router(state);
     let addr: SocketAddr = format!("{}:{}", args.host, args.port)
         .parse()
@@ -1326,6 +1827,84 @@ pub async fn run(args: Args) -> Result<(), String> {
     axum::serve(listener, app)
         .await
         .map_err(|e| format!("服务退出: {e}"))
+}
+
+/// 模型级不可用（上游说没注册）：`InferHub.002002009.404 model is not registered`。
+fn is_model_missing_body(text: &str) -> bool {
+    let l = text.to_ascii_lowercase();
+    l.contains("002002009") || l.contains("not registered") || l.contains("model_not_found")
+}
+
+/// 限时福利未领取：`InferHub.4004.200 benefit not found`。
+fn is_benefit_missing_body(text: &str) -> bool {
+    let l = text.to_ascii_lowercase();
+    text.contains("4004.200") || l.contains("benefit not found")
+}
+
+/// 从 claim 响应里取本次发放的积分（多字段兜底，最后用活动标称额）。
+fn claim_credits(v: &Value, c: &activity::Campaign) -> f64 {
+    if let Some(d) = v.get("data") {
+        for k in ["benefitAmount", "credit", "credits", "creditAmount", "amount", "pendingTotalAmount"] {
+            if let Some(n) = d.get(k).and_then(|x| x.as_f64()) {
+                if n > 0.0 {
+                    return n;
+                }
+            }
+        }
+    }
+    if c.pending > 0.0 {
+        c.pending
+    } else {
+        c.amount
+    }
+}
+
+/// 冷启动种子：福利套餐轮换后新增的模型在首次发现前也要按福利路由。
+fn seed_benefit_models() -> &'static [&'static str] {
+    &["deepseek-v4-flash-0731", "deepseek-v4-pro-0813", "glm-5.3-flash"]
+}
+
+/// 看门狗：续期、保活、活动领取（每 60 秒一拍；`CODEARTS_WATCHDOG=0` 关闭）。
+async fn background_loop(st: Arc<Server>) {
+    use tokio::time::{interval, Duration as TD};
+    let mut tick = interval(TD::from_secs(60));
+    let mut last_activity = Instant::now() - Duration::from_secs(3600);
+    loop {
+        tick.tick().await;
+        let now = config::now_unix();
+        let hour = activity::local_hour_utc8(now);
+        // 活动：启动即跑一次，之后 30 分钟一轮；9/21 点额外兜底一次。
+        if activity_auto_enabled()
+            && (last_activity.elapsed() >= Duration::from_secs(1800) || hour == 9 || hour == 21)
+        {
+            last_activity = Instant::now();
+            let results = st.run_activities(None).await;
+            let claimed: f64 = results
+                .iter()
+                .map(|r| r.get("credits").and_then(|x| x.as_f64()).unwrap_or(0.0))
+                .sum();
+            if claimed > 0.0 {
+                println!("[codearts] 活动积分：本轮合计 +{claimed}");
+            }
+        }
+        // 续期：把 30 分钟内到期的号提前续掉（失败按既有规则标死）。
+        for (a, src) in st.candidates().unwrap_or_default() {
+            let _ = st.ensure_fresh(&a, src).await;
+        }
+        // 保活：10 分钟没动静的号打一次积分接口（签名成本极低）。
+        for (a, _src) in st.all_accounts() {
+            if !a.enabled || !a.has_credentials() {
+                continue;
+            }
+            let idle = st
+                .idle_for(&a.identity())
+                .map(|d| d >= Duration::from_secs(600))
+                .unwrap_or(true);
+            if idle && st.up.statistics(&a).await.is_ok() {
+                st.touch_account(&a.identity());
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1358,4 +1937,44 @@ mod tests {
         assert!(e.credential);
         assert!(e.message.contains("登录态已过期"), "{}", e.message);
     }
+
+    #[test]
+    fn model_error_classifiers() {
+        assert!(is_model_missing_body(
+            r#"{"error_code":"InferHub.002002009.404","error_msg":"model is not registered"}"#
+        ));
+        assert!(is_model_missing_body("model_not_found"));
+        assert!(!is_model_missing_body("bad request"));
+        assert!(is_benefit_missing_body(
+            r#"{"error_code":"InferHub.4004.200","error_msg":"benefit not found"}"#
+        ));
+        assert!(is_benefit_missing_body("benefit not found"));
+        assert!(!is_benefit_missing_body("plain error"));
+    }
+
+    #[test]
+    fn claim_credits_prefers_response_then_campaign_amount() {
+        let c = activity::Campaign {
+            id: serde_json::json!(1),
+            title: "t".into(),
+            kind: "USER_LOGIN".into(),
+            status: "ELIGIBLE".into(),
+            claimable: true,
+            unit: "CREDIT".into(),
+            amount: 1000.0,
+            pending: 0.0,
+            start: None,
+            end: None,
+        };
+        assert_eq!(
+            claim_credits(&serde_json::json!({"data":{"benefitAmount":1000}}), &c),
+            1000.0
+        );
+        assert_eq!(
+            claim_credits(&serde_json::json!({"data":{"credit":500}}), &c),
+            500.0
+        );
+        assert_eq!(claim_credits(&serde_json::json!({}), &c), 1000.0);
+    }
+
 }

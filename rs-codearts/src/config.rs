@@ -393,3 +393,12 @@ mod tests {
         assert_eq!(cfg.accounts[0].display_name(), "hid_abc");
     }
 }
+
+/// 单账号并发上限（上游按账号统计并发，实测上限 3；`CODEARTS_MAX_CONCURRENT` 可覆盖）。
+pub fn max_concurrent() -> usize {
+    std::env::var("CODEARTS_MAX_CONCURRENT")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(3)
+}
