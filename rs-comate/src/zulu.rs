@@ -18,10 +18,145 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// 登录态文件：`%USERPROFILE%\.comate\cli-login.json`（Go `licenseFile()`）。
 pub fn license_path() -> PathBuf {
-    let home = std::env::var_os("USERPROFILE")
+    home_dir().join(".comate").join("cli-login.json")
+}
+
+/// zulu serve 的 pid 文件：`%USERPROFILE%\.comate\zulu-serve.pid`（zulu 自身写，路径写死）。
+pub fn serve_pid_path() -> PathBuf {
+    home_dir().join(".comate").join("zulu-serve.pid")
+}
+
+fn home_dir() -> PathBuf {
+    std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
-        .unwrap_or_default();
-    home.join(".comate").join("cli-login.json")
+        .unwrap_or_default()
+}
+
+/// Comate IDE 的设置文件：`%APPDATA%\Comate\User\settings.json`。
+pub fn ide_settings_path() -> Option<PathBuf> {
+    let appdata = std::env::var_os("APPDATA").map(PathBuf::from)?;
+    Some(appdata.join("Comate").join("User").join("settings.json"))
+}
+
+/// 从 IDE 设置里读 `baidu.comate.license`（Comate 登录态）。
+///
+/// 2026-11-15 实测：更新后 `cli-login.json`（CLI 登录）与 IDE 设置里是**两个不同账号**
+/// （`de500679…`/勤奋的Amer 与 `875914f0…`/我比尼玛还愛尼）。用户在用的、买会员的是 IDE 那个，
+/// 所以生产环境优先读它；`cli-login.json` 只作兜底。
+pub fn ide_license_at(path: &Path) -> String {
+    let bytes = match std::fs::read(path) {
+        Ok(b) => b,
+        Err(_) => return String::new(),
+    };
+    // IDE 的 settings.json 常带 UTF-8 BOM 与注释之外的普通 JSON；带 BOM 时先剥掉。
+    let bytes = strip_utf8_bom(&bytes);
+    let value: serde_json::Value = match serde_json::from_slice(bytes) {
+        Ok(v) => v,
+        Err(_) => return String::new(),
+    };
+    let map = match value {
+        serde_json::Value::Object(m) => m,
+        _ => return String::new(),
+    };
+    match map.get("baidu.comate.license") {
+        Some(serde_json::Value::String(s)) => s.trim().to_string(),
+        _ => String::new(),
+    }
+}
+
+fn strip_utf8_bom(b: &[u8]) -> &[u8] {
+    if b.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        &b[3..]
+    } else {
+        b
+    }
+}
+
+/// 许可证来源（按顺序取第一个非空）。
+#[derive(Debug, Clone)]
+pub enum LicenseSource {
+    /// 显式环境变量 `COMATE_LICENSE`（人工指定时最优先）。
+    Env(String),
+    /// Comate IDE 的 `settings.json`（当前在用账号）。
+    IdeSettings(PathBuf),
+    /// CLI 登录态 `~/.comate/cli-login.json`。
+    File(PathBuf),
+}
+
+impl LicenseSource {
+    pub fn read(&self) -> String {
+        match self {
+            LicenseSource::Env(name) => std::env::var(name).unwrap_or_default().trim().to_string(),
+            LicenseSource::IdeSettings(p) => ide_license_at(p),
+            LicenseSource::File(p) => read_license_at(p),
+        }
+    }
+}
+
+/// 按优先级解析登录态；全空返回 ""。
+pub fn resolve_license(sources: &[LicenseSource]) -> String {
+    for s in sources {
+        let v = s.read();
+        if !v.is_empty() {
+            return v;
+        }
+    }
+    String::new()
+}
+
+/// pid 文件里我们关心的字段（zulu 写的 JSON：pid/port/host/zuluVersion/zuluBin/authMode）。
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServePid {
+    #[serde(default)]
+    pub pid: u32,
+    #[serde(default)]
+    pub port: u16,
+    #[serde(default)]
+    pub host: Option<String>,
+}
+
+pub fn read_serve_pid() -> Option<ServePid> {
+    let bytes = std::fs::read(serve_pid_path()).ok()?;
+    serde_json::from_slice::<ServePid>(&bytes).ok()
+}
+
+/// 干掉 pid 文件记录的那个 zulu serve，并删掉 pid 文件。
+///
+/// 为什么需要：`zulu serve` 是**单例**——它会读 pid 文件，发现已有服务就「复用」并立刻返回，
+/// **根本不看 `--port`/`--license`**（2026-11-15 实测：`serve --port 8892` 直接回了
+/// `{"port":8792,"reused":true}`）。所以只要 Comate IDE 自己拉过一个 serve（例如 8779），
+/// 我们 spawn 的那个就会原地退出、8792 永远不健康，随后整体超时。
+///
+/// 只在该 serve 不在我们期望的端口时调用（自己端口上的实例由健康检查直接复用）。
+pub fn stop_serve_from_pid_file(reason: &str) -> bool {
+    let Some(p) = read_serve_pid() else {
+        return false;
+    };
+    let mut killed = false;
+    if p.pid > 0 {
+        #[cfg(windows)]
+        {
+            let status = std::process::Command::new("taskkill")
+                .args(["/PID", &p.pid.to_string(), "/T", "/F"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+            killed = status.map(|s| s.success()).unwrap_or(false);
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = std::process::Command::new("kill")
+                .args(["-TERM", &p.pid.to_string()])
+                .status();
+            killed = true;
+        }
+        eprintln!(
+            "comate-plugin: 停掉既有 zulu serve（pid={} port={}，{reason}）→ killed={killed}",
+            p.pid, p.port
+        );
+    }
+    let _ = std::fs::remove_file(serve_pid_path());
+    killed
 }
 
 /// Go `readLicense`：文件缺失/坏 JSON/license 非字符串 → ""；否则 TrimSpace。
@@ -130,6 +265,7 @@ pub async fn list_models(zulu_path: &Path, license: &str) -> Result<Option<Vec<M
             .arg("list-model")
             .arg("-l")
             .arg(&license)
+            .env("PLATFORM", "saas") // 外部版必须是 saas（默认 internal 会打 comate.baidu-int.com）
             .output()
     })
     .await
@@ -182,6 +318,11 @@ pub async fn ensure_zulu_serve(
             .arg("127.0.0.1")
             .arg("-l")
             .arg(&license)
+            // ⚠ 2026-11-15 实测：zulu 1.8.1 的 `PLATFORM` 默认 `internal`，会去打
+            // `comate.baidu-int.com`（百度内网，外部解析不了），会话直接以
+            // 「您当前会话执行遇到了异常，请检测网络后重试！」失败（内核拿到 taskId=-1）。
+            // 外部版必须显式设 `saas`（取值只能是 saas/internal/poc，大写无效）。
+            .env("PLATFORM", "saas")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())

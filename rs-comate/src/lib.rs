@@ -114,8 +114,8 @@ pub struct ModelsCache {
 /// 服务状态（本地端点用）。
 pub struct AppState {
     pub started_at: Instant,
-    /// 登录态文件（Go `licenseFile()`）。
-    pub license_path: PathBuf,
+    /// 登录态来源链（按优先级；生产：环境变量 → IDE 设置 → cli-login.json）。
+    pub license_sources: Vec<zulu::LicenseSource>,
     /// 探测到的 zulu CLI（Go 每请求 `findZulu()`，这里启动时解析一次；进程内等价）。
     pub zulu_path: Option<PathBuf>,
     /// `COMATE_CWD`（Go 每请求 `os.Getenv`，同样是「启动时一次」）。
@@ -145,7 +145,7 @@ impl AppState {
     ) -> Self {
         Self {
             started_at: Instant::now(),
-            license_path,
+            license_sources: vec![zulu::LicenseSource::File(license_path)],
             zulu_path,
             cwd_env,
             mode_env,
@@ -158,14 +158,29 @@ impl AppState {
         }
     }
 
-    /// 生产构造：与 Go 的 `licenseFile()` / `findZulu()` / `os.Getenv` 同一套判定。
+    /// 生产构造：登录态顺序 = `COMATE_LICENSE` → Comate IDE 的 settings.json → `cli-login.json`。
+    ///
+    /// 2026-11-15 更新后两者可能是不同账号：IDE 里那个才是用户当前在用/买会员的账号，
+    /// 所以排在前；`cli-login.json` 只兜底（老账号、且 CLI 停用后可能过期）。
     pub fn from_env() -> Self {
-        Self::new(
+        let mut sources = vec![zulu::LicenseSource::Env("COMATE_LICENSE".to_string())];
+        if let Some(p) = zulu::ide_settings_path() {
+            sources.push(zulu::LicenseSource::IdeSettings(p));
+        }
+        sources.push(zulu::LicenseSource::File(zulu::license_path()));
+        let mut st = Self::new(
             zulu::license_path(),
             zulu::discover_zulu(std::env::var("COMATE_ZULU").ok().as_deref()),
             std::env::var("COMATE_CWD").ok(),
             std::env::var("COMATE_MODE").ok(),
-        )
+        );
+        st.license_sources = sources;
+        st
+    }
+
+    /// 当前生效的登录态（每次请求现读：用户可能在 IDE 里换账号）。
+    pub fn license(&self) -> String {
+        zulu::resolve_license(&self.license_sources)
     }
 
     /// 覆盖上游 base（假上游对照用）。
@@ -225,7 +240,7 @@ pub fn add_cors(h: &mut HeaderMap) {
 /// `GET/POST /health`：无登录态 → `{"status":"no_license"}`；否则带 service/uptimeSec。
 /// 末尾换行对齐 Go 的 `json.NewEncoder(w).Encode(...)`；方法不限（Go 的 handler 不判方法）。
 async fn handle_health(State(st): State<Arc<AppState>>) -> Response {
-    let license = zulu::read_license_at(&st.license_path);
+    let license = st.license();
     let body = if license.is_empty() {
         obj(vec![("status", s("no_license"))])
     } else {
@@ -260,7 +275,7 @@ pub fn fallback_short_models() -> Vec<J> {
 
 /// `GET/POST /v1/models`：首条 auto + 实时目录（失败回退硬编码）。方法不限（Go 同）。
 async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
-    let license = zulu::read_license_at(&st.license_path);
+    let license = st.license();
     let mut data: Vec<J> = vec![obj(vec![
         ("id", s("auto")),
         ("display_name", s("Auto-Free")),
@@ -365,7 +380,7 @@ async fn handle_chat(State(st): State<Arc<AppState>>, method: Method, req: Reque
     if method != Method::POST {
         return write_error(StatusCode::METHOD_NOT_ALLOWED, "仅支持 POST", "invalid_request");
     }
-    let license = zulu::read_license_at(&st.license_path);
+    let license = st.license();
     if license.is_empty() {
         eprintln!(
             "comate-plugin: {} {} model=- 503 no_license {:?}",
@@ -429,9 +444,9 @@ async fn handle_chat(State(st): State<Arc<AppState>>, method: Method, req: Reque
     };
 
     if parsed.stream {
-        handle_chat_stream(&st, upstream_body, model_label, start).await
+        handle_chat_stream(&st, &zulu_path, &license, upstream_body, model_label, start).await
     } else {
-        handle_chat_once(&st, upstream_body, model_label, start).await
+        handle_chat_once(&st, &zulu_path, &license, upstream_body, model_label, start).await
     }
 }
 
@@ -565,17 +580,24 @@ async fn upstream_http_error(resp: reqwest::Response) -> String {
 
 async fn handle_chat_once(
     st: &AppState,
+    zulu_path: &Path,
+    license: &str,
     body: String,
     model: String,
     start: Instant,
 ) -> Response {
     let created = unix_now();
     let id = new_id();
-    let resp = match post_upstream(st, &body).await {
+    let resp = match post_upstream_retry(st, zulu_path, license, &body).await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("comate-plugin: POST {} model={} 502 {:?}", st.upstream_base, model, start.elapsed());
-            return write_error(StatusCode::BAD_GATEWAY, &format!("上游连接失败: {e}"), "upstream_error");
+            eprintln!(
+                "comate-plugin: POST {} model={} 502 {:?}",
+                st.upstream_base,
+                model,
+                start.elapsed()
+            );
+            return write_error(StatusCode::BAD_GATEWAY, &e, "upstream_error");
         }
     };
     if resp.status() != StatusCode::OK {
@@ -605,6 +627,8 @@ struct StreamRun {
     ok_done: bool,
     upstream_err: String,
     out: Vec<u8>,
+    /// 新旧两套协议共用的事件累积器（见 `translate::SseAcc`）。
+    acc: translate::SseAcc,
 }
 
 impl StreamRun {
@@ -617,6 +641,7 @@ impl StreamRun {
             ok_done: false,
             upstream_err: String::new(),
             out: Vec::new(),
+            acc: translate::SseAcc::default(),
         }
     }
 
@@ -628,51 +653,27 @@ impl StreamRun {
     }
 
     /// 单条 SSE 行的处理（`handleChatStream` 读循环的 switch 段）。
+    ///
+    /// zulu 1.8.1 起正文/思考走元素帧（`element-add` + `element-patch`，后者给累计全文），
+    /// 结束帧也从 `kind=completed` 变成 `type=task_done`；两种都经 `SseAcc` 归并。
     fn feed(&mut self, line: &[u8]) {
         let ev = match translate::event_from_line(line) {
             Some(ev) => ev,
             None => return,
         };
-        match ev.kind.as_str() {
-            "delta-batch" => {
-                for c in &ev.chunks {
-                    if c.delta.is_empty() {
-                        continue;
-                    }
-                    match c.kind.as_str() {
-                        "text-delta" => {
-                            let chunk = chunk_json(&self.id, &self.model, &c.delta, "", self.created);
-                            self.push_frame(chunk);
-                        }
-                        "thinking-delta" => {
-                            let chunk =
-                                chunk_reasoning_json(&self.id, &self.model, &c.delta, "", self.created);
-                            self.push_frame(chunk);
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            "element-add" => {
-                if let Some(el) = &ev.element {
-                    if el.typ == "TEXT" && !el.content.is_empty() {
-                        let chunk = chunk_json(&self.id, &self.model, &el.content, "", self.created);
-                        self.push_frame(chunk);
-                    }
-                }
-            }
-            "completed" => {
-                if ev.status == "ok" {
-                    self.ok_done = true;
-                } else {
-                    self.upstream_err = if ev.content.is_empty() {
-                        ev.status.clone()
-                    } else {
-                        ev.content.clone()
-                    };
-                }
-            }
-            _ => {}
+        for d in self.acc.ingest(&ev) {
+            let chunk = if d.reasoning {
+                chunk_reasoning_json(&self.id, &self.model, &d.text, "", self.created)
+            } else {
+                chunk_json(&self.id, &self.model, &d.text, "", self.created)
+            };
+            self.push_frame(chunk);
+        }
+        if self.acc.finished {
+            self.ok_done = true;
+        }
+        if self.acc.failed && !self.acc.error.is_empty() {
+            self.upstream_err = self.acc.error.clone();
         }
     }
 
@@ -710,19 +711,18 @@ fn sse_error(status: StatusCode, message: &str) -> Response {
 
 async fn handle_chat_stream(
     st: &AppState,
+    zulu_path: &Path,
+    license: &str,
     body: String,
     model: String,
     start: Instant,
 ) -> Response {
     let mut run = StreamRun::new(model.clone());
-    let resp = match post_upstream(st, &body).await {
+    let resp = match post_upstream_retry(st, zulu_path, license, &body).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("comate-plugin: kind=stream model={model} 502 {:?}", start.elapsed());
-            return sse_error(
-                StatusCode::BAD_GATEWAY,
-                &format!("上游连接失败: {e}"),
-            );
+            return sse_error(StatusCode::BAD_GATEWAY, &e);
         }
     };
     if resp.status() != StatusCode::OK {
@@ -849,6 +849,18 @@ async fn ensure_zulu(st: &AppState, zulu_path: &Path, license: &str) -> Result<(
     if let Some(mut child) = guard.take() {
         let _ = child.kill(); // 自己 spawn 的已死：清掉记录再重拉
     }
+    // zulu serve 是**单例**（读 ~/.comate/zulu-serve.pid，命中就「复用」并立刻返回，
+    // 不看 --port/--license）。既有实例不在我们端口上时，必须先停掉，否则 spawn 出来的
+    // 进程原地退出、8792 永远不健康（表现为「zulu serve 启动超时（20 秒未就绪）」）。
+    if let Some(p) = zulu::read_serve_pid() {
+        let desired: u16 = st.zulu_serve_port.parse().unwrap_or(0);
+        if p.port != desired {
+            zulu::stop_serve_from_pid_file(&format!(
+                "既有实例在 {} 而非 {}，单例会直接复用而不监听我们的端口",
+                p.port, desired
+            ));
+        }
+    }
     match zulu::ensure_zulu_serve(
         zulu_path,
         license,
@@ -864,6 +876,69 @@ async fn ensure_zulu(st: &AppState, zulu_path: &Path, license: &str) -> Result<(
         }
         Err(e) => Err(e),
     }
+}
+
+/// 按当前 license 重启 zulu serve（登录态不匹配时的自愈路径）。
+async fn restart_zulu(st: &AppState, zulu_path: &Path, license: &str) -> Result<(), String> {
+    let mut guard = st.zulu_proc.lock().await;
+    if let Some(mut child) = guard.take() {
+        let _ = child.kill();
+    }
+    zulu::stop_serve_from_pid_file("403：请求里的 license 与 serve 启动时的 auth 不一致");
+    // 给端口一点释放时间（不强求，后面的 20s 轮询会兜住）
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    match zulu::ensure_zulu_serve(
+        zulu_path,
+        license,
+        &st.zulu_serve_port,
+        &st.zulu_health_url,
+        st.zulu_serve_timeout,
+    )
+    .await
+    {
+        Ok(child) => {
+            *guard = child;
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// POST 上游；遇到「license 与 serve auth 不匹配」的 403 时按当前 license 重启 serve 再试一次。
+///
+/// 触发场景：`ensure_zulu` 复用了端口上已有的 serve，但它启动时的 `-l` 是另一个账号
+/// （例如 Comate IDE 自己拉的实例）。重启后仍失败就把上游错误原样交回。
+async fn post_upstream_retry(
+    st: &AppState,
+    zulu_path: &Path,
+    license: &str,
+    body: &str,
+) -> Result<reqwest::Response, String> {
+    let resp = post_upstream(st, body)
+        .await
+        .map_err(|e| format!("上游连接失败: {e}"))?;
+    if resp.status() != StatusCode::FORBIDDEN {
+        return Ok(resp);
+    }
+    let bytes = resp.bytes().await.unwrap_or_default();
+    let text = translate::trim_space(&String::from_utf8_lossy(&bytes)).to_string();
+    if !text.contains("does not match zulu serve auth") {
+        return Err(format!("上游 HTTP 403: {text}"));
+    }
+    eprintln!("comate-plugin: serve 登录态不匹配，按当前 license 重启 zulu serve 后重试");
+    if let Err(e) = restart_zulu(st, zulu_path, license).await {
+        return Err(format!("重启 zulu serve 失败: {e}（上游原文: {text}）"));
+    }
+    let resp = post_upstream(st, body)
+        .await
+        .map_err(|e| format!("上游连接失败: {e}"))?;
+    if resp.status() == StatusCode::OK {
+        return Ok(resp);
+    }
+    let code = resp.status().as_u16();
+    let bytes = resp.bytes().await.unwrap_or_default();
+    let text = translate::trim_space(&String::from_utf8_lossy(&bytes)).to_string();
+    Err(format!("上游 HTTP {code}: {text}"))
 }
 
 // ---------- 兜底路由（Go ServeMux 语义） ----------
@@ -1001,7 +1076,8 @@ async fn handle_fallback(method: Method, uri: Uri) -> Response {
 pub async fn run(args: Args) -> Result<(), String> {
     let mut state = AppState::from_env();
     if let Some(p) = args.license_file.clone() {
-        state.license_path = p;
+        // 显式 --license-file 仍然压过一切（对照/回放专用）。
+        state.license_sources = vec![zulu::LicenseSource::File(p)];
     }
     if let Some(z) = args.zulu.clone() {
         state.zulu_path = Some(z);
@@ -1012,11 +1088,24 @@ pub async fn run(args: Args) -> Result<(), String> {
         "comate-plugin: [rust rewrite] starting on {}:{} (upstream={})",
         args.host, args.port, args.upstream
     );
-    // 只报路径与存在性，**绝不打印登录态内容**
+    // 只报来源与存在性，**绝不打印登录态内容**
+    let source_desc: Vec<String> = state
+        .license_sources
+        .iter()
+        .map(|s| match s {
+            zulu::LicenseSource::Env(n) => format!("env:{n}"),
+            zulu::LicenseSource::IdeSettings(p) => {
+                format!("ide-settings:{}（存在={}）", p.display(), p.exists())
+            }
+            zulu::LicenseSource::File(p) => {
+                format!("cli-login:{}（存在={}）", p.display(), p.exists())
+            }
+        })
+        .collect();
     println!(
-        "comate-plugin: 登录态文件 {}（存在={}）；zulu CLI {}",
-        state.license_path.display(),
-        state.license_path.exists(),
+        "comate-plugin: 登录态来源 {} → 命中={}；zulu CLI {}",
+        source_desc.join(" | "),
+        !state.license().is_empty(),
         state
             .zulu_path
             .as_ref()

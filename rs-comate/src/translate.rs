@@ -138,7 +138,10 @@ pub fn complete_json(id: &str, model: &str, content: &str, created: i64) -> Stri
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct SseEvent {
+    /// 旧协议的事件名（`kind`）：`delta-batch` / `element-add` / `completed` …
     pub kind: String,
+    /// 新协议（zulu 1.8.1）的事件名（`type`）：`task_done` / `task_failed` …
+    pub typ: String,
     pub status: String,
     pub content: String,
     pub chunks: Vec<SseChunk>,
@@ -149,12 +152,22 @@ pub struct SseEvent {
 pub struct SseChunk {
     pub kind: String,
     pub delta: String,
+    /// `element-add` 里的元素快照。
+    pub element: Option<SseElement>,
+    /// `element-patch` 的目标元素 id。
+    pub eid: String,
+    /// `element-patch` 的元素快照（`content` 是**累计全文**，不是增量）。
+    pub patch: Option<SseElement>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct SseElement {
     pub typ: String,
+    /// 元素 id：同一元素的多次 patch 靠它归并。
+    pub id: String,
     pub content: String,
+    /// `done:true` 表示该元素已写完（目前只用于诊断，不参与拼接）。
+    pub done: bool,
 }
 
 /// Go 结构体字段匹配（先精确、再 ASCII 忽略大小写）。
@@ -176,6 +189,15 @@ fn str_field(m: &Map<String, Value>, key: &str) -> Result<String, ()> {
     }
 }
 
+/// 取布尔字段：缺失/null → false；类型不符 → Err。
+fn bool_field(m: &Map<String, Value>, key: &str) -> Result<bool, ()> {
+    match pick(m, key) {
+        None | Some(Value::Null) => Ok(false),
+        Some(Value::Bool(v)) => Ok(*v),
+        Some(_) => Err(()),
+    }
+}
+
 fn chunks_field(m: &Map<String, Value>) -> Result<Vec<SseChunk>, ()> {
     match pick(m, "chunks") {
         None | Some(Value::Null) => Ok(Vec::new()),
@@ -186,6 +208,9 @@ fn chunks_field(m: &Map<String, Value>) -> Result<Vec<SseChunk>, ()> {
                     Value::Object(cm) => out.push(SseChunk {
                         kind: str_field(cm, "kind")?,
                         delta: str_field(cm, "delta")?,
+                        element: object_field(cm, "element")?,
+                        eid: str_field(cm, "eid")?,
+                        patch: object_field(cm, "patch")?,
                     }),
                     Value::Null => out.push(SseChunk::default()),
                     _ => return Err(()),
@@ -197,12 +222,15 @@ fn chunks_field(m: &Map<String, Value>) -> Result<Vec<SseChunk>, ()> {
     }
 }
 
-fn element_field(m: &Map<String, Value>) -> Result<Option<SseElement>, ()> {
-    match pick(m, "element") {
+/// 取 `element` / `patch` 这类元素对象：缺失/null → None；对象 → Some；其它 → Err。
+fn object_field(m: &Map<String, Value>, key: &str) -> Result<Option<SseElement>, ()> {
+    match pick(m, key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::Object(em)) => Ok(Some(SseElement {
             typ: str_field(em, "type")?,
+            id: str_field(em, "id")?,
             content: str_field(em, "content")?,
+            done: bool_field(em, "done")?,
         })),
         Some(_) => Err(()),
     }
@@ -215,10 +243,11 @@ pub fn parse_sse_event(json: &str) -> Option<SseEvent> {
         Value::Null => Some(SseEvent::default()),
         Value::Object(m) => Some(SseEvent {
             kind: str_field(&m, "kind").ok()?,
+            typ: str_field(&m, "type").ok()?,
             status: str_field(&m, "status").ok()?,
             content: str_field(&m, "content").ok()?,
             chunks: chunks_field(&m).ok()?,
-            element: element_field(&m).ok()?,
+            element: object_field(&m, "element").ok()?,
         }),
         _ => None,
     }
@@ -232,6 +261,189 @@ pub fn event_from_line(line: &[u8]) -> Option<SseEvent> {
     let t = trim_space(&s);
     let rest = t.strip_prefix("data:")?;
     parse_sse_event(trim_space(rest))
+}
+
+// ---------- 事件状态机（新旧两套协议共用） ----------
+
+/// 一次增量下发：`reasoning=false` 进 `delta.content`，`true` 进 `delta.reasoning_content`。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Delta {
+    pub reasoning: bool,
+    pub text: String,
+}
+
+/// 上游事件累积器。
+///
+/// 两套协议同时吃：
+/// * **旧**（Go 时代 zulu）：`delta-batch` 里的 `text-delta` / `thinking-delta` 是**增量**；
+///   结束帧是 `{"kind":"completed","status":"ok","content":<全文>}`（全文以它为准）。
+/// * **新**（zulu 1.8.1，2026-11-15 实测）：正文/思考都走**元素**——`element-add` 给首段，
+///   之后 `element-patch` 给的是**累计全文**（`content` 不是增量！）；结束帧是
+///   `{"type":"task_done","status":"completed"}`。失败时正文位置会先出现一个 `EXCEPTION`
+///   元素，`content` 是人话错误（例如「您当前会话执行遇到了异常，请检测网络后重试！」）。
+#[derive(Debug, Default)]
+pub struct SseAcc {
+    /// 正文全文（非流式路径取它）。
+    pub text: String,
+    /// 思考全文。
+    pub reasoning: String,
+    /// 错误文案（`EXCEPTION` 元素 / 旧 completed 的 content / 失败状态）。
+    pub error: String,
+    /// 收到成功结束帧。
+    pub finished: bool,
+    /// 收到失败结束帧。
+    pub failed: bool,
+    /// 每个元素 id 已下发的完整内容（元素帧给累计全文，靠它算增量）。
+    seen: std::collections::HashMap<String, String>,
+}
+
+impl SseAcc {
+    /// 吃一条事件，返回需要下发给客户端的增量（正文/思考）。
+    pub fn ingest(&mut self, ev: &SseEvent) -> Vec<Delta> {
+        let mut out = Vec::new();
+
+        // --- 结束帧：新协议 type=task_done ---
+        if ev.typ == "task_done" {
+            if ev.status == "completed" {
+                self.finished = true;
+            } else {
+                self.failed = true;
+                if self.error.is_empty() {
+                    self.error = if ev.content.is_empty() {
+                        ev.status.clone()
+                    } else {
+                        ev.content.clone()
+                    };
+                }
+            }
+            return out;
+        }
+
+        // --- 结束帧：旧协议 kind=completed ---
+        if ev.kind == "completed" {
+            if ev.status == "ok" {
+                self.finished = true;
+                // 旧协议以 completed.content 为权威全文（黄金基准 read-ok / read-first-wins 锁死）。
+                if !ev.content.is_empty() {
+                    self.text = ev.content.clone();
+                }
+            } else {
+                self.failed = true;
+                self.error = if ev.content.is_empty() {
+                    ev.status.clone()
+                } else {
+                    ev.content.clone()
+                };
+            }
+            return out;
+        }
+
+        // --- 顶层元素帧（旧协议形态，兜底兼容） ---
+        // 旧协议里顶层 `element-add` 的 REASON 会被 Go 丢掉（黄金基准 `stream-element-add`
+        // 锁着这条），所以这里只接 TEXT；新协议的 REASON 走 delta-batch 里的元素帧。
+        if ev.kind == "element-add" || ev.kind == "element-patch" {
+            if let Some(el) = &ev.element {
+                if let Some(d) = self.take_element(el, false) {
+                    out.push(d);
+                }
+            }
+        }
+
+        // --- delta-batch ---
+        for c in &ev.chunks {
+            match c.kind.as_str() {
+                "text-delta" => {
+                    if !c.delta.is_empty() {
+                        self.text.push_str(&c.delta);
+                        out.push(Delta {
+                            reasoning: false,
+                            text: c.delta.clone(),
+                        });
+                    }
+                }
+                "thinking-delta" => {
+                    if !c.delta.is_empty() {
+                        self.reasoning.push_str(&c.delta);
+                        out.push(Delta {
+                            reasoning: true,
+                            text: c.delta.clone(),
+                        });
+                    }
+                }
+                "element-add" => {
+                    if let Some(el) = &c.element {
+                        if let Some(d) = self.take_element(el, true) {
+                            out.push(d);
+                        }
+                    }
+                }
+                "element-patch" => {
+                    if let Some(p) = &c.patch {
+                        if let Some(d) = self.take_element(p, true) {
+                            out.push(d);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
+    /// 元素帧 → 增量。`element-add` 与 `element-patch` 同一条路径：
+    /// 内容按「累计全文」处理，只下发比上次多出来的尾巴。
+    ///
+    /// `allow_reasoning`：新协议（delta-batch 内的元素帧）才把 REASON 透成
+    /// `reasoning_content`；旧协议顶层元素帧保持 Go 的「丢 REASON」行为。
+    fn take_element(&mut self, el: &SseElement, allow_reasoning: bool) -> Option<Delta> {
+        let reasoning = match el.typ.as_str() {
+            "EXCEPTION" => {
+                if !el.content.is_empty() {
+                    self.error = el.content.clone();
+                }
+                return None;
+            }
+            "TEXT" => false,
+            "REASON" => {
+                if !allow_reasoning {
+                    return None;
+                }
+                true
+            }
+            _ => return None,
+        };
+        let key = if el.id.is_empty() {
+            format!("~{}", el.typ)
+        } else {
+            el.id.clone()
+        };
+        let prev = self.seen.get(&key).cloned().unwrap_or_default();
+        let next = if prev.is_empty() {
+            el.content.clone()
+        } else if let Some(rest) = el.content.strip_prefix(prev.as_str()) {
+            rest.to_string()
+        } else if el.content == prev {
+            String::new()
+        } else {
+            // 非前缀（上游改写了整段）：重发会重复，宁可不发——已下发的正文保持原样。
+            String::new()
+        };
+        if el.content.len() > prev.len() {
+            self.seen.insert(key, el.content.clone());
+        }
+        if next.is_empty() {
+            return None;
+        }
+        if reasoning {
+            self.reasoning.push_str(&next);
+        } else {
+            self.text.push_str(&next);
+        }
+        Some(Delta {
+            reasoning,
+            text: next,
+        })
+    }
 }
 
 // ---------- Go bufio.Scanner 等价扫描器 ----------
@@ -306,31 +518,33 @@ impl LineScanner {
     }
 }
 
-/// `readFullAnswer`（非流式路径）：读完整条上游 SSE，取 completed(status=ok) 的 content。
-/// 返回 `(content, errMsg)`：errMsg 非空表示失败（文案与 Go 逐字一致）。
+/// `readFullAnswer`（非流式路径）：读完整条上游 SSE，取最终的正文/错误。
+///
+/// 旧协议取 `completed(status=ok).content`；新协议（zulu 1.8.1）取元素累积正文 +
+/// `task_done(status=completed)`。返回 `(content, errMsg)`：errMsg 非空表示失败
+/// （文案与 Go 侧逐字一致；新协议多一种来源：`EXCEPTION` 元素的人话错误）。
 pub fn read_full_answer(body: &[u8]) -> (String, String) {
     let mut scanner = LineScanner::new(MAX_TOKEN);
     let mut lines = scanner.push(body);
     if let Some(tail) = scanner.finish() {
         lines.push(tail);
     }
+    let mut acc = SseAcc::default();
     for line in &lines {
         let ev = match event_from_line(line) {
             Some(ev) => ev,
             None => continue,
         };
-        if ev.kind != "completed" {
-            continue;
+        let _ = acc.ingest(&ev);
+        if acc.finished || acc.failed {
+            break;
         }
-        if ev.status != "ok" {
-            let msg = if !ev.content.is_empty() {
-                ev.content.clone()
-            } else {
-                ev.status.clone()
-            };
-            return (String::new(), msg);
-        }
-        return (ev.content, String::new());
+    }
+    if acc.failed {
+        return (String::new(), acc.error);
+    }
+    if acc.finished {
+        return (acc.text, String::new());
     }
     if let Some(e) = scanner.err() {
         return (String::new(), format!("上游 SSE 中断: {e}"));
@@ -399,5 +613,85 @@ mod tests {
             let msgs: Vec<Value> = serde_json::from_str(input).unwrap();
             assert_eq!(flatten_messages(&msgs), want, "input={input}");
         }
+    }
+
+    // ---------- zulu 1.8.1 新协议（2026-11-15 真机抓的帧形态） ----------
+
+    /// 新协议：元素帧（`element-add` + `element-patch` 累计全文）+ `type=task_done`。
+    #[test]
+    fn new_protocol_element_frames_accumulate() {
+        let body = concat!(
+            "data: {\"kind\":\"delta-batch\",\"cid\":\"remote-1\",\"chunks\":[{\"kind\":\"element-add\",\"mid\":\"m\",\"element\":{\"type\":\"REASON\",\"id\":\"r1\",\"content\":\"思考一\",\"done\":false}}]}\n\n",
+            "data: {\"kind\":\"delta-batch\",\"cid\":\"remote-1\",\"chunks\":[{\"kind\":\"element-patch\",\"mid\":\"m\",\"eid\":\"r1\",\"patch\":{\"type\":\"REASON\",\"id\":\"r1\",\"content\":\"思考一。继续\",\"done\":true}}]}\n\n",
+            "data: {\"kind\":\"delta-batch\",\"cid\":\"remote-1\",\"chunks\":[{\"kind\":\"element-add\",\"mid\":\"m\",\"element\":{\"type\":\"TEXT\",\"id\":\"t1\",\"content\":\"你好\",\"done\":false}}]}\n\n",
+            "data: {\"kind\":\"delta-batch\",\"cid\":\"remote-1\",\"chunks\":[{\"kind\":\"element-patch\",\"mid\":\"m\",\"eid\":\"t1\",\"patch\":{\"type\":\"TEXT\",\"id\":\"t1\",\"content\":\"你好，世界。\",\"done\":true}}]}\n\n",
+            "data: {\"type\":\"task_done\",\"status\":\"completed\",\"conversationId\":\"remote-1\"}\n\n",
+        );
+        let mut acc = SseAcc::default();
+        let mut text = String::new();
+        let mut reasoning = String::new();
+        for line in body.lines() {
+            let Some(ev) = event_from_line(line.as_bytes()) else {
+                continue;
+            };
+            for d in acc.ingest(&ev) {
+                if d.reasoning {
+                    reasoning.push_str(&d.text);
+                } else {
+                    text.push_str(&d.text);
+                }
+            }
+        }
+        assert_eq!(text, "你好，世界。");
+        assert_eq!(reasoning, "思考一。继续");
+        assert!(acc.finished && !acc.failed);
+        // 非流式同一份字节也要拿到同样的正文
+        let (content, err) = read_full_answer(body.as_bytes());
+        assert_eq!((content.as_str(), err.as_str()), ("你好，世界。", ""));
+    }
+
+    /// 新协议失败：先来 `EXCEPTION` 元素，再来 `task_done(failed)`——错误要取人话文案。
+    #[test]
+    fn new_protocol_failure_surfaces_exception() {
+        let body = concat!(
+            "data: {\"kind\":\"delta-batch\",\"cid\":\"remote-1\",\"chunks\":[{\"kind\":\"element-add\",\"mid\":\"m\",\"element\":{\"type\":\"EXCEPTION\",\"id\":\"e1\",\"content\":\"您当前会话执行遇到了异常，请检测网络后重试！\"}}]}\n\n",
+            "data: {\"type\":\"task_done\",\"status\":\"failed\",\"conversationId\":\"remote-1\"}\n\n",
+        );
+        let (content, err) = read_full_answer(body.as_bytes());
+        assert_eq!(content, "");
+        assert_eq!(err, "您当前会话执行遇到了异常，请检测网络后重试！");
+    }
+
+    /// 同一元素重复 patch（内容没变）不能重复下发。
+    #[test]
+    fn repeated_patch_emits_nothing() {
+        let body = concat!(
+            "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"element-add\",\"element\":{\"type\":\"TEXT\",\"id\":\"t1\",\"content\":\"abc\",\"done\":false}}]}\n\n",
+            "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"element-patch\",\"eid\":\"t1\",\"patch\":{\"type\":\"TEXT\",\"id\":\"t1\",\"content\":\"abc\",\"done\":false}}]}\n\n",
+            "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"element-patch\",\"eid\":\"t1\",\"patch\":{\"type\":\"TEXT\",\"id\":\"t1\",\"content\":\"abcd\",\"done\":true}}]}\n\n",
+            "data: {\"type\":\"task_done\",\"status\":\"completed\"}\n\n",
+        );
+        let mut acc = SseAcc::default();
+        let mut emitted = String::new();
+        for line in body.lines() {
+            if let Some(ev) = event_from_line(line.as_bytes()) {
+                for d in acc.ingest(&ev) {
+                    emitted.push_str(&d.text);
+                }
+            }
+        }
+        assert_eq!(emitted, "abcd");
+    }
+
+    /// 新协议 `task_done` 之前没有 completed 帧，也要算「正常收尾」——
+    /// 这正是 2026-11-15 之前代理报「上游会话结束但未收到 completed」的原因。
+    #[test]
+    fn task_done_completes_without_completed_frame() {
+        let body = concat!(
+            "data: {\"kind\":\"delta-batch\",\"chunks\":[{\"kind\":\"element-add\",\"element\":{\"type\":\"TEXT\",\"id\":\"t1\",\"content\":\"ok\",\"done\":true}}]}\n\n",
+            "data: {\"type\":\"task_done\",\"status\":\"completed\"}\n\n",
+        );
+        let (content, err) = read_full_answer(body.as_bytes());
+        assert_eq!((content.as_str(), err.as_str()), ("ok", ""));
     }
 }

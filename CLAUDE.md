@@ -349,6 +349,46 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   `<final>...</final>`（18s 返回，非报错），同请求重测即正常；代理如实转发、**comate
   侧无空响应重试**（团结有 ensureNonEmpty，此处没有）。遇到空/残渣答案先重测再排查
 
+#### Comate 1.108.2 / zulu 1.8.1 更新适配（2026-11-15 实测，已落地 rs-comate）
+
+- **根因一：`PLATFORM=saas` 是硬门槛**。zulu 1.8.1 的 `PLATFORM` 默认 `internal`，
+  会去打 `comate.baidu-int.com`（百度内网，公网解析不了）→ 会话创建拿不到
+  `conversationId/taskId`（内核里 `taskId<0` 直接抛）→ 统一报「您当前会话执行遇到了异常，
+  请检测网络后重试！」。取值只认小写 `saas`/`internal`/`poc`，**大写 `SAAS` 等于没设**。
+  `list-model` 与 `serve` 两个子进程都已注入。**这是本次更新后 8786 全挂的唯一根因**。
+- **根因二：流式协议换了一套**。旧：`delta-batch` 的 `text-delta`/`thinking-delta`（增量）
+  + `{"kind":"completed","status":"ok","content":全文}`。新：`delta-batch` 里的
+  `element-add`（首段）/ `element-patch`（**content 是累计全文，不是增量**）
+  + `{"type":"task_done","status":"completed"}`（失败时正文位置先给 `EXCEPTION` 元素）。
+  旧代理只认 `completed`，所以更新后一律 502「上游会话结束但未收到 completed」。
+  `translate::SseAcc` 现在两套通吃；`REASON` 元素透成 `reasoning_content`。
+- **根因三：登录态两个账号**。`~/.comate/cli-login.json`（CLI）与
+  `%APPDATA%\Comate\User\settings.json` 的 `baidu.comate.license`（IDE）这次不是同一个号；
+  用户在用/买会员的是 IDE 那个。解析顺序改为 `COMATE_LICENSE` → IDE settings → cli-login。
+- **`zulu serve` 是单例**：读 `~/.comate/zulu-serve.pid`，命中就「复用」并立即退出，
+  **不看 `--port`/`--license`**（实测 `serve --port 8892` 回 `{"port":8792,"reused":true}`）。
+  IDE 自己拉过 serve（如 8779）时我们 spawn 的进程原地退出、8792 永不健康。
+  现在 spawn 前若 pid 文件在别的端口就先 `taskkill`；若 8792 上的 serve license 不匹配则
+  403 自愈（重启 serve + 重试一次）。代价：IDE 重启后第一次对话会把它自己的 serve 换掉，
+  两边都用 IDE license，之后会互相复用。
+- **模型目录**（`zulu list-model` 实时，15 个）：新增 `deepseek-v4.1-flash`（ratio 0.3x、
+  支持图片/思考、effort low/high/max）、`ernie-5.5-flash-preview`（0.1x）；去掉
+  `glm-5.0-fc`、`kimi-k2.5-oneapi`。`FALLBACK_MODELS` 有意未动（被 Go 黄金
+  `models-fallback-*` 逐字节锁着，要改得连黄金重采）。
+- **云直连路线可行**（GitHub 已有成熟实现，见下）：`https://comate.baidu.com/api/v2/api/models/available`
+  + `/api/aidevops/autocomate/rest/autowork/v2/{conversation,task,execute}`，
+  认证只需头 `login-name`/`Uuap-login-name` = license（无签名、无设备绑定）。
+  本机实测：模型目录 200、非流式/流式对话 200、**工具调用（client tools）真能回 tool_calls**、
+  带真实 usage 与 reasoning。zulu serve 这条路**结构上不可能**给客户端注入工具
+  （init 请求体字段全集里没有 `tools`）——要做 Agent 工具得走云直连，属独立升级项。
+  会员积分：Comate 与「百度搭子」共用权益，Pro 25,000 / Max 100,000 分/月，
+  余额在 `/api/user/agent/balance`（要 Cookie，license 头不够）。
+- 参考实现（.work/refs/ 已 clone）：`Suiying6023/Comate2API`（Python，零依赖，直连云，
+  工具/图片/JSON 输出/凭证池；2026-11-13 更新）、`PengJunchen/magpie-comate-auth`
+  （JS，native sessions + client-owned tools + 工具结果续接，VALIDATION.md 5 万字体检）、
+  `ikashana/magpie-comate-auth`（会员积分卡 + 15 模型 + Ask(8)/Agent(1) 模式区分）、
+  `vibe-coding-labs/ComateReverseEngineering`（逆向分析仓库）。
+
 ## 已踩的坑（改代码前必读）
 
 1. **WebView2 不吃系统代理**：Node/Electron fetch 连境外 API 会挂，Go 栈最稳

@@ -102,3 +102,44 @@ cargo test -- --nocapture     # 看黄金覆盖汇总（libtest 默认吞掉通�
 3. **超 32MB 请求体的连接行为**：Go 的 server 会在 handler 返回后尝试读掉剩余体再关连接，
    Rust 侧到 32MB 即停读。实测 33MB 时客户端仍能拿到 400（见合同用例），
    但极端并发下的连接复用行为未逐字节对比。
+
+## 2026-11-15 适配（Comate 1.108.2 / zulu 1.8.1 更新后）
+
+更新后三条实测结论（真机验证，不是推测）：
+
+1. **`PLATFORM=saas` 是硬门槛**。zulu 1.8.1 的 `PLATFORM` 默认 `internal`，会去打
+   `comate.baidu-int.com`（百度内网，公网解析不了）→ 会话创建拿不到 `conversationId/taskId`
+   → 内核抛「您当前会话执行遇到了异常，请检测网络后重试！」。
+   取值只能是 `saas` / `internal` / `poc`，**大写 `SAAS` 不在映射表里（等于没设）**。
+   现在 `list-model` 与 `serve` 两个子进程都显式注入 `PLATFORM=saas`（`src/zulu.rs`）。
+2. **流式协议换了一套**。旧：`delta-batch` 里 `text-delta`/`thinking-delta` 增量 + `kind=completed.content` 全文。
+   新：`delta-batch` 里 `element-add`（首段）/ `element-patch`（**累计全文，不是增量**）
+   + 结束帧 `{"type":"task_done","status":"completed"}`；失败时正文位置先给一个
+   `EXCEPTION` 元素（`content` 是人话错误）。`src/translate.rs::SseAcc` 两套一起消化，
+   旧的逐字节行为由黄金基准锁着（顶层 `element-add` 的 REASON 仍按 Go 丢掉）。
+   新协议的 `REASON` 现在会透成 `reasoning_content`（`delta-batch` 内的元素帧）。
+3. **登录态有两个账号**。`~/.comate/cli-login.json`（CLI 登录）与
+   `%APPDATA%\Comate\User\settings.json` 的 `baidu.comate.license`（IDE 登录）这次是**不同账号**。
+   用户在用的、买会员的是 IDE 那个，所以生产解析顺序改为
+   `COMATE_LICENSE` → IDE `settings.json` → `cli-login.json`（`src/zulu.rs::LicenseSource`）。
+   两个 license 都能过 `zulu run`；`serve` 的 `-l` 必须与请求里的 `license` 一致，否则 403。
+
+附带修掉的两个稳定性问题：
+
+- **`zulu serve` 是单例**：它读 `~/.comate/zulu-serve.pid`，命中就「复用」并立刻退出，
+  **完全不看 `--port`/`--license`**（实测 `serve --port 8892` 直接回 `{"port":8792,"reused":true}`）。
+  Comate IDE 自己拉过 serve（例如 8779）时，我们 spawn 的进程会原地退出、8792 永远不健康
+  （旧表现：`zulu serve 启动超时（20 秒未就绪）`）。现在 spawn 前若 pid 文件指向别的端口，
+  先 `taskkill` 那个实例再拉自己的（`src/zulu.rs::stop_serve_from_pid_file`）。
+  代价：IDE 重启后第一次对话会把它的 serve 换成我们的（两者都用 IDE license，之后会互相复用）。
+- **403 自愈**：若 8792 上已有 serve 但启动时 `-l` 是另一个账号，第一次请求会 403
+  `does not match zulu serve auth`；现在按当前 license 重启 serve 并重试一次（`post_upstream_retry`）。
+
+模型目录（`zulu list-model` 实时）这次变成 15 个：新增 `deepseek-v4.1-flash`、
+`ernie-5.5-flash-preview`，去掉 `glm-5.0-fc`、`kimi-k2.5-oneapi`。
+`FALLBACK_MODELS` 常量**有意没动**——它是 list-model 失败时的兜底，且被 Go 黄金基准
+（`models-fallback-*`）逐字节锁着；要更新得连黄金一起重采，留作下版待办。
+
+已实测通过（2026-11-15）：非流式 200 真答案；流式正文 + `reasoning_content` + `stop` + `[DONE]`；
+`/v1/models` 15 个实时目录；外部 serve 占别的端口时自动换血；license 不匹配时 403 自愈。
+新增 4 条单测锁新协议（`src/translate.rs` 底部，用真机抓的帧形态）。
