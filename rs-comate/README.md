@@ -103,6 +103,63 @@ cargo test -- --nocapture     # 看黄金覆盖汇总（libtest 默认吞掉通�
    Rust 侧到 32MB 即停读。实测 33MB 时客户端仍能拿到 400（见合同用例），
    但极端并发下的连接复用行为未逐字节对比。
 
+## 云直连（2026-11-15 起是默认传输）
+
+`COMATE_TRANSPORT=cloud`（默认）→ 直接打 `https://comate.baidu.com`，**不碰本机 zulu serve**；
+`COMATE_TRANSPORT=zulu` → 走上面那套老 zulu serve（黄金基准与兜底用）。
+
+为什么换：zulu 的会话接口字段全集里**没有 `tools`**，客户端工具结构上注入不进去；
+而官方 CLI 的 HTTP 层本来就是这套 HTTPS。2026-11-15 真机实测（同一台机、同一个号）：
+
+| | zulu serve | 云直连 |
+|---|---|---|
+| 非流式一问一答 | 16~22s | **2.0s** |
+| 流式首字 | 7~10s | **1.5~2s** |
+| 工具调用 | 不支持（客户端工具） | **`tool_calls` 正常往返** |
+| usage | 恒 0 | 真实 token（含 `cached_tokens`） |
+| reasoning | 有（1.8.1 元素帧） | 有（`reasoningDelta`） |
+| 依赖 | zulu serve + comate-engine 内核 | 无本地进程 |
+
+协议（`src/cloud.rs`，照 Comate2API / magpie-comate-auth 的公开实现对了一遍）：
+
+```
+GET  /api/v2/api/models/available?key=<license>&type=ZULU&...   → 15 个模型 + 能力字段
+POST /api/aidevops/autocomate/rest/autowork/v2/conversation      → data.id
+POST .../v2/task                                                → data.taskId
+POST .../v2/execute                                             → SSE
+```
+
+认证只要头 `login-name` / `Uuap-login-name` = license（**无签名、无设备绑定**），
+外加 `X-Source: COMATE`、`plugin-version: zulucli-1.8.1`、`x-skip-fcnap: yes`。
+
+**客户端工具怎么注入**（`src/cloud_chat.rs`）：OpenAI 的 `tools` 被塞进
+`agentInfo.mcpInfos`，声明成一个名叫 `openai_client` 的「假 MCP 服务器」，
+同时给 `agentPrompt` 写清「用 UseMcpTool 调、参数放 arguments」。
+模型回 `FUNCTION_CALL_*` 帧（`input` 是**按 key 字符串追加**的碎片），
+`ToolCallAcc` 拼成完整调用后翻成标准 `tool_calls`；客户端把结果带回来时，
+凭 `tool_call_id` 找回 `/conversation`+`/task` 原会话，用 `query=""` +
+`toolUseResults`（native id/name/params + 结果文本）续接——**不新建会话**。
+
+其它细节：
+
+- `/v1/models` 仍只暴露**去后缀短名**（`glm-5.3`），请求时用目录映射回完整
+  `modelId`；`modelKey` 必须完整 id，用显示名会 `model.unavailable`。
+- `auto`/空模型 → 目录里 `isDefault` 的那条（没有就第一条）。
+- 非流式响应的 `usage` 是 `inputTokens + cachedInputTokens`（Comate 的 inputTokens
+  **不含**缓存命中），另带 `prompt_tokens_details.cached_tokens`。
+- 流式最后一块是 `choices: []` + `usage`（OpenAI 规范），然后 `[DONE]`。
+- 环境变量：`COMATE_TRANSPORT`（cloud/zulu）、`COMATE_CLOUD_BASE`（改入口，契约测试用）、
+  `COMATE_PLUGIN_VERSION`（默认 `zulucli-1.8.1`，跟着 Comate 更新走）、`COMATE_LICENSE`
+  （压过 IDE 设置与 cli-login）。
+
+**没做**（如实登记）：图片输入（`attachImages` 上传链路）、`max_tokens`/`temperature`
+透传、`response_format` 结构化输出、多轮跨请求的会话复用（每轮新建会话，只有工具续接复用）、
+会员积分展示（`/api/user/agent/balance` 要 Cookie，license 头不够）。
+
+合同测试：`tests/cloud_contract.rs` 用进程内假云复刻三步协议，锁住
+「出站 modelKey 是完整 id」「auth 头与 uploadBaseInfo」「工具调用 ↔ tool_calls」
+「工具结果续接 query 为空且 toolUseResults 带 native 参数」。
+
 ## 2026-11-15 适配（Comate 1.108.2 / zulu 1.8.1 更新后）
 
 更新后三条实测结论（真机验证，不是推测）：

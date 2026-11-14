@@ -263,6 +263,16 @@ pub fn event_from_line(line: &[u8]) -> Option<SseEvent> {
     parse_sse_event(trim_space(rest))
 }
 
+/// 云直连（`cloud.rs`）的「data: 行 → 帧」步骤：同一套行清洗，换成云帧解析。
+///
+/// SSE 注释行（`:heartbeat`）与 `data:` 之外的行自然返回 `None`。
+pub fn event_from_line_like(line: &[u8]) -> Option<crate::cloud::CloudFrame> {
+    let s = String::from_utf8_lossy(line);
+    let t = trim_space(&s);
+    let rest = t.strip_prefix("data:")?;
+    crate::cloud::parse_frame(trim_space(rest))
+}
+
 // ---------- 事件状态机（新旧两套协议共用） ----------
 
 /// 一次增量下发：`reasoning=false` 进 `delta.content`，`true` 进 `delta.reasoning_content`。

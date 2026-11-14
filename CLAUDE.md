@@ -327,15 +327,17 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
     字符均 200；未覆盖：6-8M 字符级 WAF 极端量级（不值得花 token 复现）
 
 ### Comate（8786，百度文心快码）——上游自带 agent 工具，不是纯聊天后端
-- **传输**：内部托管 zulu serve（8792），`/v1/chat/completions` 扁平化后打
-  `/api/v1/conversations/init`。zulu 是 **agent 引擎**（`comate-engine` = @comate/kernel：
-  沙箱命令执行、MCP、sqlite-vec 代码库索引、LSP、git），`--mode` **默认 Agent**
-  （可选 Ask/Plan/Cloud/Bot；Ask/Plan 只读）
-- **⚠ 工具无法由客户端注入**：会话请求体字段全集只有 query / cwd / ptoken / license /
-  model / conversation / mode / enableCodebaseSearch / activate{Skills,Commands,
-  Subagents,Rules} / attach{Images,Files}——**没有 `tools`**。所以「让 ZCode/DSH 自己的
-  工具被 comate 模型调用」在代理层无解；可用形态是「给自足任务 → 上游工具在 cwd 里干完 →
-  只回文本」（Qoder 同形态：客户端侧同样看不到 tool_calls）
+- **两条传输**（v4.9 起 rs-comate 内置，`COMATE_TRANSPORT` 切换）：
+  **云直连（默认，`cloud`）** 打 `https://comate.baidu.com` 三步协议，
+  无本地进程、支持客户端工具、有真实 usage；**zulu serve（`zulu`）** 是老的
+  `--plugin → 8792 /api/v1/conversations/init` 路线，留作对照与兜底。
+  zulu 是 **agent 引擎**（`comate-engine` = @comate/kernel：沙箱命令执行、MCP、
+  sqlite-vec 代码库索引、LSP、git），`--mode` 默认 Agent（可选 Ask/Plan/Cloud/Bot）。
+- **⚠ 工具无法由客户端注入（此结论只对 zulu 路线成立）**：zulu 会话请求体字段全集只有
+  query / cwd / ptoken / license / model / conversation / mode / enableCodebaseSearch /
+  activate{Skills,Commands,Subagents,Rules} / attach{Images,Files}——**没有 `tools`**。
+  所以「让 ZCode/DSH 自己的工具被 comate 模型调用」在 zulu 路线无解；
+  **2026-11-15 起默认改走云直连，`tool_calls` 已实测可往返**（见下节）。
 - **工作目录跟随（v3.10.5）**：插件从客户端提示词提取 `Working directory:`/`工作目录`
   标记（`internal/clientcwd` 共享包，与 Qoder 同源），`COMATE_CWD` 可钉死、
   `COMATE_MODE=Ask` 只读。**此前 cwd 写死 `os.TempDir()`，引擎工具在空目录里空转，
@@ -388,6 +390,29 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   （JS，native sessions + client-owned tools + 工具结果续接，VALIDATION.md 5 万字体检）、
   `ikashana/magpie-comate-auth`（会员积分卡 + 15 模型 + Ask(8)/Agent(1) 模式区分）、
   `vibe-coding-labs/ComateReverseEngineering`（逆向分析仓库）。
+
+#### 云直连已落地（2026-11-15，rs-comate 新默认传输）
+
+- **代码**：`rs-comate/src/cloud.rs`（协议：HTTP + SSE 帧 + 工具参数按 key 追加归并）、
+  `cloud_chat.rs`（OpenAI 侧：请求解析、假 MCP 声明、工具→tool_calls、工具结果续接）、
+  `lib.rs` 的 `Transport::{Cloud,Zulu}` 与 `cloud_*` handler。
+- **实测（同一台机同一个号）**：非流式 **2.0s**、流式首字 ~1.5s（zulu 是 16~22s）；
+  工具调用 `tool_calls` 正常往返（模型调 `UseMcpTool` → 我们翻成客户端函数 →
+  结果带回来续同一 conversation/task，`query=""`）；真实 usage（含 cached_tokens）；
+  `reasoning_content` 正常。2026-11-15 三条活体链路都验过：纯文本流式/非流式、
+  工具调用、工具结果续接。
+- **协议要点**（照 Comate2API + magpie 的公开实现对了一遍）：
+  `GET /api/v2/api/models/available` → `POST .../rest/autowork/v2/{conversation,task,execute}`；
+  认证只靠头 `login-name`/`Uuap-login-name`=license（**无签名、无设备绑定**）。
+  工具走 `agentInfo.mcpInfos` 的假 MCP 服务器 `openai_client`；上游回
+  `FUNCTION_CALL_START/PARAMS_APPEND/END`，`input` 是**按 key 字符串追加**的碎片。
+- **默认值与开关**：`COMATE_TRANSPORT=cloud|zulu`（默认 cloud）、`COMATE_CLOUD_BASE`、
+  `COMATE_PLUGIN_VERSION`（默认 `zulucli-1.8.1`，Comate 更新后要跟着改）、`COMATE_LICENSE`。
+- **测试**：`tests/cloud_contract.rs` 6 条（进程内假云）锁三步协议、完整 modelId、
+  auth 头、tool_calls 往返、续接 query 为空、未知模型 400；单测 +6（帧解析、
+  参数归并、真机帧序列、会话绑定）。zulu 老路径的 3 条黄金 + 10 条合同**原样全绿**。
+- **没做**：图片输入、`max_tokens`/`temperature` 透传、`response_format`、
+  跨请求会话复用（工具续接除外）、会员积分展示（余额端点要 Cookie）。
 
 ## 已踩的坑（改代码前必读）
 

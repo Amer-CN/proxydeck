@@ -16,6 +16,8 @@
 //! * `upstream_base` / `zulu_health_url` / `zulu_serve_port` 三个字段供黄金回放指向假上游
 //!   与假健康端点——**生产构造里它们等于 `internal/comate` 的常量 8792**。
 
+pub mod cloud;
+pub mod cloud_chat;
 pub mod cwd;
 pub mod gjson;
 pub mod godecode;
@@ -38,6 +40,7 @@ use gjson::{i, obj, s, J};
 use serde_json::Value;
 use tokio::sync::Mutex;
 
+use cloud_chat::{Binding, ChatRequest, CloudReader, SessionStore, ToolDef};
 use translate::{chunk_json, chunk_reasoning_json, complete_json, LineScanner, MAX_TOKEN};
 
 /// 与 Go `internal/comate/upstreamBase` 同值（内部 zulu serve 固定 8792）。
@@ -51,6 +54,45 @@ pub const MODELS_CACHE_TTL: Duration = Duration::from_secs(600); // Go: 10*time.
 
 /// 与 Go `handleChat` 的 `io.LimitReader(r.Body, 32<<20)` 同值。
 pub const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
+
+/// 传输方式：云直连（默认）或老 zulu serve（兼容/黄金基准用）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Transport {
+    /// `https://comate.baidu.com` 直连（无本地进程，支持客户端工具）。
+    Cloud,
+    /// 本机 zulu serve（8792；无 tools 能力，保留作对照与兜底）。
+    Zulu,
+}
+
+impl Transport {
+    pub fn from_env() -> Self {
+        match std::env::var("COMATE_TRANSPORT")
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "zulu" | "serve" | "legacy" => Transport::Zulu,
+            _ => Transport::Cloud,
+        }
+    }
+}
+
+/// 由时间 + 序号派生的短 id 后缀（`call_...` 兜底用）。
+pub fn new_id_suffix() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+    let mut x = nanos ^ seq.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    x ^= x >> 33;
+    x = x.wrapping_mul(0xFF51_AFD7_ED55_8CCD);
+    x ^= x >> 33;
+    format!("{:x}", x & 0xFFFF_FFFF_FFFF)
+}
 
 /// Go `fallbackModels` 的 id 列表（顺序逐条保持；`/v1/models` 展示去后缀短名）。
 pub const FALLBACK_MODELS: [&str; 15] = [
@@ -114,6 +156,14 @@ pub struct ModelsCache {
 /// 服务状态（本地端点用）。
 pub struct AppState {
     pub started_at: Instant,
+    /// 传输方式（默认云直连；`AppState::new` 给测试/黄金用 zulu）。
+    pub transport: Transport,
+    /// 云直连入口（默认 [`cloud::CLOUD_BASE`]；`COMATE_CLOUD_BASE` 可覆盖，契约测试用）。
+    pub cloud_base: String,
+    /// 云模型目录缓存（10 分钟，与 zulu 侧同 TTL）。
+    pub cloud_models: Mutex<Option<(Instant, Vec<cloud::CloudModel>)>>,
+    /// 工具调用 → 会话绑定（工具结果续接用）。
+    pub sessions: SessionStore,
     /// 登录态来源链（按优先级；生产：环境变量 → IDE 设置 → cli-login.json）。
     pub license_sources: Vec<zulu::LicenseSource>,
     /// 探测到的 zulu CLI（Go 每请求 `findZulu()`，这里启动时解析一次；进程内等价）。
@@ -145,6 +195,10 @@ impl AppState {
     ) -> Self {
         Self {
             started_at: Instant::now(),
+            transport: Transport::Zulu,
+            cloud_base: cloud::CLOUD_BASE.to_string(),
+            cloud_models: Mutex::new(None),
+            sessions: SessionStore::default(),
             license_sources: vec![zulu::LicenseSource::File(license_path)],
             zulu_path,
             cwd_env,
@@ -175,6 +229,12 @@ impl AppState {
             std::env::var("COMATE_MODE").ok(),
         );
         st.license_sources = sources;
+        st.transport = Transport::from_env();
+        if let Ok(base) = std::env::var("COMATE_CLOUD_BASE") {
+            if !base.trim().is_empty() {
+                st.cloud_base = base.trim().trim_end_matches('/').to_string();
+            }
+        }
         st
     }
 
@@ -281,6 +341,28 @@ async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
         ("display_name", s("Auto-Free")),
         ("object", s("model")),
     ])];
+    if st.transport == Transport::Cloud && !license.is_empty() {
+        match cloud_models_cached(&st, &license).await {
+            Ok(list) => {
+                for m in list {
+                    let mut entry: Vec<(String, J)> = vec![
+                        ("id".to_string(), s(short_model_id(&m.model_id))),
+                        ("object".to_string(), s("model")),
+                    ];
+                    if !m.display_name.is_empty() {
+                        entry.push(("display_name".to_string(), s(&m.display_name)));
+                    }
+                    data.push(J::Obj(entry));
+                }
+            }
+            Err(e) => {
+                eprintln!("comate-plugin: 云模型目录失败，回退硬编码目录: {e}");
+                data.extend(fallback_short_models());
+            }
+        }
+        let body = obj(vec![("data", J::Arr(data)), ("object", s("list"))]).to_go() + "\n";
+        return ([(header::CONTENT_TYPE, "application/json")], body).into_response();
+    }
     let use_live = !license.is_empty() && st.zulu_path.is_some();
     if use_live {
         let zulu_path = st.zulu_path.clone().unwrap_or_default();
@@ -307,6 +389,93 @@ async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
     }
     let body = obj(vec![("data", J::Arr(data)), ("object", s("list"))]).to_go() + "\n";
     ([(header::CONTENT_TYPE, "application/json")], body).into_response()
+}
+
+/// 云模型目录（10 分钟缓存）。失败不缓存，下次重试。
+async fn cloud_models_cached(
+    st: &AppState,
+    license: &str,
+) -> Result<Vec<cloud::CloudModel>, String> {
+    {
+        let cache = st.cloud_models.lock().await;
+        if let Some((at, list)) = cache.as_ref() {
+            if at.elapsed() < MODELS_CACHE_TTL {
+                return Ok(list.clone());
+            }
+        }
+    }
+    let client = cloud::CloudClient::new(&st.cloud_base, license);
+    let list = client.list_models().await.map_err(|e| e.message)?;
+    let mut cache = st.cloud_models.lock().await;
+    *cache = Some((Instant::now(), list.clone()));
+    Ok(list)
+}
+
+fn cloud_provider(m: &cloud::CloudModel) -> String {
+    if m.provider.trim().is_empty() {
+        "anthropic".to_string()
+    } else {
+        m.provider.clone()
+    }
+}
+
+/// 把客户端传来的短名/显示名/完整 id 解析成云端的精确 modelId。
+///
+/// 云端 `modelKey` **必须**是带哈希后缀的完整 `modelId`，用 displayName 会报
+/// `model.unavailable`（Comate2API 与 magpie 都踩过）。`auto`/空 → 目录里的默认模型。
+/// 目录拉不到时的兜底匹配（只按完整 id / 去后缀短名）。
+fn fallback_model_match(requested: &str) -> Option<String> {
+    let want = requested.trim();
+    if want.is_empty() {
+        return Some(FALLBACK_MODELS[0].to_string());
+    }
+    for id in FALLBACK_MODELS {
+        if id.eq_ignore_ascii_case(want) || short_model_id(id).eq_ignore_ascii_case(want) {
+            return Some(id.to_string());
+        }
+    }
+    None
+}
+
+async fn resolve_cloud_model(
+    st: &AppState,
+    license: &str,
+    requested: &str,
+) -> Result<(String, String), String> {
+    let list = match cloud_models_cached(st, license).await {
+        Ok(l) => l,
+        Err(e) => {
+            // 目录服务挂了至少让明确写了模型名的请求还能跑
+            if let Some(id) = fallback_model_match(requested) {
+                eprintln!("comate-plugin: 云模型目录失败（{e}），按内置表解析 {requested:?}");
+                return Ok((id, "anthropic".to_string()));
+            }
+            return Err(e);
+        }
+    };
+    if list.is_empty() {
+        return Err("云模型目录为空".to_string());
+    }
+    let want = requested.trim();
+    if want.is_empty() || want.eq_ignore_ascii_case("auto") || want.eq_ignore_ascii_case("auto-free")
+    {
+        let m = list
+            .iter()
+            .find(|m| m.is_default)
+            .or_else(|| list.first())
+            .expect("非空");
+        return Ok((m.model_id.clone(), cloud_provider(m)));
+    }
+    for m in &list {
+        if m.model_id.eq_ignore_ascii_case(want)
+            || m.model_type.eq_ignore_ascii_case(want)
+            || m.display_name.eq_ignore_ascii_case(want)
+        {
+            return Ok((m.model_id.clone(), cloud_provider(m)));
+        }
+    }
+    let avail: Vec<&str> = list.iter().map(|m| m.model_type.as_str()).collect();
+    Err(format!("模型不存在或不可用: {want}（可用：{}）", avail.join(", ")))
 }
 
 /// 10 分钟模型目录缓存（Go `cachedModels`）；`None` = `list-model` 输出 JSON `null`。
@@ -394,6 +563,13 @@ async fn handle_chat(State(st): State<Arc<AppState>>, method: Method, req: Reque
             "no_license",
         );
     }
+    let raw = read_capped_body(req.into_body(), MAX_BODY_BYTES).await;
+
+    // ---- 云直连（默认）：不依赖本机 zulu，支持客户端工具 ----
+    if st.transport == Transport::Cloud {
+        return handle_chat_cloud(st, license, &raw, start).await;
+    }
+
     let zulu_path = match st.zulu_path.clone() {
         Some(p) => p,
         None => {
@@ -411,7 +587,6 @@ async fn handle_chat(State(st): State<Arc<AppState>>, method: Method, req: Reque
         }
     };
 
-    let raw = read_capped_body(req.into_body(), MAX_BODY_BYTES).await;
     let parsed = match godecode::decode_chat_request(&raw) {
         Ok(p) => p,
         Err(e) => {
@@ -447,6 +622,241 @@ async fn handle_chat(State(st): State<Arc<AppState>>, method: Method, req: Reque
         handle_chat_stream(&st, &zulu_path, &license, upstream_body, model_label, start).await
     } else {
         handle_chat_once(&st, &zulu_path, &license, upstream_body, model_label, start).await
+    }
+}
+
+// ---------- 云直连：chat.completions ----------
+
+/// 云直连的一轮对话（流式/非流式）。
+async fn handle_chat_cloud(
+    st: Arc<AppState>,
+    license: String,
+    raw: &[u8],
+    start: Instant,
+) -> Response {
+    let req: ChatRequest = match cloud_chat::parse_chat_request(raw) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("comate-plugin: 云直连 400 {:?} {e}", start.elapsed());
+            return write_error(
+                StatusCode::BAD_REQUEST,
+                &format!("请求体解析失败: {e}"),
+                "invalid_request",
+            );
+        }
+    };
+    let model_label = if req.model.is_empty() {
+        "auto".to_string()
+    } else {
+        req.model.clone()
+    };
+    let (model_id, provider) = match resolve_cloud_model(&st, &license, &req.model).await {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("comate-plugin: 云直连 model={model_label} 400 {e} {:?}", start.elapsed());
+            return write_error(StatusCode::BAD_REQUEST, &e, "invalid_request");
+        }
+    };
+    let active: Vec<ToolDef> = cloud_chat::active_tools(&req);
+    let client = cloud::CloudClient::new(&st.cloud_base, &license);
+    let prepared =
+        match cloud_chat::prepare_turn(&client, &req, &model_id, &provider, &active, &st.sessions)
+            .await
+        {
+            Ok(p) => p,
+            Err(e) => {
+                let status = if e.status == 400 {
+                    StatusCode::BAD_REQUEST
+                } else {
+                    StatusCode::BAD_GATEWAY
+                };
+                eprintln!(
+                    "comate-plugin: 云直连 model={model_label} {} {:?} {}",
+                    e.status,
+                    start.elapsed(),
+                    e.message
+                );
+                return write_error(status, &e.message, "upstream_error");
+            }
+        };
+
+    if req.stream {
+        cloud_stream(st, license, prepared, active, model_label, start).await
+    } else {
+        cloud_once(&st, license, prepared, &active, model_label, start).await
+    }
+}
+
+/// 非流式：读完上游，拼标准 chat.completion。
+async fn cloud_once(
+    st: &AppState,
+    license: String,
+    prepared: cloud_chat::PreparedTurn,
+    active: &[ToolDef],
+    model_label: String,
+    start: Instant,
+) -> Response {
+    let id = new_id();
+    let created = unix_now();
+    let conv = prepared.conversation_id;
+    let task = prepared.task_id;
+    let model_id = prepared.model_id.clone();
+    let mut reader = CloudReader::new(id, model_label.clone(), created);
+    if let Err(e) = cloud_chat::read_all(prepared.resp, &mut reader, active).await {
+        eprintln!(
+            "comate-plugin: 云直连 once model={model_label} 502 {:?} {e}",
+            start.elapsed()
+        );
+        return write_error(StatusCode::BAD_GATEWAY, &e, "upstream_error");
+    }
+    record_cloud_bindings(st, &license, &model_id, conv, task, &reader);
+    let body = cloud_chat::complete_response(
+        &reader.id,
+        &model_label,
+        reader.created,
+        &reader.content,
+        &reader.reasoning,
+        &reader.calls,
+        reader.usage,
+    ) + "\n";
+    ([(header::CONTENT_TYPE, "application/json")], body).into_response()
+}
+
+/// 流式：先读到「首个输出」或上游结束（首字之前失败还能回 502），再边读边下发。
+async fn cloud_stream(
+    st: Arc<AppState>,
+    license: String,
+    prepared: cloud_chat::PreparedTurn,
+    active: Vec<ToolDef>,
+    model_label: String,
+    start: Instant,
+) -> Response {
+    let id = new_id();
+    let created = unix_now();
+    let conv = prepared.conversation_id;
+    let task = prepared.task_id;
+    let model_id = prepared.model_id.clone();
+    let mut reader = CloudReader::new(id, model_label.clone(), created);
+    let mut scanner = LineScanner::new(MAX_TOKEN);
+    let mut stream = prepared.resp.bytes_stream();
+
+    // 阶段一：读到首个可下发块（正文/思考）或结束为止。
+    while !reader.committed && !reader.ended {
+        match stream.next().await {
+            None => break,
+            Some(Err(e)) => {
+                if reader.error.is_empty() {
+                    reader.error = format!("上游 SSE 中断: {e}");
+                }
+                break;
+            }
+            Some(Ok(chunk)) => {
+                for line in scanner.push(&chunk) {
+                    reader.feed(&line);
+                }
+            }
+        }
+    }
+
+    if reader.committed {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(16);
+        let first = cloud_chat::take_out(&mut reader);
+        let _ = tx.send(Ok(Bytes::from(first))).await;
+        tokio::spawn(async move {
+            let mut reader = reader;
+            let mut scanner = scanner;
+            let mut stream = stream;
+            while !reader.ended {
+                match stream.next().await {
+                    None => break,
+                    Some(Err(e)) => {
+                        if reader.error.is_empty() {
+                            reader.error = format!("上游 SSE 中断: {e}");
+                        }
+                        break;
+                    }
+                    Some(Ok(chunk)) => {
+                        for line in scanner.push(&chunk) {
+                            reader.feed(&line);
+                        }
+                        if !reader.out.is_empty() {
+                            let out = cloud_chat::take_out(&mut reader);
+                            if tx.send(Ok(Bytes::from(out))).await.is_err() {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(tail) = scanner.finish() {
+                reader.feed(&tail);
+            }
+            if let Err(e) = reader.finish_frames(&active) {
+                if reader.error.is_empty() {
+                    reader.error = e;
+                }
+            }
+            record_cloud_bindings(&st, &license, &model_id, conv, task, &reader);
+            if !reader.error.is_empty() {
+                eprintln!(
+                    "comate-plugin: 云直连 stream model={model_label} 上游错误 {:?} {}",
+                    start.elapsed(),
+                    reader.error
+                );
+            }
+            let out = cloud_chat::take_out(&mut reader);
+            if !out.is_empty() {
+                let _ = tx.send(Ok(Bytes::from(out))).await;
+            }
+        });
+        return sse_response(Body::from_stream(tokio_stream_from(rx)));
+    }
+
+    // 阶段二之前就结束了：没有下发任何块，可以如实回 502。
+    if let Some(tail) = scanner.finish() {
+        reader.feed(&tail);
+    }
+    if !reader.error.is_empty() {
+        eprintln!(
+            "comate-plugin: 云直连 stream model={model_label} 502 {:?} {}",
+            start.elapsed(),
+            reader.error
+        );
+        return sse_error(StatusCode::BAD_GATEWAY, &reader.error);
+    }
+    if let Err(e) = reader.finish_frames(&active) {
+        if reader.error.is_empty() {
+            reader.error = e;
+        }
+    }
+    record_cloud_bindings(&st, &license, &model_id, conv, task, &reader);
+    let out = cloud_chat::take_out(&mut reader);
+    sse_response(Body::from_stream(tokio_stream_from_bytes(out)))
+}
+
+/// 把本轮的每个工具调用登记成「可续接会话」，下一轮带 tool 结果回来时用它。
+fn record_cloud_bindings(
+    st: &AppState,
+    _license: &str,
+    model_id: &str,
+    conversation_id: i64,
+    task_id: i64,
+    reader: &CloudReader,
+) {
+    for c in &reader.calls {
+        let Some(native) = reader.native.iter().find(|n| n.id == c.id) else {
+            continue;
+        };
+        st.sessions.record(Binding {
+            tool_call_id: c.id.clone(),
+            conversation_id,
+            task_id,
+            model_id: model_id.to_string(),
+            native_id: native.id.clone(),
+            native_name: native.name.clone(),
+            params: Value::Object(native.input.clone()),
+            at: Instant::now(),
+        });
     }
 }
 
