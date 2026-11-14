@@ -367,6 +367,9 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
 - **根因三：登录态两个账号**。`~/.comate/cli-login.json`（CLI）与
   `%APPDATA%\Comate\User\settings.json` 的 `baidu.comate.license`（IDE）这次不是同一个号；
   用户在用/买会员的是 IDE 那个。解析顺序改为 `COMATE_LICENSE` → IDE settings → cli-login。
+  **2026-11-15 用户确认：会员是充在「百度搭子」的，权益落在 IDE 登录的百度账号上**——
+  也就是代理默认用的那个；启动日志会打印「来源 ide-settings（账号 xxx）」并警告两个号不同，
+  要换号设 `COMATE_LICENSE`。账号名只进本机日志，**不进仓库**。
 - **`zulu serve` 是单例**：读 `~/.comate/zulu-serve.pid`，命中就「复用」并立即退出，
   **不看 `--port`/`--license`**（实测 `serve --port 8892` 回 `{"port":8792,"reused":true}`）。
   IDE 自己拉过 serve（如 8779）时我们 spawn 的进程原地退出、8792 永不健康。

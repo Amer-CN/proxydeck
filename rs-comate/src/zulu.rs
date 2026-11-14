@@ -41,8 +41,8 @@ pub fn ide_settings_path() -> Option<PathBuf> {
 /// 从 IDE 设置里读 `baidu.comate.license`（Comate 登录态）。
 ///
 /// 2026-11-15 实测：更新后 `cli-login.json`（CLI 登录）与 IDE 设置里是**两个不同账号**
-/// （`de500679…`/勤奋的Amer 与 `875914f0…`/我比尼玛还愛尼）。用户在用的、买会员的是 IDE 那个，
-/// 所以生产环境优先读它；`cli-login.json` 只作兜底。
+/// （CLI 的旧号与 IDE 当前号；具体值不入库，本机自己看两个文件即可）。
+/// 用户在用的、买会员的是 IDE 那个，所以生产环境优先读它；`cli-login.json` 只作兜底。
 pub fn ide_license_at(path: &Path) -> String {
     let bytes = match std::fs::read(path) {
         Ok(b) => b,
@@ -91,6 +91,48 @@ impl LicenseSource {
             LicenseSource::File(p) => read_license_at(p),
         }
     }
+}
+
+/// 从 IDE 设置里读 `baidu.comate.username`（**只用于启动日志**，别写进仓库/文档）。
+pub fn ide_username_at(path: &Path) -> String {
+    let Ok(bytes) = std::fs::read(path) else {
+        return String::new();
+    };
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(strip_utf8_bom(&bytes)) else {
+        return String::new();
+    };
+    value
+        .as_object()
+        .and_then(|m| m.get("baidu.comate.username"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
+/// 按优先级解析登录态，并返回「命中的是与哪个来源」——启动日志用它告诉用户
+/// 现在吃的是哪个号（更新后 IDE 号与 CLI 号可能不是同一个，会员只在一个号上）。
+pub fn resolve_license_with_source(sources: &[LicenseSource]) -> (String, String) {
+    for s in sources {
+        let v = s.read();
+        if v.is_empty() {
+            continue;
+        }
+        let desc = match s {
+            LicenseSource::Env(n) => format!("env:{n}"),
+            LicenseSource::IdeSettings(p) => {
+                let user = ide_username_at(p);
+                if user.is_empty() {
+                    format!("ide-settings:{}", p.display())
+                } else {
+                    format!("ide-settings（账号 {user}）")
+                }
+            }
+            LicenseSource::File(p) => format!("cli-login:{}", p.display()),
+        };
+        return (v, desc);
+    }
+    (String::new(), "无".to_string())
 }
 
 /// 按优先级解析登录态；全空返回 ""。

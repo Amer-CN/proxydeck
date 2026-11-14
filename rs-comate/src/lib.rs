@@ -1498,6 +1498,17 @@ pub async fn run(args: Args) -> Result<(), String> {
         "comate-plugin: [rust rewrite] starting on {}:{} (upstream={})",
         args.host, args.port, args.upstream
     );
+    let ide_license = zulu::ide_settings_path()
+        .map(|p| zulu::ide_license_at(&p))
+        .unwrap_or_default();
+    let cli_license = zulu::read_license_at(&zulu::license_path());
+    if !ide_license.is_empty() && !cli_license.is_empty() && ide_license != cli_license {
+        // 只报「不同」，绝不打印任一边的值——两个号可能一个是会员一个是免费号。
+        println!(
+            "comate-plugin: 注意：IDE 登录号与 cli-login 号不是同一个，当前按优先级用 IDE 号；\
+             会员权益跟百度账号走，要换号请设 COMATE_LICENSE"
+        );
+    }
     // 只报来源与存在性，**绝不打印登录态内容**
     let source_desc: Vec<String> = state
         .license_sources
@@ -1513,9 +1524,11 @@ pub async fn run(args: Args) -> Result<(), String> {
         })
         .collect();
     println!(
-        "comate-plugin: 登录态来源 {} → 命中={}；zulu CLI {}",
+        "comate-plugin: 登录态来源 {} → 命中={}（来源 {}）；transport={:?}；zulu CLI {}",
         source_desc.join(" | "),
         !state.license().is_empty(),
+        zulu::resolve_license_with_source(&state.license_sources).1,
+        state.transport,
         state
             .zulu_path
             .as_ref()
