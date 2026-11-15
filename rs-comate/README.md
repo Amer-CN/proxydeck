@@ -56,6 +56,10 @@ POST .../v2/execute                                             → SSE
 - 错误语义：`EXCEPTION` 元素 → 502 人话；未知模型 → 400 并列可用清单；
   首块之前失败才回 502，已下发后只结束流。
 
+**工具名解析**：模型会把客户端工具**全名**写进 `server_name`（`mcp__rea__xxx`）、
+`tool_name` 只给短名。映射按短名做 `__` 后缀唯一匹配，不校验 `server_name`；
+认不出的名字原样透传（客户端回 unknown tool，模型自行纠正）——严格匹配会让整批调用
+被丢弃，表现成「只有思考、然后停」。排查时设 `COMATE_DEBUG_FRAMES=<文件>` 可落盘原始帧。
 **没做**（如实登记）：图片输入（`attachImages` 上传链路）、`max_tokens`/`temperature`
 透传（实测 `modelParams.maxTokens` 被上游接受但**忽略**，透传=假承诺）、
 `response_format` 结构化输出、多轮跨请求的会话复用（每轮新建会话，只有工具续接复用）、

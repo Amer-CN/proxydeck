@@ -329,25 +329,44 @@ pub fn map_native_calls(
     for c in native {
         let is_mcp = c.name == "UseMcpTool" || c.name == "use_mcp_tool";
         let (name, args) = if is_mcp {
-            let server = c
-                .input
-                .get("server_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if !server.is_empty() && server != MCP_SERVER {
-                return Err(format!("上游调用了未知 MCP 服务器: {server}"));
-            }
-            let name = c
+            // server_name 不能当校验条件：实测模型会把客户端工具全名塞进
+            // server_name（如 mcp__rea__inspect_kernel_build_config），只给
+            // tool_name 短名（inspect_kernel_build_config）。按短名解析，
+            // 匹配不上就原样透传，让客户端回「未知工具」给模型自己纠正——
+            // 之前这里直接 Err 会把整批调用丢掉，表现成「只有思考、没有正文」。
+            let mut name = c
                 .input
                 .get("tool_name")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
+                .trim()
                 .to_string();
             if name.is_empty() {
-                return Err("上游工具调用缺少 tool_name".to_string());
+                // 兼容只给 server_name 的形态（可能是短名，也可能是 mcp__x__y）。
+                let server = c
+                    .input
+                    .get("server_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
+                if server.is_empty() || server == MCP_SERVER {
+                    return Err("上游工具调用缺少 tool_name".to_string());
+                }
+                name = server.to_string();
             }
             if !active.iter().any(|t| t.name == name) {
-                return Err(format!("上游调用了未声明的工具: {name}"));
+                let suffix = format!("__{name}");
+                let mut hits: Vec<&str> = active
+                    .iter()
+                    .filter(|t| t.name.ends_with(&suffix))
+                    .map(|t| t.name.as_str())
+                    .collect();
+                hits.sort_unstable();
+                hits.dedup();
+                if hits.len() == 1 {
+                    name = hits[0].to_string();
+                }
+                // 认不出来：保留原样（客户端会返回 unknown tool，模型可重试）。
             }
             let raw = c.input.get("arguments").cloned().unwrap_or(Value::Null);
             let args = match raw {
@@ -556,6 +575,7 @@ impl CloudReader {
 
     /// 吃一行 SSE。
     pub fn feed(&mut self, line: &[u8]) {
+        dump_frame(line, "raw");
         let Some(f) = event_from_line_like(line) else {
             return;
         };
@@ -592,7 +612,12 @@ impl CloudReader {
             k if k.starts_with("FUNCTION_CALL_") || k.starts_with("TOOL_CALL_") => {
                 self.tools.consume(k, &f.tool_use);
             }
-            _ => {}
+            other => {
+                // 只在开诊断时落盘：未知帧类型往往就是「正文没转出来」的元凶。
+                if !other.is_empty() {
+                    dump_frame(other.as_bytes(), "NOTE unknown-kind");
+                }
+            }
         }
         if f.end {
             self.ended = true;
@@ -602,6 +627,11 @@ impl CloudReader {
     /// 结束块：tool_calls（若有）→ finish_reason → usage → `[DONE]`。
     pub fn finish_frames(&mut self, active: &[ToolDef]) -> Result<(), String> {
         let native = self.tools.take_finished(true);
+        let note_counts = (
+            self.content.chars().count(),
+            self.reasoning.chars().count(),
+            native.len(),
+        );
         if !native.is_empty() {
             self.native = native.clone();
             match map_native_calls(native, active) {
@@ -613,6 +643,20 @@ impl CloudReader {
                 }
             }
         }
+        dump_frame(
+            format!(
+                "NOTE finish: content={} reasoning={} native_calls={} calls={} usage={} error={:?} ended={}",
+                note_counts.0,
+                note_counts.1,
+                note_counts.2,
+                self.calls.len(),
+                self.usage.is_some(),
+                self.error,
+                self.ended
+            )
+            .as_bytes(),
+            "note",
+        );
         if !self.calls.is_empty() {
             let chunk = chunk_tool_calls(&self.id, &self.model, self.created, &self.calls);
             self.push_frame(chunk);
@@ -692,6 +736,21 @@ fn chunk_entry(id: &str, model: &str, created: i64, delta: J) -> String {
     .to_go()
 }
 
+/// 诊断开关：`COMATE_DEBUG_FRAMES=<文件路径>` 时把上游 SSE 帧与关键摘要追加到该文件。
+/// 只用于排查「只有 reasoning 没有正文」「空响应」这类问题；未设置时零成本，不改变转发行为。
+pub fn dump_frame(line: &[u8], tag: &str) {
+    let Some(path) = std::env::var_os("COMATE_DEBUG_FRAMES") else {
+        return;
+    };
+    let path = std::path::PathBuf::from(path);
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        use std::io::Write;
+        let _ = f.write_all(tag.as_bytes());
+        let _ = f.write_all(b"\t");
+        let _ = f.write_all(line);
+        let _ = f.write_all(b"\n");
+    }
+}
 /// 非流式完整响应（带 reasoning / tool_calls / usage）。
 pub fn complete_response(
     id: &str,
@@ -883,7 +942,7 @@ mod tests {
         assert_eq!(calls[0].name, "get_weather");
         assert_eq!(calls[0].arguments, "{\"city\":\"上海\"}");
 
-        // 未声明的工具 → 报错
+        // 未声明的工具：原样透传（客户端回 unknown tool，模型自己纠正），不再整批丢弃
         let mut bad = Map::new();
         bad.insert("tool_name".into(), Value::String("nope".into()));
         let native = vec![PendingToolCall {
@@ -892,7 +951,58 @@ mod tests {
             input: bad,
             ended: true,
         }];
-        assert!(map_native_calls(native, &[tool("get_weather")]).is_err());
+        let calls = map_native_calls(native, &[tool("get_weather")]).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "nope");
+    }
+
+    /// 2026-11-15 真机现场：模型把客户端工具全名塞进 `server_name`，只给短名
+    /// `tool_name`（`mcp__rea__inspect_kernel_build_config` / `inspect_kernel_build_config`）。
+    /// 旧实现按 server_name 校验 + 全名精确匹配，把整批调用丢掉 → 只有 reasoning、
+    /// 然后 stop（DSH 侧表现为「说到一半断流」/ 空响应）。
+    #[test]
+    fn maps_short_tool_name_whose_server_name_carries_full_name() {
+        let full = "mcp__rea__inspect_kernel_build_config";
+        let mut input = Map::new();
+        input.insert("server_name".into(), Value::String(full.into()));
+        input.insert(
+            "tool_name".into(),
+            Value::String("inspect_kernel_build_config".into()),
+        );
+        input.insert(
+            "arguments".into(),
+            Value::String(r#"{"path":"C:\\x\\kernel.build"}"#.into()),
+        );
+        let native = vec![PendingToolCall {
+            id: "call_x".into(),
+            name: "UseMcpTool".into(),
+            input,
+            ended: true,
+        }];
+        let calls = map_native_calls(native, &[tool(full)]).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, full, "短名必须唯一后缀匹配回全名");
+        assert_eq!(calls[0].arguments, r#"{"path":"C:\\x\\kernel.build"}"#);
+    }
+
+    #[test]
+    fn maps_call_when_server_name_is_arbitrary() {
+        let mut input = Map::new();
+        input.insert("server_name".into(), Value::String("whatever".into()));
+        input.insert("tool_name".into(), Value::String("get_weather".into()));
+        input.insert(
+            "arguments".into(),
+            Value::String("{\"city\":\"上海\"}".into()),
+        );
+        let native = vec![PendingToolCall {
+            id: "c2".into(),
+            name: "UseMcpTool".into(),
+            input,
+            ended: true,
+        }];
+        let calls = map_native_calls(native, &[tool("get_weather")]).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "get_weather");
     }
 
     #[test]

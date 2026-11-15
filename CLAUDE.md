@@ -417,6 +417,12 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
 - **测试**：`tests/cloud_contract.rs` 6 条（进程内假云）锁三步协议、完整 modelId、
   auth 头、tool_calls 往返、续接 query 为空、未知模型 400；单测 +6（帧解析、
   参数归并、真机帧序列、会话绑定）。zulu 老路径的 3 条黄金 + 10 条合同**原样全绿**。
+- **工具名解析的坑（2026-11-15 真机）**：模型会把客户端工具**全名**塞进 `server_name`
+  （如 `mcp__rea__inspect_kernel_build_config`），`tool_name` 只给短名
+  （`inspect_kernel_build_config`）。映射**不能校验 server_name、不能只做全名精确匹配**：
+  按短名做 `__` 后缀唯一匹配；认不出来的名字**原样透传**（客户端回 unknown tool，模型自己纠正）。
+  旧实现两项都严 → 整批调用被丢 → 只剩 reasoning 然后 `stop`（DSH 里就是「说到一半断流」/空响应）。
+  诊断开关 `COMATE_DEBUG_FRAMES=<文件>` 会把上游原始帧与每次结束摘要落盘（未设置时零成本）。
 - **没做**：图片输入、`max_tokens`/`temperature` 透传、`response_format`、
   跨请求会话复用（工具续接除外）、会员积分展示（余额端点要 Cookie）。
 
