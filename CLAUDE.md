@@ -428,6 +428,10 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   原样 → 尾逗号/截断修补 → 实在不行退化成 `{}`，由客户端按自己的 schema 校验回给模型。
   **不依赖任何客户端特性**（DSH 的 ToolArgsError 只是其中一种；Cursor/Codex/opencode 同样成立）。
   插件日志每个请求一行 `[comate] finish …`，坏参数另打 `[comate] bad-args …`。
+- **只预告不调工具（2026-11-15 第三例）**：弱模型（`ernie-5.5-flash-preview`）在大工具列表下会
+  回一句「I'll start by…」就结束（finish 里 `content=78 native_calls=0`，上游正常收尾）。
+  代理侧在 `agentPrompt` 里补了硬约束：决定用工具就必须在**同一条回复**里发出调用，
+  不许只给计划/预告。另外该模型当时上游过载（同日志两次 502「请求较多」）。
 - **没做**：图片输入、`max_tokens`/`temperature` 透传、`response_format`、
   跨请求会话复用（工具续接除外）、会员积分展示（余额端点要 Cookie）。
 

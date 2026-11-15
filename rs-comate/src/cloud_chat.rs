@@ -281,7 +281,9 @@ pub fn build_agent_info(active: &[ToolDef], choice: &ToolChoice, parallel: bool)
                 "\nYou MUST call at least one of these functions in this response before providing a final answer.",
             ),
             _ => prompt.push_str(
-                "\nCall a function when needed; otherwise answer directly. Existing tool results are already in the history.",
+                "\nCall a function when needed; otherwise answer directly. Existing tool results are already in the history.\n\
+                 If you decide to use a tool, emit the tool call in the SAME response — never reply with only a plan, \n\
+                 announcement, or an \"I will…\" sentence without calling the tool.",
             ),
         }
         if !parallel {
