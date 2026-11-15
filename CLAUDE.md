@@ -582,9 +582,9 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
 - **本版主线（2026-11-15，v4.9.0）**：Comate 改走云直连（工具调用、真实 usage、
   2s 级响应），zulu 路线留作兜底并适配 1.8.1 新协议；另修 build-rs.ps1 的
   `--version` 自检在无控制台宿主下恒为空的假失败。细节只在 CHANGELOG/提交里。
-- **服务现状**（2026-11-15 实测）：8788 团结、8793 码道在监听（跑在换装前的旧镜像上，
-  功能不受本版影响）；8786 Comate 未常驻；GUI 未运行。新 exe（v4.9.0）已落位
-  `F:\AIXM\proxydeck\ProxyDeck.exe`，启动 GUI 后逐个拉杆点火即可；**重启 GUI 不会自动点火**。
+- **服务现状**（2026-11-15 15:08 起实测）：GUI（PID 17216）+ 新 exe `v4.9.0` 在跑，
+  8786 Comate / 8788 团结 / 8793 码道 三个拉杆都已点火；8786 走云直连，真机 1.7s 响应
+  带真实 usage。后端是独立常驻子进程，关 GUI 不死；**重启 GUI 不会自动点火**，需逐个拉杆。
 - **账号池内存态**：Dead/冷却/调用计数只在内存（重启清零），只有 Enabled/Removed 落盘；
   上游 reset 时点不落盘，重启丢一次无害。`codebuddy-pool(-intl).json` 已 gitignore。
   码道侧不同：续期结果写 overlay（`codearts-refreshed.json`）并同步回写账号文件，
@@ -626,10 +626,10 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   （版本号必须唯一且严格降序），改坏会直接红。
 - `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
-- `.work/` 现状（2026-11-15 盘点，gitignore 不入库）：`refs/` 新增 Comate 参考实现
-  clone（Comate2API、magpie-comate-auth ×2）；`comate-update-2026-11-15/`、
-  `comate-cloud-2026-11-15/` 是本轮抓包/探针证据；另有码道与其它会话的历史文件未动。
-  清场清单见当次洁癖汇报。
+- `.work/` 现状（2026-11-15 洁癖清场后，gitignore 不入库）：`refs/` 保留 Comate 参考实现
+  clone（Comate2API、magpie-comate-auth ×2）；本轮抓包/探针目录（`comate-update-*`、
+  `comate-cloud-*`）与 release 记事已删（结论已进 README/CHANGELOG）；码道与其它会话的
+  历史文件未动。
 - **构建缓存纪律（2026-10-30 用户裁决：磁盘优先）**：Rust 的 target 曾散落成
   `E:\cargo-target\rs-*` 9 份，同一张依赖图各编一遍，12 天攒到 67GB。2026-10-30
   整目录清场（实测释放 67.14GB，E: 11.8MB → 62.5GiB）后改为：
