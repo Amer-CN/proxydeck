@@ -182,10 +182,18 @@ Write-Host ""
 Write-Host "[3/5] run: --version"
 $oldDataDir = $env:PROXYDECK_DATA_DIR
 if ($DataDir) { $env:PROXYDECK_DATA_DIR = $DataDir }
+$verFile = Join-Path $env:TEMP ("proxydeck-version-" + [guid]::NewGuid().ToString('N') + ".txt")
 try {
-  $verOut = & $exe --version 2>&1
+  # GUI-subsystem exe does NOT attach its stdout to a PowerShell pipe when the host
+  # has no console: `& $exe --version 2>&1` returns empty and the line shows up
+  # later on the console (observed 2026-11-15 on pwsh 7 AND Windows PowerShell 5.1).
+  # Redirect through cmd into a file: that path is console-independent and stable.
+  $verLine = "`"$exe`" --version > `"$verFile`" 2>&1"
+  & $env:ComSpec /c $verLine
   $verCode = $LASTEXITCODE
+  $verOut = @(Get-Content $verFile -ErrorAction SilentlyContinue)
 } finally {
+  Remove-Item $verFile -ErrorAction SilentlyContinue
   if ($DataDir) {
     if ($null -eq $oldDataDir) { Remove-Item Env:\PROXYDECK_DATA_DIR -ErrorAction SilentlyContinue }
     else { $env:PROXYDECK_DATA_DIR = $oldDataDir }
