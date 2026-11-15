@@ -627,6 +627,26 @@ async fn handle_chat(State(st): State<Arc<AppState>>, method: Method, req: Reque
 
 // ---------- 云直连：chat.completions ----------
 
+/// 云直连一次尝试的结果：要么已经能回给客户端，要么上游过载、值得原样重试。
+enum CloudTry {
+    Done(Response),
+    Retry(String),
+}
+
+/// 上游过载/瞬断，重试一次可能就过；400/鉴权类不重试。
+fn upstream_busy(msg: &str) -> bool {
+    const MARKERS: [&str; 7] = [
+        "请求较多",
+        "响应异常",
+        "稍后重试",
+        "建议升级插件",
+        "上游 SSE 中断",
+        "error sending request",
+        "connection",
+    ];
+    MARKERS.iter().any(|m| msg.contains(m))
+}
+
 /// 云直连的一轮对话（流式/非流式）。
 async fn handle_chat_cloud(
     st: Arc<AppState>,
@@ -659,12 +679,28 @@ async fn handle_chat_cloud(
     };
     let active: Vec<ToolDef> = cloud_chat::active_tools(&req);
     let client = cloud::CloudClient::new(&st.cloud_base, &license);
-    let prepared =
-        match cloud_chat::prepare_turn(&client, &req, &model_id, &provider, &active, &st.sessions)
-            .await
+
+    // 上游现在会间歇性回「请求较多 / 响应异常」（HTTP 200 + EXCEPTION 帧）。
+    // DSH 只重试两三次就放弃，用户看到的就是「又断了」。这里由代理自己扛：
+    // 首字之前失败 → 重新 prepare（新一轮 task）+ 重试，最多 3 次。
+    const ATTEMPTS: usize = 3;
+    let mut last_err = String::new();
+    for attempt in 1..=ATTEMPTS {
+        let prepared = match cloud_chat::prepare_turn(
+            &client, &req, &model_id, &provider, &active, &st.sessions,
+        )
+        .await
         {
             Ok(p) => p,
             Err(e) => {
+                if e.status != 400 && attempt < ATTEMPTS && upstream_busy(&e.message) {
+                    last_err = e.message;
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        800 * attempt as u64,
+                    ))
+                    .await;
+                    continue;
+                }
                 let status = if e.status == 400 {
                     StatusCode::BAD_REQUEST
                 } else {
@@ -680,10 +716,43 @@ async fn handle_chat_cloud(
             }
         };
 
+        let outcome = if req.stream {
+            cloud_stream(
+                st.clone(),
+                license.clone(),
+                prepared,
+                active.clone(),
+                model_label.clone(),
+                start,
+            )
+            .await
+        } else {
+            cloud_once(&st, license.clone(), prepared, &active, model_label.clone(), start).await
+        };
+        match outcome {
+            CloudTry::Done(resp) => return resp,
+            CloudTry::Retry(msg) => {
+                last_err = msg;
+                if attempt < ATTEMPTS {
+                    eprintln!(
+                        "comate-plugin: 云直连 model={model_label} 上游过载，第 {attempt}/{ATTEMPTS} 次重试：{last_err}"
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        1000 * attempt as u64,
+                    ))
+                    .await;
+                    continue;
+                }
+            }
+        }
+    }
+    eprintln!(
+        "comate-plugin: 云直连 model={model_label} 重试 {ATTEMPTS} 次仍失败：{last_err}"
+    );
     if req.stream {
-        cloud_stream(st, license, prepared, active, model_label, start).await
+        sse_error(StatusCode::BAD_GATEWAY, &last_err)
     } else {
-        cloud_once(&st, license, prepared, &active, model_label, start).await
+        write_error(StatusCode::BAD_GATEWAY, &last_err, "upstream_error")
     }
 }
 
@@ -695,7 +764,7 @@ async fn cloud_once(
     active: &[ToolDef],
     model_label: String,
     start: Instant,
-) -> Response {
+) -> CloudTry {
     let id = new_id();
     let created = unix_now();
     let conv = prepared.conversation_id;
@@ -707,7 +776,10 @@ async fn cloud_once(
             "comate-plugin: 云直连 once model={model_label} 502 {:?} {e}",
             start.elapsed()
         );
-        return write_error(StatusCode::BAD_GATEWAY, &e, "upstream_error");
+        if upstream_busy(&e) {
+            return CloudTry::Retry(e);
+        }
+        return CloudTry::Done(write_error(StatusCode::BAD_GATEWAY, &e, "upstream_error"));
     }
     record_cloud_bindings(st, &license, &model_id, conv, task, &reader);
     let body = cloud_chat::complete_response(
@@ -719,7 +791,7 @@ async fn cloud_once(
         &reader.calls,
         reader.usage,
     ) + "\n";
-    ([(header::CONTENT_TYPE, "application/json")], body).into_response()
+    CloudTry::Done(([(header::CONTENT_TYPE, "application/json")], body).into_response())
 }
 
 /// 流式：先读到「首个输出」或上游结束（首字之前失败还能回 502），再边读边下发。
@@ -730,7 +802,7 @@ async fn cloud_stream(
     active: Vec<ToolDef>,
     model_label: String,
     start: Instant,
-) -> Response {
+) -> CloudTry {
     let id = new_id();
     let created = unix_now();
     let conv = prepared.conversation_id;
@@ -809,10 +881,10 @@ async fn cloud_stream(
                 let _ = tx.send(Ok(Bytes::from(out))).await;
             }
         });
-        return sse_response(Body::from_stream(tokio_stream_from(rx)));
+        return CloudTry::Done(sse_response(Body::from_stream(tokio_stream_from(rx))));
     }
 
-    // 阶段二之前就结束了：没有下发任何块，可以如实回 502。
+    // 阶段二之前就结束了：没有下发任何块，可以如实回 502 / 交给上层重试。
     if let Some(tail) = scanner.finish() {
         reader.feed(&tail);
     }
@@ -822,7 +894,10 @@ async fn cloud_stream(
             start.elapsed(),
             reader.error
         );
-        return sse_error(StatusCode::BAD_GATEWAY, &reader.error);
+        if upstream_busy(&reader.error) {
+            return CloudTry::Retry(reader.error);
+        }
+        return CloudTry::Done(sse_error(StatusCode::BAD_GATEWAY, &reader.error));
     }
     if let Err(e) = reader.finish_frames(&active) {
         if reader.error.is_empty() {
@@ -831,7 +906,7 @@ async fn cloud_stream(
     }
     record_cloud_bindings(&st, &license, &model_id, conv, task, &reader);
     let out = cloud_chat::take_out(&mut reader);
-    sse_response(Body::from_stream(tokio_stream_from_bytes(out)))
+    CloudTry::Done(sse_response(Body::from_stream(tokio_stream_from_bytes(out))))
 }
 
 /// 把本轮的每个工具调用登记成「可续接会话」，下一轮带 tool 结果回来时用它。
@@ -1585,5 +1660,16 @@ mod tests {
         assert_eq!(st.zulu_health_url, "http://127.0.0.1:8792/health");
         assert_eq!(st.zulu_serve_port, "8792");
         assert_eq!(st.zulu_serve_timeout, Duration::from_secs(20));
+    }
+
+    #[test]
+    fn upstream_busy_markers_retry_only_transient_failures() {
+        // 真机 502 的两种文案（HTTP 200 + EXCEPTION 帧）
+        assert!(upstream_busy("抱歉，目前请求较多，我正在竭尽全力处理。"));
+        assert!(upstream_busy("当前服务响应异常，您可以稍后重试。"));
+        assert!(upstream_busy("上游 SSE 中断: error decoding response body"));
+        // 不该重试的
+        assert!(!upstream_busy("模型不存在"));
+        assert!(!upstream_busy("invalid license"));
     }
 }

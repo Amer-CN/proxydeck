@@ -435,6 +435,9 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
 - **缺工具名也不丢（2026-11-15 第四例）**：真机见过模型发了 2 个调用但 `tool_name` 缺失（名字另有归处）。
   现在依次认 `tool_name`/`toolName`/`tool`/`function`/`name`，再退 `server_name`；全空就发
   `unknown_tool` 占位（客户端回“不存在”→模型重发），绝不再整批丢弃。
+- **上游过载自动重试（2026-11-15 第五例）**：上游会间歇回 HTTP 200 + EXCEPTION「请求较多/响应异常」；
+  DSH 只重试两三次就放弃，用户看到「又断了」。代理现在在首字之前失败时自己重试 3 次
+  （重新 prepare + 退避 1s/2s），仍失败才回 502。
 - **没做**：图片输入、`max_tokens`/`temperature` 透传、`response_format`、
   跨请求会话复用（工具续接除外）、会员积分展示（余额端点要 Cookie）。
 
