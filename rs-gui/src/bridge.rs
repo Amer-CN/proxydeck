@@ -647,7 +647,9 @@ pub fn key_map_default() -> Vec<Vec<String>> {
 }
 
 /// 脸名白名单（与 ui.html 的 `SUP_FACES` 同源；2026-10-21 起含 `oc`）。
-pub const KEY_MAP_FACES: [&str; 8] = ["cmd", "tj", "comate", "cb", "qoder", "bai", "ext", "oc"];
+/// 脸名白名单（与 ui.html 的 `SUP_FACES` 同源；`md` = 码道，2026-10-26 加入 UI，
+/// 但这里漏了它——导致所有带码道的键位保存被静默拒绝、重启回默认）。
+pub const KEY_MAP_FACES: [&str; 9] = ["cmd", "md", "tj", "comate", "cb", "qoder", "bai", "ext", "oc"];
 
 /// 键位映射形态校验（1-4 键、每键 ≥1 脸、脸名白名单、一页一键）。
 pub fn key_map_valid(m: &[Vec<String>]) -> bool {
@@ -784,6 +786,17 @@ mod tests {
         assert!(
             !key_map_valid(&vec![vec!["nope".to_string()]]),
             "白名单外脸名非法"
+        );
+        // 2026-11-15：UI 的 SUP_FACES 含 `md`（码道），桥白名单漏了它，
+        // 带码道的键位保存会被静默拒绝；这里钉死允许。
+        assert!(
+            key_map_valid(&vec![
+                vec!["cmd".to_string(), "md".to_string()],
+                vec!["tj".to_string(), "comate".to_string()],
+                vec!["cb".to_string(), "qoder".to_string()],
+                vec!["ext".to_string(), "oc".to_string()],
+            ]),
+            "含 md 的键位必须合法（与 UI SUP_FACES 对齐）"
         );
         let dup = vec![
             vec!["cmd".to_string()],

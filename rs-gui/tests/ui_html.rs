@@ -191,3 +191,30 @@ fn changelog_versions_are_unique_and_strictly_descending() {
         );
     }
 }
+/// 2026-11-15：UI 的 `SUP_FACES`（可分配到键位的供应商）必须与桥的
+/// `KEY_MAP_FACES` 白名单一致。曾经 UI 加了 `md`（码道）、桥没加，
+/// 结果所有带码道的键位保存被静默拒绝、重启后回默认。
+#[test]
+fn sup_faces_match_bridge_key_map_whitelist() {
+    let html = String::from_utf8_lossy(rs_gui::uihtml::UI_HTML).to_string();
+    let start = html.find("var SUP_FACES").expect("界面里找不到 SUP_FACES");
+    let tail = &html[start..];
+    let open = tail.find('[').expect("SUP_FACES 缺 [");
+    let close = tail[open..].find(']').expect("SUP_FACES 缺 ]");
+    let list = &tail[open + 1..open + close];
+    let mut ui: Vec<String> = list
+        .split(',')
+        .map(|p| p.trim().trim_matches('\'').trim_matches('"').trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect();
+    let mut bridge: Vec<String> = rs_gui::bridge::KEY_MAP_FACES
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    ui.sort();
+    bridge.sort();
+    assert_eq!(
+        ui, bridge,
+        "UI 的 SUP_FACES 与桥 KEY_MAP_FACES 不一致（新增供应商必须两边同时加）"
+    );
+}
