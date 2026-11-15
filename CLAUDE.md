@@ -423,6 +423,10 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   按短名做 `__` 后缀唯一匹配；认不出来的名字**原样透传**（客户端回 unknown tool，模型自己纠正）。
   旧实现两项都严 → 整批调用被丢 → 只剩 reasoning 然后 `stop`（DSH 里就是「说到一半断流」/空响应）。
   诊断开关 `COMATE_DEBUG_FRAMES=<文件>` 会把上游原始帧与每次结束摘要落盘（未设置时零成本）。
+- **坏参数不丢（2026-11-15 第二例）**：模型偶尔产出非法 JSON 参数（真机：命令里的中文引号
+  没转义）。旧实现校验失败即丢弃整批 → 又是「只有思考就停」。现在**原样透传**，客户端回
+  `invalid arguments: …`，模型自行纠正。插件日志每个请求一行 `[comate] finish …`（不依赖
+  `COMATE_DEBUG_FRAMES`），能直接看出是正文空、调用空还是参数坏。
 - **没做**：图片输入、`max_tokens`/`temperature` 透传、`response_format`、
   跨请求会话复用（工具续接除外）、会员积分展示（余额端点要 Cookie）。
 

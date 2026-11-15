@@ -374,12 +374,10 @@ pub fn map_native_calls(
                 Value::Null => "{}".to_string(),
                 other => serde_json::to_string(&other).unwrap_or_else(|_| "{}".into()),
             };
-            let parsed: Value = serde_json::from_str(&args)
-                .map_err(|e| format!("工具 {name} 的 arguments 不是合法 JSON: {e}"))?;
-            if !parsed.is_object() {
-                return Err(format!("工具 {name} 的 arguments 必须是 JSON 对象"));
-            }
-            (name, serde_json::to_string(&parsed).unwrap_or_else(|_| "{}".into()))
+            // 不在这里校验参数 JSON：模型偶尔会产出坏 JSON（2026-11-15 真机：命令里
+            // 中文引号没转义）。丢掉整批调用会让这一轮只剩思考然后停；原样透传，
+            // 客户端会回 `invalid arguments: …` 给模型，它自己会改。
+            (name, args)
         } else {
             (
                 c.name.clone(),
@@ -643,7 +641,19 @@ impl CloudReader {
                 }
             }
         }
-        dump_frame(
+        // 常驻一行摘要（不依赖 COMATE_DEBUG_FRAMES）：线上再遇到「只有思考就停」
+        // 时，插件日志里能直接看出是正文空、调用空、还是参数坏。
+        println!(
+            "[comate] finish model={} content={} reasoning={} native_calls={} calls={} usage={} ended={} err={:?}",
+            self.model,
+            note_counts.0,
+            note_counts.1,
+            note_counts.2,
+            self.calls.len(),
+            self.usage.is_some(),
+            self.ended,
+            self.error
+        );        dump_frame(
             format!(
                 "NOTE finish: content={} reasoning={} native_calls={} calls={} usage={} error={:?} ended={}",
                 note_counts.0,
@@ -941,6 +951,23 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "get_weather");
         assert_eq!(calls[0].arguments, "{\"city\":\"上海\"}");
+
+        // 参数不是合法 JSON：同样透传（客户端回 invalid arguments 给模型纠正）
+        let mut bad_json = Map::new();
+        bad_json.insert("tool_name".into(), Value::String("get_weather".into()));
+        bad_json.insert(
+            "arguments".into(),
+            Value::String(r#"{"city": "上海}"#.into()),
+        );
+        let native = vec![PendingToolCall {
+            id: "c3".into(),
+            name: "UseMcpTool".into(),
+            input: bad_json,
+            ended: true,
+        }];
+        let calls = map_native_calls(native, &[tool("get_weather")]).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].arguments, r#"{"city": "上海}"#, "坏 JSON 必须原样透传");
 
         // 未声明的工具：原样透传（客户端回 unknown tool，模型自己纠正），不再整批丢弃
         let mut bad = Map::new();

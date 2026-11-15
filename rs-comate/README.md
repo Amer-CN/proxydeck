@@ -60,6 +60,9 @@ POST .../v2/execute                                             → SSE
 `tool_name` 只给短名。映射按短名做 `__` 后缀唯一匹配，不校验 `server_name`；
 认不出的名字原样透传（客户端回 unknown tool，模型自行纠正）——严格匹配会让整批调用
 被丢弃，表现成「只有思考、然后停」。排查时设 `COMATE_DEBUG_FRAMES=<文件>` 可落盘原始帧。
+参数坏掉时**不丢弃**：模型偶尔产出非法 JSON（如命令里中文引号没转义），原样透传，
+客户端会回 `invalid arguments: …` 让模型自己改；插件日志每个请求有
+`[comate] finish model=… content=… reasoning=… calls=… err=…` 一行摘要。
 **没做**（如实登记）：图片输入（`attachImages` 上传链路）、`max_tokens`/`temperature`
 透传（实测 `modelParams.maxTokens` 被上游接受但**忽略**，透传=假承诺）、
 `response_format` 结构化输出、多轮跨请求的会话复用（每轮新建会话，只有工具续接复用）、
