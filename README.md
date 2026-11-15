@@ -9,7 +9,7 @@
 [![Version](https://img.shields.io/badge/Version-v4.9.0-E8483F?style=for-the-badge)](https://github.com/Amer-CN/proxydeck/releases)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge)](#-快速开始)
 [![License](https://img.shields.io/badge/License-%E5%BC%80%E6%BA%90%E5%85%8D%E8%B4%B9-10B981?style=for-the-badge)](#%EF%B8%8F-%E5%85%B3%E4%BA%8E%E5%85%8D%E8%B4%B9%E4%B8%8E%E8%BE%B9%E7%95%8C)
-[![Size](https://img.shields.io/badge/Size-18MB-8B5CF6?style=for-the-badge)](https://github.com/Amer-CN/proxydeck/releases)
+[![Size](https://img.shields.io/badge/Size-24MB-8B5CF6?style=for-the-badge)](https://github.com/Amer-CN/proxydeck/releases)
 
 </div>
 
@@ -26,7 +26,7 @@ Agent 都能直接接——一个 exe 双击即用，零安装零配置。
 ## 🚀 快速开始
 
 1. **下载**：从 [Releases](https://github.com/Amer-CN/proxydeck/releases) 下载
-   `ProxyDeck.exe`（单文件，约 18MB，无需安装）
+   `ProxyDeck.exe`（单文件，约 24MB，无需安装）
 2. **点火**：双击打开，把 COMMAND 甲板的红色拉杆拉到最右
 3. **接入**：在你的 AI 客户端里填——
 
@@ -42,10 +42,11 @@ API Key:   你的 CommandCode Key（commandcode.ai/studio → API keys）
 | CommandCode | 55990 | API Key |
 | 团结（Codely） | 8788 | 自动读取 ~/.codely-cli 登录态 |
 | WorkBuddy（CodeBuddy） | 8787 | 自动读取桌面端登录态 |
-| Comate（百度） | 8786 | 自动读取 ~/.comate/cli-login.json |
+| Comate（百度） | 8786 | 自动读取 Comate 登录态（IDE 优先） |
 | Qoder（阿里） | 8785 | 自动读取桌面端登录态 |
 | B.AI | 8891 | 注水检测页填入密钥 |
 | VIBEX | 8790 | 自动探测或手动粘贴 token |
+| 码道（华为云） | 8793 | 自动读取桌面端登录态 |
 
 > **平台各自需要你自己的有效订阅**——本工具只做接口转换，不含任何账号资源。
 

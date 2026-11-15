@@ -23,7 +23,7 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 ├─ rs-proxy/                  COMMAND 代理（55990，三条入站协议）
 ├─ rs-tuanjie/                团结插件（8788）
 ├─ rs-codebuddy/              WorkBuddy 插件（8787 + 国际版 8789）
-├─ rs-comate/                 Comate 插件（8786；托管 zulu serve 8792）
+├─ rs-comate/                 Comate 插件（8786；云直连默认，zulu serve 8792 兜底）
 ├─ rs-qoder/                  Qoder 插件（8785）
 ├─ rs-vibex/                  VibeX 插件（8790）
 ├─ rs-bai/                    B.AI 插件（8891）
@@ -338,18 +338,21 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   activate{Skills,Commands,Subagents,Rules} / attach{Images,Files}——**没有 `tools`**。
   所以「让 ZCode/DSH 自己的工具被 comate 模型调用」在 zulu 路线无解；
   **2026-11-15 起默认改走云直连，`tool_calls` 已实测可往返**（见下节）。
-- **工作目录跟随（v3.10.5）**：插件从客户端提示词提取 `Working directory:`/`工作目录`
-  标记（`internal/clientcwd` 共享包，与 Qoder 同源），`COMATE_CWD` 可钉死、
-  `COMATE_MODE=Ask` 只读。**此前 cwd 写死 `os.TempDir()`，引擎工具在空目录里空转，
-  表现与纯聊天模型无法区分——2026-09-10 曾据此误判「comate 只能当聊天用」，实为插件缺陷**
-- **query 走命令行参数**：Windows 上限实测约 32767 字符（32700 过 / 32800 ENAMETOOLONG）；
-  超长以 SSE `task_failed` 返回，代理侧表现为「上游 SSE 中断」而非 500
-- **工具过程不可见**：上游有 tool-call-action / tool-params-delta / tool-output-delta 等事件，
-  但本代理只转发 `delta-batch`/`element-add` 的文本，`thinking-delta` 亦被丢弃
-  （首字前那 30~60s 空白即此；若要改善，把它透成 `reasoning_content`）
-- **上游偶发返回占位残渣**：2026-09-11 在 8786 实测两次里有一次 content 就是字面量
-  `<final>...</final>`（18s 返回，非报错），同请求重测即正常；代理如实转发、**comate
-  侧无空响应重试**（团结有 ensureNonEmpty，此处没有）。遇到空/残渣答案先重测再排查
+- **工作目录跟随（v3.10.5，仅 zulu 路线）**：插件从客户端提示词提取
+  `Working directory:`/`工作目录` 标记（`rs-comate/src/cwd.rs`，与 `rs-qoder/src/cwd.rs`
+  同源逻辑），`COMATE_CWD` 可钉死、`COMATE_MODE=Ask` 只读。**此前 cwd 写死临时目录、
+  引擎工具在空目录里空转，表现与纯聊天模型无法区分——2026-09-10 曾据此误判
+  「comate 只能当聊天用」，实为插件缺陷**。云直连不跑本地引擎，不看 cwd。
+- **`zulu run` 的 query 走命令行参数（历史约束）**：Windows 上限实测约 32767 字符
+  （32700 过 / 32800 ENAMETOOLONG）。这是 CLI 子命令的限制，**不是本插件的**——
+  serve 走 HTTP、云直连走 HTTPS，都不受此限（云直连 query 只受请求体大小约束）。
+- **zulu 路线的工具过程不可见（云直连已解决）**：zulu 上游有 tool-call-action /
+  tool-params-delta / tool-output-delta 等事件，但代理只转发 `delta-batch`/`element-add`
+  的文本（1.8.1 起 `REASON` 也会透成 `reasoning_content`）。要用客户端工具请走默认云直连。
+- **上游偶发返回占位残渣（zulu 路线 2026-09-11 实测）**：两次里有一次 content 就是
+  字面量 `<final>...</final>`（18s 返回，非报错），同请求重测即正常；代理如实转发、
+  **comate 侧无空响应重试**（团结有 ensureNonEmpty，此处没有）。云直连截至 2026-11-15
+  未复现；遇到空/残渣先重测再排查。
 
 #### Comate 1.108.2 / zulu 1.8.1 更新适配（2026-11-15 实测，已落地 rs-comate）
 
@@ -436,9 +439,10 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
    允许改名）→ 新 exe 落位原路径 → 只需关掉并重启 GUI；插件是独立常驻子进程
    （关 GUI 不死），**后端完全不用停**。旧的 .old 文件等进程自然退出后删
 7. **流式响应转发**：FlushInterval 50ms 保 SSE 及时；stream_options.include_usage 补 usage
-8. **协作流程**：见 `~/.dsh/AGENTS.md` + `dsh-collab-mode` 插件的规则段（子智能体
-   executor/code-reviewer 四步流程）；简报写 `.work/current-task.md`。
-   ~~`~/.zcode/AGENTS.md`~~ 已于 2026-09-13 退役，别再引用。
+8. **协作流程**：见 `~/.dsh/AGENTS.md`（全局规则）+ 本项目 `CLAUDE.md`。
+   `dsh-collab-mode` 插件已于 2026-11-14 卸载，不要再找它的规则段或
+   executor/code-reviewer 角色工具；~~`~/.zcode/AGENTS.md`~~ 2026-09-13 退役。
+   简报仍写 `.work/current-task.md`（gitignore，不进库）。
 9. ~~**python build.py 静默失败**~~（**Go 时代**，Rust 已无此脚本）：教训保留——
    构建工具静默失败会让人把旧产物当新产物部署，**发版后必须字节校验产物**（现在由
    `--version` 输出 + 与 Release digest 比对完成）。
@@ -566,21 +570,21 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-10-27，v4.7.1 已发布）
+## 当前状态（2026-11-15，v4.9.0 已发布）
 
 > **逐版历史只在 `CHANGELOG.md`**（唯一权威）。本节只保留「现在什么状态、下一步注意什么」，
 > 不再复制版本流水账——2026-10-18 洁癖收尾时删掉了约 200 行重复条目。
 
-- **产品本体**：Rust（`rs-gui` + 七个插件 crate + `rs-proxy`），单 exe 约 21MB。
+- **产品本体**：Rust（`rs-gui` + 八个插件 crate + `rs-proxy`），单 exe 约 23.8MB。
 - **已删除的功能**（别再找代码）：生图/生视频 + Agnes（v4.1.0）、自定义服务商与三协议
   （v4.2.0）、**Go 参考实现整体移除（2026-10-18，155 文件 / 42,274 行）**。
   详见上文架构节与两处「（历史）」小节。
-- **本轮主线（2026-10-26~27）**：v4.7.0 新增码道甲板（8793，桌面登录态自动导入 +
-  账号池自动归档/管理 UI）＋空 role 规整兼容 agent 客户端；v4.7.1 只调小滚动棘轮音效。
-  细节只在 CHANGELOG/提交里，这里不复述。
-- **服务现状**（2026-10-27 实测）：8785/8788 在监听；8793 码道未常驻（随测试窗口关闭已停，
-  用时在生产 GUI 里拉杆点火即可）。后端是独立常驻子进程，关 GUI 不死；
-  **重启 GUI 不会自动点火**，需逐个拉杆。
+- **本版主线（2026-11-15，v4.9.0）**：Comate 改走云直连（工具调用、真实 usage、
+  2s 级响应），zulu 路线留作兜底并适配 1.8.1 新协议；另修 build-rs.ps1 的
+  `--version` 自检在无控制台宿主下恒为空的假失败。细节只在 CHANGELOG/提交里。
+- **服务现状**（2026-11-15 实测）：8788 团结、8793 码道在监听（跑在换装前的旧镜像上，
+  功能不受本版影响）；8786 Comate 未常驻；GUI 未运行。新 exe（v4.9.0）已落位
+  `F:\AIXM\proxydeck\ProxyDeck.exe`，启动 GUI 后逐个拉杆点火即可；**重启 GUI 不会自动点火**。
 - **账号池内存态**：Dead/冷却/调用计数只在内存（重启清零），只有 Enabled/Removed 落盘；
   上游 reset 时点不落盘，重启丢一次无害。`codebuddy-pool(-intl).json` 已 gitignore。
   码道侧不同：续期结果写 overlay（`codearts-refreshed.json`）并同步回写账号文件，
@@ -591,8 +595,8 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
      404/405 保持 Go `http.NotFound`/`http.Error` 逐字节原形（金标锁死，**不要统一**）。
   ② 插件端口无鉴权（仅绑 127.0.0.1 缓解）——**用户裁决不做**：加鉴权会破坏 GUI/客户端
      零配置直连，回环绑定是已接受的缓解面。
-  ③ Comate usage 恒 0——**用户裁决不做**：上游 SSE 不回 usage，本地算不出可靠 token 数，
-     留 0 比编数字诚实。
+  ③ Comate usage：**云直连（默认）返回真实 token**（input+cached/output，带
+     `cached_tokens`）；只有回退的 zulu 路线仍是 0（上游 SSE 不回 usage，留 0 比编数字诚实）。
   ④ 账号区无障碍标注——已补：甲板 `.acc-row` 与矩阵弹窗 `.mx-card` 都加
      `role="listitem"` + `aria-label`（账号+状态+调用次数），行内按钮补 `aria-label`，
      两处容器 `role="list"`。纯属性，未动布局/样式/交互。
@@ -604,13 +608,13 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   不是 origin；`push_api.py` 里的 `REPO` 写的是改名前旧名 `command-code-proxy-tools`，
   GitHub 会重定向，能用但名字陈旧）
 - 服务治理：**GUI 管得住外部拉起的后端**——靠的不是
-  进程归属，而是 `plugins.go` 的 `pluginStart` 先探活端口、健康就「接管复用，不杀不
-  重启」（`pluginList` 的 `healthy` 也无条件查端口，`stop` 按端口杀）。所以旧文
+  进程归属，而是 `rs-gui/src/plugins.rs` 的 `PluginHost::start` 先探活端口、健康就
+  「接管复用，不杀不重启」（`list` 的 `healthy` 也无条件查端口，`stop` 按端口杀）。所以旧文
   「外部拉起的实例 GUI 插件开关未必管得住它」是误解：2026-09-10 曾据此给出「拉杆会
   撞端口、得先杀掉」的错误处置建议，实际拉杆只会接管
 - **换装纪律**：`ProxyDeck.exe` 换装走腾位法（rename 运行中的 exe → 新包顶替原
   路径），**后端不断、只有 GUI 需重启**；一键更新的替换目标取自
-  `os.Executable()`（`bridge.go`）而非硬编码路径。v3.20.3 起腾位名唯一
+  `std::env::current_exe()`（`rs-gui/src/bridge.rs`）而非硬编码路径。v3.20.3 起腾位名唯一
   （`ProxyDeck.exe.old-<纳秒>`，不再撞残留锁）；v3.20.5 起新 GUI 凭换血标记
   把旧后端自动换血（改名不改上报路径，靠名字认不出，只能靠标记）。
 - **⚠ 发版脚本禁止对 ui.html 做「全局版本串替换」**（2026-10-18 事故）：
@@ -622,7 +626,10 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   （版本号必须唯一且严格降序），改坏会直接红。
 - `CHANGELOG.md` 顶条与 ui.html `CHANGELOG_DATA` 首条必须**逐字同源**：前者进
   GitHub Release 正文，后者进 GUI 更新日志浮层；两处不同源用户会看到两套日志
-- `.work/` 现状（2026-10-27 盘点，gitignore 不入库）：`refs/`（第三方参考实现 clone）+ 本轮码道工作的 patch/bump/CDP 验证/test 脚本 + `task-codearts.md`（协议设计简报）。其它会话的历史文件未动。
+- `.work/` 现状（2026-11-15 盘点，gitignore 不入库）：`refs/` 新增 Comate 参考实现
+  clone（Comate2API、magpie-comate-auth ×2）；`comate-update-2026-11-15/`、
+  `comate-cloud-2026-11-15/` 是本轮抓包/探针证据；另有码道与其它会话的历史文件未动。
+  清场清单见当次洁癖汇报。
 - **构建缓存纪律（2026-10-30 用户裁决：磁盘优先）**：Rust 的 target 曾散落成
   `E:\cargo-target\rs-*` 9 份，同一张依赖图各编一遍，12 天攒到 67GB。2026-10-30
   整目录清场（实测释放 67.14GB，E: 11.8MB → 62.5GiB）后改为：
@@ -647,7 +654,8 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
   出口 IP 计，共享网络易撞墙，撞后负缓存 10 分钟）
 - 客户端侧模型配置：tuanjie provider（8788）用 codely 系（core 即 GLM-5.3 承载入口）。
-  2026-09-13 起主用 DSH（ZCode 已退役），模型席位以 `dsh-collab-mode` 插件设置面板为准。
+  2026-09-13 起主用 DSH（ZCode 已退役）；`dsh-collab-mode` 插件 2026-11-14 已卸载，
+  模型席位以 DSH 自身会话/模型设置为准（Comate 走 8786 云直连）。
 
 ## 常用命令
 
