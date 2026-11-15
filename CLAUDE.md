@@ -432,6 +432,9 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   回一句「I'll start by…」就结束（finish 里 `content=78 native_calls=0`，上游正常收尾）。
   代理侧在 `agentPrompt` 里补了硬约束：决定用工具就必须在**同一条回复**里发出调用，
   不许只给计划/预告。另外该模型当时上游过载（同日志两次 502「请求较多」）。
+- **缺工具名也不丢（2026-11-15 第四例）**：真机见过模型发了 2 个调用但 `tool_name` 缺失（名字另有归处）。
+  现在依次认 `tool_name`/`toolName`/`tool`/`function`/`name`，再退 `server_name`；全空就发
+  `unknown_tool` 占位（客户端回“不存在”→模型重发），绝不再整批丢弃。
 - **没做**：图片输入、`max_tokens`/`temperature` 透传、`response_format`、
   跨请求会话复用（工具续接除外）、会员积分展示（余额端点要 Cookie）。
 

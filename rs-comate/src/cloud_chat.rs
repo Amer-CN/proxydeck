@@ -336,12 +336,19 @@ pub fn map_native_calls(
             // tool_name 短名（inspect_kernel_build_config）。按短名解析，
             // 匹配不上就原样透传，让客户端回「未知工具」给模型自己纠正——
             // 之前这里直接 Err 会把整批调用丢掉，表现成「只有思考、没有正文」。
-            let mut name = c
-                .input
-                .get("tool_name")
-                .and_then(|v| v.as_str())
+            // 工具名可能落在多个字段里（真机见过 tool_name 缺失、名字塞进别的键）。
+            // 依次认；全空也不丢整批——发一个 `unknown_tool` 占位调用，
+            // 客户端回「工具不存在」，模型自己就会重发正确调用。
+            let mut name = ["tool_name", "toolName", "tool", "function", "name"]
+                .iter()
+                .find_map(|k| {
+                    c.input
+                        .get(*k)
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                })
                 .unwrap_or("")
-                .trim()
                 .to_string();
             if name.is_empty() {
                 // 兼容只给 server_name 的形态（可能是短名，也可能是 mcp__x__y）。
@@ -351,10 +358,14 @@ pub fn map_native_calls(
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .trim();
-                if server.is_empty() || server == MCP_SERVER {
-                    return Err("上游工具调用缺少 tool_name".to_string());
+                if !server.is_empty() && server != MCP_SERVER {
+                    name = server.to_string();
                 }
-                name = server.to_string();
+            }
+            if name.is_empty() {
+                let keys: Vec<&str> = c.input.keys().map(|k| k.as_str()).collect();
+                println!("[comate] bad-call tool=? keys={keys:?}");
+                name = "unknown_tool".to_string();
             }
             if !active.iter().any(|t| t.name == name) {
                 let suffix = format!("__{name}");
@@ -1158,6 +1169,35 @@ mod tests {
         assert_eq!(calls[0].name, "get_weather");
     }
 
+    #[test]
+    fn missing_tool_name_falls_back_to_unknown_tool() {
+        let mut input = Map::new();
+        input.insert("server_name".into(), Value::String(MCP_SERVER.into()));
+        input.insert("arguments".into(), Value::String("{}".into()));
+        let native = vec![PendingToolCall {
+            id: "c4".into(),
+            name: "UseMcpTool".into(),
+            input,
+            ended: true,
+        }];
+        let calls = map_native_calls(native, &[tool("get_weather")]).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "unknown_tool", "占位名让客户端回 unknown tool");
+
+        // 名字在别名键里也能认出来
+        let mut alias = Map::new();
+        alias.insert("server_name".into(), Value::String(MCP_SERVER.into()));
+        alias.insert("tool".into(), Value::String("get_weather".into()));
+        alias.insert("arguments".into(), Value::String("{\"city\":\"上海\"}".into()));
+        let native = vec![PendingToolCall {
+            id: "c5".into(),
+            name: "UseMcpTool".into(),
+            input: alias,
+            ended: true,
+        }];
+        let calls = map_native_calls(native, &[tool("get_weather")]).unwrap();
+        assert_eq!(calls[0].name, "get_weather");
+    }
     #[test]
     fn sanitizes_tool_arguments_to_valid_json() {
         let (a, s) = sanitize_tool_arguments(r#"{"city":"上海"}"#);
