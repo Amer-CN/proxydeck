@@ -374,9 +374,21 @@ pub fn map_native_calls(
                 Value::Null => "{}".to_string(),
                 other => serde_json::to_string(&other).unwrap_or_else(|_| "{}".into()),
             };
-            // 不在这里校验参数 JSON：模型偶尔会产出坏 JSON（2026-11-15 真机：命令里
-            // 中文引号没转义）。丢掉整批调用会让这一轮只剩思考然后停；原样透传，
-            // 客户端会回 `invalid arguments: …` 给模型，它自己会改。
+            // 模型偶尔产出坏 JSON（2026-11-15 真机：命令里中文引号没转义）。
+            // 不能把「客户端会不会处理坏参数」当契约——各家 agent 行为不一样，
+            // 有的整轮失败、有的静默卡住。代理侧一律产出**合法 JSON 对象**：
+            // 先试原样，再试补全截断/去尾逗号，实在不行退化成 `{}`，
+            // 让客户端按自己的 schema 校验回给模型（这是 OpenAI 兼容的通用语义）。
+            let original = args;
+            let (args, status) = sanitize_tool_arguments(&original);
+            if !status.is_empty() {
+                println!(
+                    "[comate] bad-args tool={} mode={} raw={:?}",
+                    name,
+                    status,
+                    original.chars().take(200).collect::<String>()
+                );
+            }
             (name, args)
         } else {
             (
@@ -685,6 +697,114 @@ impl CloudReader {
     }
 }
 
+/// 把模型给的 `arguments` 变成**保证合法**的 JSON 对象字符串。
+///
+/// 为什么必须代理侧兜底：模型偶尔产出坏 JSON（2026-11-15 真机：命令里中文引号没转义，
+/// JSON 提前闭合）。如果把坏字符串原样发给客户端，各家 agent 行为不一（DSH 会回
+/// `invalid arguments` 让模型重试，其它客户端可能整轮失败或静默卡住）。保证合法 JSON
+/// 是 OpenAI 兼容层的通用契约：客户端按自己的 schema 校验 `{}` 并回错误给模型。
+///
+/// 返回 `(json, status)`：status 为空=正常；`repaired`=已修补；`fallback`=退化成 `{}`。
+fn sanitize_tool_arguments(raw: &str) -> (String, &'static str) {
+    let s = raw.trim();
+    if s.is_empty() {
+        return ("{}".to_string(), "fallback");
+    }
+    if is_json_object(s) {
+        return (s.to_string(), "");
+    }
+    if let Some(fixed) = repair_json_object(s) {
+        return (fixed, "repaired");
+    }
+    ("{}".to_string(), "fallback")
+}
+
+fn is_json_object(s: &str) -> bool {
+    serde_json::from_str::<Value>(s)
+        .map(|v| v.is_object())
+        .unwrap_or(false)
+}
+
+fn strip_trailing_commas(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut in_str = false;
+    let mut esc = false;
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+        if in_str {
+            out.push(ch);
+            if esc {
+                esc = false;
+            } else if ch == '\\' {
+                esc = true;
+            } else if ch == '"' {
+                in_str = false;
+            }
+        } else if ch == '"' {
+            in_str = true;
+            out.push(ch);
+        } else if ch == ',' {
+            let mut j = i + 1;
+            while j < chars.len() && chars[j].is_whitespace() {
+                j += 1;
+            }
+            if !(j < chars.len() && (chars[j] == '}' || chars[j] == ']')) {
+                out.push(ch);
+            }
+        } else {
+            out.push(ch);
+        }
+        i += 1;
+    }
+    out
+}
+/// 修补两类最常见的坏 JSON：尾逗号、被截断（字符串/括号没闭合）。
+fn repair_json_object(s: &str) -> Option<String> {
+    let mut candidates: Vec<String> = Vec::new();
+    // 1) 尾逗号：`{"a":1,}`、`{"a":[1,],}`（只删紧挨 `}`/`]` 的逗号，且跳过字符串内部）
+    let no_commas = strip_trailing_commas(s);
+    if no_commas != s {
+        candidates.push(no_commas);
+    }
+    // 2) 截断补全：按字符扫描未闭合的字符串与括号，按栈逆序补齐
+    let mut in_str = false;
+    let mut esc = false;
+    let mut stack: Vec<char> = Vec::new();
+    for ch in s.chars() {
+        if in_str {
+            if esc {
+                esc = false;
+            } else if ch == '\\' {
+                esc = true;
+            } else if ch == '"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_str = true,
+            '{' => stack.push('}'),
+            '[' => stack.push(']'),
+            '}' | ']' => {
+                stack.pop();
+            }
+            _ => {}
+        }
+    }
+    if in_str || !stack.is_empty() {
+        let mut out = s.to_string();
+        if in_str {
+            out.push('"');
+        }
+        while let Some(c) = stack.pop() {
+            out.push(c);
+        }
+        candidates.push(out);
+    }
+    candidates.into_iter().find(|c| is_json_object(c))
+}
 /// OpenAI `delta.tool_calls` 块（一次给全所有调用）。
 pub fn chunk_tool_calls(id: &str, model: &str, created: i64, calls: &[OpenAiToolCall]) -> String {
     let list: Vec<J> = calls
@@ -967,7 +1087,11 @@ mod tests {
         }];
         let calls = map_native_calls(native, &[tool("get_weather")]).unwrap();
         assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].arguments, r#"{"city": "上海}"#, "坏 JSON 必须原样透传");
+        assert!(
+            is_json_object(&calls[0].arguments),
+            "代理必须保证发出的 arguments 是合法 JSON 对象：{}",
+            calls[0].arguments
+        );
 
         // 未声明的工具：原样透传（客户端回 unknown tool，模型自己纠正），不再整批丢弃
         let mut bad = Map::new();
@@ -1032,6 +1156,30 @@ mod tests {
         assert_eq!(calls[0].name, "get_weather");
     }
 
+    #[test]
+    fn sanitizes_tool_arguments_to_valid_json() {
+        let (a, s) = sanitize_tool_arguments(r#"{"city":"上海"}"#);
+        assert_eq!(s, "");
+        assert!(is_json_object(&a));
+
+        let (a, s) = sanitize_tool_arguments(r#"{"city":"上海",}"#);
+        assert_eq!(s, "repaired");
+        assert!(is_json_object(&a), "{a}");
+
+        let (a, s) = sanitize_tool_arguments(r#"{"city":"上海"#);
+        assert_eq!(s, "repaired");
+        assert!(is_json_object(&a), "{a}");
+        assert!(a.contains("上海"), "修补不能丢掉原文：{a}");
+
+        // 真机那种“引号没转义”的坏法：修不好也必须退化成合法 `{}`
+        let (a, s) = sanitize_tool_arguments(r#"{"command": "gh issue comment 42 --body \"一" 2>&1 | Select-Object -Last 3"}"#);
+        assert!(is_json_object(&a), "退化成 {a}，状态 {s}");
+
+        let (a, s) = sanitize_tool_arguments("[1,2]");
+        assert_eq!((a.as_str(), s), ("{}", "fallback"));
+        let (a, s) = sanitize_tool_arguments("");
+        assert_eq!((a.as_str(), s), ("{}", "fallback"));
+    }
     #[test]
     fn reader_streams_text_and_finishes_with_usage() {
         let mut r = CloudReader::new("id".into(), "m".into(), 1);
