@@ -44,6 +44,7 @@ pub mod pathclean;
 pub mod pool;
 pub mod quota;
 pub mod region;
+pub mod reword;
 pub mod sse;
 pub mod stats;
 pub mod toolrefs;
@@ -889,3 +890,4 @@ mod tests {
         assert_eq!(redact_proxy("socks5://u:p@h:1080"), "socks5://***@h:1080");
     }
 }
+

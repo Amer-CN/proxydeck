@@ -736,11 +736,18 @@ pub async fn handle_chat(
         }
     }
 
+    // 已知需要改写的 system/assistant 文本，本轮直接按改写形态发——免得每轮
+    // （尤其工具循环的每一步）先吃一次 11128 拒绝。不做任何改写的常规请求零成本。
+    if let Some(rule) = crate::reword::pre_reword(&mut backend) {
+        println!("[codebuddy] 11128 已知指纹，预先按规则 {} 改写后发出", rule);
+    }
+
     let mut account_resent = false; // 账号级换号重发只允许一次（免费池一般就 2 个号）
     let mut dead_resent = 0usize; // 凭据失效换号重发计数，上限 = 池大小
     let mut exhausted_resent = 0usize; // 额度耗尽换号重发计数，上限 = 池大小
     let mut transient_resent = 0usize; // 11133 原地重试计数，上限 TRANSIENT_MAX_RETRY
     let mut flagged_resent = 0usize; // 11128 按号封禁换号计数，上限 = 池大小（全封防循环）
+    let mut flagged_reworded = false; // 11128 内容指纹改写重发只做一次（改写→搬家各一步）
     let mut restricted_resent = 0usize; // 11140 账号限制换号计数，上限 = 池大小（全限防循环）
     let mut model_blocked_resent = 0usize; // 11158 模型不在套餐：换号计数，上限 = 池大小
     let mut stream_head_resent = 0usize; // 流内嗅探判错换号计数，上限 = 池大小（**不冷却账号**）
@@ -919,14 +926,34 @@ pub async fn handle_chat(
         // `write_err` 如实透传上游报文），防恒 11128 下无限 continue。计数与 14018/401
         // 各自独立：封号不是额度耗尽也不是凭据失效。
         if is_flagged_body(&err_body) && st.pool.is_some() && !acc_uid.is_empty() {
-            if err_body.contains("channel verification") {
-                // 通道校验子类（2026-10-19 起 INTL 网关新增）：缺会话头时整池同错，
-                // 与号无关、与内容无关——冷却任何号都是误伤，直接透传（不换号不冷却）。
-                println!(
-                    "[codebuddy] 11128 通道校验（缺会话头/非官方通道），不判账号、不冷却，原样透传，body 预览: {}",
-                    truncate(&err_body, 200)
-                );
-            } else if crate::desensitize::body_has_11128_trigger(&backend) {
+            // 11128 分级治理（2026-11-21 实测修正）：**上游所有 11128 的 `displayTips`
+            // 都写 "This call failed channel verification…"**，所以这句不能当子类型判据。
+            // 旧实现用它分流，结果 11128 一律走进「通道校验、原样透传」那一支——
+            // 改写没跑过、按号冷却也没跑过（那段成了死代码）。现在的阶梯是：
+            //   ① 先按需改写重发一次（号不冷却）：内容级拒绝改一句就过，且拒绝不花配额；
+            //   ② 改写也过不去 → 已知触发词判「内容指纹」原样透传，否则判账号级换号冷却。
+            if !flagged_reworded {
+                flagged_reworded = true;
+                // 先记**原文**指纹再改写——记改写后的形态等于没记：下一次客户端送来的
+                // 还是没有逗号的原文，指纹对不上，又要先吃一次 400（2026-11-21 实测踩到）。
+                crate::reword::remember(&backend);
+                let retried = if let Some(rule) = crate::reword::reword(&mut backend) {
+                    println!(
+                        "[codebuddy] 11128 内容指纹命中规则 {}，改写后同号重发（号不冷却）",
+                        rule
+                    );
+                    true
+                } else if crate::reword::move_system_to_user(&mut backend) {
+                    println!("[codebuddy] 11128 规则未命中，system 挪进首条 user 后同号重发");
+                    true
+                } else {
+                    false
+                };
+                if retried {
+                    continue;
+                }
+            }
+            if crate::desensitize::body_has_11128_trigger(&backend) {
                 println!(
                     "[codebuddy] 11128 命中内容指纹（{}），不判账号、不冷却，原样透传",
                     crate::pool::uid_short(&acc_uid)
@@ -1597,6 +1624,20 @@ pub fn truncate(s: &str, n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// 2026-11-21 真机报文回归：**所有** 11128 的 `displayTips` 都写
+    /// "This call failed channel verification…"，所以这句绝不能当子类型判据
+    /// （旧实现用它分流，把全部 11128 当通道校验放过，改写与按号治理都成了死代码）。
+    /// 这里锁两件事：① 真机报文确实被判为 11128；② 它确实含那句陷阱文案。
+    #[test]
+    fn real_11128_body_carries_channel_verification_trap() {
+        let body = r#"{"code":11128,"msg":"Illegal API invocation from an unapproved channel","requestId":"01a1f9fc9ad1779d9c3008f944b25e0f","retry_policy":{"retry":false},"displayMsg":{"en":"Request blocked. Please send it again"},"displayTips":{"en":"This call failed channel verification, possibly because it was not sent from an official client. Please resend from the official client."},"actions":["EDIT_INPUT","SUBMIT_FEEDBACK"]}"#;
+        assert!(is_flagged_body(body), "真机 11128 必须被判出来");
+        assert!(
+            body.contains("channel verification"),
+            "真机报文含这句陷阱文案——判据不能依赖它，否则 11128 全被当成通道校验"
+        );
+    }
+
 
     /// `3d4627f` 的 Rust 侧等价物：peek 到的字节**一个都不能丢**，必须原样交给下游聚合。
     /// 反向验证：把 `peek` 改回「读进 out 且清空 `pending`」⇒ 本用例判红（下游只收到 40 字节）。
