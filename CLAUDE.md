@@ -269,6 +269,15 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   **已落地分流（v4.6.1）**：11140 + 账号限制文案 → 标死该号并换健康号（有界）；
   全池被限 → 403 + 申诉指引；纯内容策略的 11140 → 原样透传、不标号。
   判据见 `rs-codebuddy/src/chat.rs::is_account_restricted_body`。
+- **11128 自愈（v4.9.9，抄 magpie 2026-10-30 实证）**：上游对身份句是**整句精确匹配**，
+  插一个逗号就过（`You are an AI agent powered by X.` → `…agent, powered by X.`），
+  加词/改大小写都没用。`rs-codebuddy/src/reword.rs` 按需改写：规则表（通用身份句插逗号、
+  Claude Code 去 `official`）→ 只动 system/assistant → 命中即**同号重发、号不冷却**
+  → 成功后记原文指纹，后续 `pre_reword` 直接按改写形态发（一条 prompt 只吃一次拒绝）。
+  规则没命中时退到 `move_system_to_user`（system 挪进首条 user，上游不读 user）。
+  **⚠ 判据陷阱（2026-11-21 实测）**：上游**所有** 11128 的 `displayTips` 都写
+  `"This call failed channel verification…"`——旧实现拿这句当子类型判据，结果 11128
+  一律走「通道校验、原样透传」，改写与按号冷却都是死代码。别再用它分流。
 - **官方网关身份头（2026-10-24 取 CN 5.8.3 `app.asar` 的 `applyGatewayHeaders`）**：官方每条
   chat 带 `X-Conversation-ID/-Request-ID/-Message-ID`、`X-Request-ID`、
   `traceparent`/`b3`/`X-B3-*`/`X-Trace-ID`、`x-codebuddy-request: 1`、
@@ -592,7 +601,7 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-11-21，v4.9.8 已发布）
+## 当前状态（2026-11-21，v4.9.9 已发布）
 
 > **逐版历史只在 `CHANGELOG.md`**（唯一权威）。本节只保留「现在什么状态、下一步注意什么」，
 > 不再复制版本流水账——2026-10-18 洁癖收尾时删掉了约 200 行重复条目。
@@ -601,7 +610,7 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
 - **已删除的功能**（别再找代码）：生图/生视频 + Agnes（v4.1.0）、自定义服务商与三协议
   （v4.2.0）、**Go 参考实现整体移除（2026-10-18，155 文件 / 42,274 行）**。
   详见上文架构节与两处「（历史）」小节。
-- **本版主线（2026-11-21，v4.9.8）**：WorkBuddy 双区 UA 跟上官方当前版本（CN 5.9.3 / CLI 2.185.0）；文档补 rs-opencode(8784) 与端口表。
+- **本版主线（2026-11-21，v4.9.9）**：WorkBuddy 11128 内容拦截自愈（按需改写身份句 + 记住，号不冷却），修 11128 全被误判成通道校验的真 bug；v4.9.8 的 UA 跟上官方（CN 5.9.3 / CLI 2.185.0）与 rs-opencode 文档补齐同批。
 - **上一版主线（2026-11-15，v4.9.0）**：Comate 改走云直连（工具调用、真实 usage、
   2s 级响应），zulu 路线留作兜底并适配 1.8.1 新协议；另修 build-rs.ps1 的
   `--version` 自检在无控制台宿主下恒为空的假失败。细节只在 CHANGELOG/提交里。
@@ -762,5 +771,6 @@ git push myrepo HEAD:main                      # 推送（remote 名 myrepo 不�
   key、不读该字段，无影响
 - **次一级差异（非凭证链，未处理）**：客户端发 `tools: []` 时反代补
   `parallel_tool_calls` 而 rc.60 官方不发（实际客户端不发空数组，影响可忽略）
+
 
 
