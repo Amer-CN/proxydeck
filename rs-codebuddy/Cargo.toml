@@ -9,6 +9,8 @@ name = "rs-codebuddy"
 path = "src/main.rs"
 
 [dependencies]
+# 出站请求体 gzip（官方 RequestBodyGzip 同款形态）；树的 reqwest 已带 flate2，无新增下载量。
+flate2 = "1"
 # at-rest（`$wbEncrypted`）解密/加密：AES-256-GCM。**不自己手搓密码学**——
 # 逐字节对齐 Go 的 `crypto/aes` + `crypto/cipher`，用审计过的实现。
 # `aes` 特性关掉：GCM 的密钥排程由 aes-gcm 内部处理，不需要直接调 AES。
@@ -42,3 +44,7 @@ windows-registry = "0.6"
 # release profile 的唯一真源在仓库根 `Cargo.toml`（workspace 级 `[profile.release]`
 # opt-level = 2，与本文件原先逐字相同）。workspace 成员的 `[profile]` 会被 cargo
 # 忽略并打 warning，故已在 P7d-2 随「收进 workspace」删除，口径不变。
+
+[dev-dependencies]
+flate2 = "1"
+

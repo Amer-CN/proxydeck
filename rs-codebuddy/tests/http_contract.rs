@@ -195,7 +195,23 @@ async fn large_body_reaches_upstream() {
 
     let hits = up.hits();
     assert_eq!(hits.len(), 1, "应只有一次上游请求");
-    let sent: Value = serde_json::from_slice(&hits[0].body).expect("上游收到的是合法 JSON");
+    // 出站 gzip（官方 RequestBodyGzip 同款）：大体积请求线上是压缩体，
+    // 这里按 Content-Encoding 解码后再断言——既守住「上游拿到合法 JSON」，
+    // 也顺手验证压缩体是真能解开的（v4.9.10）。
+    let gz = hits[0]
+        .headers
+        .iter()
+        .any(|(k, v)| k.eq_ignore_ascii_case("content-encoding") && v.eq_ignore_ascii_case("gzip"));
+    assert!(gz, "2MB 级请求必须带 Content-Encoding: gzip");
+    let plain = {
+        use std::io::Read;
+        let mut out = Vec::new();
+        flate2::read::GzDecoder::new(&hits[0].body[..])
+            .read_to_end(&mut out)
+            .expect("上游必须能解开 gzip 体");
+        out
+    };
+    let sent: Value = serde_json::from_slice(&plain).expect("上游解压后是合法 JSON");
     let content = sent["messages"][0]["content"].as_str().expect("content 是字符串");
     assert_eq!(content.len(), 3_600_000, "请求体被截断或被改写");
     assert_eq!(sent["stream"], Value::Bool(true));
@@ -296,3 +312,4 @@ fn golden_files_exist() {
         "黄金场景数不该缩水"
     );
 }
+

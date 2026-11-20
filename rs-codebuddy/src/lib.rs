@@ -891,3 +891,70 @@ mod tests {
     }
 }
 
+/// 出站请求体 gzip 的最小体积：低于这个值压缩后反而更大（官方客户端也是整个体压）。
+pub const GZIP_MIN_BYTES: usize = 1024;
+
+/// `CODEBUDDY_GZIP=0` 关闭出站压缩（默认开，对齐官方 `RequestBodyGzip`）。
+pub fn gzip_enabled() -> bool {
+    match std::env::var("CODEBUDDY_GZIP") {
+        Ok(v) => {
+            let v = v.trim().to_ascii_lowercase();
+            !(v == "0" || v == "false" || v == "off" || v == "no")
+        }
+        Err(_) => true,
+    }
+}
+
+/// 把请求体压成 gzip 字节；压缩失败时返回 None（调用方发明文，不影响可用性）。
+pub fn gzip_body(plain: &[u8]) -> Option<Vec<u8>> {
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+
+    let mut enc = GzEncoder::new(Vec::new(), Compression::default());
+    enc.write_all(plain).ok()?;
+    enc.finish().ok()
+}
+
+#[cfg(test)]
+mod gzip_tests {
+    use super::*;
+
+    #[test]
+    fn gzip_roundtrips_and_has_magic() {
+        let plain = b"{\"model\":\"x\",\"messages\":[]}".repeat(80);
+        let gz = gzip_body(&plain).expect("压缩应成功");
+        assert_eq!(&gz[..2], &[0x1f, 0x8b], "gzip 魔数");
+        assert!(gz.len() < plain.len(), "重复 JSON 应压得下去");
+
+        let mut out = Vec::new();
+        use std::io::Read;
+        flate2::read::GzDecoder::new(&gz[..])
+            .read_to_end(&mut out)
+            .expect("解压应成功");
+        assert_eq!(out, plain, "往返必须逐字节一致");
+    }
+
+    #[test]
+    fn gzip_threshold_is_a_kib() {
+        assert_eq!(GZIP_MIN_BYTES, 1024);
+    }
+
+    #[test]
+    fn gzip_enabled_defaults_on_and_parses_off() {
+        // 环境变量在测试里共享，串行改完立刻还原
+        let saved = std::env::var("CODEBUDDY_GZIP").ok();
+        std::env::remove_var("CODEBUDDY_GZIP");
+        assert!(gzip_enabled(), "缺省必须开");
+        for off in ["0", "false", "off", "NO", " off "] {
+            std::env::set_var("CODEBUDDY_GZIP", off);
+            assert!(!gzip_enabled(), "{off:?} 应视为关闭");
+        }
+        std::env::set_var("CODEBUDDY_GZIP", "1");
+        assert!(gzip_enabled());
+        match saved {
+            Some(v) => std::env::set_var("CODEBUDDY_GZIP", v),
+            None => std::env::remove_var("CODEBUDDY_GZIP"),
+        }
+    }
+}

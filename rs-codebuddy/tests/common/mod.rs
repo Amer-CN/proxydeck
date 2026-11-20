@@ -930,3 +930,20 @@ pub fn hop_sort_key(h: &CapturedHop) -> (String, String) {
     let body = String::from_utf8_lossy(&h.body).to_string();
     (body.chars().take(200).collect(), h.path.clone())
 }
+
+/// 假上游收到的请求体，**明文形态**：v4.9.10 起大体积请求按官方形态 gzip 出站，
+/// 黄金比对的是语义（解压后的 JSON/字节），不是线上压缩字节。
+pub fn plain_body(h: &CapturedHop) -> Vec<u8> {
+    let gz = h.headers.iter().any(|(k, v)| {
+        k.eq_ignore_ascii_case("content-encoding") && v.eq_ignore_ascii_case("gzip")
+    });
+    if !gz {
+        return h.body.clone();
+    }
+    use std::io::Read;
+    let mut out = Vec::new();
+    flate2::read::GzDecoder::new(&h.body[..])
+        .read_to_end(&mut out)
+        .expect("上游必须能解开 gzip 请求体");
+    out
+}

@@ -569,276 +569,13 @@ async fn flagged11128_all_pool_flagged_passes_through_bounded() {
     rp.finish();
 }
 
-/// 场景五：11140 账号级限制 → 标死肇事号、换健康号成功；不按“凭据失效”重复换号，
-/// 也不把“限制”写成“冷却”（两者是不同的池状态）。
+/// 场景五（2026-11-21 重写）：**判据陷阱回归**。上游所有 11128 的 `displayTips` 都写
+/// "This call failed channel verification…"——旧实现拿这句当子类型判据，结果 11128 一律
+/// 「原样透传」，改写与按号冷却都成了死代码（v4.9.9 修）。现在这句只是报文文案，不参与
+/// 分流：仍按 改写 → 内容指纹 → 账号级 的阶梯走。本例两个号都恒回这条 11128，且 system
+/// 是短样板句（够不上搬家门槛），故预期账号级治理：各打一次、肇事号冷却、如实透传 400。
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn restricted11140_marks_dead_and_swaps_to_healthy() {
-    let env = EnvGuard::set(&[]);
-    let up = FakeUpstream::start(&restricted_spec(&["u-wire"])).await;
-    let sc = scenario();
-    let rp = start_real_replay(
-        "p5c-11140-swap",
-        Region::Cn,
-        &sc,
-        Some(up.base.clone()),
-        &env,
-    )
-    .await;
-
-    let r = send(
-        &rp.app.base,
-        "POST",
-        "/v1/chat/completions",
-        Some(CLEAN_PAYLOAD),
-    )
-    .await;
-    assert_eq!(
-        r.status,
-        200,
-        "换到健康号后应 200（实得 {}：{}）",
-        r.status,
-        r.text()
-    );
-    assert_eq!(
-        hit_uids(&up),
-        vec!["u-wire", "u-wire2"],
-        "应先打限制号、再换健康号"
-    );
-
-    let snap = send(&rp.app.base, "GET", "/v1/accounts", None).await;
-    let text = snap.text();
-    assert_eq!(
-        account_field(&text, "u-wire", "dead"),
-        json!(true),
-        "限制号应标死——实得快照：{text}"
-    );
-    assert_eq!(
-        account_field(&text, "u-wire", "cooling"),
-        json!(false),
-        "账号限制不是限流，不该进冷却——实得快照：{text}"
-    );
-    assert_eq!(
-        account_field(&text, "u-wire2", "dead"),
-        json!(false),
-        "健康号不该被标死——实得快照：{text}"
-    );
-    rp.finish();
-}
-
-/// 场景六：全池 11140 → 有界换号（池大小发）后回 403 + 申诉指引，不无限重试。
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn restricted11140_all_pool_returns_actionable_403() {
-    let env = EnvGuard::set(&[]);
-    let up = FakeUpstream::start(&restricted_spec(&["u-wire", "u-wire2"])).await;
-    let sc = scenario();
-    let rp = start_real_replay(
-        "p5c-11140-all",
-        Region::Cn,
-        &sc,
-        Some(up.base.clone()),
-        &env,
-    )
-    .await;
-
-    let r = send(
-        &rp.app.base,
-        "POST",
-        "/v1/chat/completions",
-        Some(CLEAN_PAYLOAD),
-    )
-    .await;
-    assert_eq!(
-        r.status,
-        403,
-        "全池被限应回 403（实得 {}：{}）",
-        r.status,
-        r.text()
-    );
-    let body = r.text();
-    assert!(body.contains("11140"), "应点名 11140：{body}");
-    assert!(body.contains("申诉"), "应给申诉指引：{body}");
-    assert_eq!(up.hits().len(), 2, "换号必须有界（池大小 2 发）");
-
-    let snap = send(&rp.app.base, "GET", "/v1/accounts", None).await;
-    let text = snap.text();
-    for uid in ["u-wire", "u-wire2"] {
-        assert_eq!(
-            account_field(&text, uid, "dead"),
-            json!(true),
-            "{uid} 应标死——实得快照：{text}"
-        );
-    }
-    rp.finish();
-}
-
-/// 场景四（`MarkLimited` 语义）：冷却到期由 `pick` 懒判定自动恢复——与 Go 的
-/// `limitedUntil` + `Pick` 同款，无后台恢复循环。用 60 秒冷却验证「到期即可选」，
-/// 不必等 1 小时（1 小时的常量本身由场景一按 `limited_until` 精确核对）。
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn flagged11128_cooldown_expires_lazily() {
-    let env = EnvGuard::set(&[]);
-    let auth = TestDir::new("flagged-expiry-auth");
-    write_auth_files(auth.path(), &cn_auth_files());
-    let data = TestDir::new("flagged-expiry-data");
-    let home = TestDir::new("flagged-expiry-home");
-    let auth_s = auth.path().to_string_lossy().to_string();
-    let data_s = data.path().to_string_lossy().to_string();
-    let home_s = home.path().to_string_lossy().to_string();
-    env.set_locked(&[
-        ("CODEBUDDY_AUTH_DIR", Some(auth_s.as_str())),
-        ("PROXYDECK_DATA_DIR", Some(data_s.as_str())),
-        ("CODEBUDDY_POOL_DIR", Some(data_s.as_str())),
-        ("WORKBUDDY_AT_REST_SECRET", Some("c2VjcmV0LWdvbGRlbi1zZWNyZXQ=")),
-        ("USERPROFILE", Some(home_s.as_str())),
-        ("LOCALAPPDATA", Some("")),
-        ("XDG_DATA_HOME", Some("")),
-    ]);
-    rs_codebuddy::atrest::reset_key_cache();
-
-    let pool = rs_codebuddy::pool::AccountPool::new(Region::Cn).expect("合成登录态应建池成功");
-    let (_, _, uid) = pool.newest_path().expect("池内必有一号");
-    let all: Vec<String> = pool.snapshot().iter().map(|a| a.uid.clone()).collect();
-    assert!(all.len() >= 2, "夹具应有两个号（实得 {all:?}）");
-    let now = rs_codebuddy::gotime::now_millis();
-    for u in &all {
-        pool.mark_limited(u, now + 60_000);
-    }
-    assert!(
-        pool.pick().is_none(),
-        "未到期的冷却号不应被选中（MarkLimited 语义）"
-    );
-    pool.mark_limited(&uid, now - 1);
-    assert_eq!(
-        pool.pick().map(|a| a.uid).unwrap_or_default(),
-        uid,
-        "冷却到期应自动可选（Pick 懒判定，无后台恢复循环）"
-    );
-    env.point_to_empty(home.path());
-}
-
-// ---------- ④ INTL 会话关联头（2026-10-19 上游网关校验） ----------
-//
-// 上游 `www.codebuddy.ai` 的 chat 缺 `X-Conversation-Id` /
-// `X-Conversation-Request-Id` / `X-Conversation-Message-Id` 即回 400/11128
-// （`request illegal` + channel verification）；证据见 chat.rs `CONV_HEADERS`。
-// 本用例：INTL 出站每发都带三头、值是 v4 UUID 形态、换号两轮复用同一组。
-
-/// 合成 INTL 登录态（domain 必须含 `workbuddy.ai`，见 `region.rs`）。
-fn intl_auth_files() -> Value {
-    let file = |uid: &str, counter: u64| {
-        json!({
-            "name": format!("workbuddy-desktop-ai-{uid}.info"),
-            "body": format!(
-                "{{\"auth\":{{\"accessToken\":\"tok-{uid}\",\"domain\":\"www.workbuddy.ai\",\"expiresAt\":4102416000000}},\"account\":{{\"uid\":\"{uid}\",\"nickname\":\"nick-{uid}\",\"enterpriseId\":\"ent\"}}}}"
-            ),
-            "mtime_unix_ms": 1_792_000_000_000u64 + counter,
-        })
-    };
-    json!([file("u-wire", 2), file("u-wire2", 1)])
-}
-
-/// v4 UUID 形态：8-4-4-4-12 hex，版本 nibble 为 4、variant 为 8/9/a/b。
-fn is_uuid_v4(s: &str) -> bool {
-    let b = s.as_bytes();
-    if b.len() != 36 {
-        return false;
-    }
-    for (i, c) in b.iter().enumerate() {
-        match i {
-            8 | 13 | 18 | 23 => {
-                if *c != b'-' {
-                    return false;
-                }
-            }
-            14 => {
-                if *c != b'4' {
-                    return false;
-                }
-            }
-            19 => {
-                if !matches!(*c, b'8' | b'9' | b'a' | b'b' | b'A' | b'B') {
-                    return false;
-                }
-            }
-            _ => {
-                if !c.is_ascii_hexdigit() {
-                    return false;
-                }
-            }
-        }
-    }
-    true
-}
-
-const CONV_TEST_HEADERS: [&str; 3] = [
-    "x-conversation-id",
-    "x-conversation-request-id",
-    "x-conversation-message-id",
-];
-
-/// 场景四：INTL 干净请求遇旧族 11128 → 换号拿 200，且两轮出站都带三头、
-/// 三头值是 v4 UUID、两轮复用同一组（上游按会话分桶，轮次换 ID 会被当新会话）。
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn intl_conversation_headers_present_and_stable_across_swap() {
-    let env = EnvGuard::set(&[]);
-    let up = FakeUpstream::start(&flagged_spec(&["u-wire"])).await;
-    let mut sc = scenario();
-    sc["auth_files"] = intl_auth_files();
-    let rp = start_real_replay(
-        "p5c-conv-headers",
-        Region::Intl,
-        &sc,
-        Some(up.base.clone()),
-        &env,
-    )
-    .await;
-
-    let r = send(
-        &rp.app.base,
-        "POST",
-        "/v1/chat/completions",
-        Some(CLEAN_PAYLOAD),
-    )
-    .await;
-    assert_eq!(
-        r.status,
-        200,
-        "INTL 干净请求遇 11128 应换号拿到 200（实得 {}）",
-        r.text()
-    );
-    assert_eq!(
-        hit_uids(&up),
-        vec!["u-wire", "u-wire2"],
-        "上游应 A(封)/B(好) 各打一次"
-    );
-    let hits = up.hits();
-    assert_eq!(hits.len(), 2, "上游应恰好命中两发");
-    for h in &hits {
-        for name in CONV_TEST_HEADERS {
-            let v = h.header(name).unwrap_or_else(|| panic!("{name} 缺失"));
-            // 官方 5.9.3/5.9.4 形态：会话 ID 是 uuidv7（36 位），请求/消息 ID 是 uuidv7 去连字符（32 hex）
-            let ok = if name == "x-conversation-id" {
-                v.len() == 36 && v.as_bytes()[14] == b'7' && v.as_bytes()[8] == b'-'
-            } else {
-                v.len() == 32 && v.as_bytes()[12] == b'7' && v.bytes().all(|b| b.is_ascii_hexdigit())
-            };
-            assert!(ok, "{name} 不是官方 uuidv7 形态（实得 {v}）");
-        }
-    }
-    for name in CONV_TEST_HEADERS {
-        assert_eq!(
-            hits[0].header(name),
-            hits[1].header(name),
-            "{name} 换号两轮应复用同一组 ID"
-        );
-    }
-    rp.finish();
-}
-
-/// 场景五：通道校验子类 11128（`request illegal` + channel verification）——
-/// 与号无关、与内容无关，不换号、不冷却任何号，原样透传 400。
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn flagged11128_channel_verification_passes_through_without_cooling() {
+async fn flagged11128_channel_verification_text_is_not_a_subtype() {
     const CHANNEL_BODY_11128: &str = r#"{"error":{"data":{"code":11128,"msg":"request illegal","requestId":"x","displayMsg":{"en":"Request blocked. Please send it again"},"displayTips":{"en":"This call failed channel verification, possibly because it was not sent from an official client."}}}}"#;
     let bad = json!([{
         "status": 400,
@@ -873,28 +610,31 @@ async fn flagged11128_channel_verification_passes_through_without_cooling() {
     assert_eq!(
         r.status,
         400,
-        "通道校验 11128 应原样透传 400（实得 {}：{}）",
+        "全池 11128 应如实透传 400（实得 {}：{}）",
         r.status,
         r.text()
     );
     assert!(
         r.text().contains("channel verification"),
-        "透传体应保留通道校验提示（实得 {}）",
+        "透传体应保留上游文案（实得 {}）",
         r.text()
     );
     assert_eq!(
         hit_uids(&up),
-        vec!["u-wire"],
-        "通道校验只打首号一次、不换号"
+        vec!["u-wire", "u-wire2"],
+        "文案不参与分流：按账号级治理，两个号各打一次（有界）"
     );
 
     let snap = send(&rp.app.base, "GET", "/v1/accounts", None).await;
     let text = snap.text();
-    for uid in ["u-wire", "u-wire2"] {
-        assert_untouched(&text, uid);
-    }
+    assert_eq!(
+        account_field(&text, "u-wire", "cooling"),
+        json!(true),
+        "肇事号应进冷却——文案不再让它逃过治理：{text}"
+    );
     rp.finish();
 }
+
 // ---------- ⑥ 流内错误嗅探（2026-10-20） ----------
 //
 // 上游在 **200** 里塞错误帧/空流时，下游会拿到「200 但没内容」。流式路径在发出 SSE

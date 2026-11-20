@@ -32,6 +32,9 @@ use sha2::{Digest, Sha256};
 /// 「记住」集合的上限：超过就整体丢弃重来（这些指纹只省一次拒绝往返，丢了无损）。
 const REMEMBERED_MAX: usize = 4096;
 
+/// 搬家兜底的最低 system 字节数：短样板句不值得为它多打一次上游。
+pub const MIN_MOVE_BYTES: usize = 64;
+
 /// 一条改写规则命中后要做的动作。
 enum Action {
     /// 在 needle 起点 + off 处插入一个逗号（保义优先，破坏整句精确匹配）。
@@ -264,7 +267,9 @@ pub fn move_system_to_user(body: &mut Map<String, Value>) -> bool {
     let Some(text) = msgs[pos].get("content").and_then(Value::as_str) else {
         return false;
     };
-    if text.trim().is_empty() {
+    // 短样板句（"You are a helpful assistant." 这类）搬了也没有意义：它不是被拒的
+    // 那条 agent 身份句，搬走只会白多一次请求。真被拒的 harness 提示词都是成百上千字节。
+    if text.trim().len() < MIN_MOVE_BYTES {
         return false;
     }
     let moved = format!("```\n{text}\n```");
@@ -365,9 +370,14 @@ mod tests {
 
     #[test]
     fn moved_system_keeps_user_words() {
+        // 搬家只对「像 agent 提示词的长 system」生效，这里刻意写成真提示词的长度
+        let long_system = format!(
+            "You are an AI agent powered by Foo.\n{}",
+            "Follow the user's instructions carefully. ".repeat(8)
+        );
         let v = json!({
             "messages": [
-                { "role": "system", "content": "You are an AI agent powered by Foo." },
+                { "role": "system", "content": long_system },
                 { "role": "user", "content": "hi" }
             ]
         });
@@ -393,6 +403,20 @@ mod tests {
         assert_eq!(
             second["messages"][0]["content"],
             "You are an AI agent, powered by RememberedCo."
+        );
+    }
+    #[test]
+    fn short_system_is_not_moved() {
+        let v = json!({
+            "messages": [
+                { "role": "system", "content": "You are a helpful assistant." },
+                { "role": "user", "content": "hi" }
+            ]
+        });
+        let mut b = v.as_object().unwrap().clone();
+        assert!(
+            !move_system_to_user(&mut b),
+            "短样板句搬家只会白多一次请求"
         );
     }
 }

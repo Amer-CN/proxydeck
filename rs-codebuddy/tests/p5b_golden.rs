@@ -101,7 +101,7 @@ fn compare_hop(scenario: &str, i: usize, want: &Value, got: &CapturedHop) {
     );
     assert_eq!(
         norm_upstream_body(field(want, "body").as_str().unwrap()),
-        norm_upstream_body(&String::from_utf8_lossy(&got.body)),
+        norm_upstream_body(&String::from_utf8_lossy(&common::plain_body(&got))),
         "[{scenario} # {i}] 上游请求体与 Go 不一致"
     );
     if let Some(wh) = field(want, "headers").as_object() {
@@ -573,3 +573,4 @@ fn derived_times(v: &Value) -> Vec<(String, String)> {
     }
     out
 }
+

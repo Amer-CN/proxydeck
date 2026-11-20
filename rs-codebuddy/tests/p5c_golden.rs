@@ -64,7 +64,7 @@ fn compare_hop(scenario: &str, i: usize, want: &Value, got: &CapturedHop) {
     );
     assert_eq!(
         norm_upstream_body(field(want, "body").as_str().unwrap()),
-        norm_upstream_body(&String::from_utf8_lossy(&got.body)),
+        norm_upstream_body(&String::from_utf8_lossy(&common::plain_body(&got))),
         "[{scenario} # {i}] 上游请求体与 Go 不一致（**脱敏硬门禁**）"
     );
     if let Some(wh) = field(want, "headers").as_object() {
@@ -449,3 +449,4 @@ async fn stats_malformed_shapes_match_go() {
         CASES.iter().filter(|c| !c.go_panics).count()
     );
 }
+

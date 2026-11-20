@@ -263,7 +263,7 @@ async fn http_scenarios_match_go_golden() {
             );
             assert_eq!(
                 field(w, "body").as_str().unwrap(),
-                String::from_utf8_lossy(&h.body),
+                String::from_utf8_lossy(&common::plain_body(h)),
                 "[{name} # {i}] 上游请求体与 Go 不一致"
             );
             if let Some(wh) = field(w, "headers").as_object() {
@@ -366,3 +366,4 @@ fn golden_meta_records_production_config() {
     );
     let _ = json!({});
 }
+

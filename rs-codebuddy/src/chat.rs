@@ -756,6 +756,9 @@ pub async fn handle_chat(
     // 这里的循环体在末尾用 `continue`（不是 `for` 的增量表达式），故把自增放在**轮首**，
     // 起点取 `usize::MAX` 让它首轮回绕成 0——与 Go 逐轮自增的取值序列完全一致。
     let mut attempt = usize::MAX;
+    // 出站 gzip 开关：`CODEBUDDY_GZIP=0` 直接关；上游若拒绝解压则本请求内自动关掉重发。
+    let mut gzip_ok = crate::gzip_enabled();
+    let mut gzip_fallback_used = false;
 
     // 200 响应体（非流式 + 有池）在 loop 里就地把 Peek 做完：判定窗口与交给聚合的字节
     // **同源且不丢**（`ok_reader` 是本轮新建的读取器，peek 到的字节留在它里面，见 PEEK_WINDOW）。
@@ -773,10 +776,29 @@ pub async fn handle_chat(
         if let Err(e) = identity.apply(&mut out_hdr, st.region) {
             return write_err(502, &e);
         }
-        let req = st.http_for(&acc_proxy)
+        // 出站请求体 gzip：官方客户端 `RequestBodyGzip` 开着，两种构建的模型请求都压缩后发
+        // （magpie 实测：不压缩照样 200，但少这一层就少一条「像官方」的证据）。体积小
+        // （<1 KiB）的请求压了反而更大，不压。`CODEBUDDY_GZIP=0` 可整体关闭；
+        // 上游若明说解不开（11101 / invalid character），本轮自动退回明文重发一次。
+        let plain = gjson::to_go_bytes(&Value::Object(backend.clone()));
+        let gz = if gzip_ok && plain.len() >= crate::GZIP_MIN_BYTES {
+            crate::gzip_body(&plain)
+        } else {
+            None
+        };
+        let gzip_used = gz.is_some();
+        let mut out_hdr_gz = out_hdr.clone();
+        if gzip_used {
+            out_hdr_gz.insert(
+                header::CONTENT_ENCODING,
+                HeaderValue::from_static("gzip"),
+            );
+        }
+        let req = st
+            .http_for(&acc_proxy)
             .post(&url)
-            .headers(out_hdr)
-            .body(gjson::to_go_bytes(&Value::Object(backend.clone())));
+            .headers(out_hdr_gz)
+            .body(gz.unwrap_or(plain));
         let resp = match req.send().await {
             Ok(r) => r,
             Err(e) => {
@@ -900,6 +922,19 @@ pub async fn handle_chat(
         let status = resp.status().as_u16();
         let http_ver = resp.version();
         let err_body = read_err_body(resp).await;
+        // gzip 兼容回退：上游若明说解不开压缩体（11101 / `invalid character '\x1f'`），
+        // 关掉 gzip 用明文重发一次。只做一次，避免和别的重试路径互相打转。
+        if gzip_used && !gzip_fallback_used
+            && (err_body.contains("11101") || err_body.contains("invalid character"))
+        {
+            gzip_fallback_used = true;
+            gzip_ok = false;
+            println!(
+                "[codebuddy] 上游拒绝 gzip 请求体（{}），本请求改明文重发，gzip 已关闭",
+                truncate(&err_body, 120)
+            );
+            continue;
+        }
         println!(
             "[codebuddy] chat model={} status={} ver={:?} err={}",
             sent_model,
@@ -1980,3 +2015,4 @@ mod tests {
         assert_ne!(c1, conversation_id_for(&body, "u-2"));
     }
 }
+
