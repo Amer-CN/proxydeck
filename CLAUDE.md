@@ -28,11 +28,12 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 ├─ rs-vibex/                  VibeX 插件（8790）
 ├─ rs-bai/                    B.AI 插件（8891）
 ├─ rs-codearts/               华为云码道插件（8793，本机登录态自动导入）
+├─ rs-opencode/               OpenCode 插件（8784；不自带能力，驱动本机 `opencode serve`）
 ├─ app/                       只剩两个原件：ui.html（UI 唯一源）+ icon.ico
 └─ Cargo.toml                 工作区（逐条列全的成员清单）
 ```
 
-- 端口约定：COMMAND 代理 55990 / WorkBuddy 8787 / 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891 / VibeX 8790 / 码道 8793
+- 端口约定：COMMAND 代理 55990 / WorkBuddy 8787（国际版 8789）/ 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891 / VibeX 8790 / 码道 8793 / OpenCode 8784
 - 插件 = spawn 本 exe 的 `--plugin-<id> --port <n>` 子进程，独立常驻，关 GUI 不中断
 - **升版本必须同步的位置**（**Rust 时代清单，2026-10-18 重写**；Go 时代的
   `app/main.go appVersion` 已不参与构建，只剩历史参考）：
@@ -591,21 +592,27 @@ request/message 32 hex、`X-Request-ID` 与消息 ID 同值）；③ `11158` 记
   （重定向不生效，日志写进虚空）；用 cmd 批处理 `>>` 追加（.work/spawn_*.cmd，
   保留历史日志，GUI 日志面板才有内容）
 
-## 当前状态（2026-11-15，v4.9.0 已发布）
+## 当前状态（2026-11-21，v4.9.7 已发布）
 
 > **逐版历史只在 `CHANGELOG.md`**（唯一权威）。本节只保留「现在什么状态、下一步注意什么」，
 > 不再复制版本流水账——2026-10-18 洁癖收尾时删掉了约 200 行重复条目。
 
-- **产品本体**：Rust（`rs-gui` + 八个插件 crate + `rs-proxy`），单 exe 约 23.8MB。
+- **产品本体**：Rust（`rs-gui` + 九个插件 crate + `rs-proxy`），单 exe 约 23.8MB。
 - **已删除的功能**（别再找代码）：生图/生视频 + Agnes（v4.1.0）、自定义服务商与三协议
   （v4.2.0）、**Go 参考实现整体移除（2026-10-18，155 文件 / 42,274 行）**。
   详见上文架构节与两处「（历史）」小节。
 - **本版主线（2026-11-15，v4.9.0）**：Comate 改走云直连（工具调用、真实 usage、
   2s 级响应），zulu 路线留作兜底并适配 1.8.1 新协议；另修 build-rs.ps1 的
   `--version` 自检在无控制台宿主下恒为空的假失败。细节只在 CHANGELOG/提交里。
-- **服务现状**（2026-11-15 15:08 起实测）：GUI（PID 17216）+ 新 exe `v4.9.0` 在跑，
-  8786 Comate / 8788 团结 / 8793 码道 三个拉杆都已点火；8786 走云直连，真机 1.7s 响应
-  带真实 usage。后端是独立常驻子进程，关 GUI 不死；**重启 GUI 不会自动点火**，需逐个拉杆。
+- **服务现状**（2026-11-21 00:58 实测）：GUI（PID 36496）+ exe `v4.9.7` 在跑；
+  **只有 8786 Comate / 8793 码道 两个后端点火**，8787/8789 WorkBuddy、8788 团结、
+  8785/8784/8790/8891/55990 都未启动。后端是独立常驻子进程，关 GUI 不死；
+  **重启 GUI 不会自动点火**，需逐个拉杆。
+- **WorkBuddy 双区状态（2026-11-21 实测）**：CN 健康号 `05f441b6`（来自 CodeBuddy CLI
+  登录写入的 `Tencent-Cloud.coding-copilot.info`，ProxyDeck 池扫描自动收）与
+  INTL 号 `c5c2e094`（token 有效期 2027-10）**都实测 200、带真实 usage 与 quota**；
+  旧的 `e3f27d19`/`516235a0` 已 11140 标死。**CLI 登录会往桌面端同目录写文件，
+  等于顺手给池子加号**——这是运维上要知道的副作用。
 - **账号池内存态**：Dead/冷却/调用计数只在内存（重启清零），只有 Enabled/Removed 落盘；
   上游 reset 时点不落盘，重启丢一次无害。`codebuddy-pool(-intl).json` 已 gitignore。
   码道侧不同：续期结果写 overlay（`codearts-refreshed.json`）并同步回写账号文件，
