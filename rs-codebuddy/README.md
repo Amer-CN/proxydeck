@@ -35,8 +35,8 @@
 
 | 项 | 值 | 证据 |
 |---|---|---|
-| CN UA | `WorkBuddy/5.8.3` | CN 5.8.3 `app.asar` 的 `WorkBuddy/${version}`（TTS / Discord / QQ 路径同款） |
-| INTL UA | `CLI/2.168.2 CodeBuddy/2.168.2` | community #84 的官方 CLI UA 形态（第三段 `OpenAI/JS` 未独立复核，暂不加） |
+| CN UA | `WorkBuddy/5.9.3` | 官方桌面端当前版本（v4.9.8 起；形态仍是 5.8.x 时代的单段 `WorkBuddy/<版本>`） |
+| INTL UA | `CLI/2.185.0 CodeBuddy/2.185.0` | 本机官方 CLI 2.185.0 抓包实测（v4.9.8 起；第三段 `X-Stainless` 由头单独发，不进 UA） |
 | 身份头 | `chat.rs::IdentityHeaders`：三组 conversation ID + `X-Request-ID` + `traceparent`/`b3`/`X-B3-*`/`X-Trace-ID` + `x-codebuddy-request: 1` + `X-Agent-Intent/Purpose` + `X-Product: SaaS`；CN 另带 `X-IDE-Type/Name: WorkBuddy`、`X-IDE-Version: 0.0.0`、`X-Private-Data: true` | CN 5.8.3 `app.asar` 的 `applyGatewayHeaders` / `applyTraceHeaders`（逐字） |
 | 黄金 | `tests/golden/golden-codebuddy-go.json` 的 UA 期望已同步（**有意偏离 Go 基线**，不是笔误） | 提交 `fix(codebuddy): 出站身份头对齐官方桌面端` |
 
