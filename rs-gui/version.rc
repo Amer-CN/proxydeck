@@ -28,13 +28,13 @@
 //   3. String values are ASCII only.
 //
 // -- Release-time only: the four digits below move together with APP_VERSION.
-//    As of 2026-11-15 they match APP_VERSION "v4.9.7". --
+//    As of 2026-11-15 they match APP_VERSION "v4.9.8". --
 // Version numbering policy: `CLAUDE.md` in the repo root; the fourth digit is
 // always 0 (Windows convention).
 
 1 VERSIONINFO
-  FILEVERSION     4,9,7,0
-  PRODUCTVERSION  4,9,7,0
+  FILEVERSION     4,9,8,0
+  PRODUCTVERSION  4,9,8,0
   FILEOS          0x00040004L
   FILETYPE        0x00000001L
   FILESUBTYPE     0x00000000L
@@ -45,12 +45,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName",      "ProxyDeck"
       VALUE "FileDescription",  "ProxyDeck - multi-platform proxy console"
-      VALUE "FileVersion",      "4.9.7.0"
+      VALUE "FileVersion",      "4.9.8.0"
       VALUE "InternalName",     "rs-gui"
       VALUE "LegalCopyright",   "ProxyDeck"
       VALUE "OriginalFilename", "ProxyDeck.exe"
       VALUE "ProductName",      "ProxyDeck"
-      VALUE "ProductVersion",   "4.9.7.0"
+      VALUE "ProductVersion",   "4.9.8.0"
       VALUE "Comments",         "Proxy core v1.2.0"
     END
   END

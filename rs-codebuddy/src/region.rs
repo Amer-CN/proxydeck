@@ -103,7 +103,10 @@ pub static REGION_CN: RegionCfg = RegionCfg {
     // （app.asar 的 TTS/Discord 路径同款：`WorkBuddy/${version}`）。旧值
     // `codebuddy2openai-go/1.0` 是项目自证名——所有用户共享同一个常量，一旦被上游
     // 指纹化就是“批量识别载体”，必须先消掉。
-    user_agent: "WorkBuddy/5.8.3",
+    // 2026-11-21：官方 CN 桌面端已到 5.9.3（magpie 实测 `WorkBuddy/5.9.3
+    // WorkBuddy/5.9.3 CLI/2.165.0`）。我们只跟版本号、形态仍保持单段——单段是
+    // 5.8.x 时代的官方形态，多段拼接未独立复核前不引入。
+    user_agent: "WorkBuddy/5.9.3",
     force_system: false,
     no_refresh: false,
     no_probe: false,
@@ -115,8 +118,9 @@ pub static REGION_INTL: RegionCfg = RegionCfg {
     domain_suffixes: &["workbuddy.ai"],
     // 官方 CodeBuddy CLI 的 UA 是 `CLI/<ver> CodeBuddy/<ver>`（community #84 实证形态）。
     // 旧值停在 2.63.2 且缺第三段（`OpenAI/JS <sdk>`）；第三段尚未被独立复核，先只把
-    // 版本号对齐到 2.168.2，形态保持两段，避免引入未证实的字段。
-    user_agent: "CLI/2.168.2 CodeBuddy/2.168.2",
+    // 版本号对齐。2026-11-21：本机装的官方 CLI 已是 2.185.0（本地抓包实测 UA
+    // 逐字为 `CLI/2.185.0 CodeBuddy/2.185.0`），我们跟着上到同一版本。
+    user_agent: "CLI/2.185.0 CodeBuddy/2.185.0",
     force_system: true,
     no_refresh: true,
     no_probe: true,
