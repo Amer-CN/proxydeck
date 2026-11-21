@@ -64,6 +64,28 @@ POST .../v2/execute                                             → SSE
 **永远发出合法 JSON**（原样 → 尾逗号/截断修补 → 退化 `{}`），由客户端按 schema 校验
 回给模型——不依赖 DSH 的 ToolArgsError，Cursor/Codex/opencode 同样成立。
 插件日志每个请求一行 `[comate] finish …`，坏参数另打 `[comate] bad-args …`。
+
+### 2026-11-21 对照上游新项目补齐的四件事
+
+参考 `httpdone/magpie-comate` 的 `PROTOCOL.md`、`maojindao55/comate-acp`、
+`tsd619124/dsh-connect-comate`（三份都是这周的新仓库）：
+
+- **`plugin-version` 是 `zulucli-<IDE 扩展版本>`**（本机 `zulucli-4.13.4`），**不是**
+  `@comate/zulu` 包版本——旧值 `zulucli-1.8.1` 一直填错了来源。现在动态读扩展
+  `package.json`，`COMATE_PLUGIN_VERSION` 仍可覆盖；启动日志会打印实际值。
+- 补 `X-Trace-Id: <uuid>` 请求头（官方每条请求都带）。
+- 认识四类非内容帧：`NEED_RETRY_EXCEPTION`（上游明确要求重试）、`QUOTA_EXCEED`、
+  `DOWNGRADE`、`NOTIFICATION`。额度帧的真文案在 `detail.userActions.cards[].message`，
+  购买链接在 `cards[].buttons[].url`，另有 `detail.autoModel`；对外回 **429 + 原文**。
+- `ask_user_question` / `send_user_message` 是 Comate **自己的交互工具**，不是客户端工具；
+  硬透传会变成 unknown_tool 把这一轮搞死。现在渲染成**正文提问**（带选项列表），
+  任何 OpenAI 兼容客户端都能把它显示给人，人答一句就在下一轮继续。
+
+**额度用尽后的免费档**：`modelKey = auto-free-individual` 且**不带 `modelProvider`。
+2026-11-21 实测 200 + 正文 + `TOKEN_USAGE`，工具调用与流式都正常。它不在账号模型目录里
+（目录只列付费模型），所以云直连的 `/v1/models` 额外列一条 `auto-free`；zulu 路线的
+`/v1/models` 不动（那条有 Go 黄金逐字节锁着）。
+
 **没做**（如实登记）：图片输入（`attachImages` 上传链路）、`max_tokens`/`temperature`
 透传（实测 `modelParams.maxTokens` 被上游接受但**忽略**，透传=假承诺）、
 `response_format` 结构化输出、多轮跨请求的会话复用（每轮新建会话，只有工具续接复用）、

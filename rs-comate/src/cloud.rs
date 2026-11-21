@@ -32,8 +32,67 @@ pub const MCP_SERVER: &str = "openai_client";
 /// `agentVersion` 常量（Comate2API 逆向自官方客户端；2026-11-15 实测 200）。
 pub const AGENT_VERSION: i64 = 12;
 
-/// 本机 zulu 版本探测不到的兜底值。
-pub const DEFAULT_PLUGIN_VERSION: &str = "zulucli-1.8.1";
+/// 额度用尽后仍可用的免费轻量模型。
+///
+/// 它**不在**账号模型目录里（目录只列付费模型），但上游认这个 modelKey：
+/// 2026-11-21 实测 `execute` 返回 200、正文与 TOKEN_USAGE 都正常。
+pub const AUTO_FREE_MODEL: &str = "auto-free-individual";
+
+/// 探测不到本机 IDE 扩展版本时的兜底值。
+///
+/// ⚠ 这里填的是**IDE 扩展版本**（`zulucli-<扩展版本>`），**不是** `@comate/zulu` 包的版本。
+/// 2026-11-21 对照 [magpie-comate PROTOCOL.md](https://github.com/httpdone/magpie-comate/blob/main/PROTOCOL.md)
+/// 才发现：官方 `plugin-version` 形如 `zulucli-4.13.0`，对应 `BaiduComate.comate` 扩展的
+/// `package.json` 版本；而本机 zulu 包是 1.8.1 —— 旧值 `zulucli-1.8.1` 一直填错了来源。
+pub const DEFAULT_PLUGIN_VERSION: &str = "zulucli-4.13.4";
+
+/// 解析要上报的 `plugin-version`。
+///
+/// 优先级：`COMATE_PLUGIN_VERSION` → 本机已装 IDE 扩展的版本（`zulucli-<ver>`）→ 兜底常量。
+/// 跟着本机安装走，Comate 升级后不用改代码。
+pub fn resolve_plugin_version() -> String {
+    if let Ok(v) = std::env::var("COMATE_PLUGIN_VERSION") {
+        let t = v.trim();
+        if !t.is_empty() {
+            return t.to_string();
+        }
+    }
+    match crate::zulu::detect_extension_version() {
+        Some(v) => format!("zulucli-{v}"),
+        None => DEFAULT_PLUGIN_VERSION.to_string(),
+    }
+}
+
+/// 一个 uuid-v4 形态的 id（官方的 `X-Trace-Id` 是 uuid）。
+///
+/// 不引 uuid crate：只要形态一致就行，取值本身没有语义。
+pub fn trace_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+    let mut x = nanos ^ seq.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x2545_F491_4F6C_DD1D;
+    let mut hex = String::with_capacity(32);
+    for _ in 0..4 {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        hex.push_str(&format!("{x:016x}"));
+    }
+    // 32 个 ASCII hex 字符，按字节切片安全。
+    format!(
+        "{}-{}-4{}-a{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[13..16],
+        &hex[17..20],
+        &hex[20..32]
+    )
+}
 
 // ---------- 模型目录 ----------
 
@@ -77,6 +136,12 @@ pub struct CloudFrame {
     pub end: bool,
     /// 失败文案（`detail.exceptionMsg`）。
     pub exception: String,
+    /// 非内容帧的附带文案（`NOTIFICATION` / `DOWNGRADE` 等的 message 类字段）。
+    pub note: String,
+    /// `QUOTA_EXCEED` 场景：服务端给的按钮链接（购买/了解额度）。
+    pub hint_url: String,
+    /// `QUOTA_EXCEED` 场景：服务端建议的降级模型（如 `auto-free-individual`）。
+    pub auto_model: String,
     pub usage: Option<CloudUsage>,
     pub tool_use: Vec<CloudToolUse>,
 }
@@ -143,6 +208,46 @@ pub fn parse_frame(json: &str) -> Option<CloudFrame> {
     f.delta = s(detail.get("delta"));
     f.reasoning = s(detail.get("reasoningDelta"));
     f.exception = s(detail.get("exceptionMsg"));
+    // 非内容帧（NOTIFICATION / DOWNGRADE / QUOTA_EXCEED）的文案字段各异，挨个认。
+    f.note = ["message", "notificationMsg", "notification", "msg", "desc", "reason"]
+        .iter()
+        .find_map(|k| {
+            let v = s(detail.get(*k));
+            (!v.trim().is_empty()).then_some(v)
+        })
+        .unwrap_or_default();
+    // 额度用尽时真正的文案在 `detail.userActions.cards[].message`，按钮链接在
+    // `cards[].buttons[].url`（2026-11-21 真机抓帧）。detail.message 往往是空的。
+    f.auto_model = s(detail.get("autoModel"));
+    if let Some(cards) = detail
+        .get("userActions")
+        .and_then(|a| a.get("cards"))
+        .and_then(|c| c.as_array())
+    {
+        for card in cards {
+            if f.note.trim().is_empty() {
+                let m = s(card.get("message"));
+                if !m.trim().is_empty() {
+                    f.note = m;
+                }
+            }
+            if f.hint_url.is_empty() {
+                if let Some(btns) = card.get("buttons").and_then(|b| b.as_array()) {
+                    for btn in btns {
+                        let u = s(btn.get("url"));
+                        if !u.trim().is_empty() {
+                            f.hint_url = u;
+                            let label = s(btn.get("text"));
+                            if f.note.is_empty() && !label.is_empty() {
+                                f.note = label;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
     if let Some(u) = detail.get("usage").and_then(|u| u.as_object()) {
         let pick = |k: &str| {
             u.get(k)
@@ -307,10 +412,7 @@ pub struct CloudClient {
 impl CloudClient {
     pub fn new(base: impl Into<String>, license: impl Into<String>) -> Self {
         let license = license.into();
-        let plugin_version = std::env::var("COMATE_PLUGIN_VERSION")
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .unwrap_or_else(|| DEFAULT_PLUGIN_VERSION.to_string());
+        let plugin_version = resolve_plugin_version();
         let ide_version = plugin_version
             .strip_prefix("zulucli-")
             .unwrap_or(&plugin_version)
@@ -338,6 +440,8 @@ impl CloudClient {
         h.insert("X-Source", HeaderValue::from_static("COMATE"));
         insert_str(&mut h, "plugin-version", &self.plugin_version);
         h.insert("x-skip-fcnap", HeaderValue::from_static("yes"));
+        // 官方每条请求都带（2026-11-21 对照 magpie-comate PROTOCOL.md 补齐）。
+        insert_str(&mut h, "X-Trace-Id", &trace_id());
         h.insert("Accept", HeaderValue::from_static("application/json"));
         h.insert("Content-Type", HeaderValue::from_static("application/json"));
         h.insert("User-Agent", HeaderValue::from_static("axios/1.7.9"));
@@ -528,6 +632,14 @@ impl CloudClient {
             "hasMcp": has_mcp,
             "agentVersion": AGENT_VERSION,
         });
+        let mut body = body;
+        // auto-free 没有 modelProvider（真机探针里该字段整个不发送）；空串会被上游当成
+        // 「未知 provider」，所以空值直接删掉这个键。
+        if model_provider.is_empty() {
+            if let Some(m) = body.as_object_mut() {
+                m.remove("modelProvider");
+            }
+        }
         let url = format!("{}/api/aidevops/autocomate/rest/autowork/v2/execute", self.base);
         let mut headers = self.auth_headers();
         headers.insert("Accept", reqwest::header::HeaderValue::from_static("text/event-stream"));
@@ -713,4 +825,32 @@ mod tests {
             Some("{\"city\":\"上海\"}")
         );
     }
+
+    #[test]
+    fn trace_id_is_uuid_shaped_and_unique() {
+        let a = trace_id();
+        let b = trace_id();
+        assert_eq!(a.len(), 36, "{a}");
+        assert_ne!(a, b, "两次取值不能相同");
+        let parts: Vec<&str> = a.split('-').collect();
+        assert_eq!(
+            parts.iter().map(|p| p.len()).collect::<Vec<_>>(),
+            vec![8, 4, 4, 4, 12],
+            "{a}"
+        );
+        assert!(a.chars().all(|c| c == '-' || c.is_ascii_hexdigit()), "{a}");
+    }
+
+    /// 2026-11-21：`plugin-version` 是 `zulucli-<IDE 扩展版本>`，不是 `@comate/zulu` 包版本。
+    #[test]
+    fn plugin_version_has_zulucli_prefix() {
+        let v = resolve_plugin_version();
+        assert!(v.starts_with("zulucli-"), "{v}");
+        let ver = v.strip_prefix("zulucli-").unwrap_or("");
+        assert!(
+            !ver.is_empty() && ver.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false),
+            "{v}"
+        );
+    }
+
 }

@@ -323,6 +323,80 @@ pub struct OpenAiToolCall {
 }
 
 /// 原生 `UseMcpTool` 调用 → 客户端的 function 调用。
+/// 上游自己带的「交互型」工具：模型想向用户提问/发消息时会调它们。
+///
+/// 这些不是客户端的工具，硬透传只会变成 unknown_tool，把这一轮变成死局
+/// （2026-11-16 对照 tsd619124/dsh-connect-comate 的实测：Comate 触发
+/// `ask_user_question` 时会发一条工具元素然后结束这一轮）。改成**正文提问**，
+/// 任何客户端都能把问题显示给人，人答一句就在下一轮继续。
+const INTERACTIVE_TOOLS: [&str; 2] = ["ask_user_question", "send_user_message"];
+
+/// 认识上游调用里的真实工具名，并判定是不是交互型工具。
+fn interactive_call(c: &PendingToolCall) -> Option<(&'static str, Value)> {
+    let mut name = ["tool_name", "toolName", "tool", "function", "name"]
+        .iter()
+        .find_map(|k| {
+            c.input
+                .get(*k)
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        });
+    if name.is_none() && !c.name.is_empty() && c.name != "UseMcpTool" && c.name != "use_mcp_tool" {
+        name = Some(c.name.clone());
+    }
+    let name = name?;
+    let hit = INTERACTIVE_TOOLS
+        .iter()
+        .find(|t| **t == name || name.ends_with(&format!("__{t}")))?;
+    let args = c.input.get("arguments").cloned().unwrap_or(Value::Null);
+    let parsed = match args {
+        Value::String(s) => serde_json::from_str::<Value>(&s).unwrap_or(Value::Null),
+        v => v,
+    };
+    Some((hit, parsed))
+}
+
+/// 把交互型调用渲染成给人看的一段正文。
+fn render_interactive(kind: &str, args: &Value) -> String {
+    let pick = |k: &str| {
+        args.get(k)
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    let body = pick("question")
+        .or_else(|| pick("message"))
+        .or_else(|| pick("text"))
+        .unwrap_or_else(|| "Comate 需要你再确认一下才能继续。".to_string());
+    let mut out = format!("\n\n【需要你确认】{body}");
+    if let Some(opts) = args.get("options").and_then(|v| v.as_array()) {
+        let labels: Vec<String> = opts
+            .iter()
+            .map(|o| match o {
+                Value::String(s) => s.clone(),
+                Value::Object(m) => m
+                    .get("label")
+                    .or_else(|| m.get("value"))
+                    .or_else(|| m.get("text"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                _ => String::new(),
+            })
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !labels.is_empty() {
+            out.push_str(&format!("\n可选：{}", labels.join(" / ")));
+        }
+    }
+    if kind == "send_user_message" {
+        out.push_str("\n（上面是 Comate 主动发来的消息）");
+    } else {
+        out.push_str("\n直接回复即可，我会把你的回答转给 Comate 继续这次会话。");
+    }
+    out
+}
 pub fn map_native_calls(
     native: Vec<PendingToolCall>,
     active: &[ToolDef],
@@ -563,6 +637,10 @@ pub struct CloudReader {
     pub usage: Option<CloudUsage>,
     pub error: String,
     pub ended: bool,
+    /// 上游明确要求重试（`NEED_RETRY_EXCEPTION`）。比按文案猜更可靠。
+    pub retry_hint: bool,
+    /// 额度/积分用尽（`QUOTA_EXCEED`）——重试没有意义。
+    pub quota: bool,
     tools: ToolCallAcc,
     /// 已映射成 OpenAI 形态的调用（结束时填）。
     pub calls: Vec<OpenAiToolCall>,
@@ -583,6 +661,8 @@ impl CloudReader {
             usage: None,
             error: String::new(),
             ended: false,
+            retry_hint: false,
+            quota: false,
             tools: ToolCallAcc::default(),
             calls: Vec::new(),
             native: Vec::new(),
@@ -632,6 +712,48 @@ impl CloudReader {
                     };
                 }
             }
+            "NEED_RETRY_EXCEPTION" => {
+                // 上游自己说「该重试」——不要按文案猜（2026-11-21 对照 PROTOCOL.md 补）。
+                self.retry_hint = true;
+                let msg = if !f.exception.is_empty() { f.exception } else { f.note };
+                if self.error.is_empty() {
+                    self.error = format!("上游要求重试：{msg}");
+                }
+            }
+            "QUOTA_EXCEED" => {
+                // 真机（2026-11-21）文案在 `detail.userActions.cards[].message`：
+                // 「当前订阅周期的模型额度已用完，每小时可免费限额使用 Auto-Free 轻量模型…」
+                self.quota = true;
+                if self.error.is_empty() {
+                    let mut text = if !f.exception.is_empty() {
+                        f.exception.clone()
+                    } else if !f.note.trim().is_empty() {
+                        f.note.clone()
+                    } else {
+                        "Comate 当前订阅周期的额度已用尽（QUOTA_EXCEED）".to_string()
+                    };
+                    if !f.auto_model.is_empty() && !text.contains(&f.auto_model) {
+                        text.push_str(&format!(
+                            "\n可以改用 {}（每小时免费限额的轻量模型）",
+                            f.auto_model
+                        ));
+                    }
+                    if !f.hint_url.is_empty() {
+                        text.push_str(&format!("\n了解/购买额度：{}", f.hint_url));
+                    }
+                    self.error = text;
+                }
+            }
+            "DOWNGRADE" => {
+                if !f.note.is_empty() {
+                    println!("[comate] 上游提示降级：{}", f.note);
+                }
+            }
+            "NOTIFICATION" => {
+                if !f.note.is_empty() {
+                    println!("[comate] 上游通知：{}", f.note);
+                }
+            }
             k if k.starts_with("FUNCTION_CALL_") || k.starts_with("TOOL_CALL_") => {
                 self.tools.consume(k, &f.tool_use);
             }
@@ -650,6 +772,22 @@ impl CloudReader {
     /// 结束块：tool_calls（若有）→ finish_reason → usage → `[DONE]`。
     pub fn finish_frames(&mut self, active: &[ToolDef]) -> Result<(), String> {
         let native = self.tools.take_finished(true);
+        // 交互型调用不当工具：渲成正文提问，这一轮正常结束（否则会变成 unknown_tool 死局）。
+        let mut native = native;
+        let mut kept: Vec<PendingToolCall> = Vec::with_capacity(native.len());
+        for c in native.drain(..) {
+            match interactive_call(&c) {
+                Some((kind, args)) => {
+                    let text = render_interactive(kind, &args);
+                    println!("[comate] interactive tool={kind} -> 正文提问（{} 字）", text.chars().count());
+                    self.content.push_str(&text);
+                    let chunk = chunk_json(&self.id, &self.model, &text, "", self.created);
+                    self.push_frame(chunk);
+                }
+                None => kept.push(c),
+            }
+        }
+        let native = kept;
         let note_counts = (
             self.content.chars().count(),
             self.reasoning.chars().count(),
@@ -1244,6 +1382,64 @@ mod tests {
         assert!(out.ends_with("data: [DONE]\n\n"), "{out}");
     }
 
+    /// 2026-11-21（对照 magpie-comate PROTOCOL.md）：
+    /// 上游会用 `NEED_RETRY_EXCEPTION` 明确说「该重试」，`QUOTA_EXCEED` 说额度用尽。
+    /// 旧实现两类都不认识 → 前者不重试、后者表现成「莫名停住」。
+    #[test]
+    fn retry_and_quota_frames_are_recognised() {
+        let mut r = CloudReader::new("id".into(), "m".into(), 1);
+        r.feed(
+            r#"data: {"content":{"type":"NEED_RETRY_EXCEPTION","detail":{"exceptionMsg":"服务繁忙"}}}"#
+                .as_bytes(),
+        );
+        assert!(r.retry_hint, "NEED_RETRY_EXCEPTION 必须置重试标记");
+        assert!(r.error.contains("上游要求重试"), "{}", r.error);
+        assert!(r.error.contains("服务繁忙"), "{}", r.error);
+        assert!(!r.quota);
+
+        let mut q = CloudReader::new("id".into(), "m".into(), 1);
+        // 2026-11-21 真机原始帧（截取关键字段）：文案在 userActions.cards[].message，
+        // 链接在 cards[].buttons[].url，另有 autoModel 建议降级模型。
+        q.feed(
+            r#"data: {"content":{"type":"QUOTA_EXCEED","detail":{"userType":"INDIVIDUAL","userActions":{"cards":[{"message":"当前订阅周期的模型额度已用完，每小时可免费限额使用Auto-Free轻量模型。","buttons":[{"text":"购买智能体积分包","url":"https://comate.baidu.com/zh/pricing/payment?type=zulu"}]}]},"autoModel":"auto-free-individual"},"end":true},"end":true}"#
+                .as_bytes(),
+        );
+        assert!(q.quota, "QUOTA_EXCEED 必须置额度标记");
+        assert!(q.error.contains("当前订阅周期的模型额度已用完"), "{}", q.error);
+        assert!(q.error.contains("auto-free-individual"), "{}", q.error);
+        assert!(q.error.contains("https://comate.baidu.com"), "{}", q.error);
+        assert!(!q.retry_hint);
+    }
+
+    /// `ask_user_question` 是 Comate 自己的交互工具，不是客户端工具。
+    /// 硬透传只会变成 unknown_tool（那一轮就废了）；必须改成正文提问。
+    #[test]
+    fn ask_user_question_is_rendered_as_text_not_a_tool_call() {
+        let mut r = CloudReader::new("id".into(), "m".into(), 1);
+        r.feed(
+            r#"data: {"content":{"type":"FUNCTION_CALL_START","detail":{"toolUse":[{"id":"c1","name":"UseMcpTool","input":{"server_name":"openai_client"}}]}}}"#
+                .as_bytes(),
+        );
+        r.feed(
+            r#"data: {"content":{"type":"FUNCTION_CALL_PARAMS_APPEND","detail":{"toolUse":[{"id":"c1","name":"UseMcpTool","input":{"tool_name":"ask_user_question"}}]}}}"#
+                .as_bytes(),
+        );
+        r.feed(
+            r#"data: {"content":{"type":"FUNCTION_CALL_PARAMS_APPEND","detail":{"toolUse":[{"id":"c1","name":"UseMcpTool","input":{"arguments":"{\"question\":\"选 A 还是 B？\",\"options\":[\"A\",\"B\"]}"}}]}}}"#
+                .as_bytes(),
+        );
+        r.feed(
+            r#"data: {"content":{"type":"FUNCTION_CALL_END","detail":{"toolUse":[{"id":"c1","name":"UseMcpTool","input":{}}]},"end":true},"end":true}"#
+                .as_bytes(),
+        );
+        r.finish_frames(&[]).unwrap();
+        assert!(r.calls.is_empty(), "交互型调用不该变成 tool_calls");
+        assert!(r.content.contains("选 A 还是 B？"), "{}", r.content);
+        assert!(r.content.contains("A / B"), "{}", r.content);
+        let out = String::from_utf8(r.out.clone()).unwrap();
+        assert!(out.contains("需要你确认"), "{out}");
+        assert!(out.contains("\"finish_reason\":\"stop\""), "{out}");
+    }
     #[test]
     fn session_resume_matches_same_conversation() {
         let store = SessionStore::default();

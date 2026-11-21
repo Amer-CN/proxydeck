@@ -229,7 +229,14 @@ async fn nonstream_chat_returns_content_usage_and_reasoning() {
     // 认证头
     let conv: Value = serde_json::from_str(&hits[0].1).unwrap();
     assert_eq!(conv["uploadBaseInfo"]["license"], "test-license-0001");
-    assert_eq!(conv["pluginVersion"], "zulucli-1.8.1");
+    // plugin-version 跟着本机安装的 IDE 扩展版本走（`zulucli-1.8.1` 是 @comate/zulu 包版本，
+    // 不是官方上报的那个字段；2026-11-21 按 magpie-comate PROTOCOL.md 纠正）。
+    let expect = rs_comate::cloud::resolve_plugin_version();
+    assert_eq!(conv["pluginVersion"], expect.as_str());
+    assert!(
+        expect.starts_with("zulucli-"),
+        "形态必须是 zulucli-<version>：{expect}"
+    );
 }
 
 #[tokio::test]

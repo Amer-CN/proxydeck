@@ -342,6 +342,14 @@ async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
         ("object", s("model")),
     ])];
     if st.transport == Transport::Cloud && !license.is_empty() {
+        // 免费档只在云直连里露出来：zulu 路径的 /v1/models 有 Go 黄金逐字节锁着，
+        // 加一条就破基线，而 Go 当年根本没有云直连这条路。
+        // 额度用尽后仍可用（2026-11-21 实测：目录里没有它，但 modelKey 直发可用）。
+        data.push(obj(vec![
+            ("id", s("auto-free")),
+            ("display_name", s("Auto-Free（额度用尽也能用）")),
+            ("object", s("model")),
+        ]));
         match cloud_models_cached(&st, &license).await {
             Ok(list) => {
                 for m in list {
@@ -457,8 +465,11 @@ async fn resolve_cloud_model(
         return Err("云模型目录为空".to_string());
     }
     let want = requested.trim();
-    if want.is_empty() || want.eq_ignore_ascii_case("auto") || want.eq_ignore_ascii_case("auto-free")
-    {
+    // 额度用尽后的免费档：目录里没有它，直接钉 modelKey（2026-11-21 实测可用）。
+    if want.eq_ignore_ascii_case("auto-free") || want.eq_ignore_ascii_case(cloud::AUTO_FREE_MODEL) {
+        return Ok((cloud::AUTO_FREE_MODEL.to_string(), String::new()));
+    }
+    if want.is_empty() || want.eq_ignore_ascii_case("auto") {
         let m = list
             .iter()
             .find(|m| m.is_default)
@@ -635,12 +646,13 @@ enum CloudTry {
 
 /// 上游过载/瞬断，重试一次可能就过；400/鉴权类不重试。
 fn upstream_busy(msg: &str) -> bool {
-    const MARKERS: [&str; 7] = [
+    const MARKERS: [&str; 8] = [
         "请求较多",
         "响应异常",
         "稍后重试",
         "建议升级插件",
         "上游 SSE 中断",
+        "上游要求重试",
         "error sending request",
         "connection",
     ];
@@ -776,6 +788,9 @@ async fn cloud_once(
             "comate-plugin: 云直连 once model={model_label} 502 {:?} {e}",
             start.elapsed()
         );
+        if reader.quota {
+            return CloudTry::Done(write_error(StatusCode::TOO_MANY_REQUESTS, &e, "quota_exceeded"));
+        }
         if upstream_busy(&e) {
             return CloudTry::Retry(e);
         }
@@ -894,6 +909,9 @@ async fn cloud_stream(
             start.elapsed(),
             reader.error
         );
+        if reader.quota {
+            return CloudTry::Done(sse_error(StatusCode::TOO_MANY_REQUESTS, &reader.error));
+        }
         if upstream_busy(&reader.error) {
             return CloudTry::Retry(reader.error);
         }
@@ -1599,11 +1617,12 @@ pub async fn run(args: Args) -> Result<(), String> {
         })
         .collect();
     println!(
-        "comate-plugin: 登录态来源 {} → 命中={}（来源 {}）；transport={:?}；zulu CLI {}",
+        "comate-plugin: 登录态来源 {} → 命中={}（来源 {}）；transport={:?}；plugin-version={}；zulu CLI {}",
         source_desc.join(" | "),
         !state.license().is_empty(),
         zulu::resolve_license_with_source(&state.license_sources).1,
         state.transport,
+        cloud::resolve_plugin_version(),
         state
             .zulu_path
             .as_ref()

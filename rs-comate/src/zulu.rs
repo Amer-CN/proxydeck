@@ -265,6 +265,41 @@ fn is_file(p: &Path) -> bool {
     std::fs::metadata(p).map(|m| !m.is_dir()).unwrap_or(false)
 }
 
+/// 本机已装 `BaiduComate.comate` 扩展的版本号（`package.json` 的 `version`）。
+///
+/// 用途：官方上报的 `plugin-version` 是 `zulucli-<扩展版本>`（不是 `@comate/zulu` 包版本）。
+/// 跟着安装走，Comate 升级后不用改代码。找不到返回 `None`，调用方退回兜底常量。
+pub fn detect_extension_version() -> Option<String> {
+    let rel = Path::new("Comate")
+        .join("resources")
+        .join("app")
+        .join("extensions")
+        .join("baiducomate.comate")
+        .join("package.json");
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    for env in ["ProgramFiles(x86)", "ProgramFiles"] {
+        if let Some(pf) = std::env::var_os(env) {
+            candidates.push(PathBuf::from(pf).join(&rel));
+        }
+    }
+    candidates.push(PathBuf::from(r"D:\Program Files (x86)").join(&rel));
+    for c in candidates {
+        let Ok(txt) = std::fs::read_to_string(&c) else {
+            continue;
+        };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) else {
+            continue;
+        };
+        if let Some(ver) = v.get("version").and_then(|x| x.as_str()) {
+            let ver = ver.trim();
+            if !ver.is_empty() {
+                return Some(ver.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Go `modelInfo`（`modelId` / `displayName`）。
 ///
 /// `Option` 是为了对齐 Go 的容忍度：缺字段与 `null` 都落成零值 ""，**类型不符**则整份

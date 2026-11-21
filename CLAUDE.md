@@ -148,6 +148,17 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   8786 挂了先查三件事：`PLATFORM=saas` 是否注入（大写等于没设）、流式是 `element-add/patch`
   还是老 `text-delta`、登录态是不是 IDE 那个号。工具名按**短名 `__` 后缀唯一匹配**，认不出的
   原样透传（细则与五个真机坑见 docs）。
+  **2026-11-21 对照上游新项目补齐四件事**（`httpdone/magpie-comate` 的 `PROTOCOL.md`、
+  `maojindao55/comate-acp`、`tsd619124/dsh-connect-comate`）：
+  ① `plugin-version` 是 **`zulucli-<IDE 扩展版本>`**（本机 4.13.4），不是 `@comate/zulu`
+  包版本——旧值 `zulucli-1.8.1` 填错了来源，现改为动态读扩展 `package.json`；
+  ② 补 `X-Trace-Id` 头；③ 认识 `NEED_RETRY_EXCEPTION`（上游明确要求重试，比按中文猜可靠）、
+  `QUOTA_EXCEED`（真文案在 `detail.userActions.cards[].message`，链接在 `buttons[].url`）、
+  `DOWNGRADE`、`NOTIFICATION`；④ `ask_user_question`/`send_user_message` 是 Comate
+  **自己的交互工具**，硬透传会变 unknown_tool 把这一轮搞死，现在渲染成**正文提问**。
+  **额度用尽也有免费档**：`modelKey=auto-free-individual` 且**不带 `modelProvider`**，
+  实测 200 + 正文 + usage、工具与流式都正常；它不在账号目录里，所以云直连的
+  `/v1/models` 额外列一条 `auto-free`（zulu 路径不列，那条有 Go 黄金锁着）。
 
 ## 已踩的坑（改代码前必读）
 
