@@ -180,6 +180,37 @@ DPoP 私钥**必须**与 refresh_token 一起保存，换密钥刷新会被 STS 
 实测（2026-11-13，真实上游 `glm-5.3`）：非流式两个端点均 200 且中文正确；
 流式 Anthropic 收到 `content_block_delta`（"温暖明亮。"）、Responses 收到文本增量。
 
+## 2026-11-21：并发闸门 / 请求体上限 / 平台差异（照社区实证补齐）
+
+来源（两个仍在维护的码道实现，交叉印证）：
+
+- [`fkfbnv/codearts2api-hardened`](https://github.com/fkfbnv/codearts2api-hardened) —
+  HITZY2002 的维护分支（v1.0.0→v1.0.3，2026-11-15~17）。
+- [`magpie-community/plugins` 的 `packages/codearts`](https://github.com/magpie-community/plugins/tree/main/packages/codearts)
+  （`@magpie-community/opencode-codearts-auth` 0.3.22，2026-11-16）——目前注释最细的实现。
+
+| 块 | 做法 | 位置 |
+|---|---|---|
+| 会话 id 稳定化 | 上游按 `x-ot-session-id` 认会话（每号并发 3）。**不能用 AK 派生**：STS 续期会换 AK，会话 id 跟着变就等于定期换新会话，旧槽还挂着 → 并发被按多个会话累计。改为按 `domainId\|显示名`（`Account::identity`）派生 | `upstream.rs::session_id_for` |
+| 请求体 10 MiB 预检 | 上游 chat 硬上限实测 10 MiB（10,484,871 B 过 / 10,485,871 B 挂），超限回的是误导性的 `InferHub.001001005`「参数非法」。本地按实际字节数拦下，回可读 413，**不轮换、不冷却账号** | `upstream.rs::CHAT_BODY_LIMIT` / `lib.rs::up_error_response` |
+| 大陆站丢弃 `stop` | 中国大陆站一个 `stop` 都不接受（magpie 0.3.19 实测）。客户端带了就本地剥掉，国际站保留 | `lib.rs::strip_unsupported_stop` |
+| 活动双通道 | 2026-11-02 起新积分体系「每日签到领100积分」投在 **PORTAL**，老体系在 IDE。两通道都查、按 `campaignId` 合并（PORTAL 覆盖同 ID），**领取时带该活动自己的通道**；单通道失败不阻断 | `upstream.rs::OPS_CHANNELS` / `campaigns` / `claim_campaign` |
+| 并发上限退避 | `TM.00001041`「并发会话数已达上限(3个)」不再立刻冷却换号：先对**同一个号**按 2/4/6/8/10 秒退避重试（槽位是时间租约，约 1 分钟释放；换号只是把问题搬走） | `lib.rs::CONCURRENCY_RETRY_SECS` |
+| 网关排队 | 网关把请求排队时回 `429` + `queue-status: queued` + `trace-id`：轮询 `GET /api/v1/concurrency/trace-queues/{traceId}` 到 `promoted` 再原样重发一次；超预算（默认 120s，`CODEARTS_QUEUE_BUDGET_SECS` 可调，0 = 不等待）则 `DELETE` 取消并透传 429 | `lib.rs::await_queue` / `upstream.rs::trace_queue_*` |
+
+**没有跟的两条（记录在案）**：
+
+- `codearts serve` CLI 后端：hardened 分支发现「官方对裸 chat 调用加传输层加密后，部分模型
+  直连回 `TM.000010051`」，对策是把命中模型转给本地 `codearts serve`。代价是内置/依赖一份
+  官方 CLI，暂不做；真遇到再评估。
+- 国际站：magpie 已支持 `codearts.ap-southeast-1.myhuaweicloud.com` 的门户与 OAuth。
+  本项目仍只做国内站。
+
+**验证**：`cargo test -p rs-codearts` 52 lib + 2 集成全绿；clippy 0 warning；
+18793 起服务后 `/health` 与 `/activity?campaigns=1` 在账号令牌过期的情况下都在 100ms 内
+返回可读错误（双通道查询不挂）。因本机账号 STS 于 2026-11-13 到期且续期失败，本轮
+**未能**用真实上游验证 PORTAL 通道是否真有可领活动 / 10 MiB 阈值 / 排队流程。
+
 ## 验证命令
 
 ```powershell

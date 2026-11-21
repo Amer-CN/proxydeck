@@ -29,6 +29,8 @@ use serde_json::Value;
 pub struct Campaign {
     /// 原始 campaignId（数字/字符串都保留原值，回传时按原类型发）。
     pub id: Value,
+    /// 投放通道（`IDE` / `PORTAL`）：领取时必须原样带回该活动自己的通道。
+    pub channel: String,
     pub title: String,
     /// 活动类型：`USER_LOGIN`（每日签到）、`NEW_USER_REGISTER`（新手）、
     /// `INVITE_*`（邀请）、`STUDENT_*`（学生）等，未知类型照常按 claimable 处理。
@@ -88,6 +90,7 @@ pub fn parse_campaigns(v: &Value) -> Vec<Campaign> {
         let num = |k: &str| it.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
         out.push(Campaign {
             id,
+            channel: String::new(), // 由调用方按投放通道填（IDE/PORTAL）
             title: it.get("title").and_then(|x| x.as_str()).unwrap_or("").trim().to_string(),
             kind: it.get("type").and_then(|x| x.as_str()).unwrap_or("").trim().to_string(),
             status: it.get("status").and_then(|x| x.as_str()).unwrap_or("").trim().to_string(),
@@ -322,6 +325,7 @@ mod tests {
     fn campaign(id: Value, kind: &str, status: &str, claimable: bool) -> Campaign {
         Campaign {
             id,
+            channel: "IDE".into(),
             title: "t".into(),
             kind: kind.into(),
             status: status.into(),

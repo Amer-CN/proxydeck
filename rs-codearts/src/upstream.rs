@@ -19,10 +19,21 @@ pub const BUILTIN_MODELS_PATH: &str = "/v1/model/builtin";
 /// 积分套餐与用量。
 pub const STATISTICS_PATH: &str = "/snap-manager/v1/statistics/plugin";
 
-/// 活动积分（签到/新手/邀请/学生）：snap-access 根路径，需 `Agent-Type: PromptCenter`。
-pub const OPS_DELIVERY_PATH: &str = "/v1/ops/delivery?channel=IDE";
+/// 活动积分投放通道：2026-11-02 起新积分体系「每日签到领100积分」投在 **PORTAL**，
+/// 老体系在 IDE。两边都查，按 `campaignId` 合并（后查的 PORTAL 覆盖同 ID 的 IDE 条目），
+/// 单通道失败不阻断——新体系只在 PORTAL 投放时 IDE 仍然可用。
+pub const OPS_CHANNELS: [&str; 2] = ["IDE", "PORTAL"];
+pub const OPS_DELIVERY_PATH: &str = "/v1/ops/delivery";
 pub const OPS_CLAIM_PATH: &str = "/v1/ops/claim";
 pub const OPS_CONFIRM_PATH: &str = "/v1/ops/confirm";
+
+/// 并发排队：网关把请求排队时回 429 + `queue-status: queued` + `trace-id`，
+/// 轮询这个 trace 直到 `promoted` 再重发；放弃时 DELETE。
+pub const TRACE_QUEUE_PATH: &str = "/api/v1/concurrency/trace-queues";
+
+/// 上游 `/api/v2/chat/completions` 的单请求硬上限（实测 10,484,871 B 过 /
+/// 10,485,871 B 挂；超限回的是误导性的 `InferHub.001001005`「参数非法」）。
+pub const CHAT_BODY_LIMIT: usize = 10 * 1024 * 1024;
 
 /// 限时福利（免费套餐）网关：与 snap-access 不同域，签名按该 host 计算。
 pub const BENEFIT_BASE: &str = "https://opengw.developer.huaweicloud.com";
@@ -282,20 +293,51 @@ impl Upstream {
 
     /// 活动列表：签到（`USER_LOGIN`）、新手（`NEW_USER_REGISTER`）、邀请、学生等。
     /// 需 `Agent-Type: PromptCenter`；签名通道与推理相同（snap-access 根路径）。
+    ///
+    /// 轮询 [`OPS_CHANNELS`]（IDE + PORTAL）取并集：新积分体系的每日签到只在 PORTAL
+    /// 投放，老体系在 IDE；按 `campaignId` 合并、PORTAL 覆盖同 ID 条目。单通道失败
+    /// 不阻断，两通道全失败才把第一个错误抛出去。
     pub async fn campaigns(
         &self,
         account: &Account,
     ) -> Result<Vec<crate::activity::Campaign>, UpError> {
+        let mut merged: std::collections::BTreeMap<String, crate::activity::Campaign> =
+            std::collections::BTreeMap::new();
+        let mut first_err: Option<UpError> = None;
+        for channel in OPS_CHANNELS {
+            match self.campaigns_channel(account, channel).await {
+                Ok(list) => {
+                    for mut c in list {
+                        c.channel = channel.to_string();
+                        merged.insert(c.id_text(), c);
+                    }
+                }
+                Err(e) => {
+                    if first_err.is_none() {
+                        first_err = Some(e);
+                    }
+                }
+            }
+        }
+        if merged.is_empty() {
+            if let Some(e) = first_err {
+                return Err(e);
+            }
+        }
+        Ok(merged.into_values().collect())
+    }
+
+    /// 单通道活动列表。
+    async fn campaigns_channel(
+        &self,
+        account: &Account,
+        channel: &str,
+    ) -> Result<Vec<crate::activity::Campaign>, UpError> {
         let mut extra = BTreeMap::new();
         extra.insert("agent-type".to_string(), "PromptCenter".to_string());
+        let path = format!("{OPS_DELIVERY_PATH}?channel={channel}");
         let resp = self
-            .signed(
-                reqwest::Method::GET,
-                OPS_DELIVERY_PATH,
-                Vec::new(),
-                extra,
-                account,
-            )
+            .signed(reqwest::Method::GET, &path, Vec::new(), extra, account)
             .await?;
         let status = resp.status().as_u16();
         let bytes = resp
@@ -323,11 +365,22 @@ impl Upstream {
     }
 
     /// 领取一个活动；返回上游 JSON（`data.id` 非空时调用方需再 confirm）。
-    pub async fn claim_campaign(&self, account: &Account, id: &Value) -> Result<Value, UpError> {
+    /// `channel` 用该活动自己的投放通道（IDE / PORTAL），空则退回 IDE。
+    pub async fn claim_campaign(
+        &self,
+        account: &Account,
+        id: &Value,
+        channel: &str,
+    ) -> Result<Value, UpError> {
         let id_text = match id {
             Value::String(s) => s.clone(),
             Value::Number(n) => n.to_string(),
             other => other.to_string(),
+        };
+        let ch = if channel.trim().is_empty() {
+            "IDE"
+        } else {
+            channel.trim()
         };
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -335,11 +388,47 @@ impl Upstream {
             .unwrap_or(0);
         let body = serde_json::json!({
             "campaignId": id,
-            "channel": "IDE",
+            "channel": ch,
             "idempotentKey": format!("claim_{id_text}_{now_ms}"),
         });
         let bytes = serde_json::to_vec(&body).unwrap_or_default();
         self.post_ops_json(OPS_CLAIM_PATH, bytes, account).await
+    }
+
+    /// 并发排队状态（`GET /api/v1/concurrency/trace-queues/{traceId}`）。
+    pub async fn trace_queue_state(&self, account: &Account, trace_id: &str) -> Result<Value, UpError> {
+        let mut extra = BTreeMap::new();
+        extra.insert("accept".to_string(), "application/json".to_string());
+        let path = format!("{TRACE_QUEUE_PATH}/{trace_id}");
+        let resp = self
+            .signed(reqwest::Method::GET, &path, Vec::new(), extra, account)
+            .await?;
+        let status = resp.status().as_u16();
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| UpError::new(502, "read", e.to_string()))?;
+        if status >= 400 {
+            return Err(error_from_body(status, &bytes));
+        }
+        serde_json::from_slice::<Value>(&bytes)
+            .map_err(|e| UpError::new(502, "parse", format!("排队状态不是 JSON: {e}")))
+    }
+
+    /// 放弃排队（DELETE 同一路径）。
+    pub async fn trace_queue_cancel(&self, account: &Account, trace_id: &str) -> Result<(), UpError> {
+        let mut extra = BTreeMap::new();
+        extra.insert("accept".to_string(), "application/json".to_string());
+        let path = format!("{TRACE_QUEUE_PATH}/{trace_id}");
+        let resp = self
+            .signed(reqwest::Method::DELETE, &path, Vec::new(), extra, account)
+            .await?;
+        let status = resp.status().as_u16();
+        if status >= 400 {
+            let bytes = resp.bytes().await.unwrap_or_default();
+            return Err(error_from_body(status, &bytes));
+        }
+        Ok(())
     }
 
     /// 确认领取（claim 返回 `data.id` 时才需要；失败不影响已到账的积分）。
@@ -503,6 +592,19 @@ impl Upstream {
         benefit: bool,
         session_id: &str,
     ) -> Result<reqwest::Response, UpError> {
+        // 上游 chat 单请求硬上限实测 10 MiB，超限回的是误导性的
+        // `InferHub.001001005`「参数非法」。在这里按实际字节数拦下，回可读的 413，
+        // 且不轮换、不冷却账号（2026-11-21 社区实证，见 hardened v1.0.1）。
+        if body.len() > CHAT_BODY_LIMIT {
+            return Err(UpError::new(
+                413,
+                "request_too_large",
+                format!(
+                    "请求体 {:.1} MiB 超过码道上游单请求上限 10 MiB（历史消息/工具 schema/内联图片过大），请压缩上下文或开新会话",
+                    body.len() as f64 / (1024.0 * 1024.0)
+                ),
+            ));
+        }
         let mut extra = BTreeMap::new();
         extra.insert("accept".to_string(), "text/event-stream".to_string());
         extra.insert("app-id".to_string(), "CodeAgent3.0".to_string());
@@ -562,12 +664,17 @@ pub struct ModelInfo {
     pub benefit: bool,
 }
 
-/// 由 AK 派生稳定会话 id（上游按它统计并发，每账号上限 3）。
+/// 由**稳定账号身份**派生会话 id（上游按 `x-ot-session-id` 认会话，每账号并发上限 3）。
+///
+/// ⚠ 不能用 AK 派生：STS 临时 AK 每次续期都会变，会话 id 跟着变等于过一段时间就换一个
+/// 新会话，网关那边旧槽还挂着（2026-11-21 社区实证，magpie `packages/codearts`：
+/// 不带该头的请求各自算一个会话、槽位挂约一分钟；官方 agent 放的是 conversation id）。
+/// 身份取 `domainId|显示名`（[`Account::identity`]），续期前后一致。
 pub fn session_id_for(account: &Account) -> String {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
-    h.update(account.access_key.as_bytes());
-    h.update(b"|codearts-session");
+    h.update(account.identity().as_bytes());
+    h.update(b"|codearts-session-v2");
     let digest = h.finalize();
     format!("ses_{}", hex::encode(&digest[..12]))
 }
@@ -730,5 +837,46 @@ mod tests {
         let e = error_from_body(401, body);
         assert!(e.credential, "{e}");
         assert!(!is_body_too_large(&e));
+    }
+
+    /// 会话 id 必须由稳定身份派生：STS 续期会换 AK，拿 AK 派生等于定期换会话，
+    /// 上游并发槽位会按多个会话累计（2026-11-21 社区实证）。
+    #[test]
+    fn session_id_survives_ak_rotation() {
+        let mut a = Account {
+            access_key: "AK-OLD".into(),
+            secret_key: "SK".into(),
+            security_token: "T1".into(),
+            domain_id: Some("dom1".into()),
+            name: "hw123".into(),
+            ..Default::default()
+        };
+        let before = session_id_for(&a);
+        a.access_key = "AK-NEW".into();
+        a.security_token = "T2".into();
+        assert_eq!(before, session_id_for(&a), "续期换了 AK 也必须同会话");
+        assert!(before.starts_with("ses_"));
+        // 换账号 = 换会话
+        a.name = "hw456".into();
+        assert_ne!(before, session_id_for(&a));
+    }
+
+    /// 上游 chat 单请求上限 10 MiB：本地拦下并回可读的 413，不联网、不算凭据错误。
+    #[tokio::test]
+    async fn oversized_chat_body_is_rejected_locally() {
+        let up = Upstream::new("http://127.0.0.1:1").unwrap();
+        let e = up
+            .chat(
+                &Account::default(),
+                "glm-5.3",
+                vec![b'x'; CHAT_BODY_LIMIT + 1],
+                false,
+                "ses_x",
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(e.status, 413);
+        assert_eq!(e.code, "request_too_large");
+        assert!(!e.credential, "请求体超限不是凭据错误");
     }
 }

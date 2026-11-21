@@ -55,6 +55,20 @@ use upstream::{ModelInfo, UpError, Upstream};
 
 /// 请求体上限（与其它 crate 的 32 MiB 口径一致）。
 pub const MAX_BODY_BYTES: usize = 32 << 20;
+/// 并发上限（`TM.00001041`）时对**同一个号**的退避重试间隔：2/4/6/8/10 秒。
+/// 上游槽位是时间租约（约 1 分钟），换号只是把问题搬到别的号上。
+pub const CONCURRENCY_RETRY_SECS: [u64; 5] = [2, 4, 6, 8, 10];
+/// 网关排队（`429 + queue-status: queued`）的总等待预算，默认 120 秒，
+/// `CODEARTS_QUEUE_BUDGET_SECS` 可覆盖（0 = 不等待，直接透传 429）。
+fn queue_budget() -> Duration {
+    let secs = std::env::var("CODEARTS_QUEUE_BUDGET_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(120);
+    Duration::from_secs(secs)
+}
+/// 排队轮询间隔。
+const QUEUE_POLL: Duration = Duration::from_secs(2);
 /// 模型清单缓存时长。
 pub const MODELS_TTL: Duration = Duration::from_secs(600);
 /// 等上游首个 SSE 事件的超时。
@@ -305,7 +319,7 @@ impl Server {
             if !activity::claimable_now(c, &settled, &day, now) {
                 continue;
             }
-            match self.up.claim_campaign(account, &c.id_json()).await {
+            match self.up.claim_campaign(account, &c.id_json(), &c.channel).await {
                 Ok(v) => {
                     let need_confirm = v
                         .get("data")
@@ -562,6 +576,32 @@ impl Server {
     }
 
     // ---------------- 并发闸门 / 模型可用性学习 ----------------
+
+    /// 等网关排队放行（`429 + queue-status: queued`）：轮询 trace 直到 `promoted`
+    /// 或超预算；超时就 DELETE 取消，别把队列项挂在服务端。
+    async fn await_queue(&self, account: &Account, trace_id: &str) -> bool {
+        let budget = queue_budget();
+        if budget.is_zero() {
+            return false;
+        }
+        let deadline = Instant::now() + budget;
+        loop {
+            if Instant::now() >= deadline {
+                let _ = self.up.trace_queue_cancel(account, trace_id).await;
+                return false;
+            }
+            tokio::time::sleep(QUEUE_POLL).await;
+            match self.up.trace_queue_state(account, trace_id).await {
+                Ok(v) => {
+                    if queue_promoted(&v) {
+                        return true;
+                    }
+                }
+                // 查询失败不等于没放行：继续等，直到预算耗尽。
+                Err(e) => println!("[codearts] 排队状态查询失败（继续等）：{}", e.message),
+            }
+        }
+    }
 
     /// 单账号并发闸门（上游每账号并发 3；`CODEARTS_MAX_CONCURRENT` 可覆盖）。
     pub fn permit(&self, uid: &str) -> Arc<tokio::sync::Semaphore> {
@@ -973,6 +1013,58 @@ fn expired_account_error(account: &Account, note: &Option<String>) -> UpError {
     )
 }
 
+/// 中国大陆站丢弃 `stop` / `stop_sequences`（上游一个 stop 都不接受），返回是否丢弃了。
+/// 国际站（不含 `cn-north-4`）保留原样。
+fn strip_unsupported_stop(base: &str, req: &mut Value) -> bool {
+    if !base.contains("cn-north-4") {
+        return false;
+    }
+    let Some(obj) = req.as_object_mut() else {
+        return false;
+    };
+    let a = obj.remove("stop").is_some();
+    let b = obj.remove("stop_sequences").is_some();
+    a || b
+}
+
+/// 并发上限错误（`TM.00001041`「并发会话数已达上限(3个)」）：先退避重试同一个号。
+fn is_concurrency_error(e: &UpError) -> bool {
+    let text = format!("{} {}", e.code, e.message).to_ascii_lowercase();
+    text.contains("tm.00001041") || text.contains("并发会话数") || text.contains("concurrent")
+}
+
+/// 网关排队应答：`429` + `queue-status: queued` + `trace-id`，取 trace id 供轮询。
+fn queued_trace(resp: &reqwest::Response) -> Option<String> {
+    let status = resp
+        .headers()
+        .get("queue-status")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if status != "queued" {
+        return None;
+    }
+    resp.headers()
+        .get("trace-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// 排队状态是否已放行（`promoted` / `running` / `admitted`）。
+pub fn queue_promoted(v: &Value) -> bool {
+    for k in ["status", "state", "queueStatus", "queue_status"] {
+        if let Some(s) = v.get(k).and_then(|x| x.as_str()) {
+            let s = s.trim().to_ascii_lowercase();
+            return matches!(s.as_str(), "promoted" | "running" | "admitted" | "active");
+        }
+    }
+    if let Some(d) = v.get("data") {
+        return queue_promoted(d);
+    }
+    v.to_string().to_ascii_lowercase().contains("\"promoted\"")
+}
+
 /// 可重试（换号）的上游错误：限流、5xx、并发上限、网络。
 fn retryable(e: &UpError) -> bool {
     e.status == 429
@@ -1053,6 +1145,10 @@ fn error_response(status: u16, message: &str, code: &str) -> Response {
 
 /// 上游错误 → 对外响应。凭据类错误固定 502 并给出可操作提示。
 fn up_error_response(e: &UpError) -> Response {
+    // 本地预检的 10 MiB 上限（上游回的是误导性的「参数非法」）。
+    if e.code == "request_too_large" {
+        return error_response(413, &e.message, "request_too_large");
+    }
     // 先认「请求体超限」：网关把它伪装成 APIG.0301 签名失败，真拿它当凭据问题
     // 会误导用户去重新登录（实际是上下文/图片太大）。
     if upstream::is_body_too_large(e) {
@@ -1416,6 +1512,10 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
 
     let cfg = st.load_config().unwrap_or_default();
 
+    // 中国大陆站不接受 `stop`（magpie 0.3.19 实测：mainland 一个 stop 都不收）。
+    // 客户端带了就本地剥掉，避免整轮 400；国际站保留。
+    strip_unsupported_stop(st.up.base(), &mut req);
+
     // 上游一律流式（glm-5.3 只支持流式）；非流式在本地聚合。
     req["model"] = Value::String(model.clone());
     req["stream"] = Value::Bool(true);
@@ -1458,66 +1558,84 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
         st.touch_account(&account.identity());
         let benefit = cfg.is_benefit() || st.is_benefit_model(&account.identity(), &model);
         let session_id = upstream::session_id_for(&account);
-        match st
-            .up
-            .chat(
-                &account,
-                &model,
-                payload.clone(),
-                benefit,
-                &session_id,
-            )
-            .await
-        {
-            Ok(resp) => {
-                let status = resp.status().as_u16();
-                if status < 400 {
-                    st.mark_ok(&account.identity());
-                    return finish_chat(resp, &model, wants_stream).await;
-                }
-                let body = resp.bytes().await.unwrap_or_default();
-                let text = String::from_utf8_lossy(&body).to_string();
-                // 模型级不可用（002002009 not registered）：记 30 分钟黑名单，避免反复撞。
-                if is_model_missing_body(&text) {
-                    st.mark_model_unavailable(&account.identity(), &model, 1800);
-                }
-                // 福利模型未领（4004.200 benefit not found）：补一次 claim 后重试一轮。
-                if is_benefit_missing_body(&text) && !benefit_claimed_once {
-                    benefit_claimed_once = true;
+        // 内层循环：并发上限先退避重试**同一个号**，网关排队先等 promoted 再重发。
+        // 都不成就按原规则交给外层换号。
+        let mut conc_retry = 0usize;
+        let mut queue_waited = false;
+        let terminal: Option<UpError> = loop {
+            let resp = match st
+                .up
+                .chat(&account, &model, payload.clone(), benefit, &session_id)
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => break Some(e),
+            };
+            let status = resp.status().as_u16();
+            if status < 400 {
+                st.mark_ok(&account.identity());
+                return finish_chat(resp, &model, wants_stream).await;
+            }
+            // 网关排队：429 + `queue-status: queued` + `trace-id`，等 promoted 后重发一次。
+            if status == 429 && !queue_waited {
+                if let Some(trace) = queued_trace(&resp) {
+                    queue_waited = true;
                     println!(
-                        "[codearts] 账号 {} 福利未领（benefit not found），补领后重试",
+                        "[codearts] 账号 {} 被网关排队（trace {trace}），等待放行",
                         account.display_name()
                     );
-                    let _ = st.up.claim_benefit(&account).await;
-                    let _ = st.ensure_benefit(&account).await;
-                    last = Some(upstream::error_from_body(status, &body));
-                    continue;
+                    if st.await_queue(&account, &trace).await {
+                        println!("[codearts] 已放行（trace {trace}），重发原请求");
+                        continue;
+                    }
+                    println!("[codearts] 排队超时（trace {trace}），放弃");
                 }
-                let e = upstream::error_from_body(status, &body);
-                if e.credential {
-                    // 账号失效：本轮直接标死，换下一个
-                    st.note_credential_failure(&account, source);
-                    last = Some(e);
-                    continue;
-                }
-                if retryable(&e) {
-                    st.mark_cooling(&account.identity(), 30);
-                    last = Some(e);
-                    continue;
-                }
-                return up_error_response(&e);
             }
-            Err(e) => {
-                if e.credential {
-                    st.note_credential_failure(&account, source);
-                } else if retryable(&e) {
-                    st.mark_cooling(&account.identity(), 30);
-                } else {
-                    return up_error_response(&e);
-                }
-                last = Some(e);
+            let body = resp.bytes().await.unwrap_or_default();
+            let text = String::from_utf8_lossy(&body).to_string();
+            // 模型级不可用（002002009 not registered）：记 30 分钟黑名单，避免反复撞。
+            if is_model_missing_body(&text) {
+                st.mark_model_unavailable(&account.identity(), &model, 1800);
             }
+            // 福利模型未领（4004.200 benefit not found）：补一次 claim 后重试一轮。
+            if is_benefit_missing_body(&text) && !benefit_claimed_once {
+                benefit_claimed_once = true;
+                println!(
+                    "[codearts] 账号 {} 福利未领（benefit not found），补领后重试",
+                    account.display_name()
+                );
+                let _ = st.up.claim_benefit(&account).await;
+                let _ = st.ensure_benefit(&account).await;
+                break Some(upstream::error_from_body(status, &body));
+            }
+            let e = upstream::error_from_body(status, &body);
+            // 并发上限（TM.00001041）：槽位按时间租约释放（约 1 分钟），换号只是把
+            // 问题搬到别的号上——先按 2/4/6/8/10 秒退避重试同一个号。
+            if is_concurrency_error(&e) && conc_retry < CONCURRENCY_RETRY_SECS.len() {
+                let secs = CONCURRENCY_RETRY_SECS[conc_retry];
+                conc_retry += 1;
+                println!(
+                    "[codearts] 账号 {} 并发已满，{secs}s 后重试（第 {conc_retry} 次）",
+                    account.display_name()
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+                continue;
+            }
+            break Some(e);
+        };
+        let Some(e) = terminal else { continue };
+        if e.credential {
+            // 账号失效：本轮直接标死，换下一个
+            st.note_credential_failure(&account, source);
+            last = Some(e);
+            continue;
         }
+        if retryable(&e) {
+            st.mark_cooling(&account.identity(), 30);
+            last = Some(e);
+            continue;
+        }
+        return up_error_response(&e);
     }
     up_error_response(
         &last.unwrap_or_else(|| UpError::new(503, "no_account", "没有可用码道账号")),
@@ -1888,6 +2006,7 @@ async fn handle_activity(
                     "items": list.iter().map(|c| json!({
                         "id": c.id_text(), "type": c.kind, "title": c.title,
                         "status": c.status, "claimable": c.claimable,
+                        "channel": c.channel,
                         "unit": c.unit, "amount": c.amount,
                         "start": c.start, "end": c.end,
                     })).collect::<Vec<_>>(),
@@ -2237,6 +2356,7 @@ mod tests {
     fn claim_credits_prefers_response_then_campaign_amount() {
         let c = activity::Campaign {
             id: serde_json::json!(1),
+            channel: "IDE".into(),
             title: "t".into(),
             kind: "USER_LOGIN".into(),
             status: "ELIGIBLE".into(),
@@ -2258,4 +2378,46 @@ mod tests {
         assert_eq!(claim_credits(&serde_json::json!({}), &c), 1000.0);
     }
 
+
+    #[test]
+    fn mainland_strips_stop_and_intl_keeps_it() {
+        let mut req = serde_json::json!({"model":"glm-5.3","stop":["END"],"stop_sequences":["X"]});
+        let base_cn = "https://snap-access.cn-north-4.myhuaweicloud.com";
+        assert!(strip_unsupported_stop(base_cn, &mut req));
+        assert!(req.get("stop").is_none(), "大陆站必须丢掉 stop");
+        assert!(req.get("stop_sequences").is_none());
+
+        let mut req2 = serde_json::json!({"model":"glm-5.3","stop":["END"]});
+        let base_intl = "https://snap-access.ap-southeast-1.myhuaweicloud.com";
+        assert!(!strip_unsupported_stop(base_intl, &mut req2));
+        assert_eq!(req2["stop"], serde_json::json!(["END"]), "国际站保留 stop");
+
+        // 没有 stop 的请求不报错、不改动
+        let mut req3 = serde_json::json!({"model":"glm-5.3"});
+        assert!(!strip_unsupported_stop(base_cn, &mut req3));
+    }
+
+    #[test]
+    fn concurrency_errors_are_recognized() {
+        assert!(is_concurrency_error(&UpError::new(
+            400,
+            "TM.00001041",
+            "并发会话数已达上限(3个)"
+        )));
+        assert!(is_concurrency_error(&UpError::new(
+            429,
+            "",
+            "concurrent session limit reached"
+        )));
+        assert!(!is_concurrency_error(&UpError::new(400, "TM.00001050", "积分已耗尽")));
+    }
+
+    #[test]
+    fn queue_state_parsing() {
+        assert!(queue_promoted(&serde_json::json!({"status":"promoted"})));
+        assert!(queue_promoted(&serde_json::json!({"data":{"state":"RUNNING"}})));
+        assert!(queue_promoted(&serde_json::json!({"queueStatus":"admitted"})));
+        assert!(!queue_promoted(&serde_json::json!({"status":"queued"})));
+        assert!(!queue_promoted(&serde_json::json!({"status":"waiting","position":3})));
+    }
 }

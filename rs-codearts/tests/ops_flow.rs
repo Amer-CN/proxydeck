@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde_json::{json, Value};
@@ -17,7 +17,18 @@ use rs_codearts::upstream::Upstream;
 #[derive(Clone, Default)]
 struct Recorder(Arc<Mutex<Vec<Value>>>);
 
-async fn delivery() -> Json<Value> {
+async fn delivery(Query(q): Query<std::collections::HashMap<String, String>>) -> Json<Value> {
+    // 双通道：IDE 给老体系的签到（id 1），PORTAL 给新体系的同 ID 条目（覆盖）
+    // 外加一条 PORTAL 专属活动（id 9）。合并后应有 3 条（1、inv-7、9）。
+    let channel = q.get("channel").cloned().unwrap_or_default();
+    if channel == "PORTAL" {
+        return Json(json!({"code":0,"data":{"items":[
+            {"campaignId":1,"type":"USER_LOGIN","title":"每日签到（新体系）","status":"CONSUMED",
+             "claimable":false,"benefitUnit":"CREDIT","benefitAmount":100},
+            {"campaignId":9,"type":"NEW_USER_REGISTER","title":"PORTAL 专属","status":"ELIGIBLE",
+             "claimable":true,"benefitUnit":"CREDIT","benefitAmount":4000}
+        ]}}));
+    }
     Json(json!({"code":0,"data":{"items":[
         {"campaignId":1,"type":"USER_LOGIN","title":"每日签到","status":"ELIGIBLE","claimable":true,
          "benefitUnit":"CREDIT","benefitAmount":1000,
@@ -81,15 +92,21 @@ async fn activity_flow_matches_upstream_contract() {
     let up = Upstream::new(&base).unwrap();
 
     let campaigns = up.campaigns(&account()).await.expect("活动列表应解析");
-    assert_eq!(campaigns.len(), 2);
-    assert_eq!(campaigns[0].id_text(), "1");
-    assert!(campaigns[0].is_login());
-    assert_eq!(campaigns[1].id_text(), "inv-7");
-    assert_eq!(campaigns[1].kind, "INVITE_REGISTER");
+    // IDE 两条 + PORTAL 两条，按 campaignId 合并（PORTAL 的 1 覆盖 IDE 的 1）→ 3 条。
+    assert_eq!(campaigns.len(), 3, "双通道应合并去重：{campaigns:?}");
+    let by_id = |id: &str| campaigns.iter().find(|c| c.id_text() == id).cloned();
+    let login = by_id("1").expect("应有 id=1");
+    assert!(login.is_login());
+    assert_eq!(login.channel, "PORTAL", "同 ID 时 PORTAL 覆盖 IDE");
+    assert_eq!(login.status, "CONSUMED", "取到的是 PORTAL 那条");
+    let inv = by_id("inv-7").expect("应有 inv-7");
+    assert_eq!(inv.channel, "IDE");
+    assert_eq!(inv.kind, "INVITE_REGISTER");
+    assert_eq!(by_id("9").expect("应有 PORTAL 专属").channel, "PORTAL");
 
-    // 数字 campaignId 必须原样回数字（上游实测 ID 是数字）。
+    // 数字 campaignId 必须原样回数字（上游实测 ID 是数字），通道用活动自己的。
     let out = up
-        .claim_campaign(&account(), &json!(1))
+        .claim_campaign(&account(), &json!(1), "PORTAL")
         .await
         .expect("claim 应成功");
     assert_eq!(out["code"], 0);
@@ -99,7 +116,7 @@ async fn activity_flow_matches_upstream_contract() {
         .find(|r| r["path"] == "claim")
         .expect("应收到 claim 请求");
     assert_eq!(claim_req["body"]["campaignId"], json!(1));
-    assert_eq!(claim_req["body"]["channel"], "IDE");
+    assert_eq!(claim_req["body"]["channel"], "PORTAL", "领取要带活动自己的通道");
     assert!(
         claim_req["body"]["idempotentKey"]
             .as_str()
