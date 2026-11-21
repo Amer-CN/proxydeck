@@ -126,6 +126,21 @@
 ### WorkBuddy（8787）——子智能体可用
 - 支持 tool_calls（实测返回过标准工具调用），可当 Agent/子智能体模型
 - glm-5.2 / kimi-k3 等可用
+### 参考实现（2026-11-21 起必读）
+
+[dingminhua/dsh-connect-workbuddy](https://github.com/dingminhua/dsh-connect-workbuddy)（**MIT**，
+Copyright (c) 2026 LaoDing，2026-11-21 仍在更新）：一个 DSH bundle 插件，把本机登录的 WorkBuddy
+（国内 + 国际双 provider）接进 DSH 模型选择器。**它比 magpie 更贴我们的问题**，下面几条硬结论出自它：
+
+- `/v3/config` 是模型目录端点（按 App 自己的客户端身份读，UA 决定给多少）；
+- 11128 的「三道门」：消息开头、会话 id 有没有、**首条是不是 system**；
+- 改写在 `prepareChatBody` 里按句改词，覆盖 `@` 路径整段；
+- CLI 桥（`cliBridge`，默认关）：让本机 CLI 自己跑任务；它也明确「伪装过渠道校验是军备竞赛，会出现 11140」；
+- 国际版两个品牌域：桌面端 `workbuddy.ai`、CLI `codebuddy.ai`，都算国际版。
+
+借鉴纪律：它自己是「借鉴设计 + 独立实现」，并把参考项目写进 `THIRD_PARTY_NOTICES.md`；
+我们若复用其代码，必须保留 MIT 版权声明。
+
 - **模型列表机制（2026-09-10 定案 → 2026-11-21 推翻）**：旧结论是「上游没有任何模型列表
   端点，`modelCandidates` 硬编码 + 每小时探测，**发现不了上游新增**，加模型要动三处」。
   **2026-11-21 实测发现 `GET /v3/config` 就是模型目录端点**（此前只查了 `/models`、
