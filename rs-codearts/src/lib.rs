@@ -187,6 +187,7 @@ impl Server {
             .parent()
             .map(|p| p.join("codearts-activity.json"))
             .unwrap_or_else(|| PathBuf::from("codearts-activity.json"));
+        let loaded_ledger = activity::Ledger::load(&ledger_path);
         Arc::new(Self {
             up,
             accounts_path,
@@ -201,7 +202,7 @@ impl Server {
             refreshed: Mutex::new(refreshed),
             health: Mutex::new(std::collections::HashMap::new()),
             archived: Mutex::new(std::collections::HashSet::new()),
-            ledger: Mutex::new(activity::Ledger::load(&ledger_path)),
+            ledger: Mutex::new(loaded_ledger),
             activity_state: Mutex::new(std::collections::HashMap::new()),
             benefit: Mutex::new(std::collections::HashMap::new()),
             busy: Mutex::new(std::collections::HashMap::new()),

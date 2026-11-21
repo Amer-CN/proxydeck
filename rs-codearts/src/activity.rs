@@ -281,8 +281,33 @@ impl Ledger {
     }
 
     pub fn save(&self) {
+        // **落盘前先和磁盘现状合并**：插件可能同时跑两个实例（例如 8793 生产 + 18793
+        // 测试），或者内存里的快照比磁盘旧——直接整体覆盖会把别处刚写进去的 settled
+        // 抹掉（2026-11-21 实测：生产实例开机时读到空账本，之后每次保存都把手工补的
+        // 领取记录清成 {}，于是「今天已领」永远记不住）。合并规则：
+        //   * `last_*` 取更新的那一份（按 last_run 比较）；
+        //   * `settled` 取并集，已存在的键保留磁盘值（磁盘代表已发生过的事实）。
+        let mut merged = Ledger::load(&self.path);
+        for (id, e) in &self.entries {
+            let dst = merged.entries.entry(id.clone()).or_default();
+            if e.last_run >= dst.last_run {
+                dst.last_run = e.last_run;
+                dst.last_message = e.last_message.clone();
+                dst.last_credits = e.last_credits;
+            }
+            for (k, v) in &e.settled {
+                // 同键取**较晚**的日期（YYYY-MM-DD 字典序＝时间序）：既保住磁盘上
+                // 别处写入的记录，也允许本进程把「今天已领」推进到新的一天。
+                match dst.settled.get(k) {
+                    Some(old) if old >= v => {}
+                    _ => {
+                        dst.settled.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
         let mut accounts = serde_json::Map::new();
-        for (k, e) in &self.entries {
+        for (k, e) in &merged.entries {
             let mut settled = serde_json::Map::new();
             for (sk, sv) in &e.settled {
                 settled.insert(sk.clone(), Value::String(sv.clone()));
@@ -437,6 +462,43 @@ mod tests {
             again.entry("u-1").settled.get("USER_LOGIN#1").map(String::as_str),
             Some("2026-11-14")
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 多实例/过期快照：保存时必须与磁盘合并，别把别处写的 settled 抹掉。
+    /// 2026-11-21 实测事故：生产实例开机读到空账本，之后每次保存都清成 {}，
+    /// 于是「今天已领」永远记不住、签到会被重复处理。
+    #[test]
+    fn save_merges_with_disk_instead_of_overwriting() {
+        let dir = std::env::temp_dir().join(format!("ca-ledger-merge-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("codearts-activity.json");
+
+        // 实例 A：写下今天的签到记录
+        let mut a = Ledger::load(&path);
+        a.update("u-1", |e| {
+            e.last_run = 100;
+            e.settled.insert("USER_LOGIN#34".into(), "2026-11-21".into());
+            e.settled.insert("confirm|USER_LOGIN#34".into(), "2026-11-21".into());
+        });
+        a.save();
+
+        // 实例 B：开机时读到的是空账本（模拟慢启动/旧快照），只改 last_*
+        let mut b = Ledger::load(&path);
+        b.entries.clear(); // 模拟「内存里没有 settled」的最坏情况
+        b.update("u-1", |e| e.last_run = 200);
+        b.save();
+
+        let back = Ledger::load(&path);
+        let e = back.entry("u-1");
+        assert_eq!(e.last_run, 200, "更新的 last_run 要生效");
+        assert_eq!(
+            e.settled.get("USER_LOGIN#34").map(String::as_str),
+            Some("2026-11-21"),
+            "磁盘上的领取记录不能被抹掉"
+        );
+        assert!(e.settled.contains_key("confirm|USER_LOGIN#34"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
