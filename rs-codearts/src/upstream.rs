@@ -313,6 +313,9 @@ impl Upstream {
                     }
                 }
                 Err(e) => {
+                    // 单通道失败不阻断（另一通道仍可领），但要留痕：2026-11-21 实测
+                    // 活动已全部搬到 PORTAL，IDE 可能回空列表或报错。
+                    println!("[codearts] 活动通道 {channel} 拉取失败：{}", e.message);
                     if first_err.is_none() {
                         first_err = Some(e);
                     }

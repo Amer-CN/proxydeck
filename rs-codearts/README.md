@@ -206,10 +206,28 @@ DPoP 私钥**必须**与 refresh_token 一起保存，换密钥刷新会被 STS 
 - 国际站：magpie 已支持 `codearts.ap-southeast-1.myhuaweicloud.com` 的门户与 OAuth。
   本项目仍只做国内站。
 
-**验证**：`cargo test -p rs-codearts` 52 lib + 2 集成全绿；clippy 0 warning；
-18793 起服务后 `/health` 与 `/activity?campaigns=1` 在账号令牌过期的情况下都在 100ms 内
-返回可读错误（双通道查询不挂）。因本机账号 STS 于 2026-11-13 到期且续期失败，本轮
-**未能**用真实上游验证 PORTAL 通道是否真有可领活动 / 10 MiB 阈值 / 排队流程。
+**验证**（2026-11-21 16:30 后，本机重新登录、领了当日 100 积分）：
+
+- `cargo test -p rs-codearts` 52 lib + 2 集成全绿；clippy 0 warning。
+- **PORTAL 通道确认存在且已是主通道**：新号 `hw097714867316278` 的
+  `GET /v1/ops/delivery` 双通道合并后 4 条**全部来自 PORTAL**
+  （`USER_LOGIN` 100、`NEW_USER_REGISTER` 4000、`STUDENT_CERTIFIED` 4000、
+  **`STUDENT_CERTIFIED` 5000「2026年学生专属福利」**——这条 11-13 的 IDE 列表里没有）。
+  同一账号的 **IDE 通道返回空列表**（无报错、无条目），说明活动已整体搬到 PORTAL；
+  只查 IDE 会漏掉全部活动。
+- **`CLAIMED` 补确认生效**：签到条目初始是 `CLAIMED`（已到账未确认），看门狗自动补
+  `confirm` 后上游状态变为 **`CONFIRMED`**，本地账本落到 `confirm|USER_LOGIN#34`。
+- **10 MiB 预检生效**：11.0 MiB 请求体 → 本地直接 `413 request_too_large`
+  （`请求体 11.0 MiB 超过码道上游单请求上限 10 MiB…`），**没有打上游、不花积分**。
+- **大陆站剥 `stop` 生效**：`POST /v1/messages` 带 `stop_sequences:["END","###"]` → 200，
+  正文「收到」（改动前这种请求会被上游 400）。
+- **协议端到端**：`/v1/chat/completions` 200（`usage` 真实：16 prompt + 64 completion）；
+  `/v1/responses` 流式 200，`response.created → output_text.delta ×2 → output_text.done
+  「收到」→ response.completed`。
+- 未验证：网关排队流程（本轮没被排队）、`codearts serve` CLI 后端、国际站。
+
+**已知限制**：思考型模型（glm-5.3）在预算过小时会把 token 全花在 `reasoning_content` 上，
+`content` 为空 → Anthropic/Responses 流式只发得出空文本。预算给足（≥400）即正常。
 
 ## 验证命令
 

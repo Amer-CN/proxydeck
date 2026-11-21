@@ -316,6 +316,33 @@ impl Server {
         let mut credits = 0.0f64;
         let mut msgs: Vec<String> = Vec::new();
         for c in &campaigns {
+            // `CLAIMED` = 已到账但**未确认**：只补 confirm（幂等），绝不重复 claim。
+            // 上游把「领取」和「确认」拆成两步，只 CLAIMED 不 CONFIRMED 的积分算挂账。
+            if c.status.eq_ignore_ascii_case("CLAIMED") {
+                if self.already_confirmed(&identity, c) {
+                    continue;
+                }
+                match self.up.confirm_campaign(account, &c.id_json()).await {
+                    Ok(()) => {
+                        self.mark_confirmed(&identity, c, &day);
+                        self.settle_activity(&identity, c, &day);
+                        msgs.push(format!("{}: 已补确认", c.title));
+                        claimed.push(serde_json::json!({
+                            "id": c.id_text(),
+                            "type": c.kind,
+                            "title": c.title,
+                            "credits": 0,
+                            "confirmed": true
+                        }));
+                    }
+                    Err(e) => {
+                        let m = format!("{}: 补确认失败 {}", c.title, e.message);
+                        println!("[codearts] 活动确认失败 {}", m);
+                        msgs.push(m);
+                    }
+                }
+                continue;
+            }
             if !activity::claimable_now(c, &settled, &day, now) {
                 continue;
             }
@@ -328,6 +355,7 @@ impl Server {
                         .unwrap_or(false);
                     if need_confirm {
                         let _ = self.up.confirm_campaign(account, &c.id_json()).await;
+                        self.mark_confirmed(&identity, c, &day);
                     }
                     let got = claim_credits(&v, c);
                     credits += got;
@@ -389,6 +417,29 @@ impl Server {
                         .unwrap_or_default(),
                 },
             );
+        }
+    }
+
+    /// 该活动是否已经补确认过（本地账本记 `confirm|<key>`）。
+    fn already_confirmed(&self, identity: &str, c: &activity::Campaign) -> bool {
+        self.ledger
+            .lock()
+            .ok()
+            .map(|l| {
+                l.entry(identity)
+                    .settled
+                    .contains_key(&format!("confirm|{}", c.key()))
+            })
+            .unwrap_or(false)
+    }
+
+    fn mark_confirmed(&self, identity: &str, c: &activity::Campaign, day: &str) {
+        if let Ok(mut l) = self.ledger.lock() {
+            l.update(identity, |e| {
+                e.settled
+                    .insert(format!("confirm|{}", c.key()), day.to_string());
+            });
+            l.save();
         }
     }
 
