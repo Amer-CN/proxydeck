@@ -2720,7 +2720,7 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     <span class="v lang" data-etch="lang" data-i18n="try.gen.langSystemTitle">跟随系统</span>
                     <span class="gap"></span>
                     <span class="pt-silk sm">Version</span>
-                    <span class="v ver" id="etchVer">v4.9.10</span>
+                    <span class="v ver" id="etchVer">v4.10.0</span>
                   </div>
                 </div>
                 <div class="pt-license-self-test" data-license-self-test aria-hidden="true">
@@ -3510,13 +3510,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 </div>
 
                 <div class="pt-subhead pt-section-gap"><span class="pt-silk sm" data-i18n="app.update">更新 · Update</span></div>
-                <div class="pt-nameplate" aria-label="已安装版本 v4.9.10">v4.9.10</div>
+                <div class="pt-nameplate" aria-label="已安装版本 v4.10.0">v4.10.0</div>
                 <div class="pt-row"><div class="pt-rowline">
                   <div class="pt-label">
                     <div class="t" data-i18n="app.version">版本</div>
-                    <div class="s" id="buildNo">v4.9.10</div>
+                    <div class="s" id="buildNo">v4.10.0</div>
                   </div>
-                  <span class="pt-val" id="verChip">v4.9.10</span>
+                  <span class="pt-val" id="verChip">v4.10.0</span>
                 </div></div>
                 <div class="pt-row"><div class="pt-rowline pt-update-row">
                   <span class="pt-status-lamp" id="updLamp" aria-hidden="true"></span>
@@ -8566,7 +8566,7 @@ var PT_I18N = {
       var r = await fetch('http://127.0.0.1:' + V.port + '/model/info', { signal: AbortSignal.timeout(3000) });
       var list = await r.json();
       if (!Array.isArray(list) || !list.length) return;
-      var sig = list.map(function (m) { return m.name + '|' + m.maxInput + '|' + m.maxOutput + '|' + (m.reasoning || ''); }).join('');
+      var sig = list.map(function (m) { return m.name + '|' + m.maxInput + '|' + m.maxOutput + '|' + (m.reasoning || '') + '|' + (m.credits || ''); }).join('');
       if (V.lastMeta === sig) return;
       V.lastMeta = sig;
       V.modelIds = list.map(function (m) { return m.name; });
@@ -9708,6 +9708,14 @@ var PT_I18N = {
      规则（学 engineering-manager-website）：每版本 = {v, date, groups:[{label, items[]}]}
      label 用 emoji 分节：🚀 新功能 / ✨ 体验优化 / 🐛 Bug 修复 */
   var CHANGELOG_DATA = [
+{ v: 'v4.10.0', date: '2026-11-21', groups: [
+{ label: '🚀 新功能', items: [
+'模型清单改读上游目录，可见模型从 15 个变成 44 个',
+'模型参考表新增倍率列（x0.00 ~ x1.62，上游下发）',
+'上下文与最大输出改由上游给出，不再显示未核实' ] },
+{ label: '🐛 Bug 修复', items: [
+'首条不是 system 时自动挪到最前（国际版照旧补）',
+'11128 改写规则补上 DSH 的 Web GUI 指纹句' ] } ] },
 { v: 'v4.9.10', date: '2026-11-21', groups: [
 { label: '✨ 体验优化', items: [
 '出站请求体按官方形态 gzip（CODEBUDDY_GZIP=0 可关）',
@@ -10605,8 +10613,53 @@ var PT_I18N = {
   }
 
   var TJ_REF_FALLBACK = ['GLM-5.3', 'KIMI-K3', 'GLM-5.3-FLASH', 'codely-basic', 'codely-core', 'codely-flash', 'codely-air', 'codely-vl'];
-  var CB_REF_FALLBACK = ['auto', 'hy4-preview', 'hy3', 'glm-5.3', 'glm-5.3-flash', 'glm-5.2', 'glm-5.1',
-    'glm-5v-turbo', 'minimax-m3', 'kimi-k3', 'kimi-k2.7', 'kimi-k2.6', 'deepseek-v4.1-flash', 'deepseek-v4-flash', 'deepseek-v4-pro'];
+  /* 离线兜底：仅在后端没点火时展示。内容是 2026-11-21 从 /v3/config 取的可对话清单，
+     上游一改就会过期——在线时永远以 `/v1/models` 为准，别把它当成权威。 */
+  var CB_REF_FALLBACK = [
+    'auto',
+    'fast-model',
+    'balanced-model',
+    'deep-model',
+    'hy4-preview-ctrl',
+    'hy4-preview-exp',
+    'hy4preview-exp1',
+    'hy4preview-exp2',
+    'hy4-preview-x',
+    'minimax-m2.5',
+    'glm-5.3',
+    'glm-5.3-flash',
+    'glm-5.2',
+    'glm-5.0-turbo',
+    'glm-4.6v',
+    'kimi-k3-1',
+    'kimi-k2.8-preview',
+    'kimi-k2.5',
+    'kimi-k2-thinking',
+    'minimax-m2.7',
+    'glm-4.6',
+    'deepseek-v4-flash',
+    'deepseek-v4.1-flash',
+    'deepseek-v4-pro',
+    'deepseek-v3-2-volc',
+    'deepseek-v3-1-volc',
+    'deepseek-v3-1-lkeap',
+    'deepseek-v3-1',
+    'deepseek-v3-0324-lkeap',
+    'deepseek-r1-0528-lkeap',
+    'kimi-k2-instruct-taiji',
+    'completion-gf',
+    'default-1.1',
+    'default-1.2',
+    'hunyuan-2.0-instruct',
+    'hunyuan-chat',
+    'space-bunny',
+    'step-5-preview',
+    'mimo-v2.6-pro',
+    'minimax-m3.1-flash',
+    'kimi-k3.1-pro',
+    'hy4std',
+    'hy4flash-free',
+    'hy4flash'];
 
   async function refForTj() {
     var r = await refFetchList(8788, '/v1/models?full=true');
@@ -10636,11 +10689,13 @@ var PT_I18N = {
     var meta = await refFetchMeta(port);
     var html = '<h3>模型参考 · MODEL REF · WorkBuddy' + (intl ? ' · 国际版' : '') + '</h3><div class="m-body">' +
       '<b>【口径】</b>清单与 ' + port + ' 后端实时一致' + (r ? '' : (intl ? '（当前离线，清单未知）' : '（当前离线，展示内置名单）')) + '；点击模型名复制。' +
-      '<table class="pm-tbl"><thead><tr><th>模型</th><th>上下文</th><th>最大输出</th><th>推理档位</th></tr></thead>';
-    if (!list.length) html += '<tr><td colspan="4">离线未知</td></tr>';
+      '<table class="pm-tbl"><thead><tr><th>模型</th><th>倍率</th><th>上下文</th><th>最大输出</th><th>推理档位</th></tr></thead>';
+    if (!list.length) html += '<tr><td colspan="5">离线未知</td></tr>';
     list.forEach(function (m) {
       var id = m.id || m, mi = meta[id] || {};
       html += '<tr>' + refNameCell(id, id) +
+        /* 倍率由上游 /v3/config 下发（credits: "x0.08"），夜间折扣会变；拿不到就如实显示 — */
+        '<td>' + esc(mi.credits || '—') + '</td>' +
         '<td>' + (mi.maxInput ? intFmt(mi.maxInput) : '—') + '</td>' +
         '<td>' + (mi.maxOutput ? intFmt(mi.maxOutput) : '—') + '</td>' +
         '<td>' + esc(mi.reasoning || '—') + '</td></tr>';
@@ -11088,7 +11143,7 @@ var PT_I18N = {
   }
 
   /* ================= 更新检查 ================= */
-  var UI_CUR = 'v4.9.10';
+  var UI_CUR = 'v4.10.0';
   var tjQuotaUserId = ''; // 积分面板选中的账号（空串=默认本地账号）
   var cbQuotaUserId = ''; // WorkBuddy 积分面板选中的账号（空串=默认最新号；区域感知：切区后失效重选）
   function verCmp(a, b) {

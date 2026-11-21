@@ -635,21 +635,35 @@ pub async fn handle_chat(
             .collect();
         backend = crate::desensitize::desensitize_body(&backend, &roles, true, true, true);
     }
-    // INTL 特化：国际版 11128 为「首条消息必须是 system」的结构校验。
-    if st.region.cfg().force_system {
-        if let Some(Value::Array(msgs)) = backend.get("messages") {
-            if !toolrefs::msgs_have_system(msgs) {
-                let mut with_sys = vec![gjson::obj(vec![
-                    ("role", gjson::s("system")),
-                    ("content", gjson::s(crate::region::INTL_DEFAULT_SYSTEM)),
-                ])];
-                with_sys.extend(msgs.iter().cloned());
-                backend.insert("messages".to_string(), Value::Array(with_sys));
+    // 11128 的「三道门」之一（dsh-connect-workbuddy 记录 + magpie 实测）：**首条必须是 system**。
+    // 国际版一直修这一条（`force_system`）；2026-11-21 起国内版也走同一条——客户端把 system
+    // 放在中间、或者干脆不带 system 时，上游看到的「形状」就是错的。
+    // 只挪位置 / 补一条最小 system，**绝不改任何现有 system 的内容**。
+    if let Some(msgs_val) = backend.get_mut("messages") {
+        if let Some(Value::Array(msgs)) = Some(&mut *msgs_val) {
+            let mut taken = std::mem::take(msgs);
+            // CN 只修顺序（`allow_prepend=false`）：实测 user-first 也 200，凭空插 system
+            // 会改写每个请求；INTL 或 `CODEBUDDY_FORCE_SYSTEM=1` 时才补。
+            let allow_prepend = st.region.cfg().force_system
+                || std::env::var("CODEBUDDY_FORCE_SYSTEM")
+                    .map(|v| {
+                        let v = v.trim().to_ascii_lowercase();
+                        !(v == "0" || v == "false" || v == "off" || v == "no")
+                    })
+                    .unwrap_or(false);
+            let what = toolrefs::ensure_system_first(
+                &mut taken,
+                crate::region::INTL_DEFAULT_SYSTEM,
+                allow_prepend,
+            );
+            if let Some(what) = what {
                 println!(
-                    "[codebuddy] region={} 客户端未带 system，自动补最小 system",
-                    st.region.as_str()
+                    "[codebuddy] region={} 首条不是 system（{}），已修正消息形状",
+                    st.region.as_str(),
+                    what
                 );
             }
+            backend.insert("messages".to_string(), Value::Array(taken));
         }
     }
 

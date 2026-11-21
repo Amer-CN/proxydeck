@@ -224,3 +224,86 @@ mod tests {
         assert!(msgs_have_system(&msgs));
     }
 }
+
+/// 保证**首条**是 system（dsh-connect-workbuddy 记录的 11128 三道门之一：
+/// 「首条是不是 system」）。
+///
+/// - 后面有 system 但不在首位 → 挪到最前（`Some("move")`），**永远做**：只动顺序、不加内容；
+/// - 一条 system 都没有 → 仅在 `allow_prepend` 时补一条最小的（`Some("prepend")`）。
+///
+/// 为什么补 system 要开关：**CN 实测 user-first 也回 200**，说明这道门在 CN 现在并不强制；
+/// 凭空插一条 system 会改写每个无 system 的请求（还有黄金基准锁着「不补」），
+/// 所以 CN 默认只做"挪"不做"补"，INTL 仍按历史实测强制补
+/// （`force_system` 或 `CODEBUDDY_FORCE_SYSTEM=1`）。
+pub fn ensure_system_first(
+    messages: &mut Vec<Value>,
+    default_system: &str,
+    allow_prepend: bool,
+) -> Option<&'static str> {
+    let is_system = |m: &Value| {
+        m.as_object().and_then(|o| o.get("role")).and_then(Value::as_str) == Some("system")
+    };
+    if messages.first().map(is_system).unwrap_or(false) {
+        return None;
+    }
+    if let Some(pos) = messages.iter().position(is_system) {
+        let sys = messages.remove(pos);
+        messages.insert(0, sys);
+        return Some("move");
+    }
+    if !allow_prepend {
+        return None;
+    }
+    messages.insert(
+        0,
+        serde_json::json!({ "role": "system", "content": default_system }),
+    );
+    Some("prepend")
+}
+
+#[cfg(test)]
+mod system_first_tests {
+    use super::ensure_system_first;
+    #[test]
+    fn system_first_moves_or_prepends() {
+        use serde_json::json;
+        let d = "You are a helpful assistant.";
+
+        // 已经是首条 → 不动
+        let mut m = vec![json!({"role":"system","content":"S"}), json!({"role":"user","content":"u"})];
+        assert_eq!(ensure_system_first(&mut m, d, true), None);
+        assert_eq!(m.len(), 2);
+
+        // system 在后面 → 挪到最前，内容原样
+        let mut m = vec![
+            json!({"role":"user","content":"u"}),
+            json!({"role":"assistant","content":"a"}),
+            json!({"role":"system","content":"S"}),
+        ];
+        assert_eq!(ensure_system_first(&mut m, d, true), Some("move"));
+        assert_eq!(m[0]["content"], "S", "挪动不改内容");
+        assert_eq!(m.len(), 3);
+
+        // 完全没有 → 补最小 system
+        let mut m = vec![json!({"role":"user","content":"u"})];
+        assert_eq!(ensure_system_first(&mut m, d, true), Some("prepend"));
+        assert_eq!(m[0]["role"], "system");
+        assert_eq!(m[0]["content"], serde_json::json!(d));
+
+        // 空列表 → 也要补
+        let mut m: Vec<serde_json::Value> = vec![];
+        assert_eq!(ensure_system_first(&mut m, d, true), Some("prepend"));
+        assert_eq!(m.len(), 1);
+
+        // 不允许补时：无 system 就一个字都不动（CN 的默认行为）
+        let mut m = vec![json!({"role":"user","content":"u"})];
+        assert_eq!(ensure_system_first(&mut m, d, false), None);
+        assert_eq!(m.len(), 1);
+        // 但"挪"仍然做
+        let mut m = vec![json!({"role":"user","content":"u"}), json!({"role":"system","content":"S"})];
+        assert_eq!(ensure_system_first(&mut m, d, false), Some("move"));
+        assert_eq!(m[0]["role"], "system");
+    }
+}
+
+

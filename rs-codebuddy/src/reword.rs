@@ -41,6 +41,8 @@ enum Action {
     Comma(usize),
     /// 从 needle 起点 + off 处删掉 n 个字节（删一个形容词，句子仍然成立）。
     Delete { at: usize, n: usize },
+    /// 在 needle 起点 + off 处插入固定文字（上游按整句匹配，插一个引导词即破匹配）。
+    Insert { at: usize, text: &'static str },
 }
 
 /// 一条改写规则：命中特征（全小写比较）+ 动作 + 规则名。
@@ -70,6 +72,24 @@ const RULES: &[Rule] = &[
             n: "official ".len(),
         },
         name: "claude-code-identity",
+    },
+    // DSH 的第二条指纹句（magpie #291 实测：400 → 这句加个引导词即 200）。
+    // 上游原文里 "names." 与 "When" 之间可能是一到两个空格，两种都给。
+    Rule {
+        needle: "web gui whose url the runtime context names. when the user refers",
+        action: Action::Insert {
+            at: "web gui whose url the runtime context names. ".len(),
+            text: "The interface, ",
+        },
+        name: "dsH-web-gui-line",
+    },
+    Rule {
+        needle: "web gui whose url the runtime context names.  when the user refers",
+        action: Action::Insert {
+            at: "web gui whose url the runtime context names.  ".len(),
+            text: "The interface, ",
+        },
+        name: "dsH-web-gui-line-2sp",
     },
 ];
 
@@ -111,6 +131,12 @@ fn apply_rules(text: &str) -> Option<(String, &'static str)> {
                 let at = pos + off;
                 out.push_str(&text[..at]);
                 out.push_str(&text[at + n..]);
+            }
+            Action::Insert { at: off, text: ins } => {
+                let at = pos + off;
+                out.push_str(&text[..at]);
+                out.push_str(ins);
+                out.push_str(&text[at..]);
             }
         }
         return Some((out, r.name));
@@ -405,6 +431,24 @@ mod tests {
             "You are an AI agent, powered by RememberedCo."
         );
     }
+    #[test]
+    fn rewrites_dsh_web_gui_line_in_both_spacings() {
+        for (src, want) in [
+            (
+                "Web GUI whose URL the runtime context names. When the user refers to it, read on.",
+                "Web GUI whose URL the runtime context names. The interface, When the user refers to it, read on.",
+            ),
+            (
+                "Web GUI whose URL the runtime context names.  When the user refers to it, read on.",
+                "Web GUI whose URL the runtime context names.  The interface, When the user refers to it, read on.",
+            ),
+        ] {
+            let mut b = body_with("system", src);
+            assert!(reword(&mut b).is_some(), "应命中：{src}");
+            assert_eq!(b["messages"][0]["content"], want);
+        }
+    }
+
     #[test]
     fn short_system_is_not_moved() {
         let v = json!({
