@@ -106,6 +106,15 @@ pub fn reasoning_matrix(model: &str) -> Option<String> {
 
 /// Go `Models`：候选池 + 每小时在线探测过滤（TTL 1h）。
 pub async fn models(state: &Arc<AppState>) -> Vec<String> {
+    // ① 新路径：上游目录 `/v3/config`（权威清单，含新增模型）。见 catalog.rs 的实测注释。
+    //    读不到（UA 被拒/网络/假上游）一律掉到下面的候选池路径，列表永远不会变空。
+    if let Some(cat) = crate::catalog::get(state).await {
+        let ids = crate::catalog::chat_ids(&cat);
+        if !ids.is_empty() {
+            return ids;
+        }
+    }
+    // ② 旧路径：硬编码候选池（+ 可选在线探测过滤）。
     let cfg = state.region.cfg();
     let candidates: Vec<String> = cfg.candidates.iter().map(|s| s.to_string()).collect();
     if cfg.no_probe {
@@ -232,6 +241,9 @@ pub async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
 /// Go `handleModelInfo`（不看方法）。
 pub async fn handle_model_info(State(st): State<Arc<AppState>>) -> Response {
     let list = models(&st).await;
+    // 目录（若可读）是这些字段的唯一权威来源：倍率、上下文、能力位都由上游给，
+    // 我们不再"猜"或留「未核实」——但缺省仍然留空，不编数字。
+    let cat = crate::catalog::get(&st).await;
     let mut out: Vec<Value> = Vec::with_capacity(list.len());
     for m in list {
         // INTL 模型矩阵未经实测，不硬造元数据：CN 的 modelMeta 不出国际版。
@@ -244,6 +256,30 @@ pub async fn handle_model_info(State(st): State<Arc<AppState>>) -> Response {
         entry.insert("name".to_string(), gjson::s(&m));
         for (k, v) in entries {
             entry.insert(k.to_string(), v);
+        }
+        if let Some(hit) = cat.as_ref().and_then(|c| crate::catalog::find(c, &m)) {
+            // 静态表里没有的才补，免得覆盖实测结论（例：glm-5.2 的「上下文实测 1M」）。
+            if !entry.contains_key("maxInput") && hit.max_input > 0 {
+                entry.insert("maxInput".to_string(), Value::Number(hit.max_input.into()));
+            }
+            if !entry.contains_key("maxOutput") && hit.max_output > 0 {
+                entry.insert(
+                    "maxOutput".to_string(),
+                    Value::Number(hit.max_output.into()),
+                );
+            }
+            if let Some(cr) = &hit.credits {
+                entry.insert("credits".to_string(), gjson::s(cr));
+            }
+            entry.insert("supportsImages".to_string(), Value::Bool(hit.supports_images));
+            entry.insert(
+                "supportsReasoning".to_string(),
+                Value::Bool(hit.supports_reasoning),
+            );
+            // 上游给的是**默认档**，不是完整矩阵——单独一个键，别塞进 `reasoning`。
+            if let Some(e) = &hit.effort {
+                entry.insert("effort".to_string(), gjson::s(e));
+            }
         }
         if !entry.contains_key("note") {
             entry.insert("note".to_string(), gjson::s(""));

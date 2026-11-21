@@ -27,6 +27,7 @@
 //! * `cred`（`CredSource`）——测试可喂 `StubCredential`（`--cred-stub`）。
 
 pub mod atrest;
+pub mod catalog;
 pub mod chat;
 pub mod collect;
 pub mod conn;
@@ -958,3 +959,4 @@ mod gzip_tests {
         }
     }
 }
+

@@ -126,14 +126,23 @@
 ### WorkBuddy（8787）——子智能体可用
 - 支持 tool_calls（实测返回过标准工具调用），可当 Agent/子智能体模型
 - glm-5.2 / kimi-k3 等可用
-- **模型列表机制（2026-09-10 定案）**：`/v1/models` = **硬编码候选池
-  （`modelCandidates`）+ 每小时在线探测过滤**（TTL 1h）。探测只能把池内不可用的
-  筛掉，**发现不了上游新增**；腾讯侧无任何 `/models` 类端点（`/models`、
-  `/v1/models`、`/v2/models` 全 404）——所以「自动更新」只等于可用性刷新，
-  **上游新增模型必须手工入池**，且要动三处：`modelCandidates` + `modelMeta`
-  （`server.go`）+ ui.html 的 `CB_REF_FALLBACK`（v3.10.3 加 `deepseek-v4.1-flash`
-  即走此流程）。8787 由**编译进 exe 的 Go 后端**提供，`plugins/codebuddy2api/`
-  是早期 Python 实现、已不在链路上（仅 `credential.go` 一处注释提到它）
+- **模型列表机制（2026-09-10 定案 → 2026-11-21 推翻）**：旧结论是「上游没有任何模型列表
+  端点，`modelCandidates` 硬编码 + 每小时探测，**发现不了上游新增**，加模型要动三处」。
+  **2026-11-21 实测发现 `GET /v3/config` 就是模型目录端点**（此前只查了 `/models`、
+  `/v1/models`、`/v2/models` 三个 404 路径，没试 `/v3/`）：
+  * **UA 决定给多少**：`User-Agent: WorkBuddy/5.9.3` → 39 个模型（27 可对话）；
+    `WorkBuddy/5.9.3 WorkBuddy/5.9.3 CLI/2.165.0` → **58 个（44 可对话）**；
+    `codebuddy2openai/1.0` → 400。`X-IDE-Type/Name/Version`、`X-Private-Data`
+    **加不加字节数完全一样**，只有 UA 有效。
+  * 每条带 `credits`（倍率 `x0.00`~`x1.62`）、`maxInputTokens`/`maxOutputTokens`、
+    `supportsImages`/`supportsToolCall`/`supportsReasoning`、`reasoning.effort`、
+    `tags`、`vendor`；另有 `modelPromotions`（促销/夜间折扣）与 `modelTiers`。
+  * 国际版同一端点同样可用（28 个模型 / 26 可对话，含 GPT-6.2、Grok-4.7、Gemini-4 系列）。
+  * 凡是「按能力位过滤」而不是按名字猜：目录里混着补全/生图/生视频
+    （`codewise-*`、`hunyuan-image-*`、`kling-video-*`），接 `/v1/chat/completions` 只会报错。
+  * v4.9.11 起 `/v1/models` 走目录（`CODEBUDDY_CATALOG=0` 关）；读不到回退旧候选池。
+  * 8787 由**编译进 exe 的 Rust 后端**提供（`rs-codebuddy`），`plugins/codebuddy2api/`
+    是早期 Python 实现、已不在链路上
 - **模型元数据纪律（2026-09-02 定）**：`/model/info` 的 modelMeta 只准填实测值
   （reasoning 实测矩阵：deepseek 系与 auto 拒 off，其余 11 个 off~max 全接；
   maxInput 仅 glm-5.2 / deepseek-v4-pro / deepseek-v4-flash 三条实测 1M）。
