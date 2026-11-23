@@ -50,14 +50,18 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   9. `rs-gui/ui.html` ← `app/ui.html` 的**逐字节副本**（`Copy-Item` 复制，**不许手改**）
   10. `rs-gui/src/uihtml.rs` `UI_HTML_SHA256` + `UI_HTML_LEN`（改完 UI 必重算）
   11. `README.md` 版本徽章（shields.io 的 `Version-vX.Y.Z`）
+  12. `CLAUDE.md`「## 当前状态（日期，vX.Y.Z 已发布）」标题里的版本
   外加 `CHANGELOG.md` 顶条 + GitHub Release（正文＝CHANGELOG 顶条逐字，标题＝`vX.Y.Z · 主题`，
   **必须附 `ProxyDeck.exe` 附件**——那是一键更新的下载源，漏传 = 用户点更新 404；
   附件名必须逐字叫 `ProxyDeck.exe`，改成 `ProxyDeck-vX.Y.Z.exe` 后端找直链会无视）。
   `CHANGELOG_DATA` 的 `date` 用**本机发布日**——跨零点发版最容易差一天。
   历史条目**不回改**（会牵动 tag 与附件对应关系）。
-  **现存三道自动门禁**（改坏会直接红，别再靠人眼）：
+  **现存四道自动门禁**（改坏会直接红，别再靠人眼）：
   `rs-gui/tests/ui_html.rs` 的 ① 逐字节副本 ② 版本号唯一+严格降序 ③ v4 段不许跳版
-  + 浮层与 `CHANGELOG.md` 同集合；以及 `build.rs` 的构建期字节比对。
+  + 浮层与 `CHANGELOG.md` 同集合；`build.rs` 的构建期字节比对；
+  **`rs-gui/tests/release_sync.rs` 的 ④ 版本锚点同源**（上面 12 处 + CHANGELOG 顶条 + README
+  必须都等于 `APP_VERSION`，锚点找不到也红）。升版本后跑：
+  `cargo test -p rs-gui --test release_sync`。
 
 ## 版本号三段位规则（2026-08-31 定，用户裁决）
 
@@ -179,66 +183,60 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
    允许改名）→ 新 exe 落位原路径 → 只需关掉并重启 GUI；插件是独立常驻子进程
    （关 GUI 不死），**后端完全不用停**。旧的 .old 文件等进程自然退出后删
 7. **流式响应转发**：FlushInterval 50ms 保 SSE 及时；stream_options.include_usage 补 usage
-8. **协作流程**：见 `~/.dsh/AGENTS.md`（全局规则）+ 本项目 `CLAUDE.md`。
-   `dsh-collab-mode` 插件已于 2026-11-14 卸载，不要再找它的规则段或
-   executor/code-reviewer 角色工具；~~`~/.zcode/AGENTS.md`~~ 2026-09-13 退役。
-   简报仍写 `.work/current-task.md`（gitignore，不进库）。
-9. ~~**python build.py 静默失败**~~（**Go 时代**，Rust 已无此脚本）：教训保留——
+8. ~~**python build.py 静默失败**~~（**Go 时代**，Rust 已无此脚本）：教训保留——
    构建工具静默失败会让人把旧产物当新产物部署，**发版后必须字节校验产物**（现在由
    `--version` 输出 + 与 Release digest 比对完成）。
-10. **GitHub 匿名 API 限额按出口 IP 计**（60/h）：共享 NAT/Clash 出口必撞墙；
+9. **GitHub 匿名 API 限额按出口 IP 计**（60/h）：共享 NAT/Clash 出口必撞墙；
     更新检查类功能优先走 gh CLI 认证通道
-11. **升版日志必须从 git 提交清单倒推**（git log 上版..HEAD），不能凭工作记忆——
+10. **升版日志必须从 git 提交清单倒推**（git log 上版..HEAD），不能凭工作记忆——
     v3.8.1 曾漏记同批的 hy4 兜底整块功能（用户指出后补）
-12. **池路径流式成功不写 activity 事件**：流式分支读完流即 return，非流式也只在
+11. **池路径流式成功不写 activity 事件**：流式分支读完流即 return，非流式也只在
     响应含 usage 时才记 ok（server.go 池路径）；单账号路径 200 一律 defer 记。
     排查「回落明明成功但实时动态没有 ok」先想到这条——2026-09-04 媒体改路由
     回落 codely-vl 零 ok 事件即此因（请求实际成功）。例外：429 兜底介入过的
     请求，恢复事件由兜底路径自发上报（v3.8.6），不依赖 ok 事件
-13. **无 BOM 的 UTF-8 .ps1 中文注释会被 PowerShell 5.1 按 GBK 解析**：乱码可能
+12. **无 BOM 的 UTF-8 .ps1 中文注释会被 PowerShell 5.1 按 GBK 解析**：乱码可能
     拼出引号/花括号直接炸语法（2026-09-04 换装脚本踩过：报「意外的标记 "}"」
     且行号错位难排查）。写 .ps1 要么纯 ASCII，要么存成 UTF-8 with BOM。
-    **变体（2026-09-05 ZCode stop hook 踩过）**：`[Console]::In.ReadToEnd()` 读
-    管道也按 GBK 解码——ZCode 喂 UTF-8，中文全变乱码、正则永不命中（每轮误拦）。
+    **变体（2026-09-05 钩子 stdin 踩过）**：`[Console]::In.ReadToEnd()` 读
+    管道也按 GBK 解码——调用方喂 UTF-8，中文全变乱码、正则永不命中（每轮误拦）。
     修法：stdin 用 `[Console]::OpenStandardInput()` 按字节读再 UTF8.GetString，
     输出错误同样按 UTF8 字节写 stderr。
-14. **Git Bash 内联中文 curl -d 会送出乱码**：Windows 终端编码把请求体里的
+13. **Git Bash 内联中文 curl -d 会送出乱码**：Windows 终端编码把请求体里的
     中文打碎，上游模型收到 mojibake 后回复"编码问题"（2026-09-06 实测假阳性，
     Qoder/WorkBuddy 都中过招）。测试请求体一律写 UTF-8 文件 +
     `--data-binary @file`
-15. **注水探针 max_tokens 自适应名单须含 codely 系**：probes.go probeCall 名单
+14. **注水探针 max_tokens 自适应名单须含 codely 系**：probes.go probeCall 名单
     （deepseek/glm-5/kimi/o1/o3）2026-09-06 漏 codely 别名组——codely-core 上游即
     思考型 GLM-5.3，只拿 8 token 预算时 content 恒空、金丝雀「算术」必误判
     （d207471 已补 `codely`）。**探针基线（tuanjie-baselines.json）是启动时加载进
     内存**：改/删条目必须重启 8788 才生效；探针预算变更后旧基线不可比，须删
     `tuanjie|codely-core` 条目重启重采（2026-09-06 实证）
-16. **故障时间线陷阱**：判定"持续故障"前先拉逐分钟成败统计——两次测试之间
+15. **故障时间线陷阱**：判定"持续故障"前先拉逐分钟成败统计——两次测试之间
     的空白期 ≠ 故障持续期（2026-09-06 曾把 6.5 分钟的上游间歇故障误判成
     "连接钉死 85 分钟"，靠逐分钟数据翻案撤回）
-17. **版本串清单以文首「升版本必须同步的位置」为唯一权威**：本坑旧文曾写「6 处」/「7 处」/
+16. **版本串清单以文首「升版本必须同步的位置」为唯一权威**：本坑旧文曾写「6 处」/「7 处」/
     「8 处」三个互相矛盾的数字——正是计数漂移的成因，**别在任何地方复述处数**，需要时直接看清单。
     漏改任一项则应用自报旧版并误弹「发现新版本」框（弹窗当前值取 ui.html UI_CUR，
     与 appVersion 不同源；v3.10.0 实测踩坑）
-18. ~~**opencode Zen 会话头 + 测试假阴性**~~（**已作废 2026-10-18**：Zen 上游已
+17. ~~**opencode Zen 会话头 + 测试假阴性**~~（**已作废 2026-10-18**：Zen 上游已
     `ModelDeprecated`，自定义服务商与 `opencode_session` 均随 v4.2.0 删除）：出站 opencode.ai 必带
     `x-opencode-session`（进程级稳定 UUID，opencode_session.go），缺头按出口
     分片随机 400 MissingSessionID；ZCode「连接测试」按钮发裸请求必报错=假阴性，
     以真实对话为准。完整定案见 CODELY.md 2026-09-07 条
-19. **同一工作树禁止多窗口并发接手同一任务**：2026-09-10 实测——三个会话
+18. **同一工作树禁止多窗口并发接手同一任务**：2026-09-10 实测——三个会话
     （收到的是同一句「接手这个会话的任务」）同时改 `internal/codebuddy/server.go`
     与 `sse_cleaner_test.go`，互写工作树、各自把对方的改动当成越界，其中一个
     未打招呼就 `taskkill` 了 8787 后端配合换装（正是本文件明令要先问的那种操作）。
-    接手前先 `git status` 确认没有别的会话在动同一批文件（ZCode 时代还可查
-    `~/.zcode/cli/hooks/activity-*.log` 反查谁在几点改了哪个文件；该工具已于
-    2026-09-13 退役，DSH 侧暂无对等日志）；commit / push / Release 这类不可逆且对外的动作
+    接手前先 `git status` 确认没有别的会话在动同一批文件；commit / push / Release 这类不可逆且对外的动作
     尤其必须串行，且推送前先 `git ls-remote <remote> refs/heads/main` 复核远端
     有没有被别人推进过
-20. **编译输入 = 工作区当前内容**：`cargo build` 编的是磁盘上的源码，**并行会话的未提交改动会被静默编进 exe**——2026-09-11 发 v3.10.5 时中招：
+19. **编译输入 = 工作区当前内容**：`cargo build` 编的是磁盘上的源码，**并行会话的未提交改动会被静默编进 exe**——2026-09-11 发 v3.10.5 时中招：
     另一个会话 01:09 改的 `internal/tuanjie/reqshape.go`（未提交、无 CHANGELOG）已混入
     产物，靠比对 mtime 才发现，最后改用 `git worktree add --detach <目标提交>` 在干净树
     上重编并 amend。**发版编译前必须确认 `git status` 没有他人改动**，或直接走 worktree
     ——否则 exe 与 tag 指向的源码对不上，且会把未审查代码推给全部用户
-21. **不要整行打印进程命令行**：argv 里可能带密钥——GUI 启动 headless 子进程时曾把
+20. **不要整行打印进程命令行**：argv 里可能带密钥——GUI 启动 headless 子进程时曾把
     CommandCode key 拼在 `-api-key` 后（`bridge.go`；2026-09-11 已改为只走
     `api-key.txt`，仅落盘失败才退回 argv），而排查时一句
     `Get-CimInstance … CommandLine` 就会把 key 带进会话记录/日志（已实际发生过一次，
@@ -246,7 +244,7 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
     `-replace '-api-key \S+','-api-key <redacted>'`；密钥类文件（`api-key.txt`）
     保持 gitignore
 
-22. **双 exe 并行必致版本误诊，认进程一律用全路径**：测试版与正式版同名不同文件
+21. **双 exe 并行必致版本误诊，认进程一律用全路径**：测试版与正式版同名不同文件
     并跑时，看到的每个界面都可能是过期货（2026-09-17 实证：鼓轮"设置/VIBEX"错位
     投诉查了两轮，根因是旧测试版窗口没关）。已裁决单轨（测试版使命结束即删）。
     附带两条：① `Get-Process` 的 ProcessName 截断（`ProxyDeck.test-ext` 显示成
@@ -255,7 +253,7 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
     上）——是后端宿主就等自然消亡，不要硬删；也不要拿改名/删除试探结论当证据。
     （v3.20.5 起更新流自动换血，此条只剩手动腾位场景。）
 
-23. **`Copy-Item` 会保留源文件 mtime → cargo 跳过重建，人会看到"假失败"**（2026-10-18
+22. **`Copy-Item` 会保留源文件 mtime → cargo 跳过重建，人会看到"假失败"**（2026-10-18
     两次踩中）：用 `Copy-Item a.rs a.rs.bak` 备份、改文件、再 `Copy-Item a.rs.bak a.rs`
     还原时，**还原后的文件带着备份时的旧 mtime**；cargo 认为"没变过"，复用上一次编译的
     object/rlib —— 于是代码明明改对了，测试却报旧行为（当天表现为一条本该通过的用例连续
@@ -264,10 +262,46 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
     ②更可靠的是 `git checkout -- <file>` 还原（mtime 会更新），或改完直接重编一个全新
     `CARGO_TARGET_DIR`。**排查"代码对但行为旧"时，先怀疑这个，别怀疑逻辑。**
 
-24. **手动拉插件别用 `Start-Process -RedirectStandard*`**：重定向不生效、日志写进虚空；
+23. **手动拉插件别用 `Start-Process -RedirectStandard*`**：重定向不生效、日志写进虚空；
     用 cmd 批处理 `>>` 追加（`.work/spawn_*.cmd`，保留历史日志，GUI 日志面板才有内容）。
 
-## 当前状态（2026-11-21，v4.10.0 已发布）
+24. **发版前必须过 `release_sync` 版本锚点门禁**（2026-11-24 复盘新增）：版本号手抄在
+    6 处 ui.html 锚点 + 4 处 version.rc + README 徽章 + CHANGELOG 顶条 + CLAUDE.md 当前状态，
+    靠人记必漏。
+    * 触发：任何升版本 / 改 `APP_VERSION` / 改那 6 个 ui.html 锚点 / 改徽章 → 跑
+      `cargo test -p rs-gui --test release_sync`。
+    * 已接进发版路径：`build-rs.ps1 -Final` 第 0 步就跑它（+ ui_html 合同），红则退出、
+      不构建、不碰 `ProxyDeck.exe`——不用靠"记得跑"。
+    * 锚点找不到也让门禁红（结构改了要重对齐，不许静默跳过）。
+    * 案例：v4.10.2 已 tag、已构建，CLAUDE.md 当前状态还写 v4.10.0（2026-11-24 复盘当场
+      被这条门禁抓到）；v3.10.0 漏改 `UI_CUR` → 应用自报旧版、误弹「发现新版本」。
+
+25. **上游形态先落夹具，再改代码**（2026-11-24 复盘新增）：改任何「上游下发形态」的分流
+    （错误码、工具调用帧、模型目录、流式收尾）之前，先把真机原始帧落进 `tests/` 夹具
+    并写一条回归断言，再动分流逻辑。
+    * 触发：准备按「我看到的这一帧」加一个 if 分支时——停下，先问同族帧长什么样。
+    * 案例：2026-11-15 comate 一天连发 5 版（坏参数→合法 JSON→提示词→缺名字→短名），
+      每版只堵一个形态；codebuddy 的 11128 从 10-17 到 11-21 四轮才定案——所有 11128 的
+      `displayTips` 都写同一句 "channel verification"，拿它分流等于把全部 11128 当成
+      通道校验。样本入库后，同类问题从「再发一版」变成「加一条断言」。
+    * 现状：**无自动门禁**（夹具是否随之新增靠评审看），这条只是规则。
+
+26. **门禁不许空转：SKIP 要能计数，扫描集合为空要红**（2026-11-24 复盘新增）：
+    * 新增 gate 必须先在**真实缺陷**上跑红一次，再修绿；只写「存在性」检查不算。
+    * 测试里的 `SKIP(...)` 分支 = 在某些机器上永远不跑：`cargo test` 全绿 ≠ 测过。
+      确认某条门禁真的跑了，要 `cargo test -- --nocapture` 看 SKIP 行。
+    * 案例：rs-qoder 的 DPAPI 合成夹具换机即失效（`golden_qoder` + `http_contract` 共 7 处
+      SKIP）；2026-11-24 全仓统计 18 处 SKIP（`tools/retro-metrics.ps1` 可复算）。
+    * 取数/扫描脚本自身也要自证「至少扫到 N 个」，0 个就红；数字能独立复核才算数。
+
+27. **交接文档里的「现状」不许手抄**（2026-11-24 复盘新增）：PID、exe 版本、哪些后端在跑、
+    缓存时间这类会过期的事实，一律跑 `pwsh -File tools/status-facts.ps1` 取输出。
+    * 触发：更新「## 当前状态」时。
+    * 案例：2026-11-21 记的「GUI PID 36496 / 磁盘 exe v4.9.10 / 8785 未启动」，到 11-24
+      已全错（实际 PID 65924、v4.10.2、8785 在跑），当天会话据此误判一次。
+    * 版本号仍必须写进「当前状态」标题——那是 `release_sync` 门禁的锚点，不是可选项。
+
+## 当前状态（2026-11-21，v4.10.2 已发布）
 
 > **逐版历史只在 `CHANGELOG.md`**（唯一权威）。本节只保留「现在什么状态、下一步注意什么」，
 > 不再复制版本流水账——2026-10-18 洁癖收尾时删掉了约 200 行重复条目。
@@ -277,16 +311,14 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
   （v4.2.0）、**Go 参考实现整体移除（2026-10-18，155 文件 / 42,274 行）**。
   历史实现细节见 git 历史与 `CHANGELOG.md`（规则层不再保留退役代码的流水）。
 - **本版主线（2026-11-21，v4.10.0）**：WorkBuddy 模型清单改读上游 `/v3/config`（甲板可见模型 15→44，模型参考表新增倍率列、上下文/最大输出来自上游）；11128 改写规则补 DSH 的 Web GUI 句；首条非 system 时自动挪到最前（CN 只挪不补）。v4.9.8–10 的 UA/gzip/11128 自愈同属这条线。
+- **v4.10.1–2（2026-11-21）**：码道积分与活动账本修复（多实例不再互相覆盖、「今天已领」恢复记忆、签到不再反复确认）。
 - **11159 / /v2/report 仍未做**：11159 只出现在 Anthropic Messages 的 thinking 签名场景，而本插件没有 /v1/messages 路由（请求体也不带 thinking 块），**结构上不可达**；/v2/report 是 INTL 专属行为上报，报文形状没有真机抓包，瞎发高风险，暂缓。
 - **上一版主线（2026-11-15，v4.9.0）**：Comate 改走云直连（工具调用、真实 usage、
   2s 级响应），zulu 路线留作兜底并适配 1.8.1 新协议；另修 build-rs.ps1 的
   `--version` 自检在无控制台宿主下恒为空的假失败。细节只在 CHANGELOG/提交里。
-- **服务现状**（2026-11-21 02:10 实测）：GUI（PID 36496，**2026-11-16 16:40 启动**）内存里仍
-  跑旧版；磁盘上的 `ProxyDeck.exe` 已是 **v4.9.10**（`--version` 可核）——**重启 GUI 才换血**，
-  重启前 `ProxyDeck.exe.old-202611210114566825162` 还被它映射，删不掉。
-  点火的后端只有 8786 Comate / 8793 码道；8787/8789 WorkBuddy、8788 团结、
-  8785/8784/8790/8891/55990 都未启动。后端是独立常驻子进程，关 GUI 不死；
-  **重启 GUI 不会自动点火**，需逐个拉杆。
+- **服务现状**：**别手抄**——跑 `pwsh -File tools/status-facts.ps1` 取当前 PID / exe 版本 /
+  哪些端口在跑 / 缓存时间（规则见坑 27）。语义不变的两条：后端是独立常驻子进程，
+  关 GUI 不死；**重启 GUI 不会自动点火**，需逐个拉杆。
 - **WorkBuddy 模块裁决（2026-11-21 用户裁决，结论已定）**：**保留**该模块——不删、不转维护模式、
   不发布「改用 magpie」公告。理由：两个区仍有可用号（实测 200），瓶颈是**账号供给**而非代码；
   magpie 的强项已在 v4.9.8→v4.9.10 抄进产品（UA/11128 自愈/gzip）。对标结论：单点更强 ≠ 应删模块。
@@ -364,8 +396,8 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 - 更新检查通道：本机 gh CLI（认证 5000/h）优先 → 匿名 HTTP 兜底（60/h 按
   出口 IP 计，共享网络易撞墙，撞后负缓存 10 分钟）
 - 客户端侧模型配置：tuanjie provider（8788）用 codely 系（core 即 GLM-5.3 承载入口）。
-  2026-09-13 起主用 DSH（ZCode 已退役）；`dsh-collab-mode` 插件 2026-11-14 已卸载，
-  模型席位以 DSH 自身会话/模型设置为准（Comate 走 8786 云直连）。
+  2026-09-13 起主用 DSH（ZCode 已退役）；模型席位以 DSH 自身会话/模型设置为准
+  （Comate 走 8786 云直连）。
 
 ## 常用命令
 
@@ -383,6 +415,12 @@ pwsh -File tools/clean-cargo-target.ps1
 
 # 界面合同门禁（3 条：逐字节副本 / 版本号唯一降序 / v4 不跳版 + 与 CHANGELOG 同集合）
 cd rs-gui; cargo test --test ui_html
+# 版本锚点门禁（14 处锚点必须都等于 APP_VERSION；升版本后必跑）
+cd rs-gui; cargo test --test release_sync
+
+# 复盘取数 / 交接现状（输出即事实，别手抄）
+pwsh -File tools/retro-metrics.ps1
+pwsh -File tools/status-facts.ps1
 
 # ui.html 内联 JS 语法校验（改完 UI 必做，改坏会白屏）
 node --check <抽取出的 js>

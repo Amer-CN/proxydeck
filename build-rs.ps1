@@ -150,6 +150,26 @@ Write-Host ""
 $cargo = Get-Command cargo -ErrorAction SilentlyContinue
 if (-not $cargo) { Write-Host "[failed] cargo not on PATH" -ForegroundColor Red; exit 1 }
 
+# -- 0. release gates (FINAL only) --------------------------------------------
+# Why here: the version strings live in 14 hand-copied anchors (ui.html 6 + version.rc
+# 4 + README + CHANGELOG + CLAUDE.md + APP_VERSION). 2026-11-24 retro found CLAUDE.md
+# still said v4.10.0 after v4.10.2 was tagged. Tests catch that, but only if someone
+# runs them at the one moment it matters: packaging. So -Final refuses to build when
+# the anchors disagree. See rs-gui/tests/release_sync.rs and docs/retro-2026-11-24.md.
+if ($Final) {
+  Write-Host "[0/5] release gates (cargo test -p rs-gui --test release_sync --test ui_html)"
+  Push-Location $root
+  try {
+    & cargo test -p rs-gui --test release_sync --test ui_html
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host ("[failed] release gates exit {0}: fix the anchors / CHANGELOG before packaging" -f $LASTEXITCODE) -ForegroundColor Red
+      exit 1
+    }
+  } finally {
+    Pop-Location
+  }
+}
+
 $cargoArgList = @('build', '--release', '--bin', 'rs-gui') + $CargoArgs
 Write-Host ("[1/5] cargo {0}" -f ($cargoArgList -join ' '))
 Push-Location $root
