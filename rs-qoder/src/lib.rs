@@ -129,6 +129,12 @@ pub const MAX_BODY_BYTES: usize = 32 << 20;
 /// 与 Go `handleCreditsSet` 的 `io.LimitReader(r.Body, 64<<10)` 同值。
 pub const CREDITS_BODY_BYTES: usize = 64 << 10;
 
+/// 冷启动自检阈值：磁盘上的服务端清单超过这个时长就在后台现拉一次。
+///
+/// 12 小时是「官方一天最多改一两次模型」的经验值——**不是**精确的失效期；
+/// 手动「↻ 刷新」永远走 `GET /v1/models/refresh`，不受它限制。
+pub const LIVE_CACHE_TTL: Duration = Duration::from_secs(12 * 3600);
+
 /// 内置静态模型目录：以 Qoder 客户端 2026-10-20 的 `resources\dynamic-text\qoder-cn.json`
 /// 为准（14 条，按 worker key 字典序）。**唯一的表源是 `catalog::STATIC_MODELS`**——
 /// 这里只是把它转成历史名字，避免两处漂移。`id` 是传给 worker 的 `--model` 原文
@@ -256,6 +262,8 @@ pub struct AppState {
     /// 服务端权威模型清单缓存（来自 worker 的 `pd-init` 控制响应）。
     /// `None` = 还没拿到过，此时 `/v1/models` 回落本地字典/静态表。
     live_models: Mutex<Option<Vec<catalog::LiveModel>>>,
+    /// 现拉串行锁：`/v1/models/refresh` 与冷启动自检共用，避免同时 spawn 两个探针 worker。
+    refresh_lock: tokio::sync::Mutex<()>,
     http: reqwest::Client,
 }
 
@@ -299,6 +307,7 @@ impl AppState {
             credits: Mutex::new(CreditsState::default()),
             usage_cache: Mutex::new(None),
             live_models: Mutex::new(None),
+            refresh_lock: tokio::sync::Mutex::new(()),
             http: reqwest::Client::builder()
                 .build()
                 .expect("建 reqwest 客户端"),
@@ -427,6 +436,58 @@ impl AppState {
         }
     }
 
+    /// 磁盘清单是否已过期（冷启动自检用）：缓存文件不存在或 mtime 比 `ttl` 老 ⇒ `true`。
+    ///
+    /// 只看文件 mtime——那是唯一能跨重启判断「上次现拉是什么时候」的落点
+    /// （清单本体不带时间戳）。`None` 路径（拿不到 USERPROFILE）也按过期处理。
+    pub fn live_models_stale(&self, ttl: Duration) -> bool {
+        if self.live_models_snapshot().is_none() {
+            return true;
+        }
+        cache_file_is_stale(live_cache_path(self.region).as_deref(), ttl)
+    }
+
+    /// **主动现拉**服务端模型清单（`/v1/models/refresh` 与冷启动自检共用）。
+    ///
+    /// 走 `worker::probe_models` 的 init-only 探针：不喂用户消息、不调模型、不扣积分。
+    /// 失败回 `Err(文案)` 且**保留旧清单**——`/v1/models` 不会因为一次现拉失败变空。
+    pub async fn refresh_live_models(&self) -> Result<usize, String> {
+        // 串行：两个入口（手动刷新 / 冷启动自检）同时来时不并发 spawn 探针。
+        let _guard = self.refresh_lock.lock().await;
+        let auth = self.current_auth()?;
+        let worker = self.worker_path.clone().ok_or_else(|| {
+            "未找到 Qoder 官方 worker，请先安装 Qoder CN（AI IDE）".to_string()
+        })?;
+        let models = worker::probe_models(
+            auth.token.clone(),
+            auth.expires_at_ms,
+            worker,
+            self.cwd_env.clone(),
+            worker::PROBE_TIMEOUT,
+        )
+        .await?;
+        let n = models.len();
+        self.absorb_live_models(models);
+        // 内容没变时 `absorb_live_models` 会跳过写盘（每请求都来一份，避免重复 IO），
+        // 但「刚现拉成功」这个事实必须落到 mtime —— 否则冷启动自检会一直认为清单过期，
+        // 每次重启都白探一次 worker（2026-11-24 实测：清单没变时 mtime 停在旧值）。
+        self.touch_live_cache();
+        Ok(n)
+    }
+
+    /// 只刷新缓存文件的 mtime（内容不动）：给「现拉成功但清单没变」留一个时间戳。
+    fn touch_live_cache(&self) {
+        let Some(path) = live_cache_path(self.region) else { return };
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                if let Err(e) = std::fs::write(&path, &bytes) {
+                    println!("qoder-plugin: 刷新模型清单时间戳失败 {e}");
+                }
+            }
+            Err(_) => {} // 没有缓存文件就没什么可刷的
+        }
+    }
+
     /// Go `currentAuth()`：内存缓存，`expiresAt` 临近过期（<30s）或解不出时重读文件
     /// （App 在跑时 `auth.v1.dat` 会被轮换刷新，重读自动跟上）。
     pub fn current_auth(&self) -> Result<QoderAuth, String> {
@@ -510,6 +571,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/health", any(handle_health))
         .route("/credits/set", any(handle_credits_set))
         .route("/v1/models", any(handle_models))
+        .route("/v1/models/refresh", any(handle_models_refresh))
         .route("/v1/chat/completions", any(handle_chat))
         .fallback(any(handle_fallback))
         .layer(axum::middleware::from_fn(cors))
@@ -614,6 +676,15 @@ fn live_cache_path(region: Region) -> Option<PathBuf> {
         Region::Intl => ".qoder-plugin-models-intl.json",
     };
     Some(PathBuf::from(home).join(name))
+}
+
+/// 缓存文件是否过期：`None` / 不存在 / 读不到 mtime 一律算过期（宁可多探一次）。
+pub fn cache_file_is_stale(path: Option<&Path>, ttl: Duration) -> bool {
+    let Some(path) = path else { return true };
+    match std::fs::metadata(path).and_then(|m| m.modified()) {
+        Ok(t) => t.elapsed().map(|e| e >= ttl).unwrap_or(true),
+        Err(_) => true,
+    }
 }
 
 /// Go `flattenMessages`：按顺序 `role: content` 拼接，`system→[System]\n`、
@@ -1083,8 +1154,20 @@ async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
     // 服务端清单优先（worker 的 `pd-init` 控制响应里那条）；没拿到才回落
     // 本地字典 / 内置静态表。GUI 甲板的「模型矩阵」就是喂这个接口，所以
     // 上游增删改名在这里自动生效，UI 不用跟着改。
+    let out = obj(vec![
+        ("object", s("list")),
+        ("data", J::Arr(models_data(&st))),
+    ]);
+    json_bytes(StatusCode::OK, &[], (out.to_go() + "\n").into_bytes())
+}
+
+/// 当前可见的模型条目：服务端清单优先，拿不到回落本地目录/静态表。
+///
+/// 单取出来是为了让 `/v1/models` 与 `/v1/models/refresh` 共用同一份条目构造
+/// （`/v1/models` 的输出形状由黄金门禁逐字节锁着，不能因为新增刷新端点走样）。
+fn models_data(st: &AppState) -> Vec<J> {
     if let Some(live) = st.live_models_snapshot() {
-        let data: Vec<J> = live
+        return live
             .iter()
             .map(|m| {
                 let mut fields = vec![
@@ -1101,11 +1184,8 @@ async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
                 obj(fields)
             })
             .collect();
-        let out = obj(vec![("object", s("list")), ("data", J::Arr(data))]);
-        return json_bytes(StatusCode::OK, &[], (out.to_go() + "\n").into_bytes());
     }
-    let data: Vec<J> = st
-        .models
+    st.models
         .iter()
         .map(|(_worker_key, label)| {
             obj(vec![
@@ -1114,8 +1194,43 @@ async fn handle_models(State(st): State<Arc<AppState>>) -> Response {
                 ("object", s("model")),
             ])
         })
-        .collect();
-    let out = obj(vec![("object", s("list")), ("data", J::Arr(data))]);
+        .collect()
+}
+
+/// `GET /v1/models/refresh`：**主动现拉**一次服务端清单，然后照 `/v1/models` 的形状回。
+///
+/// 2026-11-24 新增：官方清单只在 worker 的 `pd-init` 里，而那条以前只有「真发一次
+/// 对话」才会顺带带回来——甲板模型矩阵于是永远停在上一次对话那一刻。这个端点走
+/// init-only 探针（不发用户消息、不调模型、不扣积分），把「现拉」变成一次点击。
+///
+/// 失败也回 200（旧清单 + `refreshed:false` + `error`），GUI 照常渲染即可。
+async fn handle_models_refresh(State(st): State<Arc<AppState>>) -> Response {
+    let start = Instant::now();
+    let (ok, err) = match st.refresh_live_models().await {
+        Ok(n) => {
+            println!(
+                "qoder-plugin: GET /v1/models/refresh 200 现拉 {n} 条（{:?}）",
+                start.elapsed()
+            );
+            (true, None)
+        }
+        Err(e) => {
+            println!(
+                "qoder-plugin: GET /v1/models/refresh 保留旧清单: {e}（{:?}）",
+                start.elapsed()
+            );
+            (false, Some(e))
+        }
+    };
+    let mut fields = vec![
+        ("object", s("list")),
+        ("data", J::Arr(models_data(&st))),
+        ("refreshed", J::Bool(ok)),
+    ];
+    if let Some(e) = err {
+        fields.push(("error", s(&e)));
+    }
+    let out = obj(fields);
     json_bytes(StatusCode::OK, &[], (out.to_go() + "\n").into_bytes())
 }
 
@@ -1719,6 +1834,24 @@ pub async fn run(args: Args) -> Result<(), String> {
     // 冷启动：先恢复上次落盘的服务端清单，`/v1/models` 一上线就是最新的
     // （恢复不到就走本地字典，等第一个请求带回来再刷新）。
     state.load_live_models_from_disk();
+    // 再自检一次陈旧度：官方上新后不用等「下一次真实对话」，重启后后台现拉一份
+    // （init-only 探针：不发用户消息、不调模型、不扣积分；失败只记日志，照旧用磁盘清单）。
+    {
+        let st = state.clone();
+        tokio::spawn(async move {
+            if !st.live_models_stale(LIVE_CACHE_TTL) {
+                return;
+            }
+            println!(
+                "qoder-plugin: 模型清单超过 {}h 未更新（或没有缓存），后台现拉一次",
+                LIVE_CACHE_TTL.as_secs() / 3600
+            );
+            match st.refresh_live_models().await {
+                Ok(n) => println!("qoder-plugin: 冷启动现拉模型清单 {n} 条"),
+                Err(e) => println!("qoder-plugin: 冷启动现拉模型清单失败（保留旧清单）: {e}"),
+            }
+        });
+    }
     let app = router(state);
     let addr: std::net::SocketAddr = format!("{}:{}", args.host, args.port)
         .parse()
@@ -1739,6 +1872,34 @@ pub fn join_path(base: &Path, rel: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cache_file_staleness_reads_mtime() {
+        // 拿不到路径 / 文件不存在 ⇒ 一律算过期（宁可多探一次）
+        assert!(cache_file_is_stale(None, Duration::from_secs(3600)));
+        let missing = std::env::temp_dir().join(format!(
+            "rs-qoder-stale-missing-{}.json",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&missing);
+        assert!(cache_file_is_stale(
+            Some(&missing),
+            Duration::from_secs(3600)
+        ));
+
+        // 刚写的文件：TTL 内不算过期；TTL=0 则一律过期
+        let fresh = std::env::temp_dir().join(format!(
+            "rs-qoder-stale-fresh-{}.json",
+            std::process::id()
+        ));
+        std::fs::write(&fresh, b"[]").unwrap();
+        assert!(!cache_file_is_stale(
+            Some(&fresh),
+            Duration::from_secs(3600)
+        ));
+        assert!(cache_file_is_stale(Some(&fresh), Duration::from_secs(0)));
+        let _ = std::fs::remove_file(&fresh);
+    }
 
     #[test]
     fn resolve_model_matches_go_catalog() {

@@ -11067,14 +11067,23 @@ var PT_I18N = {
           refreshPluginView(mode); plog(V, 'sys', '手动刷新'); return;
         }
         if (mode === 'qoder') {
-          /* Qoder 积分刷新：/health?refresh=1 让插件旁路 60s 额度缓存现拉
-             openapi（套餐+专属包实时数），再刷视图渲染出来 */
+          /* Qoder 刷新两件事：
+             ① /v1/models/refresh 让插件现拉官方模型清单——只读 worker 的 pd-init
+                控制响应，不发用户消息、不调模型、不扣积分；官方上新后按一次就生效，
+                不用再等下一次真实对话（清单以前只有对话才顺带带回来）。
+             ② /health?refresh=1 旁路 60s 额度缓存，现拉 openapi（套餐+专属包实时数）。
+             现拉要起一次 worker（本机实测 5~11 秒），给 40 秒预算；失败也照常刷视图，
+             插件自己保留旧清单并在响应里给 refreshed:false。 */
           rf.disabled = true;
           var oldQ = rf.textContent;
           rf.textContent = '刷新中…';
-          plog(V, 'sys', '手动刷新积分（现拉官方额度）');
+          plog(V, 'sys', '手动刷新：现拉官方模型清单 + 额度');
+          try {
+            await fetch('http://127.0.0.1:' + V.port + '/v1/models/refresh',
+              { signal: AbortSignal.timeout(40000) });
+          } catch (e) {}
           try { await fetch('http://127.0.0.1:' + V.port + '/health?refresh=1'); } catch (e) {}
-          refreshPluginView(mode);
+          await refreshPluginView(mode);
           rf.disabled = false; rf.textContent = oldQ;
           return;
         }

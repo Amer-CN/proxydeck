@@ -67,13 +67,14 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
 > 老安装仍能命中。本机 `D:\Program Files\Qoder` 是**国际版**。
 
 
-## 端点（与 Go `http.ServeMux` 注册的四条同形）
+## 端点（与 Go `http.ServeMux` 注册的四条同形，另加一条现拉）
 
 | 路径 | 行为 | 方法 |
 |---|---|---|
 | `/health` | 无登录态 `{"status":"no_license"}`；有则 `{"credits":{...},"service":"qoder","status":"ok","uptimeSec":N}`，`credits` 含 `spent` / `spentThisSession` / `quotaExceeded`，`refresh=1` 时另有 `realtime` | **不看方法**（POST 也 200） |
 | `/credits/set` | `POST {"spent":0}` 清零账本；非 POST → 405 + `Allow: POST` | 判方法 |
-| `/v1/models` | 模型目录 **13 条**（Qoder 客户端 `resources\dynamic-text` 的目录；读不到回落内置静态表） | **不看方法** |
+| `/v1/models` | 模型目录（服务端清单优先：13 条起；读不到回落客户端目录/内置静态表） | **不看方法** |
+| `/v1/models/refresh` | **2026-11-24 新增**：现拉一次服务端清单（init-only 探针，不跑模型、不扣积分），形状同 `/v1/models`，另带 `refreshed` 与失败时的 `error`；失败仍 200 + 旧清单 | 不看方法 |
 | `/v1/chat/completions` | 扁平化 `messages` → worker prompt → 翻回 OpenAI（流式/非流式） | 仅 POST |
 | 其余 | `ServeMux` 语义：`cleanPath != path` → 307，否则 404 纯文本 | — |
 
@@ -215,6 +216,32 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
       worker 退回临时目录 `E:\Temp` → 模型读项目文件被判「工作目录之外」而弹授权。
     * 修好后 `worker cwd=` 日志显示真实项目目录；实测同一请求从「权限提示」变成
       正确读出 `Cargo.toml` 的 9 个 workspace 成员（含行号）。
+17. **主动现拉模型清单（2026-11-24，Go 侧没有这一层）**：
+    * 现象（用户报告）：「Qoder 的模型矩阵没随官方更新」。查下来不是 `catalog` 坏了：
+      服务端清单只藏在 worker 的 `pd-init` 控制响应里，而那条**只有真发一次对话**
+      才会顺带带回来；磁盘快照停在 2026-10-27，官方已经换成
+      **Qwen4-Max**（`qmodel_latest`）、**GLM-5.4**（`gmodel_latest`）、
+      **Step-5-Preview**（`jmodel`）——矩阵一直显示 10 条旧清单。
+      官方文档也滞后（CLI 文档页还写着 Qwen3.7-Max / GLM-5.2），**只能以服务端为准**。
+    * 修法：`worker::probe_models()` 走 **init-only 探针**——spawn 一个 worker、发
+      `initialize`、读到 `response.models` 就杀进程；只应答 `fetch_job_token`，
+      **不发用户消息、不调模型**。实测一次约 5~11 秒，账本 `spent` 与 mtime 均不变
+      （不扣积分）。
+    * 两个入口：`GET /v1/models/refresh`（GUI 甲板「↻ 刷新」先打它，40 秒预算）；
+      冷启动自检——磁盘清单 mtime 超过 `LIVE_CACHE_TTL`（12h）就在后台现拉一次
+      （`live_models_stale` / `cache_file_is_stale`，失败只记日志、保留旧清单）。
+      现拉成功但清单**没变**时 `absorb_live_models` 会跳过写盘，所以另有
+      `touch_live_cache()` 把 mtime 推到当下——否则每次重启都判「过期」白探一次
+      （2026-11-24 实测踩到：mtime 停在 3 天前，重启后还剩一次多余现拉）。
+    * GUI：`app/ui.html` 的 Qoder 刷新分支改成「先现拉清单、再现拉额度」；
+      界面向量（`rs-gui/ui.html` 逐字节副本 + `uihtml.rs` 的 SHA/长度）已同步。
+    * 失败路径实测：`--worker` 指到不存在的文件时回 200 + `refreshed:false` +
+      `error`（含 stderr 尾巴），`data` 仍是旧 13 条——不 500、不清空。
+    * **双区都验过**（2026-11-24）：CN 现拉 13 条（见上）；`--region INTL` 的测试实例
+      现拉 **16 条**——INTL 服务端比 CN 多 `Sonus`（`smodel`，倍率 8）/ `Cantus`
+      （`cmodel`，倍率 4），并把 `Ultimate` / `Efficient` 两个质量档位也当可选项下发。
+      `parse_live` **不筛**质量档位（INTL 这两档可调；CN 服务端本来就不发它们），
+      两区缓存文件（`-cn` / `-intl`）、worker、登录态各自独立，互不覆盖。
 
 ## 未覆盖
 
@@ -229,7 +256,7 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
 ## 测试与门禁
 
 ```powershell
-cd rs-qoder; cargo test          # 50 单测 + 6 黄金 + 7 合同
+cd rs-qoder; cargo test          # 55 单测 + 6 黄金 + 8 合同
 # 黄金门禁里的 SKIP 行与计数用 println! 打，libtest 默认**只在失败时**显示通过用例的 stdout：
 cargo test -- --nocapture        # 要看「跳过了什么、跳过几条」就带这个（见 tests/golden/README.md）
 ```

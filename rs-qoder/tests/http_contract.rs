@@ -145,6 +145,52 @@ async fn no_worker_is_503_with_go_message() {
 }
 
 #[tokio::test]
+async fn models_refresh_without_worker_keeps_current_list() {
+    // 2026-11-24 新增的现拉端点：失败（这里=没 worker）必须回 200 + 旧清单 + refreshed:false，
+    // 不能 500、不能把 /v1/models 的形状改坏。本机装了 Qoder CN ⇒ 用 AppState::new 的
+    // 「不给 worker」测试缝；登录态夹具解不开的机器 SKIP（与其它用例同口径）。
+    if !auth_fixture_usable() {
+        println!("SKIP(dpapi-fixture): 现拉失败路径要先过登录态，夹具本机解不开——未跑");
+        return;
+    }
+    let dir = TestDir::new("contract-refresh-noworker");
+    let st = Arc::new(rs_qoder::AppState::new(
+        auth_fixture_dir(),
+        None, // 故意不给 worker
+        Some(dir.join(".qoder-cli-credits.json")),
+        None,
+    ));
+    let srv = AppServer::start(st).await;
+
+    let h = hop(&srv.base, "GET", "/v1/models/refresh", None).await;
+    assert_eq!(h.status, 200, "现拉失败也要 200，不能 500: {}", h.body);
+    let v: serde_json::Value = serde_json::from_str(&h.body).expect("刷新端点应是 JSON");
+    assert_eq!(v["refreshed"], serde_json::json!(false));
+    assert!(
+        v["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("未找到 Qoder 官方 worker"),
+        "错误文案应说明 worker 缺失: {}",
+        h.body
+    );
+    assert_eq!(v["object"], "list");
+    assert_eq!(
+        v["data"].as_array().map(|a| a.len()),
+        Some(rs_qoder::catalog::STATIC_MODELS.len()),
+        "失败时保留静态清单：{}",
+        h.body
+    );
+
+    // `/v1/models` 形状不受影响（黄金门禁用得更严，这里只查新字段没漏进去）
+    let h2 = hop(&srv.base, "GET", "/v1/models", None).await;
+    assert_eq!(h2.status, 200);
+    let v2: serde_json::Value = serde_json::from_str(&h2.body).unwrap();
+    assert!(v2.get("refreshed").is_none(), "/v1/models 不该带 refreshed");
+    assert!(v2.get("error").is_none());
+}
+
+#[tokio::test]
 async fn large_body_reaches_the_worker() {
     // axum 的 `DefaultBodyLimit` 只对 `Bytes`/`Json` 这类**提取器**生效；本 crate 走的是
     // `req.into_body()` + 自带的 32MB 上限（对齐 Go 的 `io.LimitReader(r.Body, 32<<20)`），

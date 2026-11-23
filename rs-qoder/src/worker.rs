@@ -654,6 +654,185 @@ pub async fn run_worker(
     Err(cause)
 }
 
+/// 主动现拉的探针超时：只等 `pd-init`。实测一次 node worker 冷启 + 握手约 5~11 秒
+/// （2026-11-24 本机），给 30 秒余量；超时即杀子进程，调用方保留旧清单。
+pub const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// **init-only 探针**：spawn 一个官方 worker、发 `initialize`、读到 `control_response`
+/// 里的 `response.models` 就收工——**不发用户消息、不调模型、不扣积分**。
+///
+/// 为什么需要它：官方模型清单只藏在 worker 的这条控制响应里（客户端本地的
+/// `resources\dynamic-text\*.json` 只是「key→显示名」字典，不随上游增删同步）。
+/// 正常路径只有「真发一次对话」才会顺带把它带回来——官方上新后，甲板「模型矩阵」
+/// 就会一直停在上一次对话那一刻的清单（2026-11-24 实测：磁盘快照停在 10-27，
+/// 官方已经换成 Qwen4-Max / GLM-5.4 / Step-5-Preview）。
+///
+/// 失败回 `Err(文案)`，调用方保留旧清单；任何情况下都不喂用户消息。
+pub async fn probe_models(
+    auth_token: String,
+    auth_expires_at_ms: Option<i64>,
+    worker_path: PathBuf,
+    cwd_env: Option<String>,
+    timeout: Duration,
+) -> Result<Vec<crate::catalog::LiveModel>, String> {
+    let payload = TempPayload::create().map_err(|e| format!("写 auth payload 失败: {e}"))?;
+    // 探针没有提示词可提取工作目录：只认 `QODER_CWD` / 临时目录（与 chat 同一个判定）。
+    let work_dir = crate::cwd::dir("", cwd_env.as_deref());
+    let parent_env: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os().collect();
+    let env = child_env(&parent_env, &payload.path);
+
+    let mut cmd = tokio::process::Command::new("node");
+    // 模型名只为满足 CLI 的必填参数；initialize 阶段不会调模型（也就不产生积分）。
+    cmd.args(worker_args(&worker_path, "auto"));
+    cmd.current_dir(&work_dir);
+    cmd.env_clear();
+    cmd.envs(env);
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd.kill_on_drop(true);
+    #[cfg(windows)]
+    {
+        cmd.creation_flags(0x08000000);
+    }
+
+    let mut child = cmd.spawn().map_err(|e| format!("启动 worker 失败: {e}"))?;
+    let mut stdin = child.stdin.take().ok_or("worker stdin 不可用")?;
+    let stdout = child.stdout.take().ok_or("worker stdout 不可用")?;
+    let mut stderr_pipe = child.stderr.take().ok_or("worker stderr 不可用")?;
+    let stderr_task = tokio::spawn(async move {
+        let mut buf = Vec::new();
+        let _ = stderr_pipe.read_to_end(&mut buf).await;
+        buf
+    });
+
+    let deadline = tokio::time::Instant::now() + timeout;
+
+    // 与 `run_worker` 逐字同一条 `initialize`（worker 只认这套键序与默认值）。
+    let init = obj(vec![
+        ("type", s("control_request")),
+        ("request_id", s("pd-init")),
+        (
+            "request",
+            obj(vec![
+                ("type", s("initialize")),
+                ("subtype", s("initialize")),
+                ("modelPolicyProvider", b(false)),
+                ("supportsCatalogReadyInitialize", b(true)),
+                ("initializeTimeoutMs", i(120000)),
+            ]),
+        ),
+    ]);
+    let mut line = init.to_go();
+    line.push('\n');
+    if let Err(e) = stdin.write_all(line.as_bytes()).await {
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+        return Err(format!("写 initialize 失败: {e}"));
+    }
+
+    let mut found: Option<Vec<crate::catalog::LiveModel>> = None;
+    let mut timed_out = false;
+    let mut scan_err: Option<String> = None;
+    let mut reader = BufReader::new(stdout);
+    let mut raw: Vec<u8> = Vec::new();
+    while found.is_none() {
+        raw.clear();
+        let read = tokio::time::timeout_at(deadline, reader.read_until(b'\n', &mut raw)).await;
+        match read {
+            Err(_) => {
+                timed_out = true;
+                break;
+            }
+            Ok(Err(e)) => {
+                scan_err = Some(format!("worker stdout 中断: {e}"));
+                break;
+            }
+            Ok(Ok(0)) => break, // EOF：worker 自己退了
+            Ok(Ok(_)) => {}
+        }
+        let text = String::from_utf8_lossy(&raw).to_string();
+        let trimmed = text.trim_end_matches(['\r', '\n']);
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(msg) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+            continue;
+        };
+        match msg.get("type").and_then(|v| v.as_str()) {
+            Some("control_response") => {
+                if let Some(models) = msg
+                    .get("response")
+                    .and_then(|r| r.get("response"))
+                    .and_then(|r| r.get("models"))
+                {
+                    let parsed = crate::catalog::parse_live(models);
+                    if !parsed.is_empty() {
+                        found = Some(parsed);
+                    }
+                }
+            }
+            Some("control_request") => {
+                // 初始化期间 worker 会先要 jobToken 回调（`hostTokenCallback=true` 必发）；
+                // 只答这一种，其它控制请求一律不理（探针不跑任务，正常也不会来）。
+                let req = CtrlReq::parse(&msg);
+                if req.request.subtype == "fetch_job_token" {
+                    let mut resp = vec![("token", s(&auth_token))];
+                    if let Some(ms) = auth_expires_at_ms {
+                        resp.push(("expires_at", i(ms)));
+                    }
+                    let reply = obj(vec![
+                        ("type", s("control_response")),
+                        (
+                            "response",
+                            obj(vec![
+                                ("subtype", s("success")),
+                                ("request_id", s(&req.request_id)),
+                                ("response", obj(resp)),
+                            ]),
+                        ),
+                    ]);
+                    let mut l = reply.to_go();
+                    l.push('\n');
+                    let _ = stdin.write_all(l.as_bytes()).await;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let _ = stdin.shutdown().await;
+    drop(stdin);
+    // 模型清单已到手：worker 不必再跑（它此时还停在「等用户消息」）。
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+    let stderr_buf = stderr_task.await.unwrap_or_default();
+
+    if let Some(models) = found {
+        return Ok(models);
+    }
+
+    let mut cause = if timed_out {
+        format!("worker 超时（{timeout:?}）未回模型清单")
+    } else if let Some(e) = scan_err {
+        e
+    } else {
+        "worker 结束但未回模型清单".to_string()
+    };
+    let tail = String::from_utf8_lossy(&stderr_buf).trim().to_string();
+    if !tail.is_empty() {
+        let mut tail = tail;
+        if tail.len() > 500 {
+            // 与 `run_worker` 同口径：按**字节**切尾（可能落在 UTF-8 中间）
+            let bytes = tail.as_bytes();
+            tail = String::from_utf8_lossy(&bytes[bytes.len() - 500..]).to_string();
+        }
+        cause.push_str("; stderr: ");
+        cause.push_str(&tail);
+    }
+    Err(cause)
+}
+
 /// Go `time.Duration.String()` 的形状（本 crate 只用得到整秒级的时长：
 /// 600s ⇒ `10m0s`、60s ⇒ `1m0s`、5s ⇒ `5s`；秒数在分钟/小时存在时**一定要写**）。
 fn go_duration(d: Duration) -> String {
