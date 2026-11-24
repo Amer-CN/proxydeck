@@ -242,6 +242,18 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
       （`cmodel`，倍率 4），并把 `Ultimate` / `Efficient` 两个质量档位也当可选项下发。
       `parse_live` **不筛**质量档位（INTL 这两档可调；CN 服务端本来就不发它们），
       两区缓存文件（`-cn` / `-intl`）、worker、登录态各自独立，互不覆盖。
+18. **`hmodel`（HungerG）是桌面客户端专属模型，CLI 通道没有它**（2026-11-24 实测）：
+    * 现象：桌面端模型选择器有 `HungerG`（Free 0.0×），本地 agent 会话日志里它的
+      `model_key` 就是 `hmodel`；但服务端下发给 CLI/agent-SDK 的清单
+      （CN 13 条 / INTL 16 条）**都不含它**。
+    * 实证（CN、INTL 各一次）：把 `hmodel` 放进解析兼容名单后强推
+      `--model hmodel`，worker 报
+      `FatalRoutingError: Model "hmodel" is not available in the current Qoder catalog.`
+      （cause 为 `ModelNotFoundError`），HTTP 502，账本 `spent`/mtime 均不变（0 积分）。
+    * 结论：官方文档写明 HungerG 面向桌面端/IDE（JetBrains、CLI、Mobile 等暂不支持），
+      我们走的正是 CLI/agent-SDK 通道。**不要把 `hmodel` 塞进模型表**——列出来只会
+      让用户点一次 502。等它进入服务端给 SDK 的目录（或官方开放 CLI），
+      冷启动/「↻ 刷新」的现拉会自动带上，不用改代码。
 
 ## 未覆盖
 
