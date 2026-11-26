@@ -13,7 +13,8 @@
 |---|---|---|
 | T0 | complete | 基线已建立；环境还原后 2 个哈希门禁转绿，保留 1 个既有 DPAPI 失败 |
 | T1 | complete | 397 passed / 0 failed / 2 ignored；构造器突变红→绿；OpenCode lib 64 passed |
-| T2–T14 | pending | 未开始 |
+| T2 | complete | A01 5/5；WorkBuddy 全 crate 137 passed / 0 failed；突变 4 红后恢复全绿 |
+| T3–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -53,6 +54,14 @@
 - 更新团结 chat、Comate、OpenCode 的当前职责说明；未改历史日志、模型策略或凭证链。
 - 验证：`cargo test -p rs-comate -p rs-proxy -p rs-tuanjie --locked -- --nocapture` → **397 passed / 0 failed / 2 ignored**；`cargo test -p rs-opencode --locked --lib` → 64 passed。
 - `cargo fmt --all -- --check` 暴露全仓既有格式差异（约 20k 行输出），未借 T1 重排全仓；本次 `git diff --check` 通过。
+
+## T2 实施记录
+- 新增 `HeadCompleteness::{Incomplete, Complete}` 与 `HeadProbe { bytes, completeness }`；`peek_within` 首块即返回，但完整度由 SSE 帧分隔符、完整 JSON/HTML 或干净 EOF 决定。
+- 预算耗尽、字节窗口攒满、半个 `data:`、JSON/UTF-8 中途均保持 `Incomplete`；明确业务码仍优先判定，完整错误帧/DONE/HTML 保持原分类。
+- A01 真实 HTTP 假上游以 chunked `dat` / `a: {...}` 切分：旧实现日志出现“空流@200，换号重发”并回 502；修复后 1 次上游命中、字节完整。
+- 旧 `!truncated` 断言固定了“网络首块=协议完整”的错误语义，改为 `Incomplete`；“首字节不白等预算”和“peek 后字节不丢”原断言保留。旧 bool 分类用例仅做类型适配，断言强度未降。
+- 验证：新目标 5/5；`cargo test -p rs-codebuddy --locked -- --nocapture` → **137 passed / 0 failed / 0 ignored**。
+- 反向验证：把半帧完成度突变为 Complete 后新目标 1 passed / 4 failed；恢复后 5/5。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。

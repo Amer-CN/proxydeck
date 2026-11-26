@@ -26,9 +26,11 @@ use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode}
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use futures_util::{StreamExt, TryStreamExt};
+use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use crate::conn::ConnClosed;
+use crate::failover::HeadCompleteness;
 use crate::gjson;
 use crate::sse::{SseFieldCleaner, UsageScanner};
 use crate::toolrefs;
@@ -882,12 +884,12 @@ pub async fn handle_chat(
             if client_wants_stream && st.pool.is_some() && !acc_uid.is_empty() {
                 let mut reader = ChunkReader::new(resp);
                 // 带时间预算：思考型模型 prefill 静默期不会把首字节压住（见 STREAM_PEEK_BUDGET）。
-                let (peeked, truncated) = reader
+                let probe = reader
                     .peek_within(STREAM_PEEK_WINDOW, STREAM_PEEK_BUDGET)
                     .await;
                 let verdict = crate::failover::classify_stream_head(
-                    &String::from_utf8_lossy(&peeked),
-                    truncated,
+                    &String::from_utf8_lossy(&probe.bytes),
+                    probe.completeness,
                 );
                 if verdict != crate::failover::StreamVerdict::Ok {
                     let p = st.pool.as_ref().expect("上面已判 Some");
@@ -1408,6 +1410,13 @@ pub fn to_int(v: Option<&Value>) -> i64 {
     }
 }
 
+/// 一次流头嗅探的结果；字节仍留在 [`ChunkReader`] 的 pending 中。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeadProbe {
+    pub bytes: Vec<u8>,
+    pub completeness: HeadCompleteness,
+}
+
 /// 上游响应体的分块读取器：把 `reqwest::Response` 的字节流包装成「按需取字节」，
 /// 并且能把「上一次取多了的余量」留在 `pending` 里（Go `bufio.Reader.fill` 只按剩余
 /// 缓冲空间读，从不越读——这里等价：`take(n)` 至多消费 n 字节）。
@@ -1485,55 +1494,46 @@ impl ChunkReader {
         self.pending[..self.pending.len().min(max)].to_vec()
     }
 
-    /// 带**时间上限**的 peek：给流式路径用。返回 `(已攒字节, 是否被截断)`。
+    /// 带**时间上限**的 peek：首块到达即返回，不把网络块边界当作协议帧边界。
     ///
-    /// 为什么需要它：`peek` 的循环条件是「攒满 `max` 或流结束」，而上游在思考型模型的
-    /// prefill 阶段可能静默几十秒——那样首字节会被压到 prefill 结束才吐，比「不嗅探」
-    /// 还差。这里在 `budget` 到点时**用已攒到的字节就下判断**（可能不足 `max`），
-    /// 攒到的字节仍然留在 `pending` 里、后续原样交给下游，一字不丢。
-    ///
-    /// **健康流不付这份时间**：只要第一块数据到了就立刻返回（首块足以判错误帧/`data:`
-    /// 形态），预算只在「上游完全没吐字节」时才真正生效。这样正常请求的首字节延迟
-    /// 与不嗅探时一致，只有真正可疑的慢上游才等到预算到点。
-    ///
-    /// 返回值第二项 `truncated`：head 是否**没读全**（预算到点 / 窗口未满）。
-    /// `classify_stream_head` 据此避免把半截 `"dat"` 误判成「上游没发 SSE」。
-    pub async fn peek_within(&mut self, max: usize, budget: Duration) -> (Vec<u8>, bool) {
+    /// 返回的 `completeness` 由当前前缀的结构决定：完整 SSE 帧、完整 JSON/HTML 或干净
+    /// EOF 才算 `Complete`；预算耗尽、半个 `data:`、JSON/UTF-8 中途都是 `Incomplete`。
+    /// 达到字节窗口本身**不代表**协议完整。所有字节仍留在 pending，后续原样交付。
+    pub async fn peek_within(&mut self, max: usize, budget: Duration) -> HeadProbe {
+        if !self.pending.is_empty() {
+            let bytes = self.pending[..self.pending.len().min(max)].to_vec();
+            let completeness = head_completeness(&bytes, false);
+            return HeadProbe { bytes, completeness };
+        }
+
         let deadline = tokio::time::Instant::now() + budget;
-        let mut truncated = true;
+        let mut clean_eof = false;
         loop {
-            if self.pending.len() >= max {
-                truncated = false;
-                break;
-            }
             let left = deadline.saturating_duration_since(tokio::time::Instant::now());
             if left.is_zero() {
                 break;
             }
             match tokio::time::timeout(left, self.read_source()).await {
                 Ok(Some(Ok(b))) => {
-                    let mut merged = Vec::with_capacity(self.pending.len() + b.len());
-                    merged.extend_from_slice(&self.pending);
-                    merged.extend_from_slice(&b);
-                    self.pending = Bytes::from(merged);
-                    // 拿到第一块就够判了：错误帧/JSON 错体/HTML 页都是首块即见，
-                    // 正常 SSE 的首块也足以看到 `data:`。不再等满窗口/预算。
-                    truncated = false;
+                    if b.is_empty() {
+                        continue;
+                    }
+                    self.pending = b;
+                    // 健康流不付预算代价：首块一到就返回；完整度单独判断。
                     break;
                 }
-                // 流结束 / 读错误：读全了（EOF 不是截断）。
-                Ok(Some(Err(_))) | Ok(None) => {
-                    truncated = false;
+                // 读错误是终止但不是干净 EOF，半个前缀仍保持 Incomplete。
+                Ok(Some(Err(_))) => break,
+                Ok(None) => {
+                    clean_eof = true;
                     break;
                 }
-                // 预算到点：用已攒到的字节下判断，并标记「可能没读全」。
                 Err(_) => break,
             }
         }
-        (
-            self.pending[..self.pending.len().min(max)].to_vec(),
-            truncated,
-        )
+        let bytes = self.pending[..self.pending.len().min(max)].to_vec();
+        let completeness = head_completeness(&bytes, clean_eof);
+        HeadProbe { bytes, completeness }
     }
 
     /// 把「剩下的全部」包成聚合用的流（`pending` 先发，然后透传上游）。
@@ -1550,6 +1550,25 @@ impl ChunkReader {
         });
         Box::pin(head.chain(stream))
     }
+}
+
+fn head_completeness(bytes: &[u8], clean_eof: bool) -> HeadCompleteness {
+    if clean_eof
+        || bytes.windows(2).any(|w| w == b"\n\n")
+        || bytes.windows(4).any(|w| w == b"\r\n\r\n")
+    {
+        return HeadCompleteness::Complete;
+    }
+    let text = String::from_utf8_lossy(bytes);
+    let lower = text.to_ascii_lowercase();
+    if text.trim_start().starts_with('<') && lower.contains("</html>") {
+        return HeadCompleteness::Complete;
+    }
+    let mut decoder = serde_json::Deserializer::from_slice(bytes);
+    if Value::deserialize(&mut decoder).is_ok() && decoder.end().is_ok() {
+        return HeadCompleteness::Complete;
+    }
+    HeadCompleteness::Incomplete
 }
 
 /// 流式下游：清洗 + usage 入账（逐块 yield，与 Go 的「读一块→写一块→Flush」同形）。
@@ -1735,7 +1754,7 @@ mod tests {
         let mut reader = ChunkReader::from_stream(Box::pin(head.chain(stall)));
 
         let t0 = std::time::Instant::now();
-        let (peeked, truncated) = tokio::time::timeout(
+        let probe = tokio::time::timeout(
             Duration::from_millis(600),
             reader.peek_within(STREAM_PEEK_WINDOW, Duration::from_millis(60)),
         )
@@ -1743,13 +1762,17 @@ mod tests {
         .expect("peek_within 必须在预算内返回（不许死等攒满 8KB）");
         let elapsed = t0.elapsed();
 
-        assert_eq!(peeked, b"dat", "预算到点应返回已攒到的字节");
+        assert_eq!(probe.bytes, b"dat", "预算到点应返回已攒到的字节");
         assert!(
             elapsed < Duration::from_millis(500),
             "应在预算附近返回（实耗 {elapsed:?}），不许等满 8KB"
         );
-        // 拿到第一块就返回 ⇒ 这 3 字节已读全，不算截断
-        assert!(!truncated, "拿到首块即返回，不算截断");
+        // 拿到首块只说明网络有字节；`dat` 仍是协议半帧。
+        assert_eq!(
+            probe.completeness,
+            crate::failover::HeadCompleteness::Incomplete,
+            "首块 dat 不得伪称协议完整"
+        );
         // 已攒字节必须仍留在 pending 里，下游能原样读回
         let mut got: Vec<u8> = Vec::new();
         if let Some(Ok(b)) = reader.next_chunk().await {
@@ -1769,12 +1792,12 @@ mod tests {
         let mut reader = ChunkReader::from_stream(Box::pin(first.chain(stall)));
 
         let t0 = std::time::Instant::now();
-        let (peeked, _truncated) = reader
+        let probe = reader
             .peek_within(STREAM_PEEK_WINDOW, Duration::from_millis(300))
             .await;
         let elapsed = t0.elapsed();
 
-        assert!(!peeked.is_empty(), "应拿到首块内容");
+        assert!(!probe.bytes.is_empty(), "应拿到首块内容");
         assert!(
             elapsed < Duration::from_millis(120),
             "健康流拿到首块必须立刻返回，不许等满 300ms 预算（实耗 {elapsed:?}）"
@@ -1783,25 +1806,28 @@ mod tests {
 
     /// 预算截断时，半截 `"dat"` 不能被判成「上游没发 SSE」（否则误换号）。
     #[test]
-    fn truncated_head_does_not_become_empty_stream() {
-        use crate::failover::{classify_stream_head, StreamVerdict};
+    fn incomplete_head_does_not_become_empty_stream() {
+        use crate::failover::{classify_stream_head, HeadCompleteness, StreamVerdict};
         // 没读全：半截前缀 → 按 Ok 透传
         assert_eq!(
-            classify_stream_head("dat", true),
+            classify_stream_head("dat", HeadCompleteness::Incomplete),
             StreamVerdict::Ok,
-            "截断的半截 data: 前缀不能判空流"
+            "半截 data: 前缀不能判空流"
         );
         // 读全了但没有 data: 行 → 才是空流
         assert_eq!(
-            classify_stream_head("dat", false),
+            classify_stream_head("dat", HeadCompleteness::Complete),
             StreamVerdict::EmptyStream,
-            "读全后仍无 data: 行才算空流"
+            "完整前缀仍无 data: 行才算空流"
         );
         // 明确的业务码即使截断也要判出来（错误帧首块即见）
         assert_eq!(
-            classify_stream_head(r#"{"code":11128,"msg":"x"}"#, true),
+            classify_stream_head(
+                r#"{"code":11128,"msg":"x"}"#,
+                HeadCompleteness::Incomplete
+            ),
             StreamVerdict::ErrCode(11128),
-            "截断也要能判出业务码"
+            "不完整也要能判出明确业务码"
         );
     }
 
