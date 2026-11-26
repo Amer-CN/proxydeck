@@ -126,8 +126,15 @@ struct ModelsCache {
 #[derive(Clone, Debug, Default)]
 struct AcctHealth {
     dead: bool,
+    dead_revision: Option<u64>,
     cooldown_until: Option<Instant>,
     failures: u32,
+}
+
+impl AcctHealth {
+    fn is_dead(&self, revision: u64) -> bool {
+        self.dead && self.dead_revision.map_or(true, |dead| dead == revision)
+    }
 }
 
 pub struct Server {
@@ -135,7 +142,6 @@ pub struct Server {
     accounts: AccountManager,
     accounts_path: PathBuf,
     overlay_path: PathBuf,
-    sts_url: String,
     allow_local: bool,
     allow_local_refresh: bool,
     max_attempts: usize,
@@ -249,7 +255,11 @@ impl Server {
             .parent()
             .map(|p| p.join("codearts-refreshed.json"))
             .unwrap_or_else(|| PathBuf::from("codearts-refreshed.json"));
-        let accounts = AccountManager::new(accounts_path.clone());
+        let accounts = AccountManager::with_refresh(
+            accounts_path.clone(),
+            up.client().clone(),
+            sts_url.clone(),
+        );
         // 启动即完成稳定 ID 迁移；失败不假装服务已就绪。
         let cfg = accounts.load()?;
         let mut refreshed = store::Store::load(&overlay_path);
@@ -269,7 +279,6 @@ impl Server {
             accounts,
             accounts_path,
             overlay_path,
-            sts_url,
             allow_local,
             allow_local_refresh,
             max_attempts: max_attempts.max(1),
@@ -790,11 +799,16 @@ impl Server {
             .unwrap_or_default()
     }
 
-    fn mark_ok(&self, id: &str) {
+    fn mark_ok(&self, account: &Account) {
         if let Ok(mut h) = self.health.lock() {
-            let e = h.entry(id.to_string()).or_default();
+            let id = account.stable_key();
+            let e = h.entry(id).or_default();
             e.failures = 0;
             e.cooldown_until = None;
+            if e.dead_revision.map_or(true, |revision| revision == account.revision) {
+                e.dead = false;
+                e.dead_revision = None;
+            }
         }
     }
 
@@ -806,10 +820,11 @@ impl Server {
         }
     }
 
-    fn mark_dead(&self, id: &str) {
+    fn mark_dead(&self, id: &str, revision: u64) {
         if let Ok(mut h) = self.health.lock() {
             let e = h.entry(id.to_string()).or_default();
             e.dead = true;
+            e.dead_revision = Some(revision);
             e.failures += 1;
         }
     }
@@ -820,7 +835,7 @@ impl Server {
         if source == "local" && !self.allow_local_refresh && self.codearts_running() {
             self.mark_cooling(&account.stable_key(), 120);
         } else {
-            self.mark_dead(&account.stable_key());
+            self.mark_dead(&account.stable_key(), account.revision);
         }
     }
 
@@ -903,7 +918,7 @@ impl Server {
             }
             let id = a.stable_key();
             let h = self.health_of(&id);
-            if h.dead {
+            if h.is_dead(a.revision) {
                 continue;
             }
             let cooling = h.cooldown_until.map(|t| t > Instant::now()).unwrap_or(false);
@@ -928,45 +943,51 @@ impl Server {
 
     /// 过期则尝试续期；返回（可能更新过的）账号 + 续期说明。
     async fn ensure_fresh(&self, account: &Account, source: &str) -> (Account, Option<String>) {
-        if !account.is_expired() {
-            return (account.clone(), None);
-        }
-        if !account.can_refresh() {
-            return (account.clone(), Some("已过期且缺少续期材料".to_string()));
-        }
-        if source == "local" && !self.allow_local_refresh && self.codearts_running() {
+        if account.is_expired() && source == "local" && !self.allow_local_refresh && self.codearts_running() {
             return (
                 account.clone(),
                 Some("已过期；码道桌面端在运行，跳过主动续期以免踢掉桌面端".to_string()),
             );
         }
-        match refresh::refresh_token(self.up.client(), &self.sts_url, account).await {
-            Ok(r) => match self.apply_refresh(account, &r) {
-                Ok(new) => {
+        let id = accounts::AccountId(account.stable_key());
+        match self
+            .accounts
+            .ensure_fresh(&id, account.revision, accounts::RefreshMode::IfExpired)
+            .await
+        {
+            Ok(snapshot) => {
+                self.reload_refreshed_store();
+                let changed = snapshot.revision > account.revision;
+                if changed {
                     println!(
                         "codearts-plugin: 账号 {} 续期成功（新过期 {}）",
                         account.display_name(),
-                        r.expires_at
+                        snapshot.credentials.expires_at.as_deref().unwrap_or("未知")
                     );
-                    (new, Some("已自动续期".to_string()))
                 }
-                Err(e) => (account.clone(), Some(e)),
-            },
-            Err(e) => {
-                eprintln!(
-                    "codearts-plugin: 账号 {} 续期失败: {e}",
-                    account.display_name()
-                );
-                // 4xx / invalid_grant = 续期材料已作废（refresh token 单次轮转，被别人
-                // 用过就再也换不出来）。这种账号继续留在候选池里只会每个请求赔一次
-                // 上游 400，直接标死等用户重新导入；网络抖动与 5xx 不标死，下轮还试。
-                if is_definitive_refresh_failure(&e) {
-                    self.mark_dead(&account.stable_key());
-                }
-                // note 直接用上游原文；外面再包一层「续期失败」会变成
-                // 「续期失败: 续期失败 HTTP 400…」（2026-11-05 实测踩到）。
-                (account.clone(), Some(e))
+                (
+                    snapshot.credentials,
+                    changed.then(|| "已自动续期".to_string()),
+                )
             }
+            Err(accounts::RefreshError::Definitive { revision, message }) => {
+                self.mark_dead(id.as_str(), revision);
+                (account.clone(), Some(message))
+            }
+            Err(error) => (account.clone(), Some(error.to_string())),
+        }
+    }
+
+    fn reload_refreshed_store(&self) {
+        if let Ok(mut current) = self.refreshed.lock() {
+            *current = store::Store::load(&self.overlay_path);
+        }
+    }
+
+    /// 后台续期周期；与 HTTP 入口共用同一个账号协调器。
+    pub async fn refresh_due_accounts(&self) {
+        for (account, source) in self.candidates().unwrap_or_default() {
+            let _ = self.ensure_fresh(&account, source).await;
         }
     }
 
@@ -1002,51 +1023,30 @@ impl Server {
 
     /// 强制续期（忽略是否过期）。本机登录态且桌面运行中且未显式允许 → 拒绝。
     async fn force_refresh(&self, account: &Account, source: &str) -> Result<Account, String> {
-        if !account.can_refresh() {
-            return Err("该账号缺少续期材料（refresh_token / DPoP 私钥 / PKCE）".to_string());
-        }
         if source == "local" && !self.allow_local_refresh && self.codearts_running() {
             return Err("码道桌面端在运行：为避免把桌面端踢下线，默认不主动续期本机登录态（可用 --allow-local-refresh 覆盖）".to_string());
         }
-        let r = refresh::refresh_token(self.up.client(), &self.sts_url, account).await?;
-        let new = self.apply_refresh(account, &r)?;
-        println!(
-            "codearts-plugin: 账号 {} 手动续期成功（新过期 {}）",
-            account.display_name(),
-            r.expires_at
-        );
-        Ok(new)
-    }
-
-    /// 把续期结果写入稳定账号边界并更新 overlay；任一步失败都返回错误。
-    /// AK 轮转后 identity 会变；不写回的话启用/停用/删除就找不到它了）。
-    fn apply_refresh(&self, account: &Account, r: &refresh::Refreshed) -> Result<Account, String> {
         let id = accounts::AccountId(account.stable_key());
-        let mut new = account.clone();
-        new.access_key = r.access_key.clone();
-        new.secret_key = r.secret_key.clone();
-        new.security_token = r.security_token.clone();
-        new.expires_at = if r.expires_at.is_empty() {
-            None
-        } else {
-            Some(r.expires_at.clone())
-        };
-        new.refresh_token = Some(r.refresh_token.clone());
-        new.revision = account.revision.saturating_add(1);
-        let saved = self.accounts.replace_credentials(&id, new)?;
-        let new = saved.credentials;
-        let published = {
-            let mut st = self
-                .refreshed
-                .lock()
-                .map_err(|_| "续期 overlay 内存锁损坏".to_string())?;
-            st.put(&new, r);
-            st.clone()
-        };
-        let mut merged = store::Store::load(&self.overlay_path);
-        merged.merge_published(&published);
-        merged.save(&self.overlay_path)?;
-        Ok(new)
+        match self
+            .accounts
+            .ensure_fresh(&id, account.revision, accounts::RefreshMode::Force)
+            .await
+        {
+            Ok(snapshot) => {
+                self.reload_refreshed_store();
+                println!(
+                    "codearts-plugin: 账号 {} 手动续期成功（新过期 {}）",
+                    account.display_name(),
+                    snapshot.credentials.expires_at.as_deref().unwrap_or("未知")
+                );
+                Ok(snapshot.credentials)
+            }
+            Err(accounts::RefreshError::Definitive { revision, message }) => {
+                self.mark_dead(id.as_str(), revision);
+                Err(message)
+            }
+            Err(error) => Err(error.to_string()),
+        }
     }
 
     /// 账号视图（绝不输出密钥类字段）。
@@ -1064,7 +1064,7 @@ impl Server {
             "expiresAt": a.expires_at,
             "expired": a.is_expired(),
             "refreshable": a.can_refresh(),
-            "dead": h.dead,
+            "dead": h.is_dead(a.revision),
             "cooling": h.cooldown_until.map(|t| t > Instant::now()).unwrap_or(false),
             "failures": h.failures,
             "domainId": a.domain_id,
@@ -1073,7 +1073,7 @@ impl Server {
 }
 
 /// 续期失败是否「确定没救」（续期材料作废），而不是网络抖动。
-fn is_definitive_refresh_failure(e: &str) -> bool {
+pub(crate) fn is_definitive_refresh_failure(e: &str) -> bool {
     let lower = e.to_lowercase();
     lower.contains("http 400")
         || lower.contains("http 401")
@@ -1272,7 +1272,7 @@ async fn handle_health(State(st): State<Arc<Server>>) -> Response {
             "source": source,
             "expired": a.is_expired(),
             "refreshable": a.can_refresh(),
-            "dead": h.dead,
+            "dead": h.is_dead(a.revision),
             "cooling": cooling,
             "failures": h.failures,
         }));
@@ -1359,7 +1359,7 @@ async fn handle_models(State(st): State<Arc<Server>>) -> Response {
         }
         match st.up.builtin_models(&account).await {
             Ok(list) => {
-                st.mark_ok(&account.stable_key());
+                st.mark_ok(&account);
                 // 合并限时福利模型（每账号独立目录；benefit=true 的条目聊天要带 maas_type）。
                 let mut merged = list.clone();
                 if let Some(bm) = st.ensure_benefit(&account).await {
@@ -1656,7 +1656,7 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
             };
             let status = resp.status().as_u16();
             if status < 400 {
-                st.mark_ok(&account.stable_key());
+                st.mark_ok(&account);
                 return finish_chat(resp, &model, wants_stream).await;
             }
             // 网关排队：429 + `queue-status: queued` + `trace-id`，等 promoted 后重发一次。
@@ -1844,7 +1844,7 @@ async fn handle_quota(State(st): State<Arc<Server>>) -> Response {
         }
         match st.up.statistics(&account).await {
             Ok(raw) => {
-                st.mark_ok(&account.stable_key());
+                st.mark_ok(&account);
                 let (total, used, remain, percent) = parse_credit(&raw);
                 return json_response(
                     StatusCode::OK,
@@ -2360,9 +2360,7 @@ async fn background_loop(st: Arc<Server>) {
             }
         }
         // 续期：把 30 分钟内到期的号提前续掉（失败按既有规则标死）。
-        for (a, src) in st.candidates().unwrap_or_default() {
-            let _ = st.ensure_fresh(&a, src).await;
-        }
+        st.refresh_due_accounts().await;
         // 保活：10 分钟没动静的号打一次积分接口（签名成本极低）。
         for (a, _src) in st.all_accounts() {
             if !a.enabled || !a.has_credentials() {

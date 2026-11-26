@@ -1,8 +1,10 @@
 //! A03：码道稳定账号 ID、旧身份别名与配置往返合同。
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use axum::extract::State;
 use rs_codearts::accounts::{AccountManager, AccountSource};
 use rs_codearts::config::{Account, Config};
 use serde_json::{json, Value};
@@ -20,6 +22,7 @@ fn temp_dir(tag: &str) -> PathBuf {
 fn account(ak: &str, name: &str) -> Account {
     Account {
         name: name.into(),
+        enabled: true,
         access_key: ak.into(),
         secret_key: format!("sk-{ak}"),
         security_token: format!("tok-{ak}"),
@@ -234,4 +237,337 @@ fn known_fields_and_new_metadata_round_trip_and_save_errors_are_visible() {
     std::fs::write(&blocker, b"x").unwrap();
     let bad = AccountManager::new(blocker.join("accounts.json"));
     assert!(bad.load().is_err(), "落盘路径失败必须返回错误，不能假成功");
+}
+
+fn refreshable_account(ak: &str) -> Account {
+    use base64::Engine;
+    let d = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([1u8; 32]);
+    Account {
+        expires_at: Some("2000-01-01T00:00:00Z".into()),
+        refresh_token: Some("refresh-old".into()),
+        code_verifier: Some("verifier".into()),
+        client_id: Some("codearts".into()),
+        dpop_private_jwk: Some(json!({"kty":"EC","crv":"P-256","d":d})),
+        ..account(ak, "Refresh")
+    }
+}
+
+struct StubSts {
+    base: String,
+    hits: Arc<AtomicUsize>,
+    mode: Arc<AtomicU8>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl StubSts {
+    async fn start(mode: u8) -> Self {
+        use axum::routing::post;
+        use axum::Router;
+        let hits = Arc::new(AtomicUsize::new(0));
+        let mode = Arc::new(AtomicU8::new(mode));
+        let app = Router::new()
+            .route("/sts", post(sts_response))
+            .with_state((hits.clone(), mode.clone()));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}/sts", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        Self { base, hits, mode, task }
+    }
+}
+
+impl Drop for StubSts {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+async fn sts_response(
+    State((hits, mode)): State<(Arc<AtomicUsize>, Arc<AtomicU8>)>,
+    body: String,
+) -> (axum::http::StatusCode, axum::Json<Value>) {
+    hits.fetch_add(1, Ordering::SeqCst);
+    assert!(body.contains("grant_type=refresh_token"));
+    tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+    match mode.load(Ordering::SeqCst) {
+        1 => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(json!({"error":{"message":"temporary"}})),
+        ),
+        2 => (
+            axum::http::StatusCode::BAD_REQUEST,
+            axum::Json(json!({"error":"invalid_grant"})),
+        ),
+        _ => (
+            axum::http::StatusCode::OK,
+            axum::Json(json!({
+                "credentials": {
+                    "access_key_id":"AK-REFRESHED",
+                    "secret_access_key":"SK-REFRESHED",
+                    "security_token":"TOK-REFRESHED",
+                    "expiration":"2099-01-01T00:00:00Z"
+                },
+                "refresh_token":"refresh-new"
+            })),
+        ),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_entries_share_one_sts_rotation_and_latest_credentials() {
+    use rs_codearts::accounts::RefreshMode;
+    let dir = temp_dir("refresh-concurrent");
+    let path = dir.join("codearts-accounts.json");
+    let seed = AccountManager::new(path.clone()).upsert(refreshable_account("AK-OLD")).unwrap();
+    let sts = StubSts::start(0).await;
+    let manager = Arc::new(AccountManager::with_refresh(
+        path,
+        reqwest::Client::new(),
+        sts.base.clone(),
+    ));
+    let mut tasks = Vec::new();
+    for _ in 0..3 {
+        let manager = manager.clone();
+        let id = seed.id.clone();
+        tasks.push(tokio::spawn(async move {
+            manager.ensure_fresh(&id, seed.revision, RefreshMode::IfExpired).await
+        }));
+    }
+    let mut snapshots = Vec::new();
+    for task in tasks {
+        snapshots.push(task.await.unwrap().unwrap());
+    }
+    assert_eq!(sts.hits.load(Ordering::SeqCst), 1);
+    for snapshot in snapshots {
+        assert_eq!(snapshot.id, seed.id);
+        assert_eq!(snapshot.credentials.access_key, "AK-REFRESHED");
+        assert_eq!(snapshot.credentials.refresh_token.as_deref(), Some("refresh-new"));
+        assert_eq!(snapshot.revision, seed.revision + 1);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_processes_share_one_sts_rotation() {
+    let dir = temp_dir("refresh-processes");
+    let path = dir.join("codearts-accounts.json");
+    let seed = AccountManager::new(path.clone()).upsert(refreshable_account("AK-OLD")).unwrap();
+    let sts = StubSts::start(0).await;
+    let exe = std::env::current_exe().unwrap();
+    let mut children = Vec::new();
+    for _ in 0..2 {
+        children.push(
+            std::process::Command::new(&exe)
+                .args(["--exact", "cross_process_refresh_child", "--nocapture"])
+                .env("CODEARTS_REFRESH_CHILD", "1")
+                .env("CODEARTS_REFRESH_ACCOUNTS", &path)
+                .env("CODEARTS_REFRESH_STS", &sts.base)
+                .env("CODEARTS_REFRESH_ID", seed.id.as_str())
+                .env("CODEARTS_REFRESH_REVISION", seed.revision.to_string())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap(),
+        );
+    }
+    for child in children {
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "子进程失败: {}", String::from_utf8_lossy(&output.stderr));
+    }
+    assert_eq!(sts.hits.load(Ordering::SeqCst), 1);
+    let snapshot = AccountManager::new(path).snapshot(&seed.id).unwrap();
+    assert_eq!(snapshot.credentials.access_key, "AK-REFRESHED");
+    assert_eq!(snapshot.revision, seed.revision + 1);
+}
+
+#[tokio::test]
+async fn cross_process_refresh_child() {
+    use rs_codearts::accounts::RefreshMode;
+    if std::env::var_os("CODEARTS_REFRESH_CHILD").is_none() {
+        return;
+    }
+    let path = std::env::var_os("CODEARTS_REFRESH_ACCOUNTS").unwrap().into();
+    let sts = std::env::var("CODEARTS_REFRESH_STS").unwrap();
+    let id = rs_codearts::accounts::AccountId(std::env::var("CODEARTS_REFRESH_ID").unwrap());
+    let revision = std::env::var("CODEARTS_REFRESH_REVISION").unwrap().parse().unwrap();
+    let manager = AccountManager::with_refresh(path, reqwest::Client::new(), sts);
+    let snapshot = manager.ensure_fresh(&id, revision, RefreshMode::Force).await.unwrap();
+    assert_eq!(snapshot.credentials.access_key, "AK-REFRESHED");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn refresh_errors_distinguish_transient_definitive_and_success() {
+    use rs_codearts::accounts::{RefreshError, RefreshMode};
+    let dir = temp_dir("refresh-errors");
+    let path = dir.join("codearts-accounts.json");
+    let seed = AccountManager::new(path.clone()).upsert(refreshable_account("AK-OLD")).unwrap();
+    let sts = StubSts::start(1).await;
+    let manager = AccountManager::with_refresh(path.clone(), reqwest::Client::new(), sts.base.clone());
+    let error = manager.ensure_fresh(&seed.id, seed.revision, RefreshMode::IfExpired).await.unwrap_err();
+    assert!(matches!(error, RefreshError::Transient(_)));
+    assert_eq!(AccountManager::new(path.clone()).snapshot(&seed.id).unwrap().revision, seed.revision);
+
+    sts.mode.store(2, Ordering::SeqCst);
+    let error = manager.ensure_fresh(&seed.id, seed.revision, RefreshMode::Force).await.unwrap_err();
+    assert!(matches!(error, RefreshError::Definitive { revision, .. } if revision == seed.revision));
+
+    sts.mode.store(0, Ordering::SeqCst);
+    let snapshot = manager.ensure_fresh(&seed.id, seed.revision, RefreshMode::Force).await.unwrap();
+    assert_eq!(snapshot.revision, seed.revision + 1);
+    assert_eq!(snapshot.credentials.access_key, "AK-REFRESHED");
+}
+
+struct StubUpstream {
+    base: String,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl StubUpstream {
+    async fn start() -> Self {
+        use axum::routing::{get, post};
+        use axum::{Json, Router};
+        let app = Router::new()
+            .route("/snap-manager/v1/statistics/plugin", get(|| async {
+                Json(json!({"metrics": []}))
+            }))
+            .route("/api/v2/chat/completions", post(|| async {
+                (
+                    [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                    "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n",
+                )
+            }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        Self { base, task }
+    }
+}
+
+impl Drop for StubUpstream {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn one_server_chat_quota_and_background_share_a_single_refresh() {
+    let dir = temp_dir("server-refresh");
+    let path = dir.join("codearts-accounts.json");
+    let seed = AccountManager::new(path.clone()).upsert(refreshable_account("AK-OLD")).unwrap();
+    let sts = StubSts::start(0).await;
+    let upstream = StubUpstream::start().await;
+    let server = rs_codearts::Server::new(
+            rs_codearts::upstream::Upstream::new(&upstream.base).unwrap(),
+            path.clone(),
+            false,
+            sts.base.clone(),
+            false,
+            3,
+        )
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let task = tokio::spawn({
+        let server = server.clone();
+        async move { axum::serve(listener, rs_codearts::router(server)).await.unwrap() }
+    });
+    let client = reqwest::Client::new();
+    let quota = {
+        let client = client.clone();
+        let base = base.clone();
+        tokio::spawn(async move { client.get(format!("{base}/v1/quota")).send().await.unwrap() })
+    };
+    let chat = {
+        let client = client.clone();
+        let base = base.clone();
+        tokio::spawn(async move {
+            client
+                .post(format!("{base}/v1/chat/completions"))
+                .json(&json!({"model":"glm-5.3","messages":[{"role":"user","content":"hi"}],"stream":false}))
+                .send()
+                .await
+                .unwrap()
+        })
+    };
+    let background = {
+        let server = server.clone();
+        tokio::spawn(async move { server.refresh_due_accounts().await })
+    };
+    let quota = quota.await.unwrap();
+    assert_eq!(quota.status(), 200, "quota body: {}", quota.text().await.unwrap());
+    let chat = chat.await.unwrap();
+    assert_eq!(chat.status(), 200, "chat body: {}", chat.text().await.unwrap());
+    background.await.unwrap();
+    assert_eq!(sts.hits.load(Ordering::SeqCst), 1);
+    assert_eq!(AccountManager::new(path).snapshot(&seed.id).unwrap().revision, seed.revision + 1);
+    task.abort();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn server_health_is_bound_to_credential_revision_and_recovers_on_new_success() {
+    use rs_codearts::accounts::RefreshMode;
+    let dir = temp_dir("server-health");
+    let path = dir.join("codearts-accounts.json");
+    let seed = AccountManager::new(path.clone()).upsert(refreshable_account("AK-OLD")).unwrap();
+    let sts = StubSts::start(1).await;
+    let upstream = StubUpstream::start().await;
+    let server = rs_codearts::Server::new(
+            rs_codearts::upstream::Upstream::new(&upstream.base).unwrap(),
+            path.clone(),
+            false,
+            sts.base.clone(),
+            false,
+            3,
+        )
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let task = tokio::spawn({
+        let server = server.clone();
+        async move { axum::serve(listener, rs_codearts::router(server)).await.unwrap() }
+    });
+    let client = reqwest::Client::new();
+    let identity = seed.credentials.identity();
+    let transient = client
+        .post(format!("{base}/accounts/refresh"))
+        .json(&json!({"identity": identity}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(transient.status(), 502);
+    let accounts: Value = client.get(format!("{base}/accounts")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(accounts["accounts"][0]["dead"], false, "瞬时失败不得判死");
+
+    sts.mode.store(2, Ordering::SeqCst);
+    let definitive = client
+        .post(format!("{base}/accounts/refresh"))
+        .json(&json!({"identity": identity}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(definitive.status(), 502);
+    let accounts: Value = client.get(format!("{base}/accounts")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(accounts["accounts"][0]["dead"], true, "确定失效绑定当前凭据版本");
+
+    sts.mode.store(0, Ordering::SeqCst);
+    let manager = AccountManager::with_refresh(path, reqwest::Client::new(), sts.base.clone());
+    manager
+        .ensure_fresh(&seed.id, seed.revision, RefreshMode::Force)
+        .await
+        .unwrap();
+    let accounts: Value = client.get(format!("{base}/accounts")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(accounts["accounts"][0]["dead"], false, "新凭据版本不得被旧失败标死");
+    assert_eq!(client.get(format!("{base}/v1/quota")).send().await.unwrap().status(), 200);
+    task.abort();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn overlay_persistence_failure_is_returned_not_reported_as_success() {
+    use rs_codearts::accounts::{RefreshError, RefreshMode};
+    let dir = temp_dir("refresh-storage-error");
+    let path = dir.join("codearts-accounts.json");
+    let seed = AccountManager::new(path.clone()).upsert(refreshable_account("AK-OLD")).unwrap();
+    std::fs::create_dir(dir.join("codearts-refreshed.json")).unwrap();
+    let sts = StubSts::start(0).await;
+    let manager = AccountManager::with_refresh(path, reqwest::Client::new(), sts.base.clone());
+    let error = manager.ensure_fresh(&seed.id, seed.revision, RefreshMode::Force).await.unwrap_err();
+    assert!(matches!(error, RefreshError::Storage(_)));
 }

@@ -10,8 +10,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::account_lock::{acquire_config_lock, LockError};
+use crate::account_lock::{acquire_account_lock, acquire_config_lock, AccountFileGuard, LockError};
 use crate::config::{Account, Config};
+use crate::refresh;
+use crate::store::Store;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct AccountId(pub String);
@@ -36,8 +38,42 @@ pub struct AccountSnapshot {
     pub revision: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RefreshMode {
+    IfExpired,
+    Force,
+}
+
+#[derive(Debug)]
+pub enum RefreshError {
+    NotFound,
+    MissingCredentials,
+    Transient(String),
+    Definitive { revision: u64, message: String },
+    Storage(String),
+    LockTimeout(String),
+}
+
+impl std::fmt::Display for RefreshError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound => write!(f, "找不到稳定账号"),
+            Self::MissingCredentials => write!(f, "账号缺少续期材料"),
+            Self::Transient(message)
+            | Self::Definitive { message, .. }
+            | Self::Storage(message)
+            | Self::LockTimeout(message) => write!(f, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for RefreshError {}
+
 pub struct AccountManager {
     path: PathBuf,
+    client: reqwest::Client,
+    sts_url: String,
+    overlay_path: PathBuf,
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -97,7 +133,23 @@ fn assign_ids(cfg: &mut Config) -> bool {
 
 impl AccountManager {
     pub fn new(path: PathBuf) -> Self {
-        Self { path }
+        let overlay_path = path
+            .parent()
+            .map(|p| p.join("codearts-refreshed.json"))
+            .unwrap_or_else(|| PathBuf::from("codearts-refreshed.json"));
+        Self {
+            path,
+            client: reqwest::Client::new(),
+            sts_url: refresh::DEFAULT_STS_URL.to_string(),
+            overlay_path,
+        }
+    }
+
+    pub fn with_refresh(path: PathBuf, client: reqwest::Client, sts_url: String) -> Self {
+        let mut manager = Self::new(path);
+        manager.client = client;
+        manager.sts_url = sts_url;
+        manager
     }
 
     pub fn path(&self) -> &Path {
@@ -112,6 +164,113 @@ impl AccountManager {
             cfg.save()?;
         }
         Ok(cfg)
+    }
+
+    /// 按稳定账号协调续期：账号 OS 锁覆盖网络请求，配置锁只覆盖读—改—写。
+    /// 等待者取得锁后重读版本；版本已更新则复用结果，不再消费旧 refresh token。
+    pub async fn ensure_fresh(
+        &self,
+        id: &AccountId,
+        observed_revision: u64,
+        mode: RefreshMode,
+    ) -> Result<AccountSnapshot, RefreshError> {
+        let dir = data_dir(&self.path);
+        let id_owned = id.as_str().to_string();
+        let account_lock = tokio::task::spawn_blocking(move || -> Result<AccountFileGuard, LockError> {
+            acquire_account_lock(&dir, &id_owned)
+        })
+        .await
+        .map_err(|e| RefreshError::Storage(format!("账号锁任务失败: {e}")))?
+        .map_err(|e| match e {
+            LockError::Timeout(message) => RefreshError::LockTimeout(message),
+            LockError::Io(message) => RefreshError::Storage(message),
+        })?;
+        let _account_lock = account_lock;
+
+        let cfg = self.load().map_err(RefreshError::Storage)?;
+        let Some(snapshot) = Self::snapshot_in(&cfg, id) else {
+            return Err(RefreshError::NotFound);
+        };
+        if snapshot.revision != observed_revision {
+            return Ok(snapshot);
+        }
+        if mode == RefreshMode::IfExpired && !snapshot.credentials.is_expired() {
+            return Ok(snapshot);
+        }
+        if !snapshot.credentials.can_refresh() {
+            return Err(RefreshError::MissingCredentials);
+        }
+        let refreshed = refresh::refresh_token(&self.client, &self.sts_url, &snapshot.credentials)
+            .await
+            .map_err(|message| {
+                if crate::is_definitive_refresh_failure(&message) {
+                    RefreshError::Definitive {
+                        revision: snapshot.revision,
+                        message,
+                    }
+                } else {
+                    RefreshError::Transient(message)
+                }
+            })?;
+        self.publish_refresh(id, &snapshot, &refreshed)
+    }
+
+    fn publish_refresh(
+        &self,
+        id: &AccountId,
+        observed: &AccountSnapshot,
+        refreshed: &refresh::Refreshed,
+    ) -> Result<AccountSnapshot, RefreshError> {
+        let _config_lock = acquire_config_lock(&data_dir(&self.path))
+            .map_err(|e| RefreshError::Storage(e.to_string()))?;
+        let mut cfg = Config::load(&self.path).map_err(RefreshError::Storage)?;
+        assign_ids(&mut cfg);
+        let Some(account) = cfg
+            .accounts
+            .iter()
+            .find(|a| a.account_id.as_deref() == Some(id.as_str()))
+            .cloned()
+        else {
+            return Err(RefreshError::NotFound);
+        };
+        if account.revision != observed.revision {
+            return Self::snapshot_in(&cfg, id).ok_or(RefreshError::NotFound);
+        }
+        let mut replacement = account.clone();
+        replacement.access_key = refreshed.access_key.clone();
+        replacement.secret_key = refreshed.secret_key.clone();
+        replacement.security_token = refreshed.security_token.clone();
+        replacement.expires_at = if refreshed.expires_at.is_empty() {
+            None
+        } else {
+            Some(refreshed.expires_at.clone())
+        };
+        replacement.refresh_token = Some(refreshed.refresh_token.clone());
+        replacement.revision = account.revision.saturating_add(1);
+        if !replacement.identity_aliases.contains(&account.identity()) {
+            replacement.identity_aliases.push(account.identity());
+        }
+        normalize_aliases(&mut replacement.identity_aliases);
+        let index = cfg
+            .accounts
+            .iter()
+            .position(|a| a.account_id.as_deref() == Some(id.as_str()))
+            .ok_or(RefreshError::NotFound)?;
+        cfg.accounts[index] = replacement.clone();
+        cfg.save().map_err(RefreshError::Storage)?;
+
+        let mut published = Store::default();
+        published.put(&replacement, refreshed);
+        let mut merged = Store::load(&self.overlay_path);
+        merged.merge_published(&published);
+        merged.save(&self.overlay_path).map_err(RefreshError::Storage)?;
+        let revision = replacement.revision;
+        Ok(AccountSnapshot {
+            id: id.clone(),
+            credentials: replacement,
+            source: AccountSource::File,
+            revision,
+        })
     }
 
     pub fn resolve_id(&self, legacy_or_current: &str) -> Option<AccountId> {

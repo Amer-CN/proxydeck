@@ -16,7 +16,8 @@
 | T2 | complete | A01 5/5；WorkBuddy 全 crate 137 passed / 0 failed；突变 4 红后恢复全绿 |
 | T3 | complete | A02 5/5；WorkBuddy 全 crate 142 passed / 0 failed；初选忽略模型突变 4 红后恢复 |
 | T4 | complete | A03 6/6；CodeArts 全 crate 62 passed / 0 failed；稳定 ID 替换突变 2 红后恢复 |
-| T5–T14 | pending | 未开始 |
+| T5 | complete | A04/A05 13/13；CodeArts 全 crate 69 passed / 0 failed；版本复用突变 1 红后恢复 |
+| T6–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -82,6 +83,16 @@
 - A03 六个场景：同名不合并、AK 轮换/重载、旧 removed 精确边界、稳定删除别名、并发首次分配、已知字段往返/失败可见、真实 HTTP 管理链。
 - 验证：`cargo test -p rs-codearts --locked -- --nocapture` → **62 passed / 0 failed / 0 ignored**。
 - 反向验证：凭据替换时改分配新 ID，A03 2 红；恢复后 6/6。
+
+## T5 实施记录
+- `AccountManager::ensure_fresh(id, observed_revision, mode)` 成为唯一续期入口；`IfExpired` / `Force` 共用按账号 OS 文件锁。
+- 锁覆盖网络请求；等待者得锁后重读版本，已更新则直接复用。保存时短期配置锁内重载、合并账号文件与 overlay，全部成功才返回新快照。
+- `RefreshError` 区分瞬时失败、绑定 revision 的确定失效、存储失败、锁超时与缺材料；本机桌面运行时的保守不续期规则保留。
+- Server 健康态新增 `dead_revision`；旧失败只标死对应凭据版本，新成功/新 revision 自动恢复候选资格。chat/quota/后台统一调用协调器，移除旧 `apply_refresh` 双实现。
+- A04：同一 Server 的 chat、quota、后台周期只发一次 STS；两个真实测试子进程共用临时目录与假 STS，也只轮转一次并读到同一新版本。
+- A05：5xx 不判死、400/invalid_grant 绑版本标死、新凭据恢复、overlay 落盘失败返回 Storage；锁残留/超时由 OS 句柄测试覆盖。
+- 验证：`cargo test -p rs-codearts --locked -- --nocapture` → **69 passed / 0 failed / 0 ignored**。
+- 反向验证：取消“新 revision 直接复用”后，双进程 Force 场景 STS 命中 2 次；恢复后 13/13。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。
