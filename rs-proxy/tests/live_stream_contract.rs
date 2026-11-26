@@ -178,3 +178,64 @@ async fn client_cancel_after_first_frame_does_not_block_or_panic() {
     assert_eq!(again.status().as_u16(), 200);
     assert!(again.text().await.unwrap().contains("首帧尾帧"));
 }
+
+/// 客户端取消后，代理必须**停止读取上游**（而不是把整条流偷偷读完再丢弃）。
+///
+/// 假上游在首帧后持续写大量行；若代理继续读，写会一直成功；若代理断开，
+/// 写侧很快拿到错误。用这个可观测差异证明取消会终止上游读取。
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn client_cancel_stops_upstream_drain() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let upstream_stopped = Arc::new(AtomicBool::new(false));
+    let flag = upstream_stopped.clone();
+    let ln = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_base = format!("http://{}", ln.local_addr().unwrap());
+    tokio::spawn(async move {
+        let (mut sock, _) = ln.accept().await.unwrap();
+        let mut buf = Vec::new();
+        let mut tmp = [0u8; 1024];
+        while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+            let n = sock.read(&mut tmp).await.unwrap_or(0);
+            if n == 0 { return; }
+            buf.extend_from_slice(&tmp[..n]);
+        }
+        let head = b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n";
+        if sock.write_all(head).await.is_err() { flag.store(true, Ordering::SeqCst); return; }
+        let first = b"{\"type\":\"text-delta\",\"text\":\"first\"}\n";
+        if sock.write_all(first).await.is_err() { flag.store(true, Ordering::SeqCst); return; }
+        let _ = sock.flush().await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let filler = "x".repeat(2048);
+        for _ in 0..200 {
+            let line = format!("{{\"type\":\"text-delta\",\"text\":\"{filler}\"}}\n");
+            if sock.write_all(line.as_bytes()).await.is_err() {
+                flag.store(true, Ordering::SeqCst);
+                return;
+            }
+            let _ = sock.flush().await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    });
+
+    let base = start_proxy(&upstream_base).await;
+    let resp = post_stream(
+        &base,
+        "/v1/chat/completions",
+        r#"{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"hi"}],"stream":true}"#,
+    )
+    .await;
+    let mut stream = resp.bytes_stream();
+    let _ = stream.next().await.expect("首块").expect("首块无错");
+    drop(stream);
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline && !upstream_stopped.load(Ordering::SeqCst) {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(
+        upstream_stopped.load(Ordering::SeqCst),
+        "客户端取消后代理仍在读取上游（向上游持续写入未失败）"
+    );
+}

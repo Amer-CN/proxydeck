@@ -122,7 +122,7 @@ async fn h_chat(State(p): State<std::sync::Arc<Proxy>>, req: axum::extract::Requ
         }
     };
     let v = cc_version().await;
-    let out = crate::chat::handle_chat_live(&p, &body, auth.as_deref(), &v).await;
+    let out = crate::chat::handle_chat(&p, &body, auth.as_deref(), &v).await;
     if let Some(live) = out.live {
         return live_response(out.content_type, live);
     }
@@ -158,7 +158,7 @@ async fn h_responses(State(p): State<std::sync::Arc<Proxy>>, req: axum::extract:
         }
     };
     let v = cc_version().await;
-    let out = crate::responses::handle_responses_live(&p, &body, auth.as_deref(), &v).await;
+    let out = crate::responses::handle_responses(&p, &body, auth.as_deref(), &v).await;
     if let Some(live) = out.live {
         return live_response(out.content_type, live);
     }
@@ -194,7 +194,7 @@ async fn h_messages(State(p): State<std::sync::Arc<Proxy>>, req: axum::extract::
         }
     };
     let v = cc_version().await;
-    let out = crate::anthropic::handle_messages_live(&p, &body, auth.as_deref(), &v).await;
+    let out = crate::anthropic::handle_messages(&p, &body, auth.as_deref(), &v).await;
     if let Some(live) = out.live {
         return live_response(out.content_type, live);
     }

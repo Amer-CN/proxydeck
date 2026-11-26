@@ -184,32 +184,12 @@ pub struct ChatOutcome {
     pub live: Option<crate::output::LiveSse>,
 }
 
-/// `/v1/chat/completions` 的完整业务逻辑（与 HTTP 层解耦，便于门禁直接驱动；缓冲输出）。
+/// `/v1/chat/completions` 的完整业务逻辑（与 HTTP 层解耦；流式请求走真实增量交付）。
 pub async fn handle_chat(
     proxy: &Proxy,
     body: &[u8],
     auth: Option<&str>,
     version: &str,
-) -> ChatOutcome {
-    handle_chat_inner(proxy, body, auth, version, false).await
-}
-
-/// HTTP 入口专用：流式请求返回真实增量流（缓冲接口保持原字节合同）。
-pub async fn handle_chat_live(
-    proxy: &Proxy,
-    body: &[u8],
-    auth: Option<&str>,
-    version: &str,
-) -> ChatOutcome {
-    handle_chat_inner(proxy, body, auth, version, true).await
-}
-
-async fn handle_chat_inner(
-    proxy: &Proxy,
-    body: &[u8],
-    auth: Option<&str>,
-    version: &str,
-    live: bool,
 ) -> ChatOutcome {
     let api_key = match proxy.resolve_api_key(auth) {
         Ok(k) => k,
@@ -234,12 +214,7 @@ async fn handle_chat_inner(
     let created = crate::util::unix_now();
 
     if req.stream {
-        if live {
-            stream_chat_with_retry_live(proxy, &cc_body, &api_key, &request_id, created, version).await
-        } else {
-            stream_chat_with_retry(proxy, body, &cc_body, &api_key, &request_id, created, version)
-                .await
-        }
+        stream_chat_with_retry_live(proxy, &cc_body, &api_key, &request_id, created, version).await
     } else {
         let out = call_upstream_checked(proxy, &cc_body, &api_key, version).await;
         match out.ok {
@@ -270,75 +245,6 @@ fn err(status: u16, message: &str, err_type: &str) -> ChatOutcome {
         upstream_hits: 0,
         recorded: false,
         live: None,
-    }
-}
-
-/// `streamChatWithRetry`：上游以 context 超限拒绝时压缩 max_tokens 后重发一次。
-#[allow(clippy::too_many_arguments)]
-async fn stream_chat_with_retry(
-    proxy: &Proxy,
-    _raw: &[u8],
-    cc_body: &crate::api::CCRequestBody,
-    api_key: &str,
-    request_id: &str,
-    created: i64,
-    version: &str,
-) -> ChatOutcome {
-    let mut body = cc_body.clone();
-    let out = call_upstream_checked(proxy, &body, api_key, version).await;
-    let mut hits = 1usize;
-    let resp = match out.ok {
-        Some(r) => r,
-        None => {
-            let (st, msg) = out.error.unwrap();
-            return err(st, &msg, "api_error");
-        }
-    };
-    let model = body.params.model.clone();
-    let first = stream_response(proxy, resp, request_id, &model, created).await;
-    if first.retry_tokens > 0 {
-        body.params.max_tokens = crate::build::CC_CONTEXT_LIMIT - first.retry_tokens - 16;
-        if body.params.max_tokens < 1024 {
-            body.params.max_tokens = 1024;
-        }
-        println!(
-            "[RETRY] context overflow retry with max_tokens={}",
-            body.params.max_tokens
-        );
-        let out2 = call_upstream_checked(proxy, &body, api_key, version).await;
-        if let Some(resp2) = out2.ok {
-            hits += 1;
-            let second = stream_response(proxy, resp2, request_id, &model, created).await;
-            return second.into_outcome(hits);
-        }
-        // Go：重发失败由 `callUpstreamChecked` 自己 `writeErr(真实状态码, 真实消息)` 后返回；
-        // 这里必须同样写出**真实错误**（原先捏造 502 "retry failed" 属分歧）。
-        if let Some((st, msg)) = out2.error {
-            return err(st, &msg, "api_error");
-        }
-        return err(502, "upstream error: retry failed", "api_error");
-    }
-    first.into_outcome(hits)
-}
-
-/// 流式翻译的产物。
-pub struct StreamOutcome {
-    pub chunks: Vec<Vec<u8>>,
-    pub retry_tokens: i64,
-    pub recorded: bool,
-}
-
-/// 缓冲 `StreamOutcome` 转下游结果（门禁用）。
-impl StreamOutcome {
-    fn into_outcome(self, hits: usize) -> ChatOutcome {
-        ChatOutcome {
-            status: 200,
-            content_type: "text/event-stream",
-            chunks: self.chunks,
-            upstream_hits: hits,
-            recorded: self.recorded,
-            live: None,
-        }
     }
 }
 
@@ -408,97 +314,6 @@ pub fn sse_data(resp: &OpenAIChatResponse) -> Vec<u8> {
     format!("data: {}\n\n", resp.to_go()).into_bytes()
 }
 
-/// `StreamResponse`：把上游 SSE 翻成 OpenAI chunk 流。
-pub async fn stream_response(
-    proxy: &Proxy,
-    resp: reqwest::Response,
-    request_id: &str,
-    model: &str,
-    created: i64,
-) -> StreamOutcome {
-    let mut chunks: Vec<Vec<u8>> = Vec::new();
-    let mut sent_role = false;
-    let mut tool_call_index: i64 = 0;
-    let mut tool_call_indexes: Vec<(String, i64)> = Vec::new();
-    let mut stream_in = 0i64;
-    let mut stream_out = 0i64;
-    let mut stream_cr = 0i64;
-    let mut stream_cw = 0i64;
-    let mut recorded = false;
-    let retry_tokens: i64 = 0;
-
-    // 先把第一行抠出来判 context 超限（Go 的 streamCCEvents 契约）：
-    // 只取一次字节流，首行从同一个 reader 里读，剩下的行继续从它读。
-    let mut reader = LineReader::new(resp);
-    let first_line = reader.first_line().await;
-    if !first_line.is_empty() {
-        if let Some(e) = CCStreamEvent::from_line(&first_line) {
-            if e.r#type == "error" {
-                if let Some(m) = &e.error_message {
-                    let n = crate::build::parse_context_overflow(m);
-                    if n > 0 {
-                        println!(
-                            "[RETRY] context overflow: {n} tokens in messages, shrinking max_tokens"
-                        );
-                        return StreamOutcome {
-                            chunks,
-                            retry_tokens: n,
-                            recorded: false,
-                        };
-                    }
-                }
-            }
-        }
-        let mut st = StreamState {
-            request_id,
-            model,
-            created,
-            sent_role: &mut sent_role,
-            tool_call_index: &mut tool_call_index,
-            tool_call_indexes: &mut tool_call_indexes,
-            stream_in: &mut stream_in,
-            stream_out: &mut stream_out,
-            stream_cr: &mut stream_cr,
-            stream_cw: &mut stream_cw,
-            chunks: &mut chunks,
-        };
-        st.process(&first_line);
-    }
-
-    let _ = reader.for_each_remaining(|line| {
-        let mut st = StreamState {
-            request_id,
-            model,
-            created,
-            sent_role: &mut sent_role,
-            tool_call_index: &mut tool_call_index,
-            tool_call_indexes: &mut tool_call_indexes,
-            stream_in: &mut stream_in,
-            stream_out: &mut stream_out,
-            stream_cr: &mut stream_cr,
-            stream_cw: &mut stream_cw,
-            chunks: &mut chunks,
-        };
-        st.process(line);
-        Ok(())
-    })
-    .await;
-
-    if stream_in > 0 || stream_out > 0 || stream_cr > 0 {
-        proxy
-            .stats
-            .lock()
-            .expect("stats 锁")
-            .record(model, stream_in, stream_out, stream_cr, stream_cw);
-        recorded = true;
-    }
-    StreamOutcome {
-        chunks,
-        retry_tokens,
-        recorded,
-    }
-}
-
 /// `StreamResponse` 的真实增量版本：首事件之后逐行翻译并立刻写下游。
 ///
 /// 首行仍先读出来判 context 超限（此时尚未向客户端发响应头，可安全重发）；
@@ -559,20 +374,26 @@ pub async fn stream_response_live(
     let model_owned = model.to_string();
     tokio::spawn(async move {
         while let Some(line) = reader.next_line().await {
-            let mut st = StreamState {
-                request_id: &rid,
-                model: &model_owned,
-                created,
-                sent_role: &mut sent_role,
-                tool_call_index: &mut tool_call_index,
-                tool_call_indexes: &mut tool_call_indexes,
-                stream_in: &mut stream_in,
-                stream_out: &mut stream_out,
-                stream_cr: &mut stream_cr,
-                stream_cw: &mut stream_cw,
-                chunks: &mut sink,
-            };
-            st.process(&line);
+            {
+                let mut st = StreamState {
+                    request_id: &rid,
+                    model: &model_owned,
+                    created,
+                    sent_role: &mut sent_role,
+                    tool_call_index: &mut tool_call_index,
+                    tool_call_indexes: &mut tool_call_indexes,
+                    stream_in: &mut stream_in,
+                    stream_out: &mut stream_out,
+                    stream_cr: &mut stream_cr,
+                    stream_cw: &mut stream_cw,
+                    chunks: &mut sink,
+                };
+                st.process(&line);
+            }
+            if sink.is_closed() {
+                // 客户端已取消：停止读上游，不再继续翻译/记账；recorder Drop 会收尾。
+                break;
+            }
         }
         let mut recorder = crate::output::UsageRecorder::new(stats, &model_owned);
         recorder.add(stream_in, stream_out, stream_cr, stream_cw);

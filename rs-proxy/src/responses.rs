@@ -213,32 +213,12 @@ impl ResponsesOutcome {
     }
 }
 
-/// `/v1/responses` 的完整业务逻辑（缓冲输出）。
+/// `/v1/responses` 的完整业务逻辑；流式请求走真实增量交付。
 pub async fn handle_responses(
     proxy: &Proxy,
     body: &[u8],
     auth: Option<&str>,
     version: &str,
-) -> ResponsesOutcome {
-    handle_responses_inner(proxy, body, auth, version, false).await
-}
-
-/// HTTP 入口专用：流式请求返回真实增量流。
-pub async fn handle_responses_live(
-    proxy: &Proxy,
-    body: &[u8],
-    auth: Option<&str>,
-    version: &str,
-) -> ResponsesOutcome {
-    handle_responses_inner(proxy, body, auth, version, true).await
-}
-
-async fn handle_responses_inner(
-    proxy: &Proxy,
-    body: &[u8],
-    auth: Option<&str>,
-    version: &str,
-    live: bool,
 ) -> ResponsesOutcome {
     let api_key = match proxy.resolve_api_key(auth) {
         Ok(k) => k,
@@ -281,47 +261,8 @@ async fn handle_responses_inner(
         }
     };
     if req.stream {
-        if live {
-            return responses_stream_live(proxy, resp, &cc_body, &api_key, &request_id, created, version)
-                .await;
-        }
-        let mut body2 = cc_body.clone();
-        let mut first =
-            stream_responses_response(proxy, resp, &request_id, &body2.params.model, created).await;
-        if first.0 > 0 {
-            body2.params.max_tokens = crate::build::CC_CONTEXT_LIMIT - first.0 - 16;
-            if body2.params.max_tokens < 1024 {
-                body2.params.max_tokens = 1024;
-            }
-            let out2 = call_upstream_checked(proxy, &body2, &api_key, version).await;
-            match out2.ok {
-                Some(r2) => {
-                    first = stream_responses_response(
-                        proxy,
-                        r2,
-                        &request_id,
-                        &body2.params.model,
-                        created,
-                    )
-                    .await;
-                }
-                // Go：重发失败由 `callUpstreamChecked` 写出**真实错误**（原先这里静默落
-                // 200 空体，属分歧）。
-                None => {
-                    let (st, msg) = out2
-                        .error
-                        .unwrap_or((502, "upstream error: retry failed".to_string()));
-                    return ResponsesOutcome::err(st, &msg, "api_error");
-                }
-            }
-        }
-        ResponsesOutcome {
-            status: 200,
-            content_type: "text/event-stream",
-            chunks: first.2,
-            recorded: first.1,
-            live: None,
-        }
+        return responses_stream_live(proxy, resp, &cc_body, &api_key, &request_id, created, version)
+            .await;
     } else {
         let b = non_stream_responses_response(
             proxy,
@@ -478,6 +419,11 @@ impl RespStream {
             Some(sink) => sink.push(chunk),
             None => self.chunks.push(chunk),
         }
+    }
+
+    /// 流式客户端是否已取消（缓冲路径永远 false）。
+    fn sink_closed(&self) -> bool {
+        self.sink.as_ref().is_some_and(|s| s.is_closed())
     }
 
     fn send_created(&mut self) {
@@ -810,75 +756,6 @@ impl RespStream {
     }
 }
 
-/// `StreamResponsesResponse`：返回 `(retry_signal, recorded, chunks)`。
-pub async fn stream_responses_response(
-    proxy: &Proxy,
-    resp: reqwest::Response,
-    request_id: &str,
-    model: &str,
-    created: i64,
-) -> (i64, bool, Vec<Vec<u8>>) {
-    let mut st = RespStream {
-        request_id: request_id.to_string(),
-        model: model.to_string(),
-        created,
-        chunks: Vec::new(),
-        sink: None,
-        started: false,
-        output_index_counter: 0,
-        text_item_added: false,
-        text_output_index: 0,
-        text_item_id: format!("msg_{}", uuid_prefix(28)),
-        text_builder: String::new(),
-        tool_order: Vec::new(),
-        tool_indexes: Vec::new(),
-        tool_items: Vec::new(),
-        tool_args_bufs: Vec::new(),
-        tool_args_streamed: Vec::new(),
-        last_tool_id: String::new(),
-        input_tokens: 0,
-        output_tokens: 0,
-        cache_read: 0,
-        cache_write: 0,
-    };
-
-    let mut reader = LineReader::new(resp);
-    let first_line = reader.first_line().await;
-    if !first_line.is_empty() {
-        if let Some(e) = CCStreamEvent::from_line(&first_line) {
-            if e.r#type == "error" {
-                if let Some(m) = &e.error_message {
-                    let n = crate::build::parse_context_overflow(m);
-                    if n > 0 {
-                        return (n, false, st.chunks);
-                    }
-                }
-            }
-        }
-    }
-    if !first_line.is_empty() {
-        st.process(&first_line);
-    }
-    let _ = reader.for_each_remaining(|line| {
-        st.process(line);
-        Ok(())
-    })
-    .await;
-
-    let mut recorded = false;
-    if st.input_tokens > 0 || st.output_tokens > 0 || st.cache_read > 0 {
-        proxy.stats.lock().expect("stats 锁").record(
-            model,
-            st.input_tokens,
-            st.output_tokens,
-            st.cache_read,
-            st.cache_write,
-        );
-        recorded = true;
-    }
-    (0, recorded, st.chunks)
-}
-
 /// `StreamResponsesResponse` 的真实增量版本：首事件之后逐行翻译并立即写下游。
 pub async fn stream_responses_response_live(
     proxy: &Proxy,
@@ -931,6 +808,9 @@ pub async fn stream_responses_response_live(
     tokio::spawn(async move {
         while let Some(line) = reader.next_line().await {
             st.process(&line);
+            if st.sink_closed() {
+                break;
+            }
         }
         let mut recorder = crate::output::UsageRecorder::new(stats, &model_for_task);
         recorder.add(st.input_tokens, st.output_tokens, st.cache_read, st.cache_write);

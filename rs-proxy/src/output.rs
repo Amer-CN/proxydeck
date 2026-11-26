@@ -63,6 +63,11 @@ impl ChannelSink {
             self.closed = true;
         }
     }
+
+    /// 下游是否已取消。翻译循环据此停止继续读上游。
+    pub fn is_closed(&self) -> bool {
+        self.closed
+    }
 }
 
 impl SseSink for ChannelSink {

@@ -349,32 +349,12 @@ impl AnthropicOutcome {
     }
 }
 
-/// `/v1/messages` 的完整业务逻辑（缓冲输出）。
+/// `/v1/messages` 的完整业务逻辑；流式请求走真实增量交付。
 pub async fn handle_messages(
     proxy: &Proxy,
     body: &[u8],
     auth: Option<&str>,
     version: &str,
-) -> AnthropicOutcome {
-    handle_messages_inner(proxy, body, auth, version, false).await
-}
-
-/// HTTP 入口专用：流式请求返回真实增量流。
-pub async fn handle_messages_live(
-    proxy: &Proxy,
-    body: &[u8],
-    auth: Option<&str>,
-    version: &str,
-) -> AnthropicOutcome {
-    handle_messages_inner(proxy, body, auth, version, true).await
-}
-
-async fn handle_messages_inner(
-    proxy: &Proxy,
-    body: &[u8],
-    auth: Option<&str>,
-    version: &str,
-    live: bool,
 ) -> AnthropicOutcome {
     let api_key = match proxy.resolve_api_key(auth) {
         Ok(k) => k,
@@ -420,47 +400,8 @@ async fn handle_messages_inner(
         }
     };
     if req.stream {
-        if live {
-            return anthropic_stream_live(proxy, resp, &cc_body, &api_key, &request_id, created, version)
-                .await;
-        }
-        let mut body2 = cc_body.clone();
-        let mut first =
-            stream_anthropic_response(proxy, resp, &request_id, &body2.params.model, created).await;
-        if first.0 > 0 {
-            body2.params.max_tokens = crate::build::CC_CONTEXT_LIMIT - first.0 - 16;
-            if body2.params.max_tokens < 1024 {
-                body2.params.max_tokens = 1024;
-            }
-            let out2 = call_upstream_checked(proxy, &body2, &api_key, version).await;
-            match out2.ok {
-                Some(r2) => {
-                    first = stream_anthropic_response(
-                        proxy,
-                        r2,
-                        &request_id,
-                        &body2.params.model,
-                        created,
-                    )
-                    .await;
-                }
-                // Go：重发失败由 `callUpstreamChecked` 写出**真实错误**（原先这里静默落
-                // 200 空体，属分歧）。
-                None => {
-                    let (st, msg) = out2
-                        .error
-                        .unwrap_or((502, "upstream error: retry failed".to_string()));
-                    return AnthropicOutcome::err(st, &msg, "api_error");
-                }
-            }
-        }
-        AnthropicOutcome {
-            status: 200,
-            content_type: "text/event-stream",
-            chunks: first.2,
-            recorded: first.1,
-            live: None,
-        }
+        return anthropic_stream_live(proxy, resp, &cc_body, &api_key, &request_id, created, version)
+            .await;
     } else {
         let b =
             non_stream_anthropic_response(proxy, resp, &request_id, &cc_body.params.model, created)
@@ -620,6 +561,11 @@ impl AnthStream {
             Some(sink) => sink.push(chunk),
             None => self.chunks.push(chunk),
         }
+    }
+
+    /// 流式客户端是否已取消（缓冲路径永远 false）。
+    fn sink_closed(&self) -> bool {
+        self.sink.as_ref().is_some_and(|s| s.is_closed())
     }
 
     fn send_start(&mut self) {
@@ -857,102 +803,6 @@ impl AnthStream {
     }
 }
 
-/// `StreamAnthropicResponse`：返回 `(retry_signal, recorded, chunks)`。
-pub async fn stream_anthropic_response(
-    proxy: &Proxy,
-    resp: reqwest::Response,
-    request_id: &str,
-    model: &str,
-    _created: i64,
-) -> (i64, bool, Vec<Vec<u8>>) {
-    let mut st = AnthStream {
-        request_id: request_id.to_string(),
-        model: model.to_string(),
-        chunks: Vec::new(),
-        sink: None,
-        started: false,
-        text_started: false,
-        text_idx: 0,
-        block_index: 0,
-        block_stop_order: Vec::new(),
-        stop_reason: "end_turn".to_string(),
-        output_tokens: 0,
-        tool_indexes: Vec::new(),
-        tool_args_streamed: Vec::new(),
-        last_tool_id: String::new(),
-    };
-
-    let mut stream_in = 0i64;
-    let mut stream_out = 0i64;
-    let mut stream_cr = 0i64;
-    let mut stream_cw = 0i64;
-
-    // 首行判 context 超限
-    let mut reader = LineReader::new(resp);
-    let first_line = reader.first_line().await;
-    if !first_line.is_empty() {
-        if let Some(e) = CCStreamEvent::from_line(&first_line) {
-            if e.r#type == "error" {
-                if let Some(m) = &e.error_message {
-                    let n = crate::build::parse_context_overflow(m);
-                    if n > 0 {
-                        return (n, false, st.chunks);
-                    }
-                }
-            }
-        }
-    }
-
-    let collect_usage = |line: &str, si: &mut i64, so: &mut i64, cr: &mut i64, cw: &mut i64| {
-        if let Some(e) = CCStreamEvent::from_line(line) {
-            if e.r#type == "finish" {
-                if let Some(u) = &e.total_usage {
-                    *si = u.input_tokens;
-                    *so = u.output_tokens;
-                    *cr = u.cache_read_tokens;
-                    *cw = u.cache_write_tokens;
-                }
-            }
-        }
-    };
-
-    if !first_line.is_empty() {
-        st.process(&first_line);
-        collect_usage(
-            &first_line,
-            &mut stream_in,
-            &mut stream_out,
-            &mut stream_cr,
-            &mut stream_cw,
-        );
-    }
-    let _ = reader.for_each_remaining(|line| {
-        st.process(line);
-        collect_usage(
-            line,
-            &mut stream_in,
-            &mut stream_out,
-            &mut stream_cr,
-            &mut stream_cw,
-        );
-        Ok(())
-    })
-    .await;
-
-    let mut recorded = false;
-    if stream_in > 0 || stream_out > 0 || stream_cr > 0 {
-        proxy.stats.lock().expect("stats 锁").record(
-            model,
-            stream_in,
-            stream_out,
-            stream_cr,
-            stream_cw,
-        );
-        recorded = true;
-    }
-    (0, recorded, st.chunks)
-}
-
 /// `StreamAnthropicResponse` 的真实增量版本：首事件之后逐行翻译并立即写下游。
 pub async fn stream_anthropic_response_live(
     proxy: &Proxy,
@@ -1028,6 +878,9 @@ pub async fn stream_anthropic_response_live(
                 &mut stream_cr,
                 &mut stream_cw,
             );
+            if st.sink_closed() {
+                break;
+            }
         }
         let mut recorder = crate::output::UsageRecorder::new(stats, &model_for_task);
         recorder.add(stream_in, stream_out, stream_cr, stream_cw);
