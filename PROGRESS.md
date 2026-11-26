@@ -163,6 +163,13 @@
 - 新增 `tests/synthetic_auth.rs`：强制走一次运行时合成→真实 `load_auth` 解密链；截断/非法文件安全报错且错误信息不含 token。
 - 验证：`cargo test -p rs-qoder --locked --test synthetic_auth` 2/2；`cargo test -p rs-qoder --locked` 全 crate 无失败。
 
+## T13 实施记录
+- 新增 `tools/sync-ui.ps1`（`-Check` / `-Write`）：只复制 `app/ui.html` → `rs-gui/ui.html` 并更新 `UI_HTML_SHA256`/`UI_HTML_LEN`；不改版本、CHANGELOG、其它常量。`tools/tests/sync-ui.tests.ps1` 用临时仓库夹具覆盖「偏差红 → 修复绿 → 二次写幂等 → 不改原件」，4/4。
+- 新增 `tools/verify-cognitive-contracts.ps1`：固定 A01–A12 映射（用例名 + 最低通过数 + 无 SKIP/非零），另跑 UI 同步、内联 JS 语法、兼容向量、`ui_html`、`release_sync`；缺目标/缺用例/空扫描/跳过都红。
+- 新增 `docs/development-map.md`（≤200 行）：单 exe 分发、插件生命周期/换血、UI/bridge/HTTP 与各平台请求链、状态所有者与持久化、测试入口、保护区。
+- `CLAUDE.md` 增加「新协作者先读开发地图」引导；rs-proxy / rs-qoder README 补增量交付与合成夹具说明（不碰历史条目）。
+- 验证：`pwsh -File tools/verify-cognitive-contracts.ps1` → **19/19 PASS，exit 0**（日志 `.work/cognitive-simplification/verify-*.log`）；`tools/tests/sync-ui.tests.ps1` 4/4；`tools/sync-ui.ps1 -Check` OK（sha256=cb90c47a… len=1543562）。
+
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。
 - T4→T5→T6：稳定 ID/锁先落地，续期协调器复用，提交前错误策略最后接入。

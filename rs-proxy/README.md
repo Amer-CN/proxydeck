@@ -6,6 +6,10 @@
 > + `internal/appdir` 的COMMAND 代理由到的那部分 + `internal/clientcwd` + `internal/version`。
 > 对外是 **55990 上的COMMAND 代理**：CommandCode 路线（出站 `/alpha/generate`）+ 三条入站协议
 > （OpenAI chat / OpenAI Responses / Anthropic Messages）。
+>
+> **增量交付（2026-11-26）**：HTTP 入口用 `handle_*_live`，上游 SSE 到达一帧就翻译一帧写下游
+> （`src/output.rs` 的 `LiveSse`/`SseSink`/`UsageRecorder`）。首事件之前仍先判 context 超限，
+> 可安全重发；发出响应头后不再重试。`handle_*` 缓冲接口保留给门禁与旧调用，字节不变。
 
 ## 一、怎么跑
 

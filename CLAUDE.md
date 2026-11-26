@@ -34,6 +34,7 @@ ProxyDeck.exe                 ← 唯一主程序（Rust 构建），双击即�
 ```
 
 - 端口约定：COMMAND 代理 55990 / WorkBuddy 8787（国际版 8789）/ 团结 8788 / Comate 8786 / Qoder 8785 / B.AI 8891 / VibeX 8790 / 码道 8793 / OpenCode 8784
+- **新协作者先读 [`docs/development-map.md`](docs/development-map.md)**：那里按「谁拥有什么状态、从哪进、测试从哪跑」画了当前入口地图（UI/bridge/HTTP 两条链、各平台请求链、持久化归属、保护区）；本文只保留架构与纪律。
 - 插件 = spawn 本 exe 的 `--plugin-<id> --port <n>` 子进程，独立常驻，关 GUI 不中断
 - **升版本必须同步的位置**（**Rust 时代清单，2026-10-18 重写**；Go 时代的
   `app/main.go appVersion` 已不参与构建，只剩历史参考）：

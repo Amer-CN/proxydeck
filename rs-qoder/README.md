@@ -140,8 +140,9 @@ Qoder 客户端有 CN 版与国际版两个构建。实测两侧 worker 运行�
    `Cache-Control`/`Connection` 再走 `writeError`（只覆盖 `Content-Type`），所以 502 上仍带这两个头。
    Rust 照此实现（黄金 `chat #7` 的头集合锁住了）。
 9. **合成登录态夹具的可用性**：`tests/golden/auth-fixture/` 是本机现制的 DPAPI 密文
-   （**当前用户作用域**），换机解不开。门禁遇到解不开会打
-   `SKIP(dpapi-fixture): ...` 并计入汇总（**不静默跳过**）；重采即得新夹具。
+   （**当前用户作用域**），换机解不开。门禁遇到解不开会先用**当前用户 DPAPI** 在临时目录
+   现制同逻辑内容的夹具（`auth::write_synthetic_fixture`，冻结夹具一个字节不改）；
+   DPAPI 本身不可用（非 Windows）才打 `SKIP(dpapi-fixture): ...` 并计入汇总（**不静默跳过**）。
 10. **`--port` 默认值等于生产端口 8785**：沿用 `rs-bai`（8891）/`rs-comate`（8786）的同款约定，
     本阶段一致；对照一律显式给测试端口。
 11. **`--usage-url` 的「显式覆盖」判定**：该参数保留了 `default_value`（CN 常量，字段类型与
