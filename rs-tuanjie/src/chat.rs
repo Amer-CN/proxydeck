@@ -35,6 +35,9 @@ use futures_util::StreamExt;
 
 use crate::client::now_unix;
 use crate::pacing::{is_pacing_model, retry_wait_secs, PACING_MAX_WAIT_SECS};
+use crate::request_lifecycle::{
+    resolve_route, CredentialRoute, FinishGuard, RequestLifecycle,
+};
 use crate::server::{go_err_text, write_err, AppState};
 use crate::session::{acquire, LitellmSession};
 
@@ -888,8 +891,6 @@ pub enum PoolOutcome {
         paced: bool,
         /// 本请求即时换号实际用掉的次数（有界性断言要它）。
         switches: usize,
-        /// 进行中注册号（收尾配平 `Finish`；流分支在流尽时配平）。
-        rid: String,
         /// 池路径入口的单调时钟起点换算的毫秒数（`ok`/`error` 事件的耗时字段，
         /// Go 传 `time.Since(start).Milliseconds()`，`server.go:1189/1249`）。
         elapsed_ms: i64,
@@ -903,8 +904,8 @@ pub enum PoolOutcome {
         pool_uid: String,
         /// 429 兜底实际介入过（收尾补完成事件，与 `Resp` 同）。
         paced: bool,
-        /// 进行中注册号（收尾逐块 touch，流尽/中断时 finish）。
-        rid: String,
+        /// 进行中注册条目所有权（流尽/客户端取消时由流收尾删除）。
+        finish: FinishGuard,
         /// usage 入账与日志用的模型名。
         model: String,
     },
@@ -959,36 +960,28 @@ pub async fn pool_path(
     model: &str,
     pacing: bool,
     wants_stream: bool,
+    life: &mut RequestLifecycle,
 ) -> PoolOutcome {
     let mut token = token;
     let mut pool_uid = pool_uid;
     // 池路径入口时钟（`ok`/`error` 事件的耗时字段用；Go `server.go:1062` 的 `start`）。
     let start = Instant::now();
-    // 进行中注册（Go `server.go:1063` 的 `registry.Register`；`defer Finish` 由各出口
-    // 与流收尾分别配平——此前本路径漏注册，流式逐块 touch 更无从谈起，P8b 审查 P1 附带补齐）。
-    let rid = st.registry.register(model, &pool_uid, wants_stream);
     let mut reply = match pool_send!(st, body, sess, token) {
         Ok(r) => {
             // 终态 200 + 入站要流式：不再缓冲，直接返回 live 流（下详 `Stream` 分支）。
-            // 200 在池路径恒为终态（402/重试/429 分支都只认非 200），故此处可直接返回；
-            // pacing 块尚未进入，配平 inc/dec 对以与非提前路径逐字一致。
+            // 200 在池路径恒为终态（402/重试/429 分支都只认非 200），故此处可直接返回。
             if wants_stream && r.status() == reqwest::StatusCode::OK {
-                if pacing {
-                    st.pacer.pending_inc();
-                    st.pacer.pending_dec();
-                }
                 return PoolOutcome::Stream {
                     resp: r,
                     pool_uid: pool_uid.clone(),
                     paced: false,
-                    rid: rid.clone(),
+                    finish: life.take_finish_guard(),
                     model: model.to_string(),
                 };
             }
             read_reply(r).await
         }
         Err(e) => {
-            st.registry.finish(&rid);
             return PoolOutcome::NetworkError(e);
         }
     };
@@ -1040,22 +1033,17 @@ pub async fn pool_path(
                 reply = match pool_send!(st, body, sess, token) {
                     Ok(r) => {
                         if wants_stream && r.status() == reqwest::StatusCode::OK {
-                            if pacing {
-                                st.pacer.pending_inc();
-                                st.pacer.pending_dec();
-                            }
                             return PoolOutcome::Stream {
                                 resp: r,
                                 pool_uid: pool_uid.clone(),
                                 paced: false,
-                                rid: rid.clone(),
+                                finish: life.take_finish_guard(),
                                 model: model.to_string(),
                             };
                         }
                         read_reply(r).await
                     }
                     Err(e) => {
-                        st.registry.finish(&rid);
                         return PoolOutcome::NetworkError(e);
                     }
                 };
@@ -1086,22 +1074,17 @@ pub async fn pool_path(
         reply = match pool_send!(st, body, sess, token) {
             Ok(r) => {
                 if wants_stream && r.status() == reqwest::StatusCode::OK {
-                    if pacing {
-                        st.pacer.pending_inc();
-                        st.pacer.pending_dec();
-                    }
                     return PoolOutcome::Stream {
                         resp: r,
                         pool_uid: pool_uid.clone(),
                         paced: false,
-                        rid: rid.clone(),
+                        finish: life.take_finish_guard(),
                         model: model.to_string(),
                     };
                 }
                 read_reply(r).await
             }
             Err(e) => {
-                st.registry.finish(&rid);
                 return PoolOutcome::NetworkError(e);
             }
         };
@@ -1113,7 +1096,7 @@ pub async fn pool_path(
     let mut paced_pool = false;
     let mut switches = 0usize;
     if pacing {
-        st.pacer.pending_inc();
+        let _pacing = RequestLifecycle::pacing_guard(&st.pacer, true);
         let deadline = Instant::now() + st.chat_timing.pacing_max_wait();
         while reply.status == reqwest::StatusCode::TOO_MANY_REQUESTS && Instant::now() < deadline {
             paced_pool = true;
@@ -1152,19 +1135,17 @@ pub async fn pool_path(
                             // 已在 pacing 块内（pending_inc 已发生）：200+stream 直接返回，
                             // 配平 pending_dec（非提前路径走到底由块尾统一 dec）。
                             if wants_stream && r.status() == reqwest::StatusCode::OK {
-                                st.pacer.pending_dec();
                                 return PoolOutcome::Stream {
                                     resp: r,
                                     pool_uid: pool_uid.clone(),
                                     paced: paced_pool,
-                                    rid: rid.clone(),
+                                    finish: life.take_finish_guard(),
                                     model: model.to_string(),
                                 };
                             }
                             read_reply(r).await
                         }
                         Err(e) => {
-                            st.registry.finish(&rid);
                             return PoolOutcome::NetworkError(e);
                         }
                     };
@@ -1198,28 +1179,25 @@ pub async fn pool_path(
                     sleep(wait).await;
                     reply = match pool_send!(st, body, sess, token) {
                         Ok(r) => {
-                            // 同上：pacing 块内，配平 pending_dec 后返回 live 流。
+                            // 同上：pacing 计数由作用域守卫配平。
                             if wants_stream && r.status() == reqwest::StatusCode::OK {
-                                st.pacer.pending_dec();
                                 return PoolOutcome::Stream {
                                     resp: r,
                                     pool_uid: pool_uid.clone(),
                                     paced: paced_pool,
-                                    rid: rid.clone(),
+                                    finish: life.take_finish_guard(),
                                     model: model.to_string(),
                                 };
                             }
                             read_reply(r).await
                         }
                         Err(e) => {
-                            st.registry.finish(&rid);
                             return PoolOutcome::NetworkError(e);
                         }
                     };
                 }
             }
         }
-        st.pacer.pending_dec();
     }
 
     PoolOutcome::Resp {
@@ -1227,7 +1205,6 @@ pub async fn pool_path(
         pool_uid,
         paced: paced_pool,
         switches,
-        rid,
         elapsed_ms: start.elapsed().as_millis() as i64,
     }
 }
@@ -1428,34 +1405,44 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
     // 才走池路径；选不出（全死/全冷却/全不可用）则**回退单账号路径**，而不是回"无可用账号"。
     // Go 的"账号池无可用账号"文案只用于 pick 成功后 `Get` 失败的竞态分支（`server.go:1055-1058`），
     // Rust 按同一语义保留给 `PoolOutcome::NoAccount`（池内竞态）。
-    if let Some((acc, token)) = st.pool.pick_with_token(&model) {
-        let pool_uid = acc.user_id.clone();
-        st.pool.inc_load(&pool_uid);
+    let route = resolve_route(&st, &model);
+    if let CredentialRoute::PoolAccount { account, token } = &route {
+        let pool_uid = account.user_id.clone();
+        let mut life = RequestLifecycle::begin(&st, &model, wants_stream, &route);
         let outcome = pool_path(
             &st,
             &body,
             sess.session(),
-            token,
-            pool_uid.clone(),
+            token.clone(),
+            pool_uid,
             &model,
             pacing,
             wants_stream,
+            &mut life,
         )
         .await;
         // `defer s.pool.DecLoad(poolUID)` 的位置在 Go 里早于响应写出（`server.go:1061`），
         // 故这里也在写响应之前配平；只对**最初**选的号生效（换号不迁移计数，Go 原样）。
-        st.pool.dec_load(&pool_uid);
+        life.release_load();
+        if !matches!(outcome, PoolOutcome::Stream { .. }) {
+            life.finish_registry();
+        }
         return finish_pool(&st, outcome, &model, wants_stream).await;
     }
 
     // ---- 单账号路径（`server.go:1255-1429`）----
     let start = Instant::now();
-    let rid = st.registry.register(&model, "", wants_stream);
+    let mut life = RequestLifecycle::begin(
+        &st,
+        &model,
+        wants_stream,
+        &CredentialRoute::LocalCredentialFallback,
+    );
     let resp = match single_send(&st, &body, sess.session()).await {
         Ok(r) => r,
         Err(e) => {
             crate::logf(&format!("[tuanjie] chat model={model} err={e}"));
-            st.registry.finish(&rid);
+            life.finish_registry();
             return write_err(StatusCode::BAD_GATEWAY, &e);
         }
     };
@@ -1468,7 +1455,7 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
     let mut resp = Some(resp);
     let mut resp_consumed = false;
     if pacing {
-        st.pacer.pending_inc();
+        let _pacing = RequestLifecycle::pacing_guard(&st.pacer, true);
         let deadline = Instant::now() + st.chat_timing.pacing_max_wait();
         while status == reqwest::StatusCode::TOO_MANY_REQUESTS && Instant::now() < deadline {
             paced_single = true;
@@ -1504,7 +1491,7 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
             resp = match single_send(&st, &body, sess.session()).await {
                 Ok(r) => Some(r),
                 Err(e) => {
-                    st.registry.finish(&rid);
+                    life.finish_registry();
                     return write_err(StatusCode::BAD_GATEWAY, &e);
                 }
             };
@@ -1513,7 +1500,6 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
             status = r.status();
             resp_headers = r.headers().clone();
         }
-        st.pacer.pending_dec();
     }
 
     // 上游瞬时错误重试（`server.go:1299-1314`）：429 直接跳出（TPM 按模型计数，换 key
@@ -1545,7 +1531,7 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
             Ok(r) => Some(r),
             Err(e) => {
                 crate::logf(&format!("[tuanjie] chat model={model} err={e}"));
-                st.registry.finish(&rid);
+                life.finish_registry();
                 return write_err(StatusCode::BAD_GATEWAY, &e);
             }
         };
@@ -1569,7 +1555,7 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
         // 判定告警计数（单账号路径）—— `server.go:1357/1361`。注意：`err_body` 已被
         // `finish_non_200` 消费，这里从返回的响应无从取回原文，故按 Go 的同一处调用点
         // 在 `finish_non_200` 内部记账（见该函数的 `note_upstream_error`）。
-        st.registry.finish(&rid);
+        life.finish_registry();
         return out;
     }
     // 上游 200：告警计数清零 —— `server.go:1365`。
@@ -1589,7 +1575,7 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
         .await
     };
     let Some(sniffed) = sniffed else {
-        st.registry.finish(&rid);
+        life.finish_registry();
         return write_err(StatusCode::BAD_GATEWAY, EMPTY_UPSTREAM_MESSAGE);
     };
     if paced_single {
@@ -1621,7 +1607,7 @@ pub async fn handle_chat(State(st): State<Arc<AppState>>, req: axum::extract::Re
         200,
     );
     let out = success_response(&st, sniffed, wants_stream, &model, "").await;
-    st.registry.finish(&rid);
+    life.finish_registry();
     out
 }
 
@@ -1683,22 +1669,18 @@ async fn finish_pool(
             resp,
             pool_uid,
             paced,
-            rid,
+            finish,
             model,
         } => {
-            return stream_pool_response(st, resp, &pool_uid, paced, rid, &model).await;
+            return stream_pool_response(st, resp, &pool_uid, paced, finish, &model).await;
         }
         PoolOutcome::Resp {
             reply,
             pool_uid,
             paced,
             switches: _,
-            rid,
             elapsed_ms,
         } => {
-            // Go 的 `defer Finish(rid)` 在 handler 返回时执行——此处在完成事件之后、
-            // 写响应之前配平，观测等价（inflight 快照只关心条目有无）。
-            st.registry.finish(&rid);
             if reply.status != reqwest::StatusCode::OK {
                 crate::logf(&format!(
                     "[tuanjie] pool chat model={model} account={pool_uid} status={} err={}",
@@ -1742,37 +1724,6 @@ async fn finish_pool(
     }
 }
 
-/// 流收尾守卫：流尽时由收尾逻辑显式 `done()` 配平 `Finish`；若客户端中途断开导致
-/// 响应流被提前丢弃，`Drop` 兜底配平（Go 靠 handler 返回时的 `defer Finish` 覆盖
-/// 同种情形；不兜底则 inflight 残留死条目）。
-pub(crate) struct StreamGuard {
-    inner: Option<(Arc<crate::inflight::RequestRegistry>, String)>,
-}
-
-impl StreamGuard {
-    fn new(registry: Arc<crate::inflight::RequestRegistry>, rid: String) -> Self {
-        StreamGuard {
-            inner: Some((registry, rid)),
-        }
-    }
-
-    pub(crate) fn rid(&self) -> &str {
-        self.inner.as_ref().map(|(_, r)| r.as_str()).unwrap_or("")
-    }
-
-    pub(crate) fn done(&mut self) {
-        if let Some((reg, rid)) = self.inner.take() {
-            reg.finish(&rid);
-        }
-    }
-}
-
-impl Drop for StreamGuard {
-    fn drop(&mut self) {
-        self.done();
-    }
-}
-
 /// 终态 200 + 入站要流式的逐块转发（Go `server.go:1197-1226`）。
 ///
 /// 头与非流式同形（`copyHeader` + `X-Accel-Buffering` + `Cache-Control`，Go 在分支前
@@ -1784,7 +1735,7 @@ async fn stream_pool_response(
     resp: reqwest::Response,
     pool_uid: &str,
     paced: bool,
-    rid: String,
+    finish: FinishGuard,
     model: &str,
 ) -> Response {
     if paced {
@@ -1807,7 +1758,7 @@ async fn stream_pool_response(
     let out_headers = base_out_headers(resp.headers());
     let scanner = UsageScanner::new(model);
     let stc = st.clone();
-    let guard = StreamGuard::new(stc.registry.clone(), rid);
+    let guard = finish;
     let stream = futures_util::stream::unfold(
         (resp.bytes_stream(), scanner, guard),
         move |(mut inner, mut scan, mut g)| {
@@ -1824,7 +1775,7 @@ async fn stream_pool_response(
                     }
                     _ => {
                         scan.finish();
-                        g.done();
+                        g.finish();
                         None
                     }
                 }

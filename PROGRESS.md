@@ -21,7 +21,8 @@
 | T7 | complete | A07 3/3（含真实生产脚本）；JS 语法 4/4；ui_html 4/4；release_sync 1/1；防过期守卫突变 1 红后恢复 |
 | T8 | complete | hostApi/A08 6/6；keymap 单测 4/4；ui_html 4/4、release_sync 1/1；bridge_contract 5/5、close_contract 1/1；md 补齐突变 2 红后恢复 |
 | T9 | complete | A09/A10 5/5；插件/换血/shell 库测试 35/35；GUI 五合同 23/23；接管过期突变 1 红后恢复 |
-| T10–T14 | pending | 未开始 |
+| T10 | complete | A11 5/5；团结全 crate 246 passed / 2 ignored；流守卫所有权突变 1 红后恢复 |
+| T11–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -135,6 +136,14 @@
 - `replace_running_exe` 拆成只做 rename 的 `vacate_executable_path` + 兼容旧名；更新流程调用新名，行为不变。
 - 验证：`cargo test -p rs-gui --lib -- plugin_hosting_tests rollover:: shell_tests` 35/35；`--test bridge_contract --test shell_contract --test command_dispatch --test winres_contract --test close_contract` 5+9+5+3+1 全绿；`--lib update::` 3/3。
 - 反向验证：把接管分支改成无条件「已在运行」，A09 重新点火用例转红；恢复后 5/5。
+
+## T10 实施记录
+- 新增 `rs-tuanjie/src/request_lifecycle.rs`：`CredentialRoute::{PoolAccount, LocalCredentialFallback}` 由 `resolve_route`（选号结果）决定；`RequestLifecycle` 统一持有进行中注册号与**初选账号** load 计数；`FinishGuard` 幂等、`Drop` 兜底；`PacingGuard` 只做同步 +1/−1。
+- `chat.rs` 池路径/单账号路径改为经生命周期守卫：删除手工 `registry.register/finish`、`inc_load/dec_load`、`pacing.pending_inc/dec`；流式把注册所有权经 `take_finish_guard` 交给响应流，`Drop` 时删除（客户端取消不再残留）。
+- 计数口径保持：load 仍绑定初选账号并在响应交付前配平；换号不迁移计数；registry 非流式收尾删除、流式流尽/取消删除；pacing 仅兜底启用时计数。单账号 429 等待循环内网络错误提前返回的 pacing 漏配平由守卫修正（A11 覆盖正常完成路径，守卫单测覆盖 Drop）。
+- 请求体脱敏/重排、签名/会话/UA、重试次数与预算、两路空响应差异均未改动。
+- 验证：`cargo test -p rs-tuanjie --locked --test p8b4_chat_behavior` 28/28；`cargo test -p rs-tuanjie --locked -- --nocapture` 全 crate **246 passed / 2 ignored**（与基线同两处 ignored）。
+- 反向验证：`take_finish_guard` 不转移 rid（新建空守卫）时，流取消用例转红；恢复后全绿。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。

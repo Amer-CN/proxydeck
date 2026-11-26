@@ -31,6 +31,7 @@ pub mod gojson;
 pub mod gziptar;
 pub mod headers;
 pub mod inflight;
+pub mod request_lifecycle;
 pub mod media;
 pub mod pacing;
 pub mod probes;

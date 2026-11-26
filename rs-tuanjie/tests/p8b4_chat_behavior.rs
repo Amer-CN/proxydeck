@@ -1106,3 +1106,154 @@ fn pool_streaming_forwards_chunk_by_chunk() {
     })
 }
 
+// ---------------------------------------------------------------- A11 请求生命周期
+
+fn stream_req() -> Vec<u8> {
+    br#"{"model":"KIMI-K3","stream":true,"messages":[{"role":"user","content":"hi"}]}"#.to_vec()
+}
+
+/// 路由由**选号结果**决定，不按账号数量推断。
+#[test]
+fn route_comes_from_selection_not_account_count() {
+    use rs_tuanjie::request_lifecycle::CredentialRoute;
+    run_locked(|| async {
+        let run = Run::new("route", &["uid-a", "uid-b"]);
+        assert!(
+            matches!(
+                rs_tuanjie::request_lifecycle::resolve_route(&run.st, "KIMI-K3"),
+                CredentialRoute::PoolAccount { .. }
+            ),
+            "池里选得出号 → 池路由"
+        );
+        run.force_single_account();
+        assert!(
+            matches!(
+                rs_tuanjie::request_lifecycle::resolve_route(&run.st, "KIMI-K3"),
+                CredentialRoute::LocalCredentialFallback
+            ),
+            "选不出号 → 本机凭据回退（不是按账号数量猜）"
+        );
+    })
+}
+
+/// 池路径 200：注册条目删除、初选账号 load 归零、pacing 计数归零。
+#[test]
+fn pool_success_releases_registry_load_and_pacing_counts() {
+    run_locked(|| async {
+        let run = Run::new("life200", &["uid-a", "uid-b"]);
+        let up = shared_upstream();
+        for id in ["uid-a", "uid-b"] {
+            up.set_chat_script(&run.key_of(id), vec![(200, "", &ok_body("KIMI-K3"))]);
+        }
+        let (status, _) = post_chat(run.st.clone(), KIMI_REQ.as_bytes().to_vec()).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            run.st.registry.inflight().is_empty(),
+            "非流式收尾必须删除进行中注册条目"
+        );
+        for account in run.st.pool.accounts_snapshot() {
+            assert_eq!(run.st.pool.load_of(&account.user_id), 0, "初选账号 load 必须归零");
+        }
+        assert_eq!(run.st.pacer.pending(), 0, "pacing 计数必须归零");
+    })
+}
+
+/// 客户端在流开始后断开：注册条目由流守卫删除，load 已提前配平。
+#[test]
+fn stream_cancel_releases_registry_entry_without_replay() {
+    run_locked(|| async {
+        let run = Run::new("lifestream", &["uid-a"]);
+        run.enable_pacing();
+        let up = shared_upstream();
+        up.set_chat_script(
+            &run.key_of("uid-a"),
+            vec![(
+                200,
+                "",
+                "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n",
+            )],
+        );
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/chat/completions")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(stream_req()))
+            .expect("构造流式请求");
+        let resp = router(run.st.clone()).oneshot(req).await.expect("oneshot");
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            run.st.registry.inflight().len(),
+            1,
+            "流未结束前注册条目在（所有权已交给响应流）"
+        );
+        drop(resp); // 客户端断开：body 被丢弃
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !run.st.registry.inflight().is_empty() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(
+            run.st.registry.inflight().is_empty(),
+            "取消后必须删除注册条目（不得残留）"
+        );
+        for account in run.st.pool.accounts_snapshot() {
+            assert_eq!(run.st.pool.load_of(&account.user_id), 0, "load 在响应交付前已配平");
+        }
+        assert_eq!(run.st.pacer.pending(), 0, "取消后 pacing 计数归零");
+        assert_eq!(
+            up.chat_calls(&run.key_of("uid-a")),
+            1,
+            "流开始后不得因取消而重发上游"
+        );
+    })
+}
+
+/// 池路径 429 换号 + 等待重发：初选号 load 只配平一次，最终号不迁移计数。
+#[test]
+fn pacing_switch_and_wait_balance_initial_account_load_once() {
+    run_locked(|| async {
+        let run = Run::new("lifepacing", &["uid-a", "uid-b"]);
+        run.enable_pacing();
+        run.chat_timing()
+            .set_switch_backoff_for_test(std::time::Duration::from_millis(5));
+        let up = shared_upstream();
+        for id in ["uid-a", "uid-b"] {
+            up.set_chat_script(
+                &run.key_of(id),
+                vec![
+                    (429, "1", r#"{"error":{"message":"rate limited"}}"#),
+                    (200, "", &ok_body("KIMI-K3")),
+                ],
+            );
+        }
+        let (status, text) = post_chat(run.st.clone(), KIMI_REQ.as_bytes().to_vec()).await;
+        assert_eq!(status, StatusCode::OK, "{text}");
+        for account in run.st.pool.accounts_snapshot() {
+            assert_eq!(run.st.pool.load_of(&account.user_id), 0, "load 只对初选号 +1/−1，最终号不迁移");
+        }
+        assert!(run.st.registry.inflight().is_empty());
+        assert_eq!(run.st.pacer.pending(), 0);
+    })
+}
+
+/// 单账号 429 等待层：完成/失败路径都不得留下 pacing 计数。
+#[test]
+fn single_path_429_wait_balances_pacing_counter() {
+    run_locked(|| async {
+        let run = Run::new("singlelife", &["uid-a"]);
+        run.force_single_account();
+        run.enable_pacing();
+        let up = shared_upstream();
+        up.set_chat_script(
+            &run.key_of("uid-a"),
+            vec![
+                (429, "1", r#"{"error":{"message":"rate limited"}}"#),
+                (200, "", &ok_body("KIMI-K3")),
+            ],
+        );
+        let (status, text) = post_chat(run.st.clone(), KIMI_REQ.as_bytes().to_vec()).await;
+        assert_eq!(status, StatusCode::OK, "{text}");
+        assert!(run.st.registry.inflight().is_empty());
+        assert_eq!(run.st.pacer.pending(), 0);
+    })
+}
+
