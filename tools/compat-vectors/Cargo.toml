@@ -1,0 +1,21 @@
+[package]
+name = "compat-vectors"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# 独立包（不在根 workspace 成员清单里）：只做「同一输入表 → 各 crate 转义输出」的
+# 可复现对照，不参与产品构建，也不让后端 crate 互相依赖。
+[workspace]
+
+[dependencies]
+rs-proxy = { path = "../../rs-proxy" }
+rs-codebuddy = { path = "../../rs-codebuddy" }
+rs-qoder = { path = "../../rs-qoder" }
+rs-tuanjie = { path = "../../rs-tuanjie" }
+rs-comate = { path = "../../rs-comate" }
+rs-vibex = { path = "../../rs-vibex" }
+serde_json = "1"
+
+
+# 只做纯函数对照，不引入其他依赖。

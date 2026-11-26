@@ -27,6 +27,8 @@ pub fn write_go_string(out: &mut Vec<u8>, s: &str) {
         match ch {
             '"' => out.extend_from_slice(b"\\\""),
             '\\' => out.extend_from_slice(b"\\\\"),
+            '\u{08}' => out.extend_from_slice(b"\\b"),
+            '\u{0c}' => out.extend_from_slice(b"\\f"),
             '\n' => out.extend_from_slice(b"\\n"),
             '\r' => out.extend_from_slice(b"\\r"),
             '\t' => out.extend_from_slice(b"\\t"),

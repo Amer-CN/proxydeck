@@ -23,7 +23,8 @@
 | T9 | complete | A09/A10 5/5；插件/换血/shell 库测试 35/35；GUI 五合同 23/23；接管过期突变 1 红后恢复 |
 | T10 | complete | A11 5/5；团结全 crate 246 passed / 2 ignored；流守卫所有权突变 1 红后恢复 |
 | T11 | complete | A12 5/5；rs-proxy 全 crate 106 passed；缓冲回退突变 1 红后恢复 |
-| T12–T14 | pending | 未开始 |
+| T12 | complete | 六实现转义对照全绿（修团结 \b/\f 分歧）；Qoder 运行时合成夹具 2/2；受影响 6 包与团结全绿 |
+| T13–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -154,6 +155,13 @@
 - A12：假上游首帧后停顿 400ms，Chat/Responses/Anthropic 首帧均在 300ms 内到达；非流式仍单 JSON；客户端取消后服务继续可用。计时从发请求前起算（排除只测「响应返回后首块」的假阳性）。
 - 验证：`cargo test -p rs-proxy --locked --no-fail-fast` → **87 lib + 3 golden + 11 http + 5 live = 106 passed / 0 failed**。
 - 反向验证：把 HTTP chat 路径改回缓冲 `handle_chat` 后，A12 首帧用例红（实耗 415ms）；恢复 live 后全绿。
+
+## T12 实施记录（两项独立提交）
+- 兼容原语对照：新增 `tools/compat-vectors`（独立包、不参与产品构建、不让后端互相依赖），把 8 组输入（控制字符/HTML/Unicode/U+2028-9/引号反斜杠/DEL/emoji）喂给 6 个 crate 的 Go 字符串转义实现；发现**团结 `gojson` 对 \b/\f 输出 `\u0008/\u000c`，其余实现与 Go 黄金一致输出 `\b/\f`**，已修团结一侧并复跑对照（6/6 一致）。共享 crate 判定：只有一个已证明一致的原语，收益不足，保留各 crate 独立实现，不新增 `rs-common`。
+- 证据：`cargo run --manifest-path tools/compat-vectors/Cargo.toml` → “全部 8 组输入在 6 个转义实现上逐字节一致”，exit 0；受影响的 rs-proxy / rs-codebuddy / rs-comate / rs-vibex / rs-bai / rs-qoder 全测试与 rs-tuanjie 全测试（246 passed / 2 ignored）均无失败。
+- Qoder 登录态：新增 `crypto::protect`（当前用户 DPAPI）与 `auth::write_synthetic_fixture`，在 Windows 测试运行时生成与冻结夹具同逻辑内容的临时夹具；`tests/common::auth_fixture_dir()` 冻结夹具可解则用冻结，否则用本机合成（非 Windows DPAPI 不可用则显式 SKIP）。冻结入库夹具一个字节未改。
+- 新增 `tests/synthetic_auth.rs`：强制走一次运行时合成→真实 `load_auth` 解密链；截断/非法文件安全报错且错误信息不含 token。
+- 验证：`cargo test -p rs-qoder --locked --test synthetic_auth` 2/2；`cargo test -p rs-qoder --locked` 全 crate 无失败。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。
