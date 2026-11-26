@@ -17,7 +17,8 @@
 | T3 | complete | A02 5/5；WorkBuddy 全 crate 142 passed / 0 failed；初选忽略模型突变 4 红后恢复 |
 | T4 | complete | A03 6/6；CodeArts 全 crate 62 passed / 0 failed；稳定 ID 替换突变 2 红后恢复 |
 | T5 | complete | A04/A05 13/13；CodeArts 全 crate 69 passed / 0 failed；版本复用突变 1 红后恢复 |
-| T6–T14 | pending | 未开始 |
+| T6 | complete | A06 4/4；CodeArts 全 crate 73 passed / 0 failed；JSON 错误旁路突变 1 红后恢复 |
+| T7–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -93,6 +94,15 @@
 - A05：5xx 不判死、400/invalid_grant 绑版本标死、新凭据恢复、overlay 落盘失败返回 Storage；锁残留/超时由 OS 句柄测试覆盖。
 - 验证：`cargo test -p rs-codearts --locked -- --nocapture` → **69 passed / 0 failed / 0 ignored**。
 - 反向验证：取消“新 revision 直接复用”后，双进程 Force 场景 STS 命中 2 次；恢复后 13/13。
+
+## T6 实施记录
+- 新增 `response::prepare_response(resp, wants_stream)`：HTTP4xx、HTTP200 JSON、HTTP200 首 SSE 错误、非流式 SSE 聚合错误都在客户端提交前转成 `UpError`。
+- `PreparedResponse` 持有完整响应或已预检流；账号策略确认后 `mark_ok`，再 `into_response()` 提交。提交后请求循环已退出，不换号重放。
+- 流式只预检首事件；正常内容后的错误原样交付。非流式聚合在提交前发现错误，可换号且不拼接前一个账号的部分内容。
+- 模型不可用、福利未领、并发退避、排队、凭据失效/冷却策略继续共用原分支；旧 `finish_chat` / `preflight_stream` / `collect_stream` 双实现移除。
+- A06 四场景：三种错误形态一致恢复、非流式晚错恢复/流式不重放、正常工具帧、客户端首字节后断开不重发。
+- 验证：`cargo test -p rs-codearts --locked -- --nocapture` → **73 passed / 0 failed / 0 ignored**。
+- 反向验证：旁路 HTTP200 JSON 错误检测后 A06 3 passed / 1 failed；恢复后 4/4。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。

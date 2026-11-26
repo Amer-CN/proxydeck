@@ -31,6 +31,7 @@ pub mod import;
 pub mod protocol;
 pub mod refresh;
 pub mod protocols;
+pub mod response;
 pub mod signer;
 pub mod sse;
 pub mod store;
@@ -42,14 +43,13 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use axum::body::{Body, Bytes};
+use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::any;
 use axum::Router;
 use clap::Parser;
-use futures_util::StreamExt;
 use serde_json::{json, Value};
 
 use accounts::AccountManager;
@@ -1655,10 +1655,6 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
                 Err(e) => break Some(e),
             };
             let status = resp.status().as_u16();
-            if status < 400 {
-                st.mark_ok(&account);
-                return finish_chat(resp, &model, wants_stream).await;
-            }
             // 网关排队：429 + `queue-status: queued` + `trace-id`，等 promoted 后重发一次。
             if status == 429 && !queue_waited {
                 if let Some(trace) = queued_trace(&resp) {
@@ -1674,27 +1670,34 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
                     println!("[codearts] 排队超时（trace {trace}），放弃");
                 }
             }
-            let body = resp.bytes().await.unwrap_or_default();
-            let text = String::from_utf8_lossy(&body).to_string();
+
+            // HTTP 状态、HTTP200 JSON、HTTP200 首 SSE/非流式聚合错误都在提交前转成 UpError。
+            let error = match response::prepare_response(resp, wants_stream).await {
+                Ok(prepared) => {
+                    st.mark_ok(&account);
+                    return prepared.for_model(&model).into_response();
+                }
+                Err(error) => error,
+            };
+            let text = format!("{} {}", error.code, error.message);
             // 模型级不可用（002002009 not registered）：记 30 分钟黑名单，避免反复撞。
             if is_model_missing_body(&text) {
                 st.mark_model_unavailable(&account.stable_key(), &model, 1800);
             }
-            // 福利模型未领（4004.200 benefit not found）：补一次 claim 后重试一轮。
+            // 福利模型未领（4004.200 benefit not found）：补一次 claim 后按原错误策略处理。
             if is_benefit_missing_body(&text) && !benefit_claimed_once {
                 benefit_claimed_once = true;
                 println!(
-                    "[codearts] 账号 {} 福利未领（benefit not found），补领后重试",
+                    "[codearts] 账号 {} 福利未领（benefit not found），补领后按原错误返回",
                     account.display_name()
                 );
                 let _ = st.up.claim_benefit(&account).await;
                 let _ = st.ensure_benefit(&account).await;
-                break Some(upstream::error_from_body(status, &body));
+                break Some(error);
             }
-            let e = upstream::error_from_body(status, &body);
             // 并发上限（TM.00001041）：槽位按时间租约释放（约 1 分钟），换号只是把
             // 问题搬到别的号上——先按 2/4/6/8/10 秒退避重试同一个号。
-            if is_concurrency_error(&e) && conc_retry < CONCURRENCY_RETRY_SECS.len() {
+            if is_concurrency_error(&error) && conc_retry < CONCURRENCY_RETRY_SECS.len() {
                 let secs = CONCURRENCY_RETRY_SECS[conc_retry];
                 conc_retry += 1;
                 println!(
@@ -1704,7 +1707,7 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
                 tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
                 continue;
             }
-            break Some(e);
+            break Some(error);
         };
         let Some(e) = terminal else { continue };
         if e.credential {
@@ -1723,106 +1726,6 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
     up_error_response(
         &last.unwrap_or_else(|| UpError::new(503, "no_account", "没有可用码道账号")),
     )
-}
-
-/// 上游已成功（HTTP < 400）后的出站处理：SSE 透传 / 非流式聚合。
-async fn finish_chat(resp: reqwest::Response, model: &str, wants_stream: bool) -> Response {
-    let ctype = resp
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-    // 非 SSE 的 200：可能是内嵌业务错误，也可能上游直接回了整包 JSON。
-    if !ctype.contains("text/event-stream") {
-        let body = resp.bytes().await.unwrap_or_default();
-        if let Ok(v) = serde_json::from_slice::<Value>(&body) {
-            if let Some(e) = upstream::embedded_error(&v) {
-                return up_error_response(&e);
-            }
-        }
-        let ct = if ctype.is_empty() {
-            "application/json; charset=utf-8".to_string()
-        } else {
-            ctype
-        };
-        return ([(header::CONTENT_TYPE, ct)], body).into_response();
-    }
-
-    if wants_stream {
-        match preflight_stream(resp).await {
-            Ok(stream) => (
-                [
-                    (header::CONTENT_TYPE, "text/event-stream; charset=utf-8"),
-                    (header::CACHE_CONTROL, "no-cache"),
-                    (header::CONNECTION, "keep-alive"),
-                ],
-                Body::from_stream(stream),
-            )
-                .into_response(),
-            Err(e) => up_error_response(&e),
-        }
-    } else {
-        let text = match collect_stream(resp).await {
-            Ok(t) => t,
-            Err(e) => return up_error_response(&e),
-        };
-        let mut agg = sse::Aggregate::default();
-        agg.feed(&text);
-        // 上游把业务错误塞在 SSE 事件里（HTTP 200）：别聚合成空答案，照实报错。
-        if let Some(e) = agg.error.take() {
-            return up_error_response(&e);
-        }
-        json_response(StatusCode::OK, &agg.into_response(model))
-    }
-}
-
-type ByteStream = std::pin::Pin<
-    Box<dyn futures_util::Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static>,
->;
-
-/// 读首个 SSE 事件做预检；正常就把「已读前缀 + 剩余流」接回去。
-async fn preflight_stream(resp: reqwest::Response) -> Result<ByteStream, UpError> {
-    let mut source = resp.bytes_stream();
-    let mut buf: Vec<u8> = Vec::new();
-    let deadline = tokio::time::Instant::now() + STREAM_PRELUDE;
-    loop {
-        let complete = sse::first_data_event(&buf).is_some()
-            && buf.windows(2).any(|w| w == &b"\n\n"[..]);
-        if complete || buf.len() > 128 * 1024 {
-            break;
-        }
-        match tokio::time::timeout_at(deadline, source.next()).await {
-            Err(_) => {
-                return Err(UpError::new(504, "timeout", "等待上游首个事件超时"));
-            }
-            Ok(None) => break,
-            Ok(Some(Err(e))) => {
-                return Err(UpError::new(502, "network", format!("读取上游流失败: {e}")))
-            }
-            Ok(Some(Ok(chunk))) => buf.extend_from_slice(&chunk),
-        }
-    }
-    if let Some(e) = sse::preflight_error(&buf) {
-        return Err(e);
-    }
-    let head = futures_util::stream::once(async move { Ok::<Bytes, std::io::Error>(Bytes::from(buf)) });
-    let rest = source.map(|r| r.map_err(|e| std::io::Error::other(e.to_string())));
-    Ok(Box::pin(head.chain(rest)))
-}
-
-/// 收集整条 SSE（非流式聚合用），上限 64 MiB。
-async fn collect_stream(resp: reqwest::Response) -> Result<String, UpError> {
-    let mut source = resp.bytes_stream();
-    let mut buf: Vec<u8> = Vec::new();
-    while let Some(chunk) = source.next().await {
-        let chunk = chunk.map_err(|e| UpError::new(502, "network", format!("读取上游流失败: {e}")))?;
-        if buf.len() + chunk.len() > 64 << 20 {
-            return Err(UpError::new(502, "too_large", "上游响应超过 64 MiB"));
-        }
-        buf.extend_from_slice(&chunk);
-    }
-    Ok(String::from_utf8_lossy(&buf).to_string())
 }
 
 // ---------------------------------------------------------------------------
