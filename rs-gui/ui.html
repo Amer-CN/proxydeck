@@ -4101,7 +4101,122 @@ var SOUND_DATA = {
       return response;
     }
   };
+  var demos = Object.create(null);
+  api.hostApi = {
+    /* 统一宿主调用入口：底层仍是 cc* 字符串协议；返回已解码对象或 {ok:false,msg}。 */
+    call: function (name, args) {
+      args = args || [];
+      var bridge = window['cc' + name];
+      if (typeof bridge === 'function') {
+        try {
+          return Promise.resolve(bridge.apply(null, args)).then(function (raw) {
+            if (typeof raw !== 'string') return raw;
+            try { return JSON.parse(raw); } catch (e) {
+              return { ok: false, msg: '宿主返回非法 JSON: ' + String(e) };
+            }
+          }, function (e) { return { ok: false, msg: String(e) }; });
+        } catch (e) {
+          return Promise.resolve({ ok: false, msg: String(e) });
+        }
+      }
+      var demo = demos[name];
+      if (typeof demo === 'function') {
+        try { return Promise.resolve(demo.apply(null, args)); }
+        catch (e) { return Promise.resolve({ ok: false, msg: String(e) }); }
+      }
+      return Promise.resolve({ ok: false, msg: '宿主无此接口: cc' + name });
+    },
+    demo: function (name, handler) {
+      if (typeof handler === 'function') demos[name] = handler;
+    },
+    hasBridge: function (name) { return typeof window['cc' + name] === 'function'; }
+  };
   window.PTApp = Object.assign(window.PTApp || {}, api);
+})();
+</script>
+<script id="pt-keymap-state">
+/* 键位映射唯一所有者：快路缓存、合法性、md 视图补齐与文件值覆盖都在这里。
+   桥文件读取/落盘由 PTApp.hostApi 负责，本模块不直接碰 cc* 绑定。 */
+(function () {
+  'use strict';
+  var KEY = 'keyMap.v1';
+  var FACES = ['cmd', 'md', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext', 'oc'];
+  var DEF = [['cmd', 'md'], ['tj', 'comate'], ['cb', 'qoder'], ['ext', 'oc']];
+  var cache = null;
+  function clone(m) { return m.map(function (k) { return k.slice(); }); }
+  function valid(m) {
+    if (!Array.isArray(m) || m.length < 1 || m.length > 4) return false;
+    var seen = {};
+    for (var ki = 0; ki < m.length; ki++) {
+      var kk = m[ki];
+      if (!Array.isArray(kk) || !kk.length) return false;
+      for (var kj = 0; kj < kk.length; kj++) {
+        if (FACES.indexOf(kk[kj]) < 0) return false;
+        if (seen[kk[kj]]) return false;
+        seen[kk[kj]] = true;
+      }
+    }
+    return true;
+  }
+  /* 老 keyMap 没有「码道」：补进含 cmd 的键（只在内存修，用户改键才落盘）。 */
+  function withMd(m) {
+    var has = false;
+    for (var i = 0; i < m.length; i++) if (m[i].indexOf('md') >= 0) has = true;
+    if (has) return m;
+    var target = -1;
+    for (var j = 0; j < m.length; j++) if (m[j].indexOf('cmd') >= 0) target = j;
+    if (target < 0) target = 0;
+    m[target] = m[target].concat(['md']);
+    return valid(m) ? m : clone(DEF);
+  }
+  function storage() {
+    try { return window.localStorage || null; } catch (e) { return null; }
+  }
+  function readFast() {
+    var s = storage();
+    if (!s) return null;
+    try { return JSON.parse(s.getItem(KEY) || 'null'); } catch (e) { return null; }
+  }
+  function writeFast(m) {
+    var s = storage();
+    if (!s) return false;
+    try { s.setItem(KEY, JSON.stringify(m)); return true; } catch (e) { return false; }
+  }
+  window.PTKeymap = Object.freeze({
+    KEY: KEY,
+    FACES: FACES,
+    get: function () {
+      if (!cache) {
+        var fast = readFast();
+        cache = valid(fast) ? withMd(fast) : clone(DEF);
+      }
+      return clone(cache);
+    },
+    setCache: function (m) {
+      if (!valid(m)) return false;
+      cache = clone(m);
+      writeFast(cache);
+      return true;
+    },
+    applyFile: function (m) {
+      if (!valid(m)) return false;
+      cache = withMd(clone(m));
+      writeFast(cache);
+      return true;
+    },
+    isValid: valid,
+    clone: clone
+  });
+  /* 配置页唯一落盘口：先更新快路，再由 hostApi 写入 keymap.json；
+     返回 {ok,msg}，失败时调用方必须如实提示并恢复文件值。 */
+  window.__keymapPersist = function (m) {
+    if (!window.PTKeymap.setCache(m)) return Promise.resolve({ ok: false, msg: '非法键位映射' });
+    var host = window.PTApp && window.PTApp.hostApi;
+    if (!host) return Promise.resolve({ ok: false, msg: '宿主接口不可用' });
+    return host.call('KeyMapSet', [JSON.stringify(window.PTKeymap.get())]).then(function (r) {
+      return { ok: !!(r && r.ok), msg: (r && r.msg) || '' };
+    });
+  };
 })();
 </script>
 <script>
@@ -4592,67 +4707,15 @@ var PT_I18N = {
     });
   }
   /* ═══ B类键位自由组合（localStorage 快路＋keymap.json 文件为准，默认 B.AI 不在任何键下）═══
-     键：keyMap.v1 = [[faces...],...]，1-4 键，每键 1..N 张脸；脸名仅限 8 供应商
-     （2026-10-21 起含 opencode）。
-     旧 provVis.v1 无论缺失/存在一律按默认映射解释，不读不迁，无弹窗。
-     引擎层只读此键做绘制与切换门控，写操作由配置子页经 window.__keymapSet 进入
-     （同步写快路＋透传桥落盘）；启动时业务层拉一次桥文件值经 window.__keymapApplyFile
-     覆盖快路（无文件时不调不回写，快路绝不覆盖文件值）；
-     window.__provGet/__provSet 保留为兼容垫（派生布尔值，旧调用点照常工作）。 */
+     键：keyMap.v1 = [[faces...],...]，1-4 键，每键 1..N 张脸。
+     键位状态唯一所有者是 PTKeymap（读/迁移/快路写）；本 IIFE 只做绘制与切换门控：
+     `window.__keymapPersist` 经 PTApp.hostApi 落盘并如实返回结果；
+     启动时业务层拉一次桥文件值经 `window.__keymapApplyFile` 覆盖快路（无文件时不调不回写）。 */
   var SUP_FACES = ['cmd', 'md', 'tj', 'comate', 'cb', 'qoder', 'bai', 'ext', 'oc'];
   var SUP_LABEL = { cmd: 'COMMAND', md: '码道', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX', oc: 'OPENCODE' };
-  var KEYMAP_DEF = [['cmd', 'md'], ['tj', 'comate'], ['cb', 'qoder'], ['ext', 'oc']];
-  var KEYMAP_KEY = 'keyMap.v1';
-  function keyMapClone(m) { return m.map(function (k) { return k.slice(); }); }
-  function keyMapValid(m) {
-    if (!Array.isArray(m) || m.length < 1 || m.length > 4) return false;
-    var seen = {};
-    for (var ki = 0; ki < m.length; ki++) {
-      var kk = m[ki];
-      if (!Array.isArray(kk) || !kk.length) return false;
-      for (var kj = 0; kj < kk.length; kj++) {
-        if (SUP_FACES.indexOf(kk[kj]) < 0) return false;
-        if (seen[kk[kj]]) return false;
-        seen[kk[kj]] = true;
-      }
-    }
-    return true;
-  }
-  var keyMapCache = null;
-  /* 2026-10-26：老 keyMap 没有「码道」（md）。加载时补进第一键（含 cmd 的那一键），
-     否则 provEnabled('md') 为假、甲板与键面都看不到。只在内存补，用户改键才落盘。 */
-  function keyMapEnsureMd(m) {
-    var has = false;
-    for (var i = 0; i < m.length; i++) if (m[i].indexOf('md') >= 0) has = true;
-    if (has) return m;
-    var t = -1;
-    for (var j = 0; j < m.length; j++) if (m[j].indexOf('cmd') >= 0) t = j;
-    if (t < 0) t = 0;
-    m[t] = m[t].concat(['md']);
-    return keyMapValid(m) ? m : keyMapClone(KEYMAP_DEF);
-  }
-  function keyMapGet() {
-    if (keyMapCache) return keyMapCache;
-    var c = null;
-    try { c = JSON.parse(localStorage.getItem(KEYMAP_KEY) || 'null'); } catch (e) { c = null; }
-    if (!keyMapValid(c)) c = keyMapClone(KEYMAP_DEF);
-    else c = keyMapEnsureMd(c);
-    keyMapCache = c;
-    return keyMapCache;
-  }
+  function keyMapGet() { return window.PTKeymap.get(); }
   function keyMapSet(m) {
-    if (!keyMapValid(m)) return false;
-    keyMapCache = keyMapClone(m);
-    try { localStorage.setItem(KEYMAP_KEY, JSON.stringify(keyMapCache)); } catch (e) {}
-    /* 文件为准：每次改映射都透传桥落盘（0600 keymap.json，Go 侧权威复验）。
-       引擎 IIFE 看不见业务层的 call/HAS_BRIDGE，直调 window.cc 桥（WebView2 下为 Promise）；
-       无桥环境（file:// 无头）window.ccKeyMapSet 缺席即跳过，行为与原来一致。 */
-    try {
-      if (typeof window !== 'undefined' && window && typeof window.ccKeyMapSet === 'function') {
-        var _kmSave = window.ccKeyMapSet(JSON.stringify(keyMapCache));
-        if (_kmSave && typeof _kmSave.then === 'function') _kmSave.then(function () {}, function () {});
-      }
-    } catch (e) {}
+    if (!window.PTKeymap.setCache(m)) return false;
     rebuildKeys();
     paint();
     return true;
@@ -4684,7 +4747,7 @@ var PT_I18N = {
   window.__provGet = provGet;
   window.__provSet = function (cfg) {
     if (!cfg || typeof cfg !== 'object') { paint(); return true; }
-    var km = keyMapClone(keyMapGet());
+    var km = window.PTKeymap.clone(keyMapGet());
     var homeOf = { md: 'cmd', bai: 'cmd', comate: 'tj', qoder: 'cb', ext: 'ext', oc: 'ext' };
     ['md', 'bai', 'comate', 'qoder', 'ext', 'oc'].forEach(function (k) {
       if (typeof cfg[k] !== 'boolean') return;
@@ -4704,18 +4767,14 @@ var PT_I18N = {
         }
       }
     });
-    if (!keyMapValid(km)) return false;
+    if (!window.PTKeymap.isValid(km)) return false;
     return keyMapSet(km);
   };
-  window.__keymapGet = function () { return keyMapClone(keyMapGet()); };
+  window.__keymapGet = function () { return window.PTKeymap.get(); };
   window.__keymapSet = keyMapSet;
-  /* 文件值应用口（启动加载专用）：与 keyMapSet 唯一差别是不写桥文件——
-     启动时文件值覆盖快路值，绝不能反过来把快路值回写成文件（无文件时调用方直接不调这里）。 */
+  /* 文件值应用口（启动加载专用）：只覆盖快路，绝不回写文件。 */
   window.__keymapApplyFile = function (m) {
-    if (!keyMapValid(m)) return false;
-    m = keyMapEnsureMd(keyMapClone(m));
-    keyMapCache = keyMapClone(m);
-    try { localStorage.setItem(KEYMAP_KEY, JSON.stringify(keyMapCache)); } catch (e) {}
+    if (!window.PTKeymap.applyFile(m)) return false;
     rebuildKeys();
     paint();
     return true;
@@ -5525,16 +5584,11 @@ var PT_I18N = {
   };
   function call(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
-    if (HAS_BRIDGE) {
-      try {
-        return Promise.resolve(window['cc' + fn].apply(null, args)).then(function (raw) {
-          return typeof raw === 'string' ? JSON.parse(raw) : raw;
-        }, function (e) { return { ok: false, msg: String(e) }; });
-      } catch (e) { return Promise.resolve({ ok: false, msg: String(e) }); }
-    }
-    var f = demo[fn.charAt(0).toLowerCase() + fn.slice(1)];
-    return Promise.resolve(f ? f.apply(null, args) : { ok: false, msg: 'demo 无此方法' });
+    return PTApp.hostApi.call(fn, args);
   }
+  Object.keys(demo).forEach(function (key) {
+    PTApp.hostApi.demo(key.charAt(0).toUpperCase() + key.slice(1), demo[key]);
+  });
 
   /* ---------------- 日志（pomme 风格行） ---------------- */
   var LOG_LEVELS = { sys: 'SYS', ok: 'OK', err: 'ERR', net: 'NET', warn: 'WARN' };
@@ -10890,6 +10944,30 @@ var PT_I18N = {
         return KM_ALL.filter(function (f) { return !used[f]; });
       }
       function kmFallback(km) { return ((km[0] || ['cmd'])[0] || 'cmd'); }
+      /* 唯一落盘路径：写快路 + 桥文件；失败不谎称已保存，恢复文件值。 */
+      function kmPersist(cur, okLabel) {
+        var pending = (typeof window.__keymapPersist === 'function')
+          ? window.__keymapPersist(cur)
+          : Promise.resolve({ ok: false, msg: '保存接口不可用' });
+        return pending.then(function (r) {
+          if (r && r.ok) {
+            try { logInto($('logStream'), 'sys', okLabel + '（配置已持久化）'); } catch (e) {}
+            kmEnsureVisible();
+            window.renderKeymapPage();
+            return true;
+          }
+          var msg = (r && r.msg) || '未知错误';
+          toast('err', '保存失败', msg + ' · 已恢复 keymap.json 的值');
+          return PTApp.hostApi.call('KeyMapGet', []).then(function (g) {
+            if (g && g.ok && typeof window.__keymapApplyFile === 'function') {
+              try { window.__keymapApplyFile(g.map); } catch (e) {}
+            }
+            kmEnsureVisible();
+            window.renderKeymapPage();
+            return false;
+          });
+        });
+      }
       function kmEnsureVisible() {
         /* 当前停留页被删/被移出映射 → 回第一键首脸（selectMode 门控只拦进入，不拦滞留） */
         try {
@@ -10944,11 +11022,7 @@ var PT_I18N = {
             var cur = kmGet();
             if (!cur[ki] || cur[ki].length <= 1) { toast('err', '键位组合', '每键至少留 1 页'); return; }
             cur[ki] = cur[ki].filter(function (f) { return f !== face; });
-            if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
-              try { logInto($('logStream'), 'sys', '键位组合：第' + (ki + 1) + '键移除 ' + (KM_LABEL[face] || face) + '（配置已持久化）'); } catch (e) {}
-              kmEnsureVisible();
-              window.renderKeymapPage();
-            } else toast('err', '键位组合', '移除失败（映射非法？）');
+            kmPersist(cur, '键位组合：第' + (ki + 1) + '键移除 ' + (KM_LABEL[face] || face));
           };
         });
         box.querySelectorAll('[data-km-addface]').forEach(function (b) {
@@ -10962,11 +11036,7 @@ var PT_I18N = {
             cur.forEach(function (k) { (k || []).forEach(function (f) { used[f] = true; }); });
             if (used[face]) { toast('err', '键位组合', (KM_LABEL[face] || face) + ' 已在别的键下（一页一键）'); return; }
             cur[ki].push(face);
-            if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
-              try { logInto($('logStream'), 'sys', '键位组合：第' + (ki + 1) + '键加入 ' + (KM_LABEL[face] || face) + '（配置已持久化）'); } catch (e) {}
-              kmEnsureVisible();
-              window.renderKeymapPage();
-            } else toast('err', '键位组合', '加入失败（映射非法？）');
+            kmPersist(cur, '键位组合：第' + (ki + 1) + '键加入 ' + (KM_LABEL[face] || face));
           };
         });
         box.querySelectorAll('[data-km-delkey]').forEach(function (b) {
@@ -10977,11 +11047,7 @@ var PT_I18N = {
             if (cur.length <= 1) { toast('err', '键位组合', '至少保留 1 键'); return; }
             var gone = cur[ki] || [];
             cur.splice(ki, 1);
-            if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
-              try { logInto($('logStream'), 'sys', '键位组合：删除第' + (ki + 1) + '键（' + gone.map(function (f) { return KM_LABEL[f] || f; }).join('+') + '回待加池，配置已持久化）'); } catch (e) {}
-              kmEnsureVisible();
-              window.renderKeymapPage();
-            } else toast('err', '键位组合', '删键失败');
+            kmPersist(cur, '键位组合：删除第' + (ki + 1) + '键（' + gone.map(function (f) { return KM_LABEL[f] || f; }).join('+') + '回待加池');
           };
         });
         var addK = $('kmAddKey');
@@ -11001,11 +11067,7 @@ var PT_I18N = {
         var un = kmUnmapped(cur);
         if (!un.length) { toast('err', '键位组合', '全部供应商已上键，无页可建新键'); return; }
         cur.push([un[0]]);
-        if (typeof window.__keymapSet === 'function' && window.__keymapSet(cur)) {
-          try { logInto($('logStream'), 'sys', '键位组合：新增第' + cur.length + '键 [' + (KM_LABEL[un[0]] || un[0]) + ']（配置已持久化）'); } catch (e) {}
-          kmEnsureVisible();
-          window.renderKeymapPage();
-        }
+        kmPersist(cur, '键位组合：新增第' + cur.length + '键 [' + (KM_LABEL[un[0]] || un[0]) + ']');
       };
       var reset = $('kmReset');
       if (reset) reset.onclick = function () {

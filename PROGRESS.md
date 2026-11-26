@@ -19,7 +19,8 @@
 | T5 | complete | A04/A05 13/13；CodeArts 全 crate 69 passed / 0 failed；版本复用突变 1 红后恢复 |
 | T6 | complete | A06 4/4；CodeArts 全 crate 73 passed / 0 failed；JSON 错误旁路突变 1 红后恢复 |
 | T7 | complete | A07 3/3（含真实生产脚本）；JS 语法 4/4；ui_html 4/4；release_sync 1/1；防过期守卫突变 1 红后恢复 |
-| T8–T14 | pending | 未开始 |
+| T8 | complete | hostApi/A08 6/6；keymap 单测 4/4；ui_html 4/4、release_sync 1/1；bridge_contract 5/5、close_contract 1/1；md 补齐突变 2 红后恢复 |
+| T9–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -114,6 +115,16 @@
 - 新增 `tools/check-ui-js.cjs`：抽取全部内联脚本逐个 `node --check`，扫描集合为 0 或任一脚本语法错误即失败（实测 4 个脚本）。
 - 验证：`node --test app/tests/ui-state.test.cjs` 3/3；`node tools/check-ui-js.cjs` 4/4；同步副本与哈希后 `ui_html` 4/4、`release_sync` 1/1。
 - 反向验证：删掉 `accPull` 的 `isCurrent` 守卫，WorkBuddy 晚到用例转红；恢复后 3/3。
+
+## T8 实施记录
+- Rust 新增 `rs-gui/src/keymap.rs`：`is_valid`（纯校验）、`migrate_with_opencode`（纯迁移）、`load_from/load`（文件读取 + 一次性迁移标记）、`save_to/save`（校验后落盘，失败如实返回）。bridge 的 `key_map_*` 改为兼容转发，旧单测保持原断言通过。
+- UI 新增 `<script id="pt-keymap-state">`：`PTKeymap` 成为快路缓存/合法性/md 视图补齐/文件值覆盖唯一所有者；`__keymapApplyFile` 只覆盖快路不回写文件。
+- 新增 `PTApp.hostApi.call(name, args)`：统一 `cc*` 字符串/Promise 解码与错误（非法 JSON/异常/缺接口均返回 `{ok:false,msg}`），业务层 `call()` 与平台请求全部经它；demo 处理器经 `hostApi.demo` 注册。
+- 配置页四条保存路径改用 `__keymapPersist` + `kmPersist`：只有桥确认成功才写“配置已持久化”；失败 toast 原文并回读 `KeyMapGet` 恢复文件值，不再吞结果谎报成功。
+- `ui_html` 合同锚点随统一入口定向适配为“业务层仅经 PTApp.hostApi.call + 底层 cc* 串协议”，行为覆盖由 `app/tests/ui-state.test.cjs` 承担（未删旧覆盖）。
+- A08 覆盖：非法映射拒绝、旧映射补 md、文件值优先、保存失败如实返回/成功载荷逐字节核对；Rust 侧覆盖 oc 一次性迁移、用户移除不回填、非法规避、保存失败。
+- 验证：`node --test app/tests/ui-state.test.cjs` 6/6；`node tools/check-ui-js.cjs` 5/5；`cargo test -p rs-gui --lib key_map` 3/3；`cargo test -p rs-gui --test ui_html --test release_sync` 4/4+1/1；`--test bridge_contract --test close_contract` 5/5+1/1。
+- 反向验证：删除 md 补齐的 concat 后 A08 2 红；恢复后 6/6。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。

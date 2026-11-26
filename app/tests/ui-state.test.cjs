@@ -29,9 +29,97 @@ function regionContext() {
   return { window, context };
 }
 
+function plain(value) { return JSON.parse(JSON.stringify(value)); }
+
 function flush() {
   return new Promise((resolve) => setImmediate(resolve));
 }
+
+function keymapContext() {
+  const window = {};
+  const store = new Map();
+  window.localStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+  };
+  const context = vm.createContext({ window, console, Promise, Object });
+  vm.runInContext(scriptById('pt-region-state'), context);
+  vm.runInContext(scriptById('pt-keymap-state'), context);
+  return { window, context, store };
+}
+
+test('hostApi decodes bridge JSON, surfaces errors and supports demo handlers', async () => {
+  const { window } = regionContext();
+  const host = window.PTApp.hostApi;
+
+  window.ccDemoOk = () => '{"ok":true,"value":7}';
+  assert.deepEqual(plain(await host.call('DemoOk', [])), { ok: true, value: 7 });
+
+  window.ccDemoBad = () => '{not json';
+  const bad = await host.call('DemoBad', []);
+  assert.equal(bad.ok, false);
+  assert.match(bad.msg, /非法 JSON/);
+
+  window.ccDemoThrow = () => { throw new Error('boom'); };
+  const thrown = await host.call('DemoThrow', []);
+  assert.deepEqual(plain(thrown), { ok: false, msg: 'Error: boom' });
+
+  const missing = await host.call('NoSuchBinding', []);
+  assert.equal(missing.ok, false);
+  assert.match(missing.msg, /宿主无此接口/);
+
+  host.demo('PreviewOnly', (a) => ({ ok: true, echo: a }));
+  assert.deepEqual(plain(await host.call('PreviewOnly', ['x'])), { ok: true, echo: 'x' });
+});
+
+test('A08 keymap fast path completes md and rejects invalid maps', () => {
+  const { window, store } = keymapContext();
+  assert.deepEqual(plain(window.PTKeymap.get()[0]), ['cmd', 'md'], '首跑默认含码道');
+  assert.equal(window.PTKeymap.setCache([['nope']]), false, '白名单外脸名必须拒绝');
+
+  store.set('keyMap.v1', JSON.stringify([['cmd'], ['tj'], ['cb', 'qoder'], ['ext']]));
+  const fresh = keymapContext();
+  fresh.store.set('keyMap.v1', JSON.stringify([['cmd'], ['ext']]));
+  assert.deepEqual(
+    plain(fresh.window.PTKeymap.get()),
+    [['cmd', 'md'], ['ext']],
+    '旧映射缺 md 时补到含 cmd 的键（当前视图补齐）'
+  );
+});
+
+test('A08 file value wins over fast path and save failure is not reported as saved', async () => {
+  const { window } = keymapContext();
+  window.localStorage.setItem('keyMap.v1', JSON.stringify([['cmd'], ['ext']]));
+
+  assert.equal(
+    window.PTKeymap.applyFile([['cmd'], ['tj', 'comate'], ['cb', 'qoder'], ['ext', 'oc']]),
+    true
+  );
+  assert.deepEqual(window.PTKeymap.get(), [
+    ['cmd', 'md'],
+    ['tj', 'comate'],
+    ['cb', 'qoder'],
+    ['ext', 'oc'],
+  ], '文件值覆盖快路值');
+
+  window.ccKeyMapSet = () => '{"ok":false,"msg":"磁盘只读"}';
+  const failed = await window.__keymapPersist([['cmd', 'md'], ['ext', 'oc']]);
+  assert.deepEqual(plain(failed), { ok: false, msg: '磁盘只读' }, '保存失败必须如实返回');
+
+  let sent = null;
+  window.ccKeyMapSet = (raw) => {
+    sent = JSON.parse(raw);
+    return '{"ok":true,"msg":"已保存"}';
+  };
+  const ok = await window.__keymapPersist([
+    ['cmd', 'md'],
+    ['tj', 'comate'],
+    ['cb', 'qoder'],
+    ['ext', 'oc'],
+  ]);
+  assert.equal(ok.ok, true);
+  assert.deepEqual(plain(sent), [['cmd', 'md'], ['tj', 'comate'], ['cb', 'qoder'], ['ext', 'oc']]);
+});
 
 test('PTApp region context is immutable, generationed and notifies subscribers', () => {
   const { window } = regionContext();

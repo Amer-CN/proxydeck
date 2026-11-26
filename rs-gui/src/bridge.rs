@@ -633,103 +633,29 @@ pub fn set_close_mode(mode: &str) -> Result<(), String> {
     std::fs::write(&path, mode.as_bytes()).map_err(|e| e.to_string())
 }
 
-/* ---------------- 键位映射（Go bridge.go:90-152） ---------------- */
+/* ---------------- 键位映射（读取/校验/落盘归 crate::keymap） ---------------- */
 
-/// 默认键位映射（与 ui.html 的 `KEYMAP_DEF` 同源：B.AI 默认不在任何键下；
-/// 2026-10-21 起 OPENCODE 作为第 4 键的副页，与 VIBEX 同键轮切）。
+/// 默认键位映射（兼容入口；权威实现在 [`crate::keymap::default_map`]）。
 pub fn key_map_default() -> Vec<Vec<String>> {
-    vec![
-        vec!["cmd".to_string()],
-        vec!["tj".to_string(), "comate".to_string()],
-        vec!["cb".to_string(), "qoder".to_string()],
-        vec!["ext".to_string(), "oc".to_string()],
-    ]
+    crate::keymap::default_map()
 }
 
-/// 脸名白名单（与 ui.html 的 `SUP_FACES` 同源；2026-10-21 起含 `oc`）。
-/// 脸名白名单（与 ui.html 的 `SUP_FACES` 同源；`md` = 码道，2026-10-26 加入 UI，
-/// 但这里漏了它——导致所有带码道的键位保存被静默拒绝、重启回默认）。
-pub const KEY_MAP_FACES: [&str; 9] = ["cmd", "md", "tj", "comate", "cb", "qoder", "bai", "ext", "oc"];
+/// 脸名白名单（兼容入口；权威实现在 [`crate::keymap::FACES`]）。
+pub const KEY_MAP_FACES: [&str; 9] = crate::keymap::FACES;
 
-/// 键位映射形态校验（1-4 键、每键 ≥1 脸、脸名白名单、一页一键）。
+/// 形态校验（兼容入口；权威实现在 [`crate::keymap::is_valid`]）。
 pub fn key_map_valid(m: &[Vec<String>]) -> bool {
-    if m.is_empty() || m.len() > 4 {
-        return false;
-    }
-    let mut seen: Vec<&str> = Vec::new();
-    for k in m {
-        if k.is_empty() {
-            return false;
-        }
-        for f in k {
-            if !KEY_MAP_FACES.contains(&f.as_str()) {
-                return false;
-            }
-            if seen.contains(&f.as_str()) {
-                return false;
-            }
-            seen.push(f.as_str());
-        }
-    }
-    true
+    crate::keymap::is_valid(m)
 }
 
-/// 一次性迁移标记：2026-10-21 之前落盘的 keymap.json 里还没有 OPENCODE 脸。
-/// 标记存在 = 迁移已经做过，之后用户再手动删掉 oc **不再回填**（尊重用户的显式选择）。
-fn key_map_oc_migration_marker() -> std::path::PathBuf {
-    appdir::path("keymap-oc-migrated.v1")
-}
-
-/// 旧映射（合法、缺 `oc` 且有 `ext`）→ 把 `oc` 补成 ext 所在键的副页。
-/// 找不到 ext 的映射原样返回（不替用户造键）；已有 oc 的也原样返回。
-fn key_map_with_opencode(mut m: Vec<Vec<String>>) -> Vec<Vec<String>> {
-    if m.iter().any(|k| k.iter().any(|f| f == "oc")) {
-        return m;
-    }
-    if let Some(ki) = m.iter().position(|k| k.iter().any(|f| f == "ext")) {
-        m[ki].push("oc".to_string());
-    }
-    m
-}
-
-/// 读盘：文件缺席/非法 → 返回默认映射 + saved=false。
-///
-/// 2026-10-21：OPENCODE 接入时对**旧的合法映射**做一次性迁移（补 `oc` 到第 4 键），
-/// 否则老用户的 keymap.json 里没有这个脸，甲板永远进不去；迁移标记保证只做一次。
+/// 读盘（兼容入口；权威实现在 [`crate::keymap::load`]）。
 pub fn key_map_get() -> (Vec<Vec<String>>, bool) {
-    let Ok(b) = std::fs::read(App::key_map_file()) else {
-        return (key_map_default(), false);
-    };
-    match serde_json::from_slice::<Vec<Vec<String>>>(&b) {
-        Ok(m) if key_map_valid(&m) => {
-            let has_oc = m.iter().any(|k| k.iter().any(|f| f == "oc"));
-            let marker = key_map_oc_migration_marker();
-            if !has_oc && !appdir::file_exists(&marker) {
-                let migrated = key_map_with_opencode(m);
-                if let Ok(raw) = serde_json::to_vec(&migrated) {
-                    let _ = std::fs::write(App::key_map_file(), raw);
-                }
-                let _ = std::fs::write(&marker, b"1");
-                (migrated, true)
-            } else {
-                (m, true)
-            }
-        }
-        _ => (key_map_default(), false),
-    }
+    crate::keymap::load()
 }
 
-/// 校验后落盘（明文，同 Go `keyMapSet` 的 `os.WriteFile`——**不是** appdir.WriteFile）。
+/// 校验后落盘（兼容入口；权威实现在 [`crate::keymap::save`]）。
 pub fn key_map_set(raw: &str) -> Result<(), String> {
-    let m: Vec<Vec<String>> = serde_json::from_str(raw).map_err(|e| e.to_string())?;
-    if !key_map_valid(&m) {
-        return Err("非法键位映射（1-4 键、每键 ≥1 页、页名须在白名单且一页一键）".into());
-    }
-    let path = App::key_map_file();
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&path, raw.as_bytes()).map_err(|e| e.to_string())
+    crate::keymap::save(raw)
 }
 
 /* ---------------- 开机自启（Go bridge.go:408-441） ---------------- */
@@ -867,7 +793,7 @@ mod tests {
             vec!["ext".to_string(), "oc".to_string()],
             "旧映射应补上 OPENCODE 副页"
         );
-        assert!(appdir::file_exists(&key_map_oc_migration_marker()));
+        assert!(appdir::file_exists(&crate::keymap::migration_marker()));
         let on_disk: Vec<Vec<String>> =
             serde_json::from_slice(&std::fs::read(App::key_map_file()).unwrap()).unwrap();
         assert_eq!(on_disk, m, "迁移结果必须落盘（文件为准）");

@@ -23,6 +23,7 @@ pub mod faxwindow;
 pub mod host;
 pub mod httpc;
 pub mod jsons;
+pub mod keymap;
 pub mod keyprobe;
 pub mod migrate;
 pub mod plugins;
