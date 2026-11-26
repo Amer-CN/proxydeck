@@ -24,7 +24,7 @@
 | T10 | complete | A11 5/5；团结全 crate 246 passed / 2 ignored；流守卫所有权突变 1 红后恢复 |
 | T11 | complete | A12 5/5；rs-proxy 全 crate 106 passed；缓冲回退突变 1 红后恢复 |
 | T12 | complete | 六实现转义对照全绿（修团结 \b/\f 分歧）；Qoder 运行时合成夹具 2/2；受影响 6 包与团结全绿 |
-| T14 | pending | 未开始 |
+| T14 | complete | 全工作区 1028 passed / 1 既有失败 / 3 ignored；A01–A12 0 跳过；两轮只读复核无剩余 MUST-FIX；报告 `docs/cognitive-simplification-verification.md` |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -169,6 +169,14 @@
 - 新增 `docs/development-map.md`（≤200 行）：单 exe 分发、插件生命周期/换血、UI/bridge/HTTP 与各平台请求链、状态所有者与持久化、测试入口、保护区。
 - `CLAUDE.md` 增加「新协作者先读开发地图」引导；rs-proxy / rs-qoder README 补增量交付与合成夹具说明（不碰历史条目）。
 - 验证：`pwsh -File tools/verify-cognitive-contracts.ps1` → **19/19 PASS，exit 0**（日志 `.work/cognitive-simplification/verify-*.log`）；`tools/tests/sync-ui.tests.ps1` 4/4；`tools/sync-ui.ps1 -Check` OK（sha256=cb90c47a… len=1543562）。
+
+## T14 实施记录
+- 全量回归：`cargo test --workspace --locked --no-fail-fast` → **1028 passed / 1 failed / 3 ignored**；唯一失败是基线既有 `rs-gui::dpapi::tests::decrypts_a_go_written_blob`（样例不是 PDAPI1，基线即红，未修）；ignored 与基线同三条，无新增跳过。
+- 统一验收：`pwsh -File tools/verify-cognitive-contracts.ps1` → **19/19 PASS，A01–A12 实际执行 0 跳过**；Node UI 7/7、同步自检 4/4、兼容向量 6 实现一致。
+- 只读复核（两轮，reviewer 子代理）：首轮指出 4 个 MUST-FIX，全部修复并复验——码道同 tenant 合并（`77f0ac9`）、COMMAND 缓冲副本与取消后继续抽干上游（`9aa04fa`）、键位恢复默认不落盘（`086b95a`）；次轮确认 F1–F4 FIXED、无剩余 MUST-FIX，残留死代码/文档在 `bc4d253` 清理。
+- 保留 LEAD（不在本计划内改行为）：码道 pre-commit 5xx 换号策略缺专门裁决测试、每请求续期协调取锁开销、配置锁同步等待、ui_html 门禁不穷举历史 `window.cc*` 调用——均写入最终报告。
+- 保护项：冻结 golden、CHANGELOG、版本锚点零改动；团结凭证链文件零 diff；未动生产服务/真实凭据；UI 副本 `tools/sync-ui.ps1 -Check` 通过。
+- 最终报告：`docs/cognitive-simplification-verification.md`。未 push/未合并/未打 tag/未发 Release/未换装。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。

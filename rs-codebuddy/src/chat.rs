@@ -1538,8 +1538,9 @@ impl ChunkReader {
 
     /// 带**时间上限**的 peek：首块到达即返回，不把网络块边界当作协议帧边界。
     ///
-    /// 返回的 `completeness` 由当前前缀的结构决定：完整 SSE 帧、完整 JSON/HTML 或干净
-    /// EOF 才算 `Complete`；预算耗尽、半个 `data:`、JSON/UTF-8 中途都是 `Incomplete`。
+    /// 返回的 `completeness` 由当前前缀的结构决定：完整 SSE 帧、完整 JSON/HTML，或
+    /// 首块之前就干净 EOF（零字节）才算 `Complete`；预算耗尽、半个 `data:`、JSON/UTF-8
+    /// 中途都是 `Incomplete`。
     /// 达到字节窗口本身**不代表**协议完整。所有字节仍留在 pending，后续原样交付。
     pub async fn peek_within(&mut self, max: usize, budget: Duration) -> HeadProbe {
         if !self.pending.is_empty() {
