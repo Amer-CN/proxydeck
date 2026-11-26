@@ -104,8 +104,8 @@ fn ui_html_bridge_surface_is_covered_by_our_bindings() {
         html.contains("typeof window.ccGetState === 'function'"),
         "桥存在性判据的锚点变了：合同已变，需重新对齐"
     );
-    // 统一调用入口（T8）：业务层只经 PTApp.hostApi.call，底层 cc* 串协议与
-    // Promise/字符串两种返回约定保持不变。行为由 app/tests/ui-state.test.cjs 覆盖。
+    // 统一调用入口（T8）：业务层统一经 PTApp.hostApi.call；本门禁只锁定这一调用形态，
+    // 不穷举历史遗留的直接 window.cc* 调用。行为由 app/tests/ui-state.test.cjs 覆盖。
     assert!(
         html.contains("PTApp.hostApi.call(fn, args)"),
         "业务层统一调用入口的锚点变了：合同已变，需重新对齐"

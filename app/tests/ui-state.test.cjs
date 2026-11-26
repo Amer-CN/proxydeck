@@ -72,6 +72,17 @@ test('hostApi decodes bridge JSON, surfaces errors and supports demo handlers', 
   assert.deepEqual(plain(await host.call('PreviewOnly', ['x'])), { ok: true, echo: 'x' });
 });
 
+test('A08 keymap reset and provider paths persist instead of only updating cache', () => {
+  const script = scriptContaining('window.__provSet');
+  assert.match(
+    script,
+    /function keyMapSet\(m\) \{[\s\S]*__keymapPersist/,
+    'keyMapSet 必须经唯一落盘口 __keymapPersist 写 keymap.json',
+  );
+  assert.match(script, /kmPersist\(def,/, '恢复默认必须走 kmPersist 的失败回读路径');
+  assert.doesNotMatch(script, /__keymapSet\(def\)/, '不得再有只写快路的恢复默认分支');
+});
+
 test('A08 keymap fast path completes md and rejects invalid maps', () => {
   const { window, store } = keymapContext();
   assert.deepEqual(plain(window.PTKeymap.get()[0]), ['cmd', 'md'], '首跑默认含码道');

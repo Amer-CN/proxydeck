@@ -4715,10 +4715,26 @@ var PT_I18N = {
   var SUP_LABEL = { cmd: 'COMMAND', md: '码道', tj: 'TUANJIE', comate: 'COMATE', cb: 'WORKBUDDY', qoder: 'QODER', bai: 'B.AI', ext: 'VIBEX', oc: 'OPENCODE' };
   function keyMapGet() { return window.PTKeymap.get(); }
   function keyMapSet(m) {
-    if (!window.PTKeymap.setCache(m)) return false;
+    if (!window.PTKeymap.setCache(m)) return Promise.resolve(false);
     rebuildKeys();
     paint();
-    return true;
+    var pending = (typeof window.__keymapPersist === 'function')
+      ? window.__keymapPersist(m)
+      : Promise.resolve({ ok: false, msg: '保存接口不可用' });
+    return pending.then(function (r) {
+      if (r && r.ok) return true;
+      // 落盘失败：如实回读 keymap.json 并恢复内存/画面，绝不谎称已保存。
+      var host = window.PTApp && window.PTApp.hostApi;
+      if (!host) return false;
+      return host.call('KeyMapGet', []).then(function (g) {
+        if (g && g.ok && typeof window.__keymapApplyFile === 'function') {
+          try { window.__keymapApplyFile(g.map); } catch (e) {}
+        }
+        rebuildKeys();
+        paint();
+        return false;
+      });
+    });
   }
   function keyIdxOf(m) {
     var km = keyMapGet();
@@ -11072,11 +11088,8 @@ var PT_I18N = {
       var reset = $('kmReset');
       if (reset) reset.onclick = function () {
         var def = [['cmd'], ['tj', 'comate'], ['cb', 'qoder'], ['ext']];
-        if (typeof window.__keymapSet === 'function' && window.__keymapSet(def)) {
-          try { logInto($('logStream'), 'sys', '键位组合：已恢复默认（B.AI 不在任何键下，配置已持久化）'); } catch (e) {}
-          kmEnsureVisible();
-          window.renderKeymapPage();
-        }
+        // 唯一落盘路径：失败会回读 keymap.json 并恢复画面，不谎报已保存。
+        kmPersist(def, '键位组合：已恢复默认（B.AI 不在任何键下）');
       };
       /* 进子页即渲染一次；启动即按持久化映射绘制一次，保证首屏即终态 */
       try {

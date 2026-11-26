@@ -106,11 +106,6 @@ pub fn vacate_executable_path(exe: &Path) -> Result<PathBuf, String> {
     Err(last_err)
 }
 
-/// 兼容入口（旧公共名）：行为与 [`vacate_executable_path`] 完全相同。
-pub fn replace_running_exe(exe: &Path, _new_file: &Path) -> Result<PathBuf, String> {
-    vacate_executable_path(exe)
-}
-
 /// 换血标记路径（Go `updateMarkerPath`：数据目录 `.update-rollover.json`）。
 pub fn update_marker_path() -> PathBuf {
     appdir::path(".update-rollover.json")
