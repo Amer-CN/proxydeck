@@ -16,6 +16,7 @@ pub mod gjson;
 pub mod godecode;
 pub mod model;
 pub mod models;
+pub mod output;
 pub mod probe;
 pub mod responses;
 pub mod stats;
@@ -36,7 +37,7 @@ pub use stats::{UsageStats, UsageStatsSnapshot};
 pub use upstream::UpstreamClient;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
 
@@ -49,7 +50,7 @@ pub struct Proxy {
     pub base_url: String,
     pub client: UpstreamClient,
     pub debug: bool,
-    pub stats: Mutex<UsageStats>,
+    pub stats: Arc<Mutex<UsageStats>>,
     /// `/v1/usage` 结果缓存（TTL 见 [`usage::USAGE_TTL`]）。
     pub usage_cache: Mutex<UsageCache>,
     /// 本次请求打到上游的次数（Go 用闭包局部计数；这里是进程级原子计数，门禁读它）。
@@ -72,7 +73,7 @@ impl Proxy {
             base_url: DEFAULT_BASE_URL.to_string(),
             client: UpstreamClient::new(),
             debug: false,
-            stats: Mutex::new(UsageStats::new("")),
+            stats: Arc::new(Mutex::new(UsageStats::new(""))),
             usage_cache: Mutex::new(UsageCache::default()),
             upstream_hits: AtomicUsize::new(0),
         }
@@ -83,7 +84,7 @@ impl Proxy {
         if path.is_empty() {
             return;
         }
-        self.stats = Mutex::new(UsageStats::new(path));
+        self.stats = Arc::new(Mutex::new(UsageStats::new(path)));
     }
 
     /// `CallUpstream`：把已构造的上游请求发出去（错误文案 `upstream error: <e>`，同 Go）。

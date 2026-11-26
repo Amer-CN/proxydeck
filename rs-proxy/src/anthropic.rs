@@ -333,6 +333,8 @@ pub struct AnthropicOutcome {
     pub content_type: &'static str,
     pub chunks: Vec<Vec<u8>>,
     pub recorded: bool,
+    /// HTTP 入口的真实增量流；缓冲接口为 None。
+    pub live: Option<crate::output::LiveSse>,
 }
 
 impl AnthropicOutcome {
@@ -342,16 +344,37 @@ impl AnthropicOutcome {
             content_type: "application/json",
             chunks: vec![anthropic_error_body(message, err_type).into_bytes()],
             recorded: false,
+            live: None,
         }
     }
 }
 
-/// `/v1/messages` 的完整业务逻辑。
+/// `/v1/messages` 的完整业务逻辑（缓冲输出）。
 pub async fn handle_messages(
     proxy: &Proxy,
     body: &[u8],
     auth: Option<&str>,
     version: &str,
+) -> AnthropicOutcome {
+    handle_messages_inner(proxy, body, auth, version, false).await
+}
+
+/// HTTP 入口专用：流式请求返回真实增量流。
+pub async fn handle_messages_live(
+    proxy: &Proxy,
+    body: &[u8],
+    auth: Option<&str>,
+    version: &str,
+) -> AnthropicOutcome {
+    handle_messages_inner(proxy, body, auth, version, true).await
+}
+
+async fn handle_messages_inner(
+    proxy: &Proxy,
+    body: &[u8],
+    auth: Option<&str>,
+    version: &str,
+    live: bool,
 ) -> AnthropicOutcome {
     let api_key = match proxy.resolve_api_key(auth) {
         Ok(k) => k,
@@ -397,6 +420,10 @@ pub async fn handle_messages(
         }
     };
     if req.stream {
+        if live {
+            return anthropic_stream_live(proxy, resp, &cc_body, &api_key, &request_id, created, version)
+                .await;
+        }
         let mut body2 = cc_body.clone();
         let mut first =
             stream_anthropic_response(proxy, resp, &request_id, &body2.params.model, created).await;
@@ -432,6 +459,7 @@ pub async fn handle_messages(
             content_type: "text/event-stream",
             chunks: first.2,
             recorded: first.1,
+            live: None,
         }
     } else {
         let b =
@@ -442,7 +470,49 @@ pub async fn handle_messages(
             content_type: "application/json",
             chunks: vec![b],
             recorded: true,
+            live: None,
         }
+    }
+}
+
+/// 流式 Anthropic 的重发 + 真实增量流。
+#[allow(clippy::too_many_arguments)]
+async fn anthropic_stream_live(
+    proxy: &Proxy,
+    resp: reqwest::Response,
+    cc_body: &crate::api::CCRequestBody,
+    api_key: &str,
+    request_id: &str,
+    created: i64,
+    version: &str,
+) -> AnthropicOutcome {
+    let mut body = cc_body.clone();
+    let model = body.params.model.clone();
+    let mut first = stream_anthropic_response_live(proxy, resp, request_id, &model, created).await;
+    if first.0 > 0 {
+        body.params.max_tokens = crate::build::CC_CONTEXT_LIMIT - first.0 - 16;
+        if body.params.max_tokens < 1024 {
+            body.params.max_tokens = 1024;
+        }
+        let out2 = call_upstream_checked(proxy, &body, api_key, version).await;
+        match out2.ok {
+            Some(r2) => {
+                first = stream_anthropic_response_live(proxy, r2, request_id, &model, created).await;
+            }
+            None => {
+                let (st, msg) = out2
+                    .error
+                    .unwrap_or((502, "upstream error: retry failed".to_string()));
+                return AnthropicOutcome::err(st, &msg, "api_error");
+            }
+        }
+    }
+    AnthropicOutcome {
+        status: 200,
+        content_type: "text/event-stream",
+        chunks: Vec::new(),
+        recorded: false,
+        live: first.1,
     }
 }
 
@@ -525,10 +595,12 @@ fn sse_event(name: &str, body: &str) -> Vec<u8> {
 /// 为什么写成 struct 而不是若干嵌套闭包：Go 里 `sendStart` / `sendTextStart` /
 /// `registerTool` / `sendToolDelta` 是**互相调用**的闭包，Rust 里那会让它们同时可变借用
 /// 同一批状态（编译不过）。改成「一个 handler 方法集」语义完全等价。
-struct AnthStream<'a> {
-    request_id: &'a str,
-    model: &'a str,
+struct AnthStream {
+    request_id: String,
+    model: String,
     chunks: Vec<Vec<u8>>,
+    /// 流式出口；None = 缓冲路径（写 `chunks`）。
+    sink: Option<crate::output::ChannelSink>,
     started: bool,
     text_started: bool,
     text_idx: i64,
@@ -541,17 +613,25 @@ struct AnthStream<'a> {
     last_tool_id: String,
 }
 
-impl AnthStream<'_> {
+impl AnthStream {
+    /// 下游出口：缓冲写 `chunks`，流式写通道。
+    fn emit_chunk(&mut self, chunk: Vec<u8>) {
+        match self.sink.as_mut() {
+            Some(sink) => sink.push(chunk),
+            None => self.chunks.push(chunk),
+        }
+    }
+
     fn send_start(&mut self) {
         if self.started {
             return;
         }
         self.started = true;
         let msg = AnthropicMessageResponse {
-            id: self.request_id.to_string(),
+            id: self.request_id.clone(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
-            model: self.model.to_string(),
+            model: self.model.clone(),
             content: Vec::new(),
             stop_reason: None,
             stop_sequence: None,
@@ -569,7 +649,7 @@ impl AnthStream<'_> {
             usage: None,
         };
         let body = ev.to_go();
-        self.chunks.push(sse_event("message_start", &body));
+        self.emit_chunk(sse_event("message_start", &body));
     }
 
     fn send_text_start(&mut self) {
@@ -590,7 +670,7 @@ impl AnthStream<'_> {
             usage: None,
         };
         let body = ev.to_go();
-        self.chunks.push(sse_event("content_block_start", &body));
+        self.emit_chunk(sse_event("content_block_start", &body));
     }
 
     fn register_tool(&mut self, id: &str, name: &str) {
@@ -618,7 +698,7 @@ impl AnthStream<'_> {
             usage: None,
         };
         let body = ev.to_go();
-        self.chunks.push(sse_event("content_block_start", &body));
+        self.emit_chunk(sse_event("content_block_start", &body));
     }
 
     fn send_tool_delta(&mut self, id: &str, partial: &str) {
@@ -647,7 +727,7 @@ impl AnthStream<'_> {
             usage: None,
         };
         let body = ev.to_go();
-        self.chunks.push(sse_event("content_block_delta", &body));
+        self.emit_chunk(sse_event("content_block_delta", &body));
     }
 
     fn process(&mut self, line: &str) {
@@ -672,7 +752,7 @@ impl AnthStream<'_> {
                     usage: None,
                 };
                 let body = e2.to_go();
-                self.chunks.push(sse_event("content_block_delta", &body));
+                self.emit_chunk(sse_event("content_block_delta", &body));
             }
             // 思考内容在 Anthropic 协议里无直接对应事件（thinking 块），跳过
             "reasoning-delta" | "reasoning-start" | "reasoning-end" => {}
@@ -733,7 +813,7 @@ impl AnthStream<'_> {
                         usage: None,
                     };
                     let body = e2.to_go();
-                    self.chunks.push(sse_event("content_block_stop", &body));
+                    self.emit_chunk(sse_event("content_block_stop", &body));
                 }
                 let mut d = Map::new();
                 d.insert(
@@ -754,7 +834,7 @@ impl AnthStream<'_> {
                     usage: Some(&usage),
                 };
                 let body3 = e3.to_go();
-                self.chunks.push(sse_event("message_delta", &body3));
+                self.emit_chunk(sse_event("message_delta", &body3));
                 let e4 = AnthropicStreamEvent {
                     r#type: "message_stop",
                     message: None,
@@ -764,8 +844,8 @@ impl AnthStream<'_> {
                     usage: None,
                 };
                 let body4 = e4.to_go();
-                self.chunks.push(sse_event("message_stop", &body4));
-                self.chunks.push(b"data: [DONE]\n\n".to_vec());
+                self.emit_chunk(sse_event("message_stop", &body4));
+                self.emit_chunk(b"data: [DONE]\n\n".to_vec());
             }
             "error" => {
                 if let Some(m) = &ev.error_message {
@@ -786,9 +866,10 @@ pub async fn stream_anthropic_response(
     _created: i64,
 ) -> (i64, bool, Vec<Vec<u8>>) {
     let mut st = AnthStream {
-        request_id,
-        model,
+        request_id: request_id.to_string(),
+        model: model.to_string(),
         chunks: Vec::new(),
+        sink: None,
         started: false,
         text_started: false,
         text_idx: 0,
@@ -870,6 +951,90 @@ pub async fn stream_anthropic_response(
         recorded = true;
     }
     (0, recorded, st.chunks)
+}
+
+/// `StreamAnthropicResponse` 的真实增量版本：首事件之后逐行翻译并立即写下游。
+pub async fn stream_anthropic_response_live(
+    proxy: &Proxy,
+    resp: reqwest::Response,
+    request_id: &str,
+    model: &str,
+    _created: i64,
+) -> (i64, Option<crate::output::LiveSse>) {
+    let mut reader = LineReader::new(resp);
+    let first_line = reader.first_line().await;
+    if let Some(e) = CCStreamEvent::from_line(&first_line) {
+        if e.r#type == "error" {
+            if let Some(m) = &e.error_message {
+                let n = crate::build::parse_context_overflow(m);
+                if n > 0 {
+                    return (n, None);
+                }
+            }
+        }
+    }
+    let (live, sink) = crate::output::channel();
+    let mut st = AnthStream {
+        request_id: request_id.to_string(),
+        model: model.to_string(),
+        chunks: Vec::new(),
+        sink: Some(sink),
+        started: false,
+        text_started: false,
+        text_idx: 0,
+        block_index: 0,
+        block_stop_order: Vec::new(),
+        stop_reason: "end_turn".to_string(),
+        output_tokens: 0,
+        tool_indexes: Vec::new(),
+        tool_args_streamed: Vec::new(),
+        last_tool_id: String::new(),
+    };
+    let mut stream_in = 0i64;
+    let mut stream_out = 0i64;
+    let mut stream_cr = 0i64;
+    let mut stream_cw = 0i64;
+    let collect_usage = |line: &str, si: &mut i64, so: &mut i64, cr: &mut i64, cw: &mut i64| {
+        if let Some(e) = CCStreamEvent::from_line(line) {
+            if e.r#type == "finish" {
+                if let Some(u) = &e.total_usage {
+                    *si = u.input_tokens;
+                    *so = u.output_tokens;
+                    *cr = u.cache_read_tokens;
+                    *cw = u.cache_write_tokens;
+                }
+            }
+        }
+    };
+    if !first_line.is_empty() {
+        st.process(&first_line);
+        collect_usage(
+            &first_line,
+            &mut stream_in,
+            &mut stream_out,
+            &mut stream_cr,
+            &mut stream_cw,
+        );
+    }
+    let stats = proxy.stats.clone();
+    let model_for_task = st.model.clone();
+    tokio::spawn(async move {
+        while let Some(line) = reader.next_line().await {
+            st.process(&line);
+            collect_usage(
+                &line,
+                &mut stream_in,
+                &mut stream_out,
+                &mut stream_cr,
+                &mut stream_cw,
+            );
+        }
+        let mut recorder = crate::output::UsageRecorder::new(stats, &model_for_task);
+        recorder.add(stream_in, stream_out, stream_cr, stream_cw);
+        recorder.record();
+        drop(st);
+    });
+    (0, Some(live))
 }
 
 /// 供门禁：Anthropic 请求体 → 出站体 JSON。

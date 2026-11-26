@@ -81,6 +81,17 @@ fn stream_response(content_type: &str, chunks: Vec<Vec<u8>>) -> Response {
         .expect("构造流式响应失败")
 }
 
+/// 真实增量流响应（三协议共用）。
+fn live_response(content_type: &str, live: crate::output::LiveSse) -> Response {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CACHE_CONTROL, "no-cache")
+        .header(header::CONNECTION, "keep-alive")
+        .body(Body::from_stream(live))
+        .expect("构造增量响应失败")
+}
+
 /// 按当前的版本号取上游版本（门禁可注入；生产走 npm 拉取 + 缓存）。
 async fn cc_version() -> String {
     crate::version::get_command_code_version().await
@@ -111,7 +122,10 @@ async fn h_chat(State(p): State<std::sync::Arc<Proxy>>, req: axum::extract::Requ
         }
     };
     let v = cc_version().await;
-    let out = crate::chat::handle_chat(&p, &body, auth.as_deref(), &v).await;
+    let out = crate::chat::handle_chat_live(&p, &body, auth.as_deref(), &v).await;
+    if let Some(live) = out.live {
+        return live_response(out.content_type, live);
+    }
     if out.status == 200 && out.content_type == "text/event-stream" {
         stream_response(out.content_type, out.chunks)
     } else {
@@ -144,7 +158,10 @@ async fn h_responses(State(p): State<std::sync::Arc<Proxy>>, req: axum::extract:
         }
     };
     let v = cc_version().await;
-    let out = crate::responses::handle_responses(&p, &body, auth.as_deref(), &v).await;
+    let out = crate::responses::handle_responses_live(&p, &body, auth.as_deref(), &v).await;
+    if let Some(live) = out.live {
+        return live_response(out.content_type, live);
+    }
     if out.status == 200 && out.content_type == "text/event-stream" {
         stream_response(out.content_type, out.chunks)
     } else {
@@ -177,7 +194,10 @@ async fn h_messages(State(p): State<std::sync::Arc<Proxy>>, req: axum::extract::
         }
     };
     let v = cc_version().await;
-    let out = crate::anthropic::handle_messages(&p, &body, auth.as_deref(), &v).await;
+    let out = crate::anthropic::handle_messages_live(&p, &body, auth.as_deref(), &v).await;
+    if let Some(live) = out.live {
+        return live_response(out.content_type, live);
+    }
     if out.status == 200 && out.content_type == "text/event-stream" {
         stream_response(out.content_type, out.chunks)
     } else {

@@ -191,6 +191,8 @@ pub struct ResponsesOutcome {
     pub content_type: &'static str,
     pub chunks: Vec<Vec<u8>>,
     pub recorded: bool,
+    /// HTTP 入口的真实增量流；缓冲接口为 None。
+    pub live: Option<crate::output::LiveSse>,
 }
 
 impl ResponsesOutcome {
@@ -206,16 +208,37 @@ impl ResponsesOutcome {
             content_type: "application/json",
             chunks: vec![b.into_bytes()],
             recorded: false,
+            live: None,
         }
     }
 }
 
-/// `/v1/responses` 的完整业务逻辑。
+/// `/v1/responses` 的完整业务逻辑（缓冲输出）。
 pub async fn handle_responses(
     proxy: &Proxy,
     body: &[u8],
     auth: Option<&str>,
     version: &str,
+) -> ResponsesOutcome {
+    handle_responses_inner(proxy, body, auth, version, false).await
+}
+
+/// HTTP 入口专用：流式请求返回真实增量流。
+pub async fn handle_responses_live(
+    proxy: &Proxy,
+    body: &[u8],
+    auth: Option<&str>,
+    version: &str,
+) -> ResponsesOutcome {
+    handle_responses_inner(proxy, body, auth, version, true).await
+}
+
+async fn handle_responses_inner(
+    proxy: &Proxy,
+    body: &[u8],
+    auth: Option<&str>,
+    version: &str,
+    live: bool,
 ) -> ResponsesOutcome {
     let api_key = match proxy.resolve_api_key(auth) {
         Ok(k) => k,
@@ -258,6 +281,10 @@ pub async fn handle_responses(
         }
     };
     if req.stream {
+        if live {
+            return responses_stream_live(proxy, resp, &cc_body, &api_key, &request_id, created, version)
+                .await;
+        }
         let mut body2 = cc_body.clone();
         let mut first =
             stream_responses_response(proxy, resp, &request_id, &body2.params.model, created).await;
@@ -293,6 +320,7 @@ pub async fn handle_responses(
             content_type: "text/event-stream",
             chunks: first.2,
             recorded: first.1,
+            live: None,
         }
     } else {
         let b = non_stream_responses_response(
@@ -308,7 +336,49 @@ pub async fn handle_responses(
             content_type: "application/json",
             chunks: vec![b],
             recorded: true,
+            live: None,
         }
+    }
+}
+
+/// 流式 Responses 的重发 + 真实增量流。
+#[allow(clippy::too_many_arguments)]
+async fn responses_stream_live(
+    proxy: &Proxy,
+    resp: reqwest::Response,
+    cc_body: &crate::api::CCRequestBody,
+    api_key: &str,
+    request_id: &str,
+    created: i64,
+    version: &str,
+) -> ResponsesOutcome {
+    let mut body = cc_body.clone();
+    let model = body.params.model.clone();
+    let mut first = stream_responses_response_live(proxy, resp, request_id, &model, created).await;
+    if first.0 > 0 {
+        body.params.max_tokens = crate::build::CC_CONTEXT_LIMIT - first.0 - 16;
+        if body.params.max_tokens < 1024 {
+            body.params.max_tokens = 1024;
+        }
+        let out2 = call_upstream_checked(proxy, &body, api_key, version).await;
+        match out2.ok {
+            Some(r2) => {
+                first = stream_responses_response_live(proxy, r2, request_id, &model, created).await;
+            }
+            None => {
+                let (st, msg) = out2
+                    .error
+                    .unwrap_or((502, "upstream error: retry failed".to_string()));
+                return ResponsesOutcome::err(st, &msg, "api_error");
+            }
+        }
+    }
+    ResponsesOutcome {
+        status: 200,
+        content_type: "text/event-stream",
+        chunks: Vec::new(),
+        recorded: false,
+        live: first.1,
     }
 }
 
@@ -376,11 +446,13 @@ fn sse_event(name: &str, body: &str) -> Vec<u8> {
 }
 
 /// Responses 流式翻译的状态机（与 anthropic 同因：Go 的闭包互相调用，Rust 需拆成方法集）。
-struct RespStream<'a> {
-    request_id: &'a str,
-    model: &'a str,
+struct RespStream {
+    request_id: String,
+    model: String,
     created: i64,
     chunks: Vec<Vec<u8>>,
+    /// 流式出口；None = 缓冲路径（写 `chunks`）。
+    sink: Option<crate::output::ChannelSink>,
     started: bool,
     output_index_counter: i64,
     text_item_added: bool,
@@ -399,18 +471,26 @@ struct RespStream<'a> {
     cache_write: i64,
 }
 
-impl RespStream<'_> {
+impl RespStream {
+    /// 下游出口：缓冲写 `chunks`，流式写通道。
+    fn emit_chunk(&mut self, chunk: Vec<u8>) {
+        match self.sink.as_mut() {
+            Some(sink) => sink.push(chunk),
+            None => self.chunks.push(chunk),
+        }
+    }
+
     fn send_created(&mut self) {
         if self.started {
             return;
         }
         self.started = true;
         let resp_obj = OpenAIResponse {
-            id: self.request_id.to_string(),
+            id: self.request_id.clone(),
             object: "response".to_string(),
             created_at: self.created,
             status: "in_progress".to_string(),
-            model: self.model.to_string(),
+            model: self.model.clone(),
             output: Vec::new(),
             usage: None,
         };
@@ -426,7 +506,7 @@ impl RespStream<'_> {
             text: String::new(),
         };
         let body = ev.to_go();
-        self.chunks.push(sse_event("response.created", &body));
+        self.emit_chunk(sse_event("response.created", &body));
     }
 
     fn add_text_item(&mut self) {
@@ -460,7 +540,7 @@ impl RespStream<'_> {
             text: String::new(),
         };
         let b1 = ev1.to_go();
-        self.chunks.push(sse_event("response.output_item.added", &b1));
+        self.emit_chunk(sse_event("response.output_item.added", &b1));
         let part = ResponseContentPart::output_text("");
         let ev2 = ResponsesStreamEvent {
             r#type: "response.content_part.added",
@@ -474,7 +554,7 @@ impl RespStream<'_> {
             text: String::new(),
         };
         let b2 = ev2.to_go();
-        self.chunks.push(sse_event("response.content_part.added", &b2));
+        self.emit_chunk(sse_event("response.content_part.added", &b2));
     }
 
     fn register_tool(&mut self, id: &str, name: &str) {
@@ -510,7 +590,7 @@ impl RespStream<'_> {
             text: String::new(),
         };
         let body = ev.to_go();
-        self.chunks.push(sse_event("response.output_item.added", &body));
+        self.emit_chunk(sse_event("response.output_item.added", &body));
     }
 
     fn send_tool_delta(&mut self, id: &str, delta: &str) {
@@ -544,8 +624,7 @@ impl RespStream<'_> {
             text: String::new(),
         };
         let body = ev.to_go();
-        self.chunks
-            .push(sse_event("response.function_call_arguments.delta", &body));
+        self.emit_chunk(sse_event("response.function_call_arguments.delta", &body));
     }
 
     fn process(&mut self, line: &str) {
@@ -571,7 +650,7 @@ impl RespStream<'_> {
                     text: String::new(),
                 };
                 let body = evd.to_go();
-                self.chunks.push(sse_event("response.output_text.delta", &body));
+                self.emit_chunk(sse_event("response.output_text.delta", &body));
             }
             "reasoning-delta" | "reasoning-start" | "reasoning-end" => {}
             "tool-use" => {
@@ -638,7 +717,7 @@ impl RespStream<'_> {
                         text: full.clone(),
                     };
                     let body = evd.to_go();
-                    self.chunks.push(sse_event("response.output_text.done", &body));
+                    self.emit_chunk(sse_event("response.output_text.done", &body));
                     let text_item = OpenAIResponseItem {
                         id: self.text_item_id.clone(),
                         r#type: "message".to_string(),
@@ -659,7 +738,7 @@ impl RespStream<'_> {
                         text: String::new(),
                     };
                     let body2 = evi.to_go();
-                    self.chunks.push(sse_event("response.output_item.done", &body2));
+                    self.emit_chunk(sse_event("response.output_item.done", &body2));
                     output.push(text_item);
                 }
                 let order = self.tool_order.clone();
@@ -689,16 +768,16 @@ impl RespStream<'_> {
                             text: String::new(),
                         };
                         let body = evi.to_go();
-                        self.chunks.push(sse_event("response.output_item.done", &body));
+                        self.emit_chunk(sse_event("response.output_item.done", &body));
                         output.push(item_clone);
                     }
                 }
                 let complete = OpenAIResponse {
-                    id: self.request_id.to_string(),
+                    id: self.request_id.clone(),
                     object: "response".to_string(),
                     created_at: self.created,
                     status: "completed".to_string(),
-                    model: self.model.to_string(),
+                    model: self.model.clone(),
                     output,
                     usage: Some(ResponseUsage {
                         input_tokens: self.input_tokens,
@@ -718,8 +797,8 @@ impl RespStream<'_> {
                     text: String::new(),
                 };
                 let body3 = evc.to_go();
-                self.chunks.push(sse_event("response.completed", &body3));
-                self.chunks.push(b"data: [DONE]\n\n".to_vec());
+                self.emit_chunk(sse_event("response.completed", &body3));
+                self.emit_chunk(b"data: [DONE]\n\n".to_vec());
             }
             "error" => {
                 if let Some(m) = &ev.error_message {
@@ -740,10 +819,11 @@ pub async fn stream_responses_response(
     created: i64,
 ) -> (i64, bool, Vec<Vec<u8>>) {
     let mut st = RespStream {
-        request_id,
-        model,
+        request_id: request_id.to_string(),
+        model: model.to_string(),
         created,
         chunks: Vec::new(),
+        sink: None,
         started: false,
         output_index_counter: 0,
         text_item_added: false,
@@ -797,6 +877,68 @@ pub async fn stream_responses_response(
         recorded = true;
     }
     (0, recorded, st.chunks)
+}
+
+/// `StreamResponsesResponse` 的真实增量版本：首事件之后逐行翻译并立即写下游。
+pub async fn stream_responses_response_live(
+    proxy: &Proxy,
+    resp: reqwest::Response,
+    request_id: &str,
+    model: &str,
+    created: i64,
+) -> (i64, Option<crate::output::LiveSse>) {
+    let mut reader = LineReader::new(resp);
+    let first_line = reader.first_line().await;
+    if let Some(e) = CCStreamEvent::from_line(&first_line) {
+        if e.r#type == "error" {
+            if let Some(m) = &e.error_message {
+                let n = crate::build::parse_context_overflow(m);
+                if n > 0 {
+                    return (n, None);
+                }
+            }
+        }
+    }
+    let (live, sink) = crate::output::channel();
+    let mut st = RespStream {
+        request_id: request_id.to_string(),
+        model: model.to_string(),
+        created,
+        chunks: Vec::new(),
+        sink: Some(sink),
+        started: false,
+        output_index_counter: 0,
+        text_item_added: false,
+        text_output_index: 0,
+        text_item_id: format!("msg_{}", uuid_prefix(28)),
+        text_builder: String::new(),
+        tool_order: Vec::new(),
+        tool_indexes: Vec::new(),
+        tool_items: Vec::new(),
+        tool_args_bufs: Vec::new(),
+        tool_args_streamed: Vec::new(),
+        last_tool_id: String::new(),
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read: 0,
+        cache_write: 0,
+    };
+    if !first_line.is_empty() {
+        st.process(&first_line);
+    }
+    let stats = proxy.stats.clone();
+    let model_for_task = st.model.clone();
+    tokio::spawn(async move {
+        while let Some(line) = reader.next_line().await {
+            st.process(&line);
+        }
+        let mut recorder = crate::output::UsageRecorder::new(stats, &model_for_task);
+        recorder.add(st.input_tokens, st.output_tokens, st.cache_read, st.cache_write);
+        recorder.record();
+        // 显式释放：保证 recorder 先入账再由 st 释放通道。
+        drop(st);
+    });
+    (0, Some(live))
 }
 
 /// 供门禁：Responses 请求体 → 出站体 JSON。

@@ -22,7 +22,8 @@
 | T8 | complete | hostApi/A08 6/6；keymap 单测 4/4；ui_html 4/4、release_sync 1/1；bridge_contract 5/5、close_contract 1/1；md 补齐突变 2 红后恢复 |
 | T9 | complete | A09/A10 5/5；插件/换血/shell 库测试 35/35；GUI 五合同 23/23；接管过期突变 1 红后恢复 |
 | T10 | complete | A11 5/5；团结全 crate 246 passed / 2 ignored；流守卫所有权突变 1 红后恢复 |
-| T11–T14 | pending | 未开始 |
+| T11 | complete | A12 5/5；rs-proxy 全 crate 106 passed；缓冲回退突变 1 红后恢复 |
+| T12–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -144,6 +145,15 @@
 - 请求体脱敏/重排、签名/会话/UA、重试次数与预算、两路空响应差异均未改动。
 - 验证：`cargo test -p rs-tuanjie --locked --test p8b4_chat_behavior` 28/28；`cargo test -p rs-tuanjie --locked -- --nocapture` 全 crate **246 passed / 2 ignored**（与基线同两处 ignored）。
 - 反向验证：`take_finish_guard` 不转移 rid（新建空守卫）时，流取消用例转红；恢复后全绿。
+
+## T11 实施记录
+- 新增 `rs-proxy/src/output.rs`：`LiveSse`（可交给 `Body::from_stream` 的增量字节流）、`SseSink` 统一出口（缓冲写 Vec / 流式写通道）、`UsageRecorder` 在流结束/取消/解码错误时同步入账一次（不 spawn 额外任务）。
+- 三协议翻译器（Chat / Responses / Anthropic）共用 `LineReader` + `SseSink`：原有逐行翻译字节不变，只是出口可切换；缓冲接口 `handle_*` 与流式入口 `handle_*_live` 并存，HTTP 层使用 live，旧门禁仍走缓冲。
+- Chat/Responses/Anthropic 新增 `stream_*_response_live`：首事件先判 context 超限（未发头，可安全重发），随后后台任务逐行翻译并立刻写下游；客户端断开导致发送失败时任务结束、上游读取停止。
+- 非流式与 `stream:false` 字节不变；`stream_options` 兼容逻辑未改；黄金下游字节（含工具调用 delta）经 live 路径重跑仍逐字节一致。
+- A12：假上游首帧后停顿 400ms，Chat/Responses/Anthropic 首帧均在 300ms 内到达；非流式仍单 JSON；客户端取消后服务继续可用。计时从发请求前起算（排除只测「响应返回后首块」的假阳性）。
+- 验证：`cargo test -p rs-proxy --locked --no-fail-fast` → **87 lib + 3 golden + 11 http + 5 live = 106 passed / 0 failed**。
+- 反向验证：把 HTTP chat 路径改回缓冲 `handle_chat` 后，A12 首帧用例红（实耗 415ms）；恢复 live 后全绿。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。
