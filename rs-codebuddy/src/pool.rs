@@ -61,6 +61,15 @@ impl Account {
     fn is_cooling(&self, now: i64) -> bool {
         self.limited_until != i64::MIN && now < self.limited_until
     }
+
+    fn is_selectable(&self, now: i64, model: &str) -> bool {
+        !self.dead
+            && !self.exhausted
+            && self.enabled
+            && !self.removed
+            && !self.is_cooling(now)
+            && (model.is_empty() || !self.blocked_models.contains(model))
+    }
 }
 
 /// 状态文件里单 uid 的持久条目（只存用户意图：停用/移出）。
@@ -193,10 +202,7 @@ impl AccountPool {
         for i in 0..n {
             let idx = (g.index + i) % n;
             let a = &g.accounts[idx];
-            if a.dead || a.exhausted || !a.enabled || a.removed || a.is_cooling(now) {
-                continue;
-            }
-            if !model.is_empty() && a.blocked_models.contains(model) {
+            if !a.is_selectable(now, model) {
                 continue;
             }
             let out = a.clone();
@@ -208,6 +214,14 @@ impl AccountPool {
             n
         );
         None
+    }
+
+    /// 是否存在不按模型过滤的可用号。调用方用它区分“全池不可用”和
+    /// “池可用但当前模型全被 11158 拉黑”，避免后一种情况下再打一次已知失败的上游。
+    pub fn has_selectable(&self) -> bool {
+        let g = lock(&self.inner);
+        let now = gotime::now_millis();
+        g.accounts.iter().any(|a| a.is_selectable(now, ""))
     }
 
     /// 11158：把这个号拉黑这个模型（内存态，重启清零）。

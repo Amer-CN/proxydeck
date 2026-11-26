@@ -583,15 +583,15 @@ pub async fn handle_chat(
     if msgs_empty {
         return write_err(400, "messages is required");
     }
-    let model_name = payload
+    let requested_model = payload
         .get("model")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let model_name = if model_name.is_empty() {
+    let requested_model = if requested_model.is_empty() {
         "auto".to_string()
     } else {
-        model_name
+        requested_model
     };
     let client_wants_stream = payload
         .get("stream")
@@ -669,14 +669,30 @@ pub async fn handle_chat(
         }
     }
 
-    // 账号池选号（双区各建各的池）：跳过冷却/停用/移除/凭据失效/额度耗尽的号、轮询推进；
-    // 全不可用 → Pick 返回 None，沿用当前凭据原样请求（上游 429 将如实透传，不编造响应）。
-    // 零值 Server（无池）行为不变。
+    // 最终上游模型先确定，再选账号；初选与所有换号共用 pick_for_model。
+    let cfg = st.failover.config();
+    let mut sent_model = requested_model.clone();
+    let limited = sent_model == crate::failover::HY4_PRIMARY
+        && st.region == crate::region::Region::Cn
+        && st.failover.hy4_limited();
+    let rewrite_to_fallback =
+        crate::failover::failover_decide(&cfg, &sent_model, limited, 0, "").rewrite;
+    if rewrite_to_fallback {
+        sent_model = cfg.fallback.clone();
+        println!(
+            "[codebuddy] hy4-preview 限流中，本次切换 {}",
+            sent_model
+        );
+    }
+
+    // 账号池选号（双区各建各的池）：按最终 sent_model 跳过 11158 黑名单及其它不可用状态。
+    // 若只是当前模型无资格、池仍有其它可用号，直接回 model_unavailable，不再打已知失败的上游；
+    // 全池因冷却/停用/失效不可用时仍沿用当前凭据原样请求，保持既有语义。
     let mut acc_uid = String::new();
     let mut acc_path = String::new();
     let mut acc_proxy = String::new();
     if let Some(p) = st.pool.as_ref() {
-        if let Some(a) = p.pick() {
+        if let Some(a) = p.pick_for_model(&sent_model) {
             acc_uid = a.uid.clone();
             acc_path = a.auth_path.clone();
             acc_proxy = a.proxy_url.clone();
@@ -690,9 +706,18 @@ pub async fn handle_chat(
             p.touch(&a.uid);
             p.inc_load(&a.uid);
             println!(
-                "[codebuddy] 账号池选号 uid={}({})",
+                "[codebuddy] 账号池选号 uid={}({}) model={}",
                 crate::pool::uid_short(&a.uid),
-                a.nickname
+                a.nickname,
+                sent_model
+            );
+        } else if p.has_selectable() {
+            return write_err(
+                400,
+                &format!(
+                    "model_unavailable：当前账号池都无权使用模型 {}（11158）。",
+                    sent_model
+                ),
             );
         }
     }
@@ -722,23 +747,12 @@ pub async fn handle_chat(
         Ok(v) => v,
         Err(e) => return write_err(502, &e),
     };
-
-    // 限流窗口内 hy4-preview 请求体层改写 fallback（agent 零感知）；兜底关闭时不改写、不 trip。
-    // hy4 兜底与缺省 reasoning 注入均为国内专属逻辑，INTL 一律跳过。
-    let cfg = st.failover.config();
-    let mut sent_model = model_name.clone();
-    let limited = sent_model == crate::failover::HY4_PRIMARY
-        && st.region == crate::region::Region::Cn
-        && st.failover.hy4_limited();
-    if crate::failover::failover_decide(&cfg, &sent_model, limited, 0, "").rewrite {
+    // 身份头仍按原请求体派生；模型改写只影响选号资格与实际上游体。
+    if rewrite_to_fallback {
         backend.insert("model".to_string(), gjson::s(&cfg.fallback));
-        sent_model = cfg.fallback.clone();
-        println!(
-            "[codebuddy] hy4-preview 限流中，本次切换 {}",
-            cfg.fallback
-        );
     }
-    // 思考缺省档：客户端未带 reasoning_effort 时按配置注入（已带一律不动，透传优先）
+
+    // 思考缺省档：客户端未带 reasoning_effort 时按最终 sent_model 注入（已带一律不动）。
     if st.region == crate::region::Region::Cn {
         if !backend.contains_key("reasoning_effort") {
             if let Some(eff) = crate::failover::reasoning_default_for(&sent_model, &cfg.default_reasoning)
@@ -835,7 +849,7 @@ pub async fn handle_chat(
                     let p = st.pool.as_ref().expect("上面已判 Some");
                     p.mark_exhausted(&acc_uid);
                     if exhausted_resent < p.size() {
-                        if let Some(next) = p.pick() {
+                        if let Some(next) = p.pick_for_model(&sent_model) {
                             let nhdr = match st.cred.headers_for(&next.auth_path) {
                                 Ok(h) => h,
                                 Err(e) => return write_err(502, &e),
@@ -898,7 +912,7 @@ pub async fn handle_chat(
                         _ => "空流@200".to_string(),
                     };
                     if stream_head_resent < p.size() {
-                        if let Some(next) = p.pick() {
+                        if let Some(next) = p.pick_for_model(&sent_model) {
                             let nhdr = match st.cred.headers_for(&next.auth_path) {
                                 Ok(h) => h,
                                 Err(e) => return write_err(502, &e),
@@ -1013,7 +1027,7 @@ pub async fn handle_chat(
                 let p = st.pool.as_ref().expect("上面已判 Some");
                 p.mark_limited(&acc_uid, flagged_until(crate::gotime::now_millis()));
                 if flagged_resent < p.size() {
-                    if let Some(next) = p.pick() {
+                    if let Some(next) = p.pick_for_model(&sent_model) {
                         let nhdr = match st.cred.headers_for(&next.auth_path) {
                             Ok(h) => h,
                             Err(e) => return write_err(502, &e),
@@ -1071,7 +1085,7 @@ pub async fn handle_chat(
                         );
                     }
                     if restricted_resent < p.size() {
-                        if let Some(next) = p.pick() {
+                        if let Some(next) = p.pick_for_model(&sent_model) {
                             let nhdr = match st.cred.headers_for(&next.auth_path) {
                                 Ok(h) => h,
                                 Err(e) => return write_err(502, &e),
@@ -1208,7 +1222,7 @@ pub async fn handle_chat(
             let p = st.pool.as_ref().expect("上面已判 Some");
             p.mark_exhausted(&acc_uid);
             if exhausted_resent < p.size() {
-                if let Some(next) = p.pick() {
+                if let Some(next) = p.pick_for_model(&sent_model) {
                     let nhdr = match st.cred.headers_for(&next.auth_path) {
                         Ok(h) => h,
                         Err(e) => return write_err(502, &e),
@@ -1245,7 +1259,7 @@ pub async fn handle_chat(
             let p = st.pool.as_ref().expect("上面已判 Some");
             p.mark_dead(&acc_uid);
             if dead_resent < p.size() {
-                if let Some(next) = p.pick() {
+                if let Some(next) = p.pick_for_model(&sent_model) {
                     let nhdr = match st.cred.headers_for(&next.auth_path) {
                         Ok(h) => h,
                         Err(e) => return write_err(502, &e),
@@ -1277,7 +1291,7 @@ pub async fn handle_chat(
                 let p = st.pool.as_ref().expect("上面已判 Some");
                 p.mark_limited(&acc_uid, until);
                 if !account_resent {
-                    if let Some(next) = p.pick() {
+                    if let Some(next) = p.pick_for_model(&sent_model) {
                         let nhdr = match st.cred.headers_for(&next.auth_path) {
                             Ok(h) => h,
                             Err(e) => return write_err(502, &e),
@@ -1326,6 +1340,34 @@ pub async fn handle_chat(
                     crate::failover::format_reset_display_minute(d.until_ms),
                     cfg.fallback
                 );
+                // fallback 是新的实际上游模型；当前号若已知不支持它，重放前先换号。
+                if let Some(p) = st.pool.as_ref() {
+                    if !acc_uid.is_empty() && p.model_blocked(&acc_uid, &sent_model) {
+                        let Some(next) = p.pick_for_model(&sent_model) else {
+                            return write_err(
+                                400,
+                                &format!(
+                                    "model_unavailable：当前账号池都无权使用模型 {}（11158）。",
+                                    sent_model
+                                ),
+                            );
+                        };
+                        let nhdr = match st.cred.headers_for(&next.auth_path) {
+                            Ok(h) => h,
+                            Err(e) => return write_err(502, &e),
+                        };
+                        p.dec_load(&acc_uid);
+                        p.touch(&next.uid);
+                        p.inc_load(&next.uid);
+                        hdr = nhdr;
+                        acc_uid = next.uid.clone();
+                        acc_path = next.auth_path.clone();
+                        acc_proxy = next.proxy_url.clone();
+                        if let Some(g) = load_guard.as_mut() {
+                            g.uid = acc_uid.clone();
+                        }
+                    }
+                }
                 continue;
             }
         }

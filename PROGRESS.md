@@ -14,7 +14,8 @@
 | T0 | complete | 基线已建立；环境还原后 2 个哈希门禁转绿，保留 1 个既有 DPAPI 失败 |
 | T1 | complete | 397 passed / 0 failed / 2 ignored；构造器突变红→绿；OpenCode lib 64 passed |
 | T2 | complete | A01 5/5；WorkBuddy 全 crate 137 passed / 0 failed；突变 4 红后恢复全绿 |
-| T3–T14 | pending | 未开始 |
+| T3 | complete | A02 5/5；WorkBuddy 全 crate 142 passed / 0 failed；初选忽略模型突变 4 红后恢复 |
+| T4–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -62,6 +63,15 @@
 - 旧 `!truncated` 断言固定了“网络首块=协议完整”的错误语义，改为 `Incomplete`；“首字节不白等预算”和“peek 后字节不丢”原断言保留。旧 bool 分类用例仅做类型适配，断言强度未降。
 - 验证：新目标 5/5；`cargo test -p rs-codebuddy --locked -- --nocapture` → **137 passed / 0 failed / 0 ignored**。
 - 反向验证：把半帧完成度突变为 Complete 后新目标 1 passed / 4 failed；恢复后 5/5。
+
+## T3 实施记录
+- 请求上下文显式区分 `requested_model` 与最终 `sent_model`；hy4 fallback 先确定资格模型，再选账号。
+- 初选及 401/403、429、14018、11128、11140、11158、200 流头等所有换号点统一使用 `pick_for_model(&sent_model)`。
+- 新增 `AccountPool::has_selectable` 区分“全池不可用”与“池可用但当前模型全黑”；后者直接回既有 `model_unavailable`，不再命中已知失败上游。
+- 429 trip 改写 fallback 后，若当前号已知不支持新模型，重放前先换合格账号；身份头仍按原请求体派生，保持原调用顺序。
+- A02 五个组合场景：跨请求记忆/其他模型不中毒、fallback 前资格、全黑零命中、CN/INTL 隔离、429 trip 后资格；旧实现 4/4 核心场景红。
+- 验证：`cargo test -p rs-codebuddy --locked -- --nocapture` → **142 passed / 0 failed / 0 ignored**。
+- 反向验证：初选改回 `pick()` 后新目标 1 passed / 4 failed；恢复后 5/5。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。
