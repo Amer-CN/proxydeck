@@ -30,15 +30,9 @@ impl futures_util::Stream for LiveSse {
     }
 }
 
-/// 协议翻译器的下游出口：缓冲路径写入 Vec，流式路径写入通道。
+/// 协议翻译器的下游出口：三协议都直接写通道（结构由 `ChannelSink` 持有）。
 pub trait SseSink {
     fn push_chunk(&mut self, chunk: Vec<u8>);
-}
-
-impl SseSink for Vec<Vec<u8>> {
-    fn push_chunk(&mut self, chunk: Vec<u8>) {
-        self.push(chunk);
-    }
 }
 
 /// 建一对（下游流，翻译器出口）。
@@ -66,7 +60,7 @@ impl ChannelSink {
 
     /// 下游是否已取消。翻译循环据此停止继续读上游。
     pub fn is_closed(&self) -> bool {
-        self.closed
+        self.closed || self.tx.is_closed()
     }
 }
 

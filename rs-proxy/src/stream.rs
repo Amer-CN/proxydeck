@@ -81,15 +81,6 @@ impl LineReader {
         self.next_line().await.unwrap_or_default()
     }
 
-    /// 把剩下的全部行喂给回调（`forEachLine` 的语义）。
-    pub async fn for_each_remaining(&mut self, mut f: impl FnMut(&str) -> Result<(), ()>) {
-        while let Some(line) = self.next_line().await {
-            if f(&line).is_err() {
-                return;
-            }
-        }
-    }
-
     /// 把剩下的体读完（`readCCResult` 用）。
     pub async fn read_all_lines(&mut self) -> Vec<String> {
         let mut out = Vec::new();

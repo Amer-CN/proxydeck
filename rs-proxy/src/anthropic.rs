@@ -563,7 +563,7 @@ impl AnthStream {
         }
     }
 
-    /// 流式客户端是否已取消（缓冲路径永远 false）。
+    /// 流式客户端是否已取消。
     fn sink_closed(&self) -> bool {
         self.sink.as_ref().is_some_and(|s| s.is_closed())
     }

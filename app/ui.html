@@ -4795,6 +4795,8 @@ var PT_I18N = {
     paint();
     return true;
   };
+  /* 配置页落盘成功后重建键区（恢复默认等路径不经过 keyMapSet）。 */
+  window.__keymapRebuild = rebuildKeys;
   var TRACK_IDX = { cmd: 0, tj: 1, cb: 2, qoder: 3, bai: 4, set: 5, ext: 6, oc: 7, comate: 8, water: 9, keymap: 10, md: 11 };
   /* 上屏 Wheel 音量条只亮着主页可见；set/water 里它挡住屏体右侧读数 */
   var VU_HOME = ['cmd', 'md', 'tj', 'cb', 'bai', 'comate', 'qoder', 'oc'];
@@ -10967,6 +10969,9 @@ var PT_I18N = {
           : Promise.resolve({ ok: false, msg: '保存接口不可用' });
         return pending.then(function (r) {
           if (r && r.ok) {
+            if (typeof window.__keymapRebuild === 'function') {
+              try { window.__keymapRebuild(); } catch (e) {}
+            }
             try { logInto($('logStream'), 'sys', okLabel + '（配置已持久化）'); } catch (e) {}
             kmEnsureVisible();
             window.renderKeymapPage();

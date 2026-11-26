@@ -24,7 +24,7 @@
 | T10 | complete | A11 5/5；团结全 crate 246 passed / 2 ignored；流守卫所有权突变 1 红后恢复 |
 | T11 | complete | A12 5/5；rs-proxy 全 crate 106 passed；缓冲回退突变 1 红后恢复 |
 | T12 | complete | 六实现转义对照全绿（修团结 \b/\f 分歧）；Qoder 运行时合成夹具 2/2；受影响 6 包与团结全绿 |
-| T13–T14 | pending | 未开始 |
+| T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -135,7 +135,7 @@
 - 接管实例退出后 `start` 先复查端口健康，允许重新点火（陈旧 running 不再永久卡死）；自 spawn 用世代号，`finish_generation` 只复位当前代，旧 watcher 晚回调被忽略。
 - `stop` 先摘运行时状态再杀 PID/端口；失败原样恢复（含世代号），成功回 `Stopped`；新增测试缝证明未监听子进程也能按 PID 清理。
 - 换血计划显式化：`UpdatePlan::{AfterSuccessfulUpdate{to}, IdentifiedOldImage(Vec<StaleTarget>), Noop}` 与 `plan_update`；标记路径全量滚、无标记只动已证实旧镜像；核心端口与未知镜像不产生目标。
-- `replace_running_exe` 拆成只做 rename 的 `vacate_executable_path` + 兼容旧名；更新流程调用新名，行为不变。
+- `replace_running_exe` 拆成只做 rename 的 `vacate_executable_path`；更新流程调用新名，行为不变（T14 复核后删除无调用方的兼容别名）。
 - 验证：`cargo test -p rs-gui --lib -- plugin_hosting_tests rollover:: shell_tests` 35/35；`--test bridge_contract --test shell_contract --test command_dispatch --test winres_contract --test close_contract` 5+9+5+3+1 全绿；`--lib update::` 3/3。
 - 反向验证：把接管分支改成无条件「已在运行」，A09 重新点火用例转红；恢复后 5/5。
 
@@ -149,7 +149,7 @@
 
 ## T11 实施记录
 - 新增 `rs-proxy/src/output.rs`：`LiveSse`（可交给 `Body::from_stream` 的增量字节流）、`SseSink` 统一出口（缓冲写 Vec / 流式写通道）、`UsageRecorder` 在流结束/取消/解码错误时同步入账一次（不 spawn 额外任务）。
-- 三协议翻译器（Chat / Responses / Anthropic）共用 `LineReader` + `SseSink`：原有逐行翻译字节不变，只是出口可切换；缓冲接口 `handle_*` 与流式入口 `handle_*_live` 并存，HTTP 层使用 live，旧门禁仍走缓冲。
+- 三协议翻译器（Chat / Responses / Anthropic）共用 `LineReader` + `SseSink`：原有逐行翻译字节不变，只是出口可切换；删除缓冲副本，HTTP 与门禁/黄金统一走 live 入口；首事件前判超限，提交后不重试。
 - Chat/Responses/Anthropic 新增 `stream_*_response_live`：首事件先判 context 超限（未发头，可安全重发），随后后台任务逐行翻译并立刻写下游；客户端断开导致发送失败时任务结束、上游读取停止。
 - 非流式与 `stream:false` 字节不变；`stream_options` 兼容逻辑未改；黄金下游字节（含工具调用 delta）经 live 路径重跑仍逐字节一致。
 - A12：假上游首帧后停顿 400ms，Chat/Responses/Anthropic 首帧均在 300ms 内到达；非流式仍单 JSON；客户端取消后服务继续可用。计时从发请求前起算（排除只测「响应返回后首块」的假阳性）。

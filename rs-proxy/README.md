@@ -7,7 +7,7 @@
 > 对外是 **55990 上的COMMAND 代理**：CommandCode 路线（出站 `/alpha/generate`）+ 三条入站协议
 > （OpenAI chat / OpenAI Responses / Anthropic Messages）。
 >
-> **增量交付（2026-11-26）**：HTTP 入口用 `handle_*_live`，上游 SSE 到达一帧就翻译一帧写下游
+> **增量交付（2026-11-26）**：HTTP 入口用 `handle_*`（唯一入口），上游 SSE 到达一帧就翻译一帧写下游
 > （`src/output.rs` 的 `LiveSse`/`SseSink`/`UsageRecorder`）。首事件之前仍先判 context 超限，
 > 可安全重发；发出响应头后不再重试，也不再保留缓冲副本（门禁/黄金同样走 live 入口）。
 
