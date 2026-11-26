@@ -226,6 +226,7 @@ pub(crate) fn account_from_value(v: &Value) -> Result<Account, String> {
             id: get("userId"),
             label: user_name,
         }),
+        ..Default::default()
     })
 }
 

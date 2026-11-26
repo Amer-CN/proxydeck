@@ -55,6 +55,16 @@ pub struct Account {
     #[serde(default, alias = "clientId")]
     pub client_id: Option<String>,
 
+    /// 稳定账号 ID（与 AK/显示名解耦）；旧文件首次由账号管理器迁移时分配。
+    #[serde(default, alias = "accountId")]
+    pub account_id: Option<String>,
+    /// 历史 identity 别名；AK 轮换后仍可把旧输入/删除记录解析回同一账号。
+    #[serde(default, alias = "identityAliases")]
+    pub identity_aliases: Vec<String>,
+    /// 凭据版本；每次替换凭据 +1。
+    #[serde(default)]
+    pub revision: u64,
+
     /// 身份头覆盖（上游换版本时可改配置，不必改代码）。
     #[serde(default)]
     pub plugin_name: Option<String>,
@@ -132,6 +142,16 @@ impl Account {
         } else {
             format!("{domain}|{name}")
         }
+    }
+
+    /// 运行态稳定键；新账号用 account_id，尚未迁移的旧对象才退回 identity。
+    pub fn stable_key(&self) -> String {
+        self.account_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| self.identity())
     }
 
     /// 是否具备续期三件套：refresh_token + DPoP 私钥 + PKCE verifier。
@@ -282,7 +302,8 @@ impl Config {
         let named = !account.display_name().is_empty();
         if let Some(slot) = self.accounts.iter_mut().find(|a| {
             a.identity() == id
-                || (named
+                || (account.domain_id.is_some()
+                    && named
                     && a.display_name() == account.display_name()
                     && a.domain_id == account.domain_id)
         }) {

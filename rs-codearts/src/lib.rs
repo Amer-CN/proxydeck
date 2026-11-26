@@ -21,6 +21,8 @@
 //! * `glm-5.3` 只支持流式 → 对上游**永远**发 stream=true，客户端要非流式就本地聚合；
 //! * 每账号并发上限 3，`x-ot-session-id` 按 AK 派生并复用，不每请求随机。
 
+pub mod account_lock;
+pub mod accounts;
 pub mod activity;
 pub mod config;
 pub mod login;
@@ -50,6 +52,7 @@ use clap::Parser;
 use futures_util::StreamExt;
 use serde_json::{json, Value};
 
+use accounts::AccountManager;
 use config::{Account, Config};
 use upstream::{ModelInfo, UpError, Upstream};
 
@@ -129,6 +132,7 @@ struct AcctHealth {
 
 pub struct Server {
     up: Upstream,
+    accounts: AccountManager,
     accounts_path: PathBuf,
     overlay_path: PathBuf,
     sts_url: String,
@@ -169,6 +173,69 @@ pub struct BenefitCatalog {
     failed: bool,
 }
 
+fn migrate_ledger_keys(ledger: &mut activity::Ledger, cfg: &Config) -> bool {
+    let mut changed = false;
+    for account in &cfg.accounts {
+        let stable = account.stable_key();
+        let mut keys = vec![account.identity()];
+        keys.extend(account.identity_aliases.iter().cloned());
+        for key in keys {
+            if key == stable {
+                continue;
+            }
+            if let Some(old) = ledger.entries.remove(&key) {
+                let dst = ledger.entries.entry(stable.clone()).or_default();
+                if old.last_run >= dst.last_run {
+                    dst.last_run = old.last_run;
+                    dst.last_message = old.last_message;
+                    dst.last_credits = old.last_credits;
+                }
+                for (campaign, day) in old.settled {
+                    match dst.settled.get(&campaign) {
+                        Some(previous) if previous >= &day => {}
+                        _ => {
+                            dst.settled.insert(campaign, day);
+                        }
+                    }
+                }
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+fn finish_account_groups(
+    order: Vec<String>,
+    mut groups: std::collections::HashMap<String, (Option<Account>, Option<Account>)>,
+) -> Vec<(Account, &'static str)> {
+    fn score(a: &Account) -> i64 {
+        a.expires_unix().unwrap_or(-1)
+    }
+    let mut out: Vec<(Account, &'static str)> = Vec::new();
+    for id in order {
+        let Some((file, live)) = groups.remove(&id) else {
+            continue;
+        };
+        let enabled = file.as_ref().map(|f| f.enabled).unwrap_or(true);
+        let (mut a, source) = match (file, live) {
+            (Some(f), Some(l)) => {
+                if score(&l) >= score(&f) {
+                    (l, "local")
+                } else {
+                    (f, "file")
+                }
+            }
+            (Some(f), None) => (f, "file"),
+            (None, Some(l)) => (l, "local"),
+            (None, None) => continue,
+        };
+        a.enabled = enabled;
+        out.push((a, source));
+    }
+    out
+}
+
 impl Server {
     pub fn new(
         up: Upstream,
@@ -177,19 +244,29 @@ impl Server {
         sts_url: String,
         allow_local_refresh: bool,
         max_attempts: usize,
-    ) -> Arc<Self> {
+    ) -> Result<Arc<Self>, String> {
         let overlay_path = accounts_path
             .parent()
             .map(|p| p.join("codearts-refreshed.json"))
             .unwrap_or_else(|| PathBuf::from("codearts-refreshed.json"));
-        let refreshed = store::Store::load(&overlay_path);
+        let accounts = AccountManager::new(accounts_path.clone());
+        // 启动即完成稳定 ID 迁移；失败不假装服务已就绪。
+        let cfg = accounts.load()?;
+        let mut refreshed = store::Store::load(&overlay_path);
+        if refreshed.migrate_keys(&cfg) {
+            refreshed.save(&overlay_path)?;
+        }
         let ledger_path = accounts_path
             .parent()
             .map(|p| p.join("codearts-activity.json"))
             .unwrap_or_else(|| PathBuf::from("codearts-activity.json"));
-        let loaded_ledger = activity::Ledger::load(&ledger_path);
-        Arc::new(Self {
+        let mut loaded_ledger = activity::Ledger::load(&ledger_path);
+        if migrate_ledger_keys(&mut loaded_ledger, &cfg) {
+            loaded_ledger.save();
+        }
+        Ok(Arc::new(Self {
             up,
+            accounts,
             accounts_path,
             overlay_path,
             sts_url,
@@ -209,7 +286,7 @@ impl Server {
             unavailable: Mutex::new(std::collections::HashMap::new()),
             last_touch: Mutex::new(std::collections::HashMap::new()),
             logins: Mutex::new(std::collections::HashMap::new()),
-        })
+        }))
     }
 
     /// 读本机登录态；失败时退回上次成功的结果（桌面端短暂写文件时不至于瞬间掉线）。
@@ -236,13 +313,8 @@ impl Server {
         if !account.has_credentials() {
             return;
         }
-        let id = account.identity();
-        if let Ok(done) = self.archived.lock() {
-            if done.contains(&id) {
-                return;
-            }
-        }
-        let mut cfg = match self.load_config() {
+        let legacy = account.identity();
+        let cfg = match self.load_config() {
             Ok(c) => c,
             Err(_) => Config {
                 accounts: Vec::new(),
@@ -251,19 +323,22 @@ impl Server {
                 path: self.accounts_path.clone(),
             },
         };
-        if cfg.removed.iter().any(|x| x == &id) {
-            if let Ok(mut done) = self.archived.lock() {
-                done.insert(id);
+        let stable = AccountManager::resolve_in(&cfg, &legacy)
+            .map(|id| id.as_str().to_string())
+            .unwrap_or_else(|| legacy.clone());
+        if let Ok(done) = self.archived.lock() {
+            if done.contains(&stable) {
+                return;
             }
-            return;
         }
-        let has = cfg
-            .accounts
-            .iter()
-            .any(|a| a.identity() == id || (a.display_name() == account.display_name() && a.domain_id == account.domain_id));
-        if has {
+        if AccountManager::account_removed_in(&cfg, account)
+            || cfg
+                .accounts
+                .iter()
+                .any(|a| a.stable_key() == stable)
+        {
             if let Ok(mut done) = self.archived.lock() {
-                done.insert(id);
+                done.insert(stable);
             }
             return;
         }
@@ -271,20 +346,22 @@ impl Server {
         if snap.name.trim().is_empty() {
             snap.name = snap.display_name();
         }
-        cfg.upsert(snap);
-        if cfg.save().is_ok() {
-            println!(
-                "codearts-plugin: 本机登录态已自动归档（{}），账号池 +1",
-                account.display_name()
-            );
-            if let Ok(mut done) = self.archived.lock() {
-                done.insert(id);
+        match self.accounts.upsert(snap) {
+            Ok(saved) => {
+                println!(
+                    "codearts-plugin: 本机登录态已自动归档（{}），账号池 +1",
+                    account.display_name()
+                );
+                if let Ok(mut done) = self.archived.lock() {
+                    done.insert(saved.id.as_str().to_string());
+                }
             }
+            Err(e) => eprintln!("codearts-plugin: 本机登录态归档失败: {e}"),
         }
     }
 
     fn load_config(&self) -> Result<Config, String> {
-        Config::load(&self.accounts_path)
+        self.accounts.load()
     }
 
     // ---------------- 活动积分（签到 / 新手 / 邀请…） ----------------
@@ -292,7 +369,7 @@ impl Server {
     /// 对单个账号跑一轮活动领取：拉活动列表 → 逐个可领活动 claim（必要时 confirm）→ 记账。
     /// 任何一步失败都只记录、不影响该账号的推理健康（不冷却、不标死）。
     async fn run_activity_for(&self, account: &Account) -> Value {
-        let identity = account.identity();
+        let identity = account.stable_key();
         let now = crate::config::now_unix();
         let day = activity::local_day_utc8(now);
         let settled = self
@@ -463,7 +540,7 @@ impl Server {
                 continue;
             }
             if let Some(o) = &only {
-                if &a.identity() != o && &a.display_name() != o {
+                if &a.stable_key() != o && &a.identity() != o && &a.display_name() != o {
                     continue;
                 }
             }
@@ -490,7 +567,7 @@ impl Server {
 
     /// 确保某账号的福利模型目录（1 小时缓存）；首次会先做一次幂等 claim。
     async fn ensure_benefit(&self, account: &Account) -> Option<Vec<ModelInfo>> {
-        let id = account.identity();
+        let id = account.stable_key();
         if let Ok(g) = self.benefit.lock() {
             if let Some(c) = g.get(&id) {
                 if c.at.elapsed() < Duration::from_secs(if c.failed { 1800 } else { 3600 }) {
@@ -741,9 +818,9 @@ impl Server {
     /// 因为桌面端随后会自己刷新凭据；文件账号才标死（需要用户更新文件/重新导入）。
     fn note_credential_failure(&self, account: &Account, source: &str) {
         if source == "local" && !self.allow_local_refresh && self.codearts_running() {
-            self.mark_cooling(&account.identity(), 120);
+            self.mark_cooling(&account.stable_key(), 120);
         } else {
-            self.mark_dead(&account.identity());
+            self.mark_dead(&account.stable_key());
         }
     }
 
@@ -755,24 +832,20 @@ impl Server {
     fn all_accounts(&self) -> Vec<(Account, &'static str)> {
         let overlay = self.refreshed.lock().ok().map(|s| s.clone()).unwrap_or_default();
         let cfg = self.load_config().ok();
-        let removed: &[String] = cfg
-            .as_ref()
-            .map(|c| c.removed.as_slice())
-            .unwrap_or(&[]);
         let mut order: Vec<String> = Vec::new();
         let mut groups: std::collections::HashMap<String, (Option<Account>, Option<Account>)> =
             std::collections::HashMap::new();
-        // 文件快照（应用 overlay）。
+        // 文件快照（应用 overlay）；稳定 ID 由 AccountManager 在 load 时保证。
         if let Some(c) = cfg.as_ref() {
             for a in c.accounts.iter().filter(|a| a.has_credentials()) {
                 let mut a = a.clone();
-                if removed.iter().any(|x| x == &a.identity()) {
+                if AccountManager::account_removed_in(c, &a) {
                     continue;
                 }
                 if let Some(o) = overlay.overlay(&a) {
                     a = o;
                 }
-                let id = a.identity();
+                let id = a.stable_key();
                 groups
                     .entry(id.clone())
                     .and_modify(|g| {
@@ -786,15 +859,24 @@ impl Server {
                     });
             }
         }
-        // 本机实时登录态。
+        // 本机实时登录态；能解析到文件稳定 ID 时归同组，否则保持本地身份。
         if let Some(local) = self.local_session() {
             if local.account.has_credentials() {
                 let mut a = local.account;
-                if !removed.iter().any(|x| x == &a.identity()) {
+                let removed = cfg
+                    .as_ref()
+                    .map(|c| AccountManager::account_removed_in(c, &a))
+                    .unwrap_or(false);
+                if !removed {
+                    if let Some(c) = cfg.as_ref() {
+                        if let Some(id) = AccountManager::resolve_in(c, &a.identity()) {
+                            a.account_id = Some(id.as_str().to_string());
+                        }
+                    }
                     if let Some(o) = overlay.overlay(&a) {
                         a = o;
                     }
-                    let id = a.identity();
+                    let id = a.stable_key();
                     groups
                         .entry(id.clone())
                         .and_modify(|g| {
@@ -809,31 +891,7 @@ impl Server {
                 }
             }
         }
-        fn score(a: &Account) -> i64 {
-            a.expires_unix().unwrap_or(-1)
-        }
-        let mut out: Vec<(Account, &'static str)> = Vec::new();
-        for id in order {
-            let Some((file, live)) = groups.remove(&id) else {
-                continue;
-            };
-            let enabled = file.as_ref().map(|f| f.enabled).unwrap_or(true);
-            let (mut a, source) = match (file, live) {
-                (Some(f), Some(l)) => {
-                    if score(&l) >= score(&f) {
-                        (l, "local")
-                    } else {
-                        (f, "file")
-                    }
-                }
-                (Some(f), None) => (f, "file"),
-                (None, Some(l)) => (l, "local"),
-                (None, None) => continue,
-            };
-            a.enabled = enabled;
-            out.push((a, source));
-        }
-        out
+        finish_account_groups(order, groups)
     }
 
     /// 账号候选表：剔除已判死账号；本机优先、未冷却优先、过期晚的优先。
@@ -843,7 +901,7 @@ impl Server {
             if !a.enabled {
                 continue;
             }
-            let id = a.identity();
+            let id = a.stable_key();
             let h = self.health_of(&id);
             if h.dead {
                 continue;
@@ -883,15 +941,17 @@ impl Server {
             );
         }
         match refresh::refresh_token(self.up.client(), &self.sts_url, account).await {
-            Ok(r) => {
-                let new = self.apply_refresh(account, &r);
-                println!(
-                    "codearts-plugin: 账号 {} 续期成功（新过期 {}）",
-                    account.display_name(),
-                    r.expires_at
-                );
-                (new, Some("已自动续期".to_string()))
-            }
+            Ok(r) => match self.apply_refresh(account, &r) {
+                Ok(new) => {
+                    println!(
+                        "codearts-plugin: 账号 {} 续期成功（新过期 {}）",
+                        account.display_name(),
+                        r.expires_at
+                    );
+                    (new, Some("已自动续期".to_string()))
+                }
+                Err(e) => (account.clone(), Some(e)),
+            },
             Err(e) => {
                 eprintln!(
                     "codearts-plugin: 账号 {} 续期失败: {e}",
@@ -901,7 +961,7 @@ impl Server {
                 // 用过就再也换不出来）。这种账号继续留在候选池里只会每个请求赔一次
                 // 上游 400，直接标死等用户重新导入；网络抖动与 5xx 不标死，下轮还试。
                 if is_definitive_refresh_failure(&e) {
-                    self.mark_dead(&account.identity());
+                    self.mark_dead(&account.stable_key());
                 }
                 // note 直接用上游原文；外面再包一层「续期失败」会变成
                 // 「续期失败: 续期失败 HTTP 400…」（2026-11-05 实测踩到）。
@@ -924,12 +984,6 @@ impl Server {
 
     /// 把导入的账号合并进账号文件并落盘，返回全量视图。
     fn save_imported(&self, accounts: Vec<Account>) -> Result<Vec<Value>, String> {
-        let mut cfg = self.load_config().unwrap_or(Config {
-            accounts: Vec::new(),
-            channel: config::DEFAULT_CHANNEL.to_string(),
-            removed: Vec::new(),
-            path: self.accounts_path.clone(),
-        });
         for mut a in accounts {
             if a.name.trim().is_empty() {
                 a.name = a.display_name();
@@ -937,11 +991,8 @@ impl Server {
             if !a.enabled {
                 a.enabled = true;
             }
-            let id = a.identity();
-            cfg.removed.retain(|x| x != &id);
-            cfg.upsert(a);
+            self.accounts.upsert(a)?;
         }
-        cfg.save()?;
         Ok(self
             .all_accounts()
             .iter()
@@ -958,7 +1009,7 @@ impl Server {
             return Err("码道桌面端在运行：为避免把桌面端踢下线，默认不主动续期本机登录态（可用 --allow-local-refresh 覆盖）".to_string());
         }
         let r = refresh::refresh_token(self.up.client(), &self.sts_url, account).await?;
-        let new = self.apply_refresh(account, &r);
+        let new = self.apply_refresh(account, &r)?;
         println!(
             "codearts-plugin: 账号 {} 手动续期成功（新过期 {}）",
             account.display_name(),
@@ -967,10 +1018,10 @@ impl Server {
         Ok(new)
     }
 
-    /// 把续期结果应用到账号并落盘 overlay。
-    /// 同时把新凭据写回账号文件（无 domainId 的账号 identity 取自 AK 尾段，
+    /// 把续期结果写入稳定账号边界并更新 overlay；任一步失败都返回错误。
     /// AK 轮转后 identity 会变；不写回的话启用/停用/删除就找不到它了）。
-    fn apply_refresh(&self, account: &Account, r: &refresh::Refreshed) -> Account {
+    fn apply_refresh(&self, account: &Account, r: &refresh::Refreshed) -> Result<Account, String> {
+        let id = accounts::AccountId(account.stable_key());
         let mut new = account.clone();
         new.access_key = r.access_key.clone();
         new.secret_key = r.secret_key.clone();
@@ -981,51 +1032,31 @@ impl Server {
             Some(r.expires_at.clone())
         };
         new.refresh_token = Some(r.refresh_token.clone());
-        if let Ok(mut st) = self.refreshed.lock() {
-            st.put(account, r);
-            if let Err(e) = st.save(&self.overlay_path) {
-                eprintln!("codearts-plugin: 续期落盘失败: {e}");
-            }
-        }
-        // 同步写回账号文件：让文件里的凭据保持可用状态，
-        // 续期后 identity 变化也不会让启用/停用/删除找不到账号。
-        let old_id = account.identity();
-        let old_name = account.display_name();
-        let old_domain = account.domain_id.clone();
-        if let Ok(mut cfg) = self.load_config() {
-            let mut changed = false;
-            for e in cfg.accounts.iter_mut() {
-                let same_id = e.identity() == old_id;
-                let same_name =
-                    e.display_name() == old_name && e.domain_id == old_domain;
-                if same_id || same_name {
-                    e.access_key = r.access_key.clone();
-                    e.secret_key = r.secret_key.clone();
-                    e.security_token = r.security_token.clone();
-                    e.expires_at = if r.expires_at.is_empty() {
-                        None
-                    } else {
-                        Some(r.expires_at.clone())
-                    };
-                    e.refresh_token = Some(r.refresh_token.clone());
-                    changed = true;
-                }
-            }
-            if changed {
-                if let Err(e) = cfg.save() {
-                    eprintln!("codearts-plugin: 账号文件回写失败: {e}");
-                }
-            }
-        }
-        new
+        new.revision = account.revision.saturating_add(1);
+        let saved = self.accounts.replace_credentials(&id, new)?;
+        let new = saved.credentials;
+        let published = {
+            let mut st = self
+                .refreshed
+                .lock()
+                .map_err(|_| "续期 overlay 内存锁损坏".to_string())?;
+            st.put(&new, r);
+            st.clone()
+        };
+        let mut merged = store::Store::load(&self.overlay_path);
+        merged.merge_published(&published);
+        merged.save(&self.overlay_path)?;
+        Ok(new)
     }
 
     /// 账号视图（绝不输出密钥类字段）。
     fn account_view(&self, a: &Account, source: &str) -> Value {
-        let id = a.identity();
+        let id = a.stable_key();
+        let legacy = a.identity();
         let h = self.health_of(&id);
         json!({
-            "identity": id,
+            "identity": legacy,
+            "accountId": id,
             "name": a.display_name(),
             "source": source,
             "enabled": a.enabled,
@@ -1233,7 +1264,7 @@ async fn handle_health(State(st): State<Arc<Server>>) -> Response {
     let all = st.all_accounts();
     let mut pool = Vec::new();
     for (a, source) in &all {
-        let id = a.identity();
+        let id = a.stable_key();
         let h = st.health_of(&id);
         let cooling = h.cooldown_until.map(|t| t > Instant::now()).unwrap_or(false);
         pool.push(json!({
@@ -1328,7 +1359,7 @@ async fn handle_models(State(st): State<Arc<Server>>) -> Response {
         }
         match st.up.builtin_models(&account).await {
             Ok(list) => {
-                st.mark_ok(&account.identity());
+                st.mark_ok(&account.stable_key());
                 // 合并限时福利模型（每账号独立目录；benefit=true 的条目聊天要带 maas_type）。
                 let mut merged = list.clone();
                 if let Some(bm) = st.ensure_benefit(&account).await {
@@ -1339,7 +1370,7 @@ async fn handle_models(State(st): State<Arc<Server>>) -> Response {
                     }
                 }
                 // 过滤掉本账号已知不可用的模型（002002009 / 未领取福利）。
-                merged.retain(|m| st.model_available(&account.identity(), &m.id));
+                merged.retain(|m| st.model_available(&account.stable_key(), &m.id));
                 if let Ok(mut cache) = st.models.lock() {
                     *cache = Some(ModelsCache {
                         at: Instant::now(),
@@ -1353,7 +1384,7 @@ async fn handle_models(State(st): State<Arc<Server>>) -> Response {
                 if e.credential {
                     st.note_credential_failure(&account, source);
                 } else if retryable(&e) {
-                    st.mark_cooling(&account.identity(), 30);
+                    st.mark_cooling(&account.stable_key(), 30);
                 } else {
                     return up_error_response(&e);
                 }
@@ -1594,7 +1625,7 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
         }
         // 单账号并发闸门：上游按账号统计并发（上限 3），超了回 429/并发错误。
         // 许可在本轮请求返回后释放（流式响应会提前释放，属近似限流，足够压住突发）。
-        let sem = st.permit(&account.identity());
+        let sem = st.permit(&account.stable_key());
         let _permit = match tokio::time::timeout(
             std::time::Duration::from_secs(30),
             sem.acquire_owned(),
@@ -1607,8 +1638,8 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
                 continue;
             }
         };
-        st.touch_account(&account.identity());
-        let benefit = cfg.is_benefit() || st.is_benefit_model(&account.identity(), &model);
+        st.touch_account(&account.stable_key());
+        let benefit = cfg.is_benefit() || st.is_benefit_model(&account.stable_key(), &model);
         let session_id = upstream::session_id_for(&account);
         // 内层循环：并发上限先退避重试**同一个号**，网关排队先等 promoted 再重发。
         // 都不成就按原规则交给外层换号。
@@ -1625,7 +1656,7 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
             };
             let status = resp.status().as_u16();
             if status < 400 {
-                st.mark_ok(&account.identity());
+                st.mark_ok(&account.stable_key());
                 return finish_chat(resp, &model, wants_stream).await;
             }
             // 网关排队：429 + `queue-status: queued` + `trace-id`，等 promoted 后重发一次。
@@ -1647,7 +1678,7 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
             let text = String::from_utf8_lossy(&body).to_string();
             // 模型级不可用（002002009 not registered）：记 30 分钟黑名单，避免反复撞。
             if is_model_missing_body(&text) {
-                st.mark_model_unavailable(&account.identity(), &model, 1800);
+                st.mark_model_unavailable(&account.stable_key(), &model, 1800);
             }
             // 福利模型未领（4004.200 benefit not found）：补一次 claim 后重试一轮。
             if is_benefit_missing_body(&text) && !benefit_claimed_once {
@@ -1683,7 +1714,7 @@ async fn chat_core(st: Arc<Server>, mut req: Value) -> Response {
             continue;
         }
         if retryable(&e) {
-            st.mark_cooling(&account.identity(), 30);
+            st.mark_cooling(&account.stable_key(), 30);
             last = Some(e);
             continue;
         }
@@ -1813,7 +1844,7 @@ async fn handle_quota(State(st): State<Arc<Server>>) -> Response {
         }
         match st.up.statistics(&account).await {
             Ok(raw) => {
-                st.mark_ok(&account.identity());
+                st.mark_ok(&account.stable_key());
                 let (total, used, remain, percent) = parse_credit(&raw);
                 return json_response(
                     StatusCode::OK,
@@ -1834,7 +1865,7 @@ async fn handle_quota(State(st): State<Arc<Server>>) -> Response {
                 if e.credential {
                     st.note_credential_failure(&account, source);
                 } else if retryable(&e) {
-                    st.mark_cooling(&account.identity(), 30);
+                    st.mark_cooling(&account.stable_key(), 30);
                 } else {
                     return up_error_response(&e);
                 }
@@ -2025,7 +2056,7 @@ async fn handle_activity(
     let day = activity::local_day_utc8(now);
     let mut accounts = Vec::new();
     for (a, src) in st.all_accounts() {
-        let id = a.identity();
+        let id = a.stable_key();
         let e = st
             .ledger
             .lock()
@@ -2041,7 +2072,7 @@ async fn handle_activity(
             "last_message": e.last_message,
             "last_credits": e.last_credits,
             "settled": e.settled,
-            "login_settled_today": st.login_settled_today(&a.identity()),
+            "login_settled_today": st.login_settled_today(&a.stable_key()),
         }));
     }
     // `?campaigns=1`：只读预览各账号活动列表（不领取，便于排障）。
@@ -2172,10 +2203,13 @@ async fn handle_account_refresh(State(st): State<Arc<Server>>, body: Bytes) -> R
     if identity.is_empty() {
         return error_response(400, "缺少 identity", "invalid_request");
     }
+    let Some(account_id) = st.accounts.resolve_id(identity) else {
+        return error_response(404, "找不到该账号", "not_found");
+    };
     let Some((account, source)) = st
         .all_accounts()
         .into_iter()
-        .find(|(a, _)| a.identity() == identity)
+        .find(|(a, _)| a.stable_key() == account_id.as_str())
     else {
         return error_response(404, "找不到该账号", "not_found");
     };
@@ -2199,22 +2233,17 @@ async fn handle_enable(State(st): State<Arc<Server>>, body: Bytes) -> Response {
     if identity.is_empty() {
         return error_response(400, "缺少 identity", "invalid_request");
     }
-    let mut cfg = match st.load_config() {
-        Ok(c) => c,
-        Err(e) => return error_response(500, &e, "load_failed"),
-    };
-    let Some(slot) = cfg.accounts.iter_mut().find(|a| a.identity() == identity) else {
+    let Some(account_id) = st.accounts.resolve_id(identity) else {
         return error_response(
             404,
             "账号文件里没有该账号（本机登录态只能整体用 --no-local 关闭）",
             "not_found",
         );
     };
-    slot.enabled = enabled;
-    if let Err(e) = cfg.save() {
+    if let Err(e) = st.accounts.set_enabled(&account_id, enabled) {
         return error_response(500, &e, "save_failed");
     }
-    json_response(StatusCode::OK, &json!({ "identity": identity, "enabled": enabled }))
+    json_response(StatusCode::OK, &json!({ "identity": identity, "accountId": account_id, "enabled": enabled }))
 }
 
 /// 删除账号文件里的账号快照（本机登录态不受影响）。
@@ -2227,22 +2256,13 @@ async fn handle_remove(State(st): State<Arc<Server>>, body: Bytes) -> Response {
     if identity.is_empty() {
         return error_response(400, "缺少 identity", "invalid_request");
     }
-    let mut cfg = match st.load_config() {
-        Ok(c) => c,
-        Err(e) => return error_response(500, &e, "load_failed"),
-    };
-    let before = cfg.accounts.len();
-    cfg.accounts.retain(|a| a.identity() != identity);
-    if cfg.accounts.len() == before {
+    let Some(account_id) = st.accounts.resolve_id(identity) else {
         return error_response(404, "账号文件里没有该账号", "not_found");
-    }
-    if !cfg.removed.iter().any(|x| x == identity) {
-        cfg.removed.push(identity.to_string());
-    }
-    if let Err(e) = cfg.save() {
+    };
+    if let Err(e) = st.accounts.remove(&account_id) {
         return error_response(500, &e, "save_failed");
     }
-    json_response(StatusCode::OK, &json!({ "identity": identity, "removed": true }))
+    json_response(StatusCode::OK, &json!({ "identity": identity, "accountId": account_id, "removed": true }))
 }
 
 pub async fn run(args: Args) -> Result<(), String> {
@@ -2269,7 +2289,7 @@ pub async fn run(args: Args) -> Result<(), String> {
         args.sts_url,
         args.allow_local_refresh,
         args.max_attempts,
-    );
+    )?;
     if watchdog_enabled() {
         let bg = state.clone();
         tokio::spawn(async move { background_loop(bg).await });
@@ -2349,11 +2369,11 @@ async fn background_loop(st: Arc<Server>) {
                 continue;
             }
             let idle = st
-                .idle_for(&a.identity())
+                .idle_for(&a.stable_key())
                 .map(|d| d >= Duration::from_secs(600))
                 .unwrap_or(true);
             if idle && st.up.statistics(&a).await.is_ok() {
-                st.touch_account(&a.identity());
+                st.touch_account(&a.stable_key());
             }
         }
     }

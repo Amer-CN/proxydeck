@@ -10,7 +10,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::{now_unix, Account};
+use crate::config::{now_unix, Account, Config};
 use crate::refresh::Refreshed;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -27,6 +27,8 @@ pub struct Entry {
     pub refresh_token: String,
     #[serde(default)]
     pub updated_at: i64,
+    #[serde(default)]
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -53,9 +55,36 @@ impl Store {
         std::fs::rename(&tmp, path).map_err(|e| format!("落盘 {} 失败: {e}", path.display()))
     }
 
+    /// 合并本进程已发布的新版本，避免覆盖另一实例刚写入的其它账号或更新版本。
+    pub fn merge_published(&mut self, published: &Store) {
+        for (id, entry) in &published.entries {
+            match self.entries.get(id) {
+                Some(old)
+                    if old.revision > entry.revision
+                        || (old.revision == entry.revision && old.updated_at > entry.updated_at) => {}
+                _ => {
+                    self.entries.insert(id.clone(), entry.clone());
+                }
+            }
+        }
+    }
+
     /// 取比账号当前凭据更晚过期的 overlay；没有就返回 None。
     pub fn overlay(&self, account: &Account) -> Option<Account> {
-        let e = self.entries.get(&account.identity())?;
+        let stable = account.stable_key();
+        let e = self
+            .entries
+            .get(&stable)
+            .or_else(|| self.entries.get(&account.identity()))
+            .or_else(|| {
+                account
+                    .identity_aliases
+                    .iter()
+                    .find_map(|alias| self.entries.get(alias))
+            })?;
+        if e.revision != 0 && e.revision < account.revision {
+            return None;
+        }
         if e.access_key.is_empty() || e.secret_key.is_empty() || e.security_token.is_empty() {
             return None;
         }
@@ -79,7 +108,7 @@ impl Store {
 
     pub fn put(&mut self, account: &Account, r: &Refreshed) {
         self.entries.insert(
-            account.identity(),
+            account.stable_key(),
             Entry {
                 access_key: r.access_key.clone(),
                 secret_key: r.secret_key.clone(),
@@ -87,7 +116,31 @@ impl Store {
                 expires_at: r.expires_at.clone(),
                 refresh_token: r.refresh_token.clone(),
                 updated_at: now_unix(),
+                revision: account.revision.saturating_add(1),
             },
         );
+    }
+
+    /// 把旧 identity/别名键的 overlay 迁到稳定 ID；保留无法识别的历史条目。
+    pub fn migrate_keys(&mut self, cfg: &Config) -> bool {
+        let mut changed = false;
+        for account in &cfg.accounts {
+            let stable = account.stable_key();
+            let mut keys = vec![account.identity()];
+            keys.extend(account.identity_aliases.iter().cloned());
+            for key in keys {
+                if key == stable {
+                    continue;
+                }
+                if let Some(entry) = self.entries.remove(&key) {
+                    let target = self.entries.entry(stable.clone()).or_default();
+                    if entry.updated_at >= target.updated_at {
+                        *target = entry;
+                    }
+                    changed = true;
+                }
+            }
+        }
+        changed
     }
 }

@@ -15,7 +15,8 @@
 | T1 | complete | 397 passed / 0 failed / 2 ignored；构造器突变红→绿；OpenCode lib 64 passed |
 | T2 | complete | A01 5/5；WorkBuddy 全 crate 137 passed / 0 failed；突变 4 红后恢复全绿 |
 | T3 | complete | A02 5/5；WorkBuddy 全 crate 142 passed / 0 failed；初选忽略模型突变 4 红后恢复 |
-| T4–T14 | pending | 未开始 |
+| T4 | complete | A03 6/6；CodeArts 全 crate 62 passed / 0 failed；稳定 ID 替换突变 2 红后恢复 |
+| T5–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -72,6 +73,15 @@
 - A02 五个组合场景：跨请求记忆/其他模型不中毒、fallback 前资格、全黑零命中、CN/INTL 隔离、429 trip 后资格；旧实现 4/4 核心场景红。
 - 验证：`cargo test -p rs-codebuddy --locked -- --nocapture` → **142 passed / 0 failed / 0 ignored**。
 - 反向验证：初选改回 `pick()` 后新目标 1 passed / 4 failed；恢复后 5/5。
+
+## T4 实施记录
+- 新增 `accounts::AccountManager`：稳定 `AccountId`、`AccountSnapshot`、旧 identity 别名、凭据 revision、导入/替换/启停/删除事务。
+- `Account.identity()` 保持旧输入/展示合同；新增 `account_id` / `identity_aliases` / `revision` 与 `stable_key()`。缺 domainId 时不再按显示名合并。
+- 新增 OS 文件句柄锁：账号锁与短期配置事务锁；Windows `share_mode(0)`，进程退出自动释放，锁文件残留不视为仍占用。
+- Server 启动时迁移 ID、overlay 与活动账本键；health/benefit/busy/unavailable/last_touch/archived 全部改用稳定键。账号视图保留 `identity`，新增 `accountId`；管理 HTTP 同时接受旧 alias 与稳定 ID。
+- A03 六个场景：同名不合并、AK 轮换/重载、旧 removed 精确边界、稳定删除别名、并发首次分配、已知字段往返/失败可见、真实 HTTP 管理链。
+- 验证：`cargo test -p rs-codearts --locked -- --nocapture` → **62 passed / 0 failed / 0 ignored**。
+- 反向验证：凭据替换时改分配新 ID，A03 2 红；恢复后 6/6。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。
