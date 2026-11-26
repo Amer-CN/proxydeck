@@ -99,6 +99,32 @@ pub fn base64_std_decode(s: &str) -> Result<Vec<u8>, String> {
     base64_decode(s.as_bytes())
 }
 
+/// 标准 base64 编码（Go `base64.StdEncoding`：带 `=` 填充、无换行）。
+pub fn base64_std_encode(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [
+            chunk[0],
+            chunk.get(1).copied().unwrap_or(0),
+            chunk.get(2).copied().unwrap_or(0),
+        ];
+        out.push(TABLE[(b[0] >> 2) as usize] as char);
+        out.push(TABLE[(((b[0] & 0x03) << 4) | (b[1] >> 4)) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(TABLE[(((b[1] & 0x0f) << 2) | (b[2] >> 6)) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(TABLE[(b[2] & 0x3f) as usize] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
+}
+
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
@@ -118,6 +144,16 @@ mod imp {
         fn CryptUnprotectData(
             p_data_in: *const DataBlob,
             ppsz_data_descr: *mut *mut u16,
+            p_optional_entropy: *const DataBlob,
+            pv_reserved: *mut c_void,
+            p_prompt_struct: *mut c_void,
+            dw_flags: u32,
+            p_data_out: *mut DataBlob,
+        ) -> i32;
+
+        fn CryptProtectData(
+            p_data_in: *const DataBlob,
+            sz_data_descr: *const u16,
             p_optional_entropy: *const DataBlob,
             pv_reserved: *mut c_void,
             p_prompt_struct: *mut c_void,
@@ -173,6 +209,48 @@ mod imp {
         unsafe { LocalFree(out_blob.pb_data) };
         Ok(out)
     }
+
+    /// 用当前用户 DPAPI 保护一段明文（只用于运行时合成测试夹具）。
+    pub fn protect(plain: &[u8]) -> Result<Vec<u8>, String> {
+        if plain.is_empty() {
+            return Err("CryptProtectData: 空内容".into());
+        }
+        let mut in_blob = DataBlob {
+            cb_data: plain.len() as u32,
+            pb_data: plain.as_ptr() as *mut c_void,
+        };
+        let mut out_blob = DataBlob {
+            cb_data: 0,
+            pb_data: std::ptr::null_mut(),
+        };
+        let ok = unsafe {
+            CryptProtectData(
+                &mut in_blob,
+                std::ptr::null(),
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                CRYPTPROTECT_UI_FORBIDDEN,
+                &mut out_blob,
+            )
+        };
+        if ok == 0 {
+            let err = std::io::Error::last_os_error();
+            return Err(format!("CryptProtectData: {err}"));
+        }
+        if out_blob.pb_data.is_null() || out_blob.cb_data == 0 {
+            if !out_blob.pb_data.is_null() {
+                unsafe { LocalFree(out_blob.pb_data) };
+            }
+            return Err("CryptProtectData: 系统返回空数据".into());
+        }
+        let out = unsafe {
+            std::slice::from_raw_parts(out_blob.pb_data as *const u8, out_blob.cb_data as usize)
+                .to_vec()
+        };
+        unsafe { LocalFree(out_blob.pb_data) };
+        Ok(out)
+    }
 }
 
 #[cfg(not(windows))]
@@ -181,9 +259,14 @@ mod imp {
     pub fn unprotect(_cipher: &[u8]) -> Result<Vec<u8>, String> {
         Err("本平台无 DPAPI（CryptUnprotectData）".into())
     }
+
+    /// 非 Windows 没有 DPAPI：合成夹具不可生成，调用方应按 OS 集成不可运行处理。
+    pub fn protect(_plain: &[u8]) -> Result<Vec<u8>, String> {
+        Err("本平台无 DPAPI（CryptProtectData）".into())
+    }
 }
 
-pub use imp::unprotect;
+pub use imp::{protect, unprotect};
 
 #[cfg(test)]
 mod tests {

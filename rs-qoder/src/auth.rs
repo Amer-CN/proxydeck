@@ -95,6 +95,66 @@ pub fn load_auth(dir: &Path) -> Result<QoderAuth, String> {
     })
 }
 
+/// 运行时合成登录态夹具（**只用当前用户 DPAPI**，不读、不改冻结的入库夹具）。
+///
+/// 冻结夹具是用采集机 DPAPI 解出的密文，换机必然解不开；业务测试改为在本机生成
+/// 同逻辑内容的临时夹具，让真实 `load_auth` 解密链被实际执行，而不是整批 SKIP。
+/// 非 Windows 没有 DPAPI → 返回错误，调用方按 OS 集成不可运行处理。
+#[doc(hidden)]
+pub fn write_synthetic_fixture(dir: &Path, token: &str, expires_at: &str) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("建合成夹具目录失败: {e}"))?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(1);
+    // 合成测试密钥：不需要密码学随机性，只要每次运行不同即可。
+    let mut key = [0u8; 32];
+    let mut x = nanos ^ ((std::process::id() as u128) << 32) ^ 0x9E37_79B9_7F4A_7C15;
+    for slot in key.iter_mut() {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        *slot = (x & 0xff) as u8;
+    }
+
+    let protected = crate::crypto::protect(&key).map_err(|e| format!("DPAPI 保护合成 key 失败: {e}"))?;
+    let mut encrypted_key = b"DPAPI".to_vec();
+    encrypted_key.extend_from_slice(&protected);
+    let local_state = serde_json::json!({
+        "os_crypt": { "encrypted_key": crate::crypto::base64_std_encode(&encrypted_key) }
+    });
+    std::fs::write(
+        dir.join("Local State"),
+        serde_json::to_vec(&local_state).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("写 Local State 失败: {e}"))?;
+
+    let plain = serde_json::json!({
+        "token": token,
+        "expiresAt": expires_at,
+        "user": { "id": "u-synthetic", "name": "synthetic" }
+    });
+    let mut nonce = [0u8; 12];
+    for (i, slot) in nonce.iter_mut().enumerate() {
+        *slot = key[(i * 7 + 3) % key.len()] ^ (i as u8);
+    }
+    let ciphertext =
+        aes_gcm_seal(&key, &nonce, &serde_json::to_vec(&plain).map_err(|e| e.to_string())?)?;
+    let mut dat = b"v10".to_vec();
+    dat.extend_from_slice(&nonce);
+    dat.extend_from_slice(&ciphertext);
+    std::fs::write(dir.join("auth.v1.dat"), dat).map_err(|e| format!("写 auth.v1.dat 失败: {e}"))
+}
+
+/// AES-256-GCM 封装（`nonce || ct+tag` 由调用方拼 `v10` 前缀）。
+fn aes_gcm_seal(key: &[u8], nonce: &[u8], plain: &[u8]) -> Result<Vec<u8>, String> {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::{Aes256Gcm, Nonce};
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| e.to_string())?;
+    let n = Nonce::from_slice(nonce);
+    cipher.encrypt(n, plain).map_err(|e| e.to_string())
+}
+
 /// Go 侧 `os.ReadFile` 失败的文案近似（`%v` 给的是 `open <path>: ...`；
 /// 这里只保留后半截，错误串不进 HTTP 合同，见 README 差异清单）。
 fn io_err_text(e: &std::io::Error) -> String {

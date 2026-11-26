@@ -41,9 +41,38 @@ pub fn load_golden() -> Value {
         .unwrap_or_else(|e| panic!("黄金基准不是合法 JSON {}: {e}", path.display()))
 }
 
-/// 合成登录态夹具目录（DPAPI 是**当前用户作用域**，换机解不开）。
+/// 合成登录态夹具目录：
+/// 1. 冻结夹具能解开（同一台采集机）→ 用冻结的；
+/// 2. 否则在本机用**当前用户 DPAPI** 生成一次同逻辑内容的临时夹具（进程内缓存）。
+///
+/// 这样业务用例实际执行真实解密链，而不是换机就整批 SKIP；冻结的入库夹具不改。
 pub fn auth_fixture_dir() -> PathBuf {
-    golden_path("auth-fixture")
+    static GENERATED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    let frozen = golden_path("auth-fixture");
+    if rs_qoder::auth::load_auth(&frozen).is_ok() {
+        return frozen;
+    }
+    GENERATED
+        .get_or_init(|| {
+            let dir = std::env::temp_dir().join(format!(
+                "rs-qoder-synthetic-auth-{}-{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            ));
+            match rs_qoder::auth::write_synthetic_fixture(
+                &dir,
+                "dt-synthetic-qoder-token",
+                "2099-01-01T00:00:00Z",
+            ) {
+                Ok(()) => dir,
+                // 非 Windows / DPAPI 不可用：仍返回冻结目录，让调用方显式 SKIP 并计数。
+                Err(_) => frozen,
+            }
+        })
+        .clone()
 }
 
 // ---------- 采集机字面量（黄金里内嵌的路径） ----------
