@@ -305,14 +305,39 @@ pub fn roll_all_with(
     (rolled, skipped)
 }
 
+/* ---------------- 换血计划来源（纯逻辑） ---------------- */
+
+/// 换血计划：两种来源语义不同，不能混为一谈。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpdatePlan {
+    /// 更新器刚成功换包（标记存在）：所有监听中的插件后端都跑在旧镜像上，全量换血。
+    AfterSuccessfulUpdate { to: String },
+    /// 无标记：只有**已证实**跑在旧镜像（`*.old*`）上的进程才是目标，不猜测。
+    IdentifiedOldImage(Vec<StaleTarget>),
+    Noop,
+}
+
+/// 由（标记读取结果，镜像判定结果）生成计划；标记优先，且标记为真时不做镜像猜测。
+pub fn plan_update(marker: (String, bool), identified: Vec<StaleTarget>) -> UpdatePlan {
+    if marker.1 {
+        return UpdatePlan::AfterSuccessfulUpdate { to: marker.0 };
+    }
+    if identified.is_empty() {
+        UpdatePlan::Noop
+    } else {
+        UpdatePlan::IdentifiedOldImage(identified)
+    }
+}
+
 /* ---------------- 接进启动流程（Go rollover.go:196-263） ---------------- */
 
 /// 更新后零残留的关键一步：把还跑在旧包（`*.old*`）上的插件后端逐个换血。
 /// **只在新 GUI 启动时后台跑一次**（`dispatch` 的 GUI 分支）。
 pub fn roll_stale_backends(host: &PluginHost) {
     // 1) 换血标记（更新器刚换完包）：全量滚，不猜镜像名
-    if let (to, true) = update::consume_update_marker() {
-        eprintln!("[rollover] 检测到更新换血标记（→ {to}），开始全量换血");
+    let marker = update::consume_update_marker();
+    if marker.1 {
+        eprintln!("[rollover] 检测到更新换血标记（→ {}），开始全量换血", marker.0);
         roll_all_backends(host);
         update::cleanup_old_exe();
         return;
@@ -338,9 +363,10 @@ pub fn roll_stale_backends(host: &PluginHost) {
         &self_exe,
         std::process::id(),
     );
-    if targets.is_empty() {
+    let plan = plan_update(marker, targets);
+    let UpdatePlan::IdentifiedOldImage(targets) = plan else {
         return;
-    }
+    };
     for t in &targets {
         eprintln!(
             "[rollover] {}（端口 {}）还跑在旧包上（pid={}），开始换血",
@@ -794,5 +820,52 @@ mod tests {
     #[test]
     fn image_path_of_bogus_pid_is_none() {
         assert_eq!(image_path_of_pid(0xFFFF_FFFE), None);
+    }
+
+    /// A10：有标记 = 更新成功后的全量计划；无标记 = 只处理已证实的旧镜像目标；都没有 = Noop。
+    #[test]
+    fn update_plan_source_is_explicit_and_never_guesses() {
+        let target = StaleTarget {
+            def_id: "zz".into(),
+            def_name: "Zz".into(),
+            def_port: 19831,
+            pid: 1111,
+            exe: "ProxyDeck.exe.old-1".into(),
+        };
+        assert_eq!(
+            plan_update(("v9.9.9".into(), true), vec![]),
+            UpdatePlan::AfterSuccessfulUpdate {
+                to: "v9.9.9".into()
+            }
+        );
+        assert_eq!(
+            plan_update((String::new(), false), vec![target.clone()]),
+            UpdatePlan::IdentifiedOldImage(vec![target])
+        );
+        assert_eq!(
+            plan_update((String::new(), false), vec![]),
+            UpdatePlan::Noop
+        );
+    }
+
+    /// A10：核心端口不在插件注册表；镜像读不出（未知）时无标记路径必须不动。
+    #[test]
+    fn core_port_and_unknown_images_are_never_targets() {
+        let defs = vec![PluginDef::new("zz", "Zz", "", "", &[], 19832, "/health", "zz")];
+        let mut snap: BTreeMap<String, Vec<u32>> = BTreeMap::new();
+        snap.insert("19832".to_string(), vec![1111]); // 未知镜像
+        snap.insert("55990".to_string(), vec![2222]); // 核心端口（不在插件注册表）
+        let targets = classify_holders(
+            &defs,
+            &snap,
+            &|_| None,
+            r"C:\ProxyDeck.exe",
+            std::process::id(),
+        );
+        assert!(targets.is_empty(), "未知镜像/核心端口不得成为换血目标");
+        assert_eq!(
+            plan_update((String::new(), false), targets),
+            UpdatePlan::Noop
+        );
     }
 }

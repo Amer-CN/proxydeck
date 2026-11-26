@@ -20,7 +20,8 @@
 | T6 | complete | A06 4/4；CodeArts 全 crate 73 passed / 0 failed；JSON 错误旁路突变 1 红后恢复 |
 | T7 | complete | A07 3/3（含真实生产脚本）；JS 语法 4/4；ui_html 4/4；release_sync 1/1；防过期守卫突变 1 红后恢复 |
 | T8 | complete | hostApi/A08 6/6；keymap 单测 4/4；ui_html 4/4、release_sync 1/1；bridge_contract 5/5、close_contract 1/1；md 补齐突变 2 红后恢复 |
-| T9–T14 | pending | 未开始 |
+| T9 | complete | A09/A10 5/5；插件/换血/shell 库测试 35/35；GUI 五合同 23/23；接管过期突变 1 红后恢复 |
+| T10–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -125,6 +126,15 @@
 - A08 覆盖：非法映射拒绝、旧映射补 md、文件值优先、保存失败如实返回/成功载荷逐字节核对；Rust 侧覆盖 oc 一次性迁移、用户移除不回填、非法规避、保存失败。
 - 验证：`node --test app/tests/ui-state.test.cjs` 6/6；`node tools/check-ui-js.cjs` 5/5；`cargo test -p rs-gui --lib key_map` 3/3；`cargo test -p rs-gui --test ui_html --test release_sync` 4/4+1/1；`--test bridge_contract --test close_contract` 5/5+1/1。
 - 反向验证：删除 md 补齐的 concat 后 A08 2 红；恢复后 6/6。
+
+## T9 实施记录
+- 插件托管改为显式 `RuntimeState::{Stopped, Starting{generation}, OwnedChild{pid,generation}, AdoptedEndpoint}`；健康仍是端口探活快照，旧 `running/healthy` DTO 只在 `list` 出口组装。
+- 接管实例退出后 `start` 先复查端口健康，允许重新点火（陈旧 running 不再永久卡死）；自 spawn 用世代号，`finish_generation` 只复位当前代，旧 watcher 晚回调被忽略。
+- `stop` 先摘运行时状态再杀 PID/端口；失败原样恢复（含世代号），成功回 `Stopped`；新增测试缝证明未监听子进程也能按 PID 清理。
+- 换血计划显式化：`UpdatePlan::{AfterSuccessfulUpdate{to}, IdentifiedOldImage(Vec<StaleTarget>), Noop}` 与 `plan_update`；标记路径全量滚、无标记只动已证实旧镜像；核心端口与未知镜像不产生目标。
+- `replace_running_exe` 拆成只做 rename 的 `vacate_executable_path` + 兼容旧名；更新流程调用新名，行为不变。
+- 验证：`cargo test -p rs-gui --lib -- plugin_hosting_tests rollover:: shell_tests` 35/35；`--test bridge_contract --test shell_contract --test command_dispatch --test winres_contract --test close_contract` 5+9+5+3+1 全绿；`--lib update::` 3/3。
+- 反向验证：把接管分支改成无条件「已在运行」，A09 重新点火用例转红；恢复后 5/5。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。

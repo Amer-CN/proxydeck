@@ -81,9 +81,12 @@ pub fn cleanup_old_exe() {
     }
 }
 
-/// 用腾位法把运行中的 exe 换成 new_file，返回腾位后的旧文件路径。
+/// 用腾位法把运行中的 exe 改名让位，返回腾位后的旧文件路径。
 /// 旧名每次取唯一（带纳秒时间戳），外面套 3 次退避重试（吃掉杀软/同步盘的短暂占用）。
-pub fn replace_running_exe(exe: &Path, _new_file: &Path) -> Result<PathBuf, String> {
+///
+/// 本函数**只做 rename**，不安装新包、不写换血标记；计划与执行分离，
+/// 调用方（更新流程）自己决定随后把新包放到哪个路径。
+pub fn vacate_executable_path(exe: &Path) -> Result<PathBuf, String> {
     let dir = exe.parent().unwrap_or_else(|| Path::new("."));
     let mut last_err = String::new();
     for attempt in 0..3 {
@@ -101,6 +104,11 @@ pub fn replace_running_exe(exe: &Path, _new_file: &Path) -> Result<PathBuf, Stri
         }
     }
     Err(last_err)
+}
+
+/// 兼容入口（旧公共名）：行为与 [`vacate_executable_path`] 完全相同。
+pub fn replace_running_exe(exe: &Path, _new_file: &Path) -> Result<PathBuf, String> {
+    vacate_executable_path(exe)
 }
 
 /// 换血标记路径（Go `updateMarkerPath`：数据目录 `.update-rollover.json`）。
@@ -564,7 +572,7 @@ pub fn run_one_key_update_flow(
     set_phase("downloaded", 100, "下载完成 · 校验通过");
 
     // 腾位法替换：1) 运行中的旧 exe 改成唯一名 → 2) .new 改名顶替原路径
-    let old_file = match replace_running_exe(&exe, &new_file) {
+    let old_file = match vacate_executable_path(&exe) {
         Ok(p) => p,
         Err(e) => {
             fail(format!(

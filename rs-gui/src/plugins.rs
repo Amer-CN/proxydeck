@@ -417,13 +417,43 @@ impl SpawnTarget {
     }
 }
 
+/// 宿主对一台插件的生命周期状态（**不是**健康快照：健康由端口探活独立判定）。
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub enum RuntimeState {
+    /// 未启动，也没有外部实例的跟踪记录。
+    #[default]
+    Stopped,
+    /// 已发起 spawn、尚未记下子进程 PID 的短暂阶段。
+    Starting { generation: u64 },
+    /// 本进程 spawn 的常驻子进程。
+    OwnedChild { pid: u32, generation: u64 },
+    /// 端口上已有健康实例（外部拉起），只跟踪、不 spawn 不杀。
+    AdoptedEndpoint,
+}
+
+impl RuntimeState {
+    fn generation(&self) -> u64 {
+        match self {
+            Self::Starting { generation } | Self::OwnedChild { generation, .. } => *generation,
+            _ => 0,
+        }
+    }
+
+    fn pid(&self) -> Option<u32> {
+        match self {
+            Self::OwnedChild { pid, .. } => Some(*pid),
+            _ => None,
+        }
+    }
+
+    fn is_active(&self) -> bool {
+        !matches!(self, Self::Stopped)
+    }
+}
+
 #[derive(Default)]
 struct PluginState {
-    running: bool,
-    /// 自 spawn 的子进程 pid（外部接管的实例为 None）
-    pid: Option<u32>,
-    /// 实例世代号：非 0 = 有一个活跃的退出监视（Go 用 `st.cmd == cmd` 判定同一实例）
-    token: u64,
+    runtime: RuntimeState,
     started: Option<Instant>,
     last_err: String,
 }
@@ -480,7 +510,18 @@ impl PluginHost {
     pub(crate) fn test_state_snapshot(&self, id: &str) -> (Option<u32>, u64) {
         let st = self.state_of(id);
         let g = st.lock().unwrap();
-        (g.pid, g.token)
+        (g.runtime.pid(), g.runtime.generation())
+    }
+
+    /// 测试缝：直接登记一个「已 spawn 但从未监听」的子进程，用于验证停止路径按 PID 清理。
+    #[cfg(test)]
+    pub(crate) fn test_set_owned_child(&self, id: &str, pid: u32) {
+        let st = self.state_of(id);
+        let mut g = st.lock().unwrap();
+        let generation = next_token();
+        g.runtime = RuntimeState::OwnedChild { pid, generation };
+        g.started = Some(Instant::now());
+        g.last_err.clear();
     }
 
     /* ---------------- pluginList ---------------- */
@@ -513,8 +554,17 @@ impl PluginHost {
         let st = self.state_of(&d.id);
         {
             let g = st.lock().unwrap();
-            if g.running {
-                return Err(format!("{} 已在运行", d.name));
+            match &g.runtime {
+                RuntimeState::OwnedChild { .. } => return Err(format!("{} 已在运行", d.name)),
+                RuntimeState::Starting { .. } => return Err(format!("{} 正在启动", d.name)),
+                RuntimeState::AdoptedEndpoint => {
+                    // 接管实例可能已经自己退出：端口不再健康就允许重新点火，
+                    // 不能因为陈旧 running 标记把插件永久卡死。
+                    if httpc::ok_fresh(&plugin_health_url(&d)) {
+                        return Err(format!("{} 已在运行", d.name));
+                    }
+                }
+                RuntimeState::Stopped => {}
             }
         }
 
@@ -522,9 +572,7 @@ impl PluginHost {
         // 不杀不重启——正在用它跑任务的客户端（子智能体等）不受影响。
         if httpc::ok_fresh(&plugin_health_url(&d)) {
             let mut g = st.lock().unwrap();
-            g.running = true; // GUI 语义：端口上有可用服务 = 运行中（外部实例，pid 为 None）
-            g.pid = None;
-            g.token = 0;
+            g.runtime = RuntimeState::AdoptedEndpoint;
             g.started = Some(Instant::now());
             g.last_err.clear();
             return Ok(());
@@ -591,9 +639,23 @@ impl PluginHost {
         }
         // 清掉上一次的失败诊断：否则本轮启动成功、旧错误仍会被当成本次原因读出。
         let _ = std::fs::remove_file(plugin_err_log_path(&d));
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| format!("启动 {} 失败: {}", d.name, e))?;
+        let generation = next_token();
+        {
+            let mut g = st.lock().unwrap();
+            g.runtime = RuntimeState::Starting { generation };
+            g.started = Some(Instant::now());
+            g.last_err.clear();
+        }
+        let mut child = match cmd.spawn() {
+            Ok(child) => child,
+            Err(e) => {
+                let mut g = st.lock().unwrap();
+                if matches!(g.runtime, RuntimeState::Starting { generation: g0 } if g0 == generation) {
+                    g.runtime = RuntimeState::Stopped;
+                }
+                return Err(format!("启动 {} 失败: {}", d.name, e));
+            }
+        };
 
         // 两条管道各起一个读线程，统一经同一把锁写同一份时间戳日志（Go 是一条
         // StampedWriter 同时当 Stdout/Stderr；Rust 的 Stdio 不能共享 File 之外的对象）。
@@ -623,12 +685,10 @@ impl PluginHost {
         }
 
         let pid = child.id();
-        let token = next_token();
+        let token = generation;
         {
             let mut g = st.lock().unwrap();
-            g.running = true;
-            g.pid = Some(pid);
-            g.token = token;
+            g.runtime = RuntimeState::OwnedChild { pid, generation: token };
             g.started = Some(Instant::now());
             g.last_err.clear();
         }
@@ -637,12 +697,13 @@ impl PluginHost {
     }
 
     /// 监视子进程退出，进程一死就把状态复位并带上失败原因（Go `watchPluginExit`）。
-    /// 判定用 token：主动停堆（`pluginStop` 把 token 置 0）与换新实例都不会被误判成失败。
+    /// 只有「退出的是当前这一代」才复位；被停堆摘掉或已被新实例替换的旧 watcher 晚回调时
+    /// 一律忽略，不得污染新一代。
     fn watch_plugin_exit(
         &self,
         st: Arc<Mutex<PluginState>>,
         mut child: std::process::Child,
-        token: u64,
+        generation: u64,
         d: PluginDef,
     ) {
         let err_log = plugin_err_log_path(&d);
@@ -652,14 +713,9 @@ impl PluginHost {
                 Ok(s) => go_wait_error(s),
                 Err(e) => Some(e.to_string()),
             };
+            let reason = plugin_exit_reason(&err_log, wait_err.as_deref(), &d);
             let mut g = st.lock().unwrap();
-            if g.token != token {
-                return;
-            }
-            g.running = false;
-            g.pid = None;
-            g.token = 0;
-            g.last_err = plugin_exit_reason(&err_log, wait_err.as_deref(), &d);
+            finish_generation(&mut g, generation, reason);
         });
     }
 
@@ -672,16 +728,13 @@ impl PluginHost {
         };
         let st = self.state_of(&d.id);
         let port = d.port.to_string();
-        // 先杀：自 spawn 的直接 Kill，外部拉起的一律按端口杀（原逻辑）。
-        // 注意 pid/token 先摘不先清 running：杀失败要恢复跟踪（恢复旧 token，
-        // 进程将来退出时 watch 照常复位并记录退出原因——同 Go 恢复 st.cmd 的语义）。
-        let (pid, token) = {
+        // 先摘运行时状态再杀：杀失败要原样恢复跟踪（含世代号），否则旧 watcher 晚回调
+        // 会因世代不匹配永远清不掉 running，界面停在「启动中」。
+        let previous = {
             let mut g = st.lock().unwrap();
-            let pid = g.pid.take();
-            let token = g.token;
-            g.token = 0; // 摘掉退出监视的实例身份（Go: st.cmd = nil）
-            (pid, token)
+            std::mem::take(&mut g.runtime)
         };
+        let pid = previous.pid();
         if let Some(pid) = pid {
             // Go: cmd.Process.Kill()（失败忽略）；Rust 的 Child 归监视线程所有，按 PID 收
             let _ = proc::hidden_cmd("taskkill", &["/F", "/PID", &pid.to_string()]).status();
@@ -691,9 +744,7 @@ impl PluginHost {
         // 界面显示失败而不是先假装关掉、3 秒后探活又弹回 running。
         if !proc::wait_port_free(&port, STOP_VERIFY_WAIT) {
             let mut g = st.lock().unwrap();
-            g.pid = pid;
-            g.token = token; // 恢复旧实例身份（Go: st.cmd = cmd），watch 将来照常复位
-            g.running = true;
+            g.runtime = previous;
             g.last_err.clear();
             return Err(format!(
                 "旧进程杀不掉（端口 {} 仍被占）：对方可能以管理员身份在运行，请右键以管理员身份运行本程序后重试，或从任务管理器结束该进程",
@@ -701,8 +752,7 @@ impl PluginHost {
             ));
         }
         let mut g = st.lock().unwrap();
-        g.running = false;
-        g.pid = None;
+        g.runtime = RuntimeState::Stopped;
         g.last_err.clear();
         Ok(())
     }
@@ -732,11 +782,26 @@ impl PluginHost {
     }
 }
 
+/// watcher 收尾：只有当前代仍是这个 generation 时才复位。
+/// 返回 true = 确实复位（调用方可据此记日志）；false = 旧 watcher 晚回调，忽略。
+fn finish_generation(state: &mut PluginState, generation: u64, reason: String) -> bool {
+    let matches = matches!(
+        state.runtime,
+        RuntimeState::Starting { generation: g } | RuntimeState::OwnedChild { generation: g, .. } if g == generation
+    );
+    if !matches {
+        return false;
+    }
+    state.runtime = RuntimeState::Stopped;
+    state.last_err = reason;
+    true
+}
+
 /// 单个插件的 `ccPluginList` 条目（Go `pluginList` 里那个 goroutine 的闭包体）。
 fn list_one(d: &PluginDef, st: &Mutex<PluginState>) -> Value {
     let (running, mut last_err) = {
         let g = st.lock().unwrap();
-        (g.running, g.last_err.clone())
+        (g.runtime.is_active(), g.last_err.clone())
     };
     let script = plugin_script(d);
     let mut present = !d.native.is_empty(); // 原生插件内置于本 exe，恒为存在
@@ -1009,5 +1074,47 @@ mod tests {
 
         std::env::remove_var(appdir::DATA_DIR_ENV);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 旧 watcher 晚回调：世代号不匹配时一律忽略，绝不能复位/污染新实例。
+    #[test]
+    fn stale_watcher_generation_never_resets_a_newer_child() {
+        let mut st = PluginState {
+            runtime: RuntimeState::OwnedChild {
+                pid: 4242,
+                generation: 7,
+            },
+            started: Some(Instant::now()),
+            last_err: String::new(),
+        };
+        assert!(!finish_generation(&mut st, 6, "旧实例退出".into()));
+        assert_eq!(
+            st.runtime,
+            RuntimeState::OwnedChild {
+                pid: 4242,
+                generation: 7
+            },
+            "旧 watcher 不得复位新代"
+        );
+        assert!(st.last_err.is_empty(), "旧 watcher 不得写新代的失败原因");
+
+        assert!(finish_generation(&mut st, 7, "当前实例退出".into()));
+        assert_eq!(st.runtime, RuntimeState::Stopped);
+        assert_eq!(st.last_err, "当前实例退出");
+        assert!(!finish_generation(&mut st, 7, "重复回调".into()), "只复位一次");
+    }
+
+    /// 接管（AdoptedEndpoint）→ 外部实例退出后必须允许重新点火；世代号只属于自 spawn 实例。
+    #[test]
+    fn adopted_endpoint_has_no_generation_and_can_be_replaced() {
+        let mut st = PluginState {
+            runtime: RuntimeState::AdoptedEndpoint,
+            ..Default::default()
+        };
+        assert!(st.runtime.is_active());
+        assert_eq!(st.runtime.pid(), None);
+        assert_eq!(st.runtime.generation(), 0);
+        assert!(!finish_generation(&mut st, 1, "不应命中".into()));
+        assert_eq!(st.runtime, RuntimeState::AdoptedEndpoint);
     }
 }

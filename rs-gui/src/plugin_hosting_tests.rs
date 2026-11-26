@@ -324,6 +324,70 @@ fn start_takes_over_healthy_backend_and_heals_stale_error() {
     drop(holder2);
 }
 
+/// A09：接管的外部实例自行退出后，陈旧的「运行中」状态不得阻止重新点火。
+#[test]
+fn adopted_endpoint_exit_allows_a_fresh_start() {
+    let _g = env_lock().lock().unwrap();
+    require_node();
+    let port = 19825;
+    let fx = Fixture::new("adopt-recover", port, "zz-delta");
+    let ext = FakeBackend::spawn("serve", port, &[]);
+    std::env::remove_var("RS_GUI_FAKE_MODE");
+
+    fx.host.start("zz-delta").expect("健康外部实例应被接管");
+    let (pid, generation) = fx.host.test_state_snapshot("zz-delta");
+    assert_eq!(pid, None, "接管不 spawn：没有自有子进程");
+    assert_eq!(generation, 0, "接管端点没有退出监视世代号");
+    assert_eq!(fx.listing()["running"], true);
+    assert_eq!(fx.listing()["healthy"], true);
+
+    drop(ext);
+    let url = format!("http://127.0.0.1:{port}/health");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while httpc::ok(&url) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(!httpc::ok(&url), "外部实例必须真的下线");
+
+    std::env::set_var("RS_GUI_FAKE_MODE", "serve");
+    fx.host
+        .start("zz-delta")
+        .expect("接管实例退出后必须允许重新点火（不得报已在运行）");
+    let v = fx.wait_field("新实例健康", |v| v["healthy"] == true);
+    assert_eq!(v["running"], true);
+    let (pid, generation) = fx.host.test_state_snapshot("zz-delta");
+    assert!(pid.is_some(), "重新点火后应是自 spawn 子进程");
+    assert!(generation > 0, "自 spawn 实例必须有世代号");
+    fx.host.stop("zz-delta").expect("新实例按 PID/端口停止");
+}
+
+/// A09：已 spawn 但从未监听的子进程，也必须能按 PID 清理（不能只看端口）。
+#[test]
+fn spawned_child_without_listener_is_cleaned_up_by_pid() {
+    let _g = env_lock().lock().unwrap();
+    let port = 19826;
+    let fx = Fixture::new("silent-child", port, "zz-delta");
+    let child = Command::new("node")
+        .args(["-e", "setTimeout(() => {}, 60000)"])
+        .spawn()
+        .expect("起静默子进程失败（node 起不来？）");
+    let pid = child.id();
+    let _guard = KillOnDrop(pid);
+    fx.host.test_set_owned_child("zz-delta", pid);
+    assert_eq!(fx.listing()["running"], true);
+    assert_eq!(fx.listing()["healthy"], false, "静默子进程从不监听");
+
+    fx.host
+        .stop("zz-delta")
+        .expect("按 PID 必须能停掉未监听子进程");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while pid_alive(pid) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(!pid_alive(pid), "未监听子进程也必须被 PID 清理");
+    assert_eq!(fx.listing()["running"], false);
+}
+
 /// 退出监视：子进程写了诊断文件 → 失败原因逐字取诊断正文（前缀 `启动失败：`）。
 #[test]
 fn exit_watch_reports_child_diagnostic_verbatim() {
