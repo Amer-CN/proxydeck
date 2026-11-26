@@ -276,7 +276,7 @@ pub async fn run(args: Args) -> std::result::Result<(), RunError> {
         "[tuanjie] rs-tuanjie 监听 {}:{}（数据目录 {}，上游 {}）",
         args.host,
         args.port,
-        pacing::data_dir().display(),
+        appdir::data_dir().display(),
         server::default_litellm_base()
     ));
     let app = server::router(state);

@@ -198,6 +198,7 @@ fn inflight_registry_and_activity_match_go() {
 
 #[test]
 fn pacing_matches_go() {
+    use rs_tuanjie::appdir::DATA_DIR_ENV;
     use rs_tuanjie::pacing::*;
 
     let _guard = env_lock();

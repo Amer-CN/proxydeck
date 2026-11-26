@@ -333,7 +333,7 @@ fn channels_static(st: &Arc<AppState>) -> Response {
 /// 逐条容忍缺字段（`id`/`key` 缺失即跳过该条），与 `matrix.rs` 的同名口径一致。
 pub fn read_channel_keys() -> std::collections::BTreeMap<String, String> {
     let mut out = std::collections::BTreeMap::new();
-    let path = crate::pacing::data_path(crate::channels::CHANNELS_CONFIG_FILE);
+    let path = crate::appdir::data_path(crate::channels::CHANNELS_CONFIG_FILE);
     let Ok(raw) = crate::crypto::read_file(&path) else {
         return out;
     };

@@ -1,49 +1,27 @@
-//! `handleChat` 的**池路径与单账号路径** —— `internal/tuanjie/server.go:938-1430` 的逐条对应物。
+//! 团结 chat 执行入口：把入站请求准备、账号路由、单次上游尝试、错误策略和
+//! OpenAI 兼容响应交付串成一条可追踪调用链。
 //!
-//! ## 本片覆盖什么
+//! ## 当前职责
 //!
-//! * 入站：`POST` 方法闸门 → 64MB 限读 → **非法 UTF-8 本地 400**（`rejectInvalidUTF8Body`）
-//!   → 解析 `model`/`stream` → 会话租借 → 反竞品身份脱敏
-//!   （`reqshape::desensitize_agent_identity`）→ 体重排（`reqshape::reshape_chat_body`）。
-//! * 池路径（有池且选得出号）：`ForwardDirect`（按号换 key + 签名头）→ 402 禁用该号并换号
-//!   → 瞬时错误重发（≤3 次，间隔 800ms）→ **429 兜底两层**（即时换号 ≤3 次、换前
-//!   [`ChatTiming::switch_backoff`] 退避；全池撞墙按 `Retry-After` 排队重发，单请求
-//!   [`crate::pacing::PACING_MAX_WAIT_SECS`] 总预算）→ 非 200 透传 / 200 转发（流式或
-//!   整块 + usage 入账）。
-//! * 单账号路径（无池）：`ForwardWithSession`（共享 `apiKeyCached`）→ 429 **只有等待层**
-//!   （无池可换）→ 瞬时错误重发（先 `invalidate_key`）→ 402 标记本地账号 → 200 空响应
-//!   嗅探重放（[`ensure_non_empty`]）。
+//! * 入站：方法闸门 → 64MB 限读 → 非法 UTF-8 本地拒绝 → 解析模型/流式 → 会话租借
+//!   → 身份脱敏与请求体重排。
+//! * 池路径：按号换 key/签名 → 402 禁用换号 → 瞬时错误重试 → 429  pacing/换号
+//!   → 非 200 透传或 200 流式/整块交付与 usage 入账。
+//! * 本地凭据路径：无池时走共享 key 缓存与等待层，保留空响应嗅探重放。
+//! * 判定告警：`note_upstream_error` / `note_upstream_ok` 已接入，`/health` 读取同一
+//!   [`crate::server::AppState::judge_alert`] 状态；不再是恒 `false` 的占位。
 //!
-//! ## 与 Go 的已知差异（逐条登记，不静默）
+//! ## 不变量
 //!
-//! 1. **`noteUpstreamError`/`noteUpstreamOK`（判定告警计数）未迁**：属 P8c 的面
-//!    （`server.go:280-322`）。本片不写告警状态，`/health` 的 `judgment_alert` 仍恒 `false`
-//!    （第三片已登记）。
-//! 2. **`logRequestShape` 未迁**：纯诊断日志（`server.go:2212-2266`），不含响应字节。
-//! 3. **`desensitizeAgentIdentity`（反竞品身份脱敏）已迁（P8d-3）**：Go 在
-//!    `reshapeChatBody` **之前**对 system 消息里的 `You are <竞品名>` 做零宽空格改写
-//!    （`server.go:988-991`），Rust 侧同位调用 [`crate::reqshape::desensitize_agent_identity`]，
-//!    55 条 Go 真函数采收向量逐字节一致。
-//!    【2026-10-18 更新】识图「静默改写模型」已按用户裁决删除：请求含图片/音频而目标
-//!    模型不在内置多模态清单时直接回 400（列出可用模型）；远程图片预下载
-//!    （`FetchRemoteImages`）保留（见 [`crate::media`]）。自定义服务商与三协议转发
-//!    同批整体删除（`providers` / `responses_forward` / `anthropic_forward` 模块已移除），
-//!    不再有「外部 provider 模型绕过多模态判定」这条分支。
-//! 4. **别名解析观测（`water.RecordResolution`）/被动注水（`water.RecordPassive`）未迁**：
-//!    注水面（P8c）。
-//! 5. **单账号路径 200 的 `defer activity.Add("ok", …)` 未迁**：Go 那条恒写（`:1379-1381`），
-//!    池路径只在非流式含 usage 时写（`:1249-1250`）；Rust 侧实现了后者的同一形态
-//!    （[`record_usage`]），前者少一条**仅用于 GUI 展示**的事件。
-//! 6. **流式 usage 入账（`usageScanner`）已迁**：逐块 `feed`（usage 段入账、流内错误记一次）
-//!    + `finish`，随池路径流式分支逐块驱动；别名解析观测（`water.RecordResolution`）
-//!    未迁（属 P8c 的注水面），响应字节与入账行为不受影响。
+//! * 团结签名种子、两层 HMAC、会话头、UA、换 key 端点与请求字节顺序属特别保护区；
+//!   本模块的重试/生命周期调整不得改变它们。
+//! * 池路径与本地路径保留各自的重试预算、429 语义、空响应差异和计数时点。
+//! * 纯诊断 `logRequestShape` 尚未接入；历史迁移差异与黄金对照见 `rs-tuanjie/README.md`。
 //!
 //! ## 测试缝
 //!
-//! 三个固定间隔是 Go 的**字面量**（`time.Sleep(800ms)` / `(1500ms)`，Go 侧无包级 var 可注入），
-//! 本片照抄同一常量；只有 Go 侧**本身就可注入**的 `pacingSwitchBackoff`（`server.go:906`
-//! 的包级 var）在 Rust 侧做成运行时可设的 [`ChatTiming::switch_backoff`]——否则门禁里每条
-//! 换号用例都要真等 3 秒。生产构造恒为 1s。
+//! 固定间隔保持 Go 字面量；仅 Go 本身可注入的 `pacingSwitchBackoff` 对应
+//! [`ChatTiming::switch_backoff`]，生产恒为 1s，测试可缩短。
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

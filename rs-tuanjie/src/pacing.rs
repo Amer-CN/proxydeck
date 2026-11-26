@@ -1,15 +1,8 @@
-//! KIMI-K3 429 兜底开关 —— `internal/tuanjie/pacing.go` 的逐条对应物（P8b 切片）。
+//! KIMI-K3 429 兜底开关与等待预算。
 //!
-//! Go 侧事实（只读核对，行号取自 `pacing.go`）：
-//! - `pacingRetryDefault = 60s`（`:21`）、`pacingMaxWait = 30min`（`:22`）——兜底等待与总预算；
-//! - `IsPacingModel`（`:55-57`）= `strings.Contains(strings.ToUpper(model), "KIMI")`；
-//! - `RetryWait`（`:61-67`）= `Atoi(TrimSpace(h))`，**>0 的整数秒**才采信，其余（空/非数字/0/负数）回 60s；
-//! - `Pacer.load/save`（`:70-99`）= 数据目录 `tuanjie-pacing.json`，形态 `{"enabled":<bool>}`
-//!   （Go 的 `json.Marshal(map[string]bool)` → 单键、无缩进、无换行），落盘走 `tmp + rename`。
-//!
-//! 数据目录判定链（`internal/appdir/appdir.go:84-98`）在 **P8c 已整块迁进
-//! [`crate::appdir`]**（该模块现在是 appdir 全量的落点：判定链 / 迁移 / 明文升级 /
-//! 日志轮转 / 启动收口）。本模块只**转出**这几个名字，保持既有调用点与测试缝不变。
+//! 本模块只拥有 pacing 策略：模型判定、`Retry-After` 解析、进行中计数和
+//! `tuanjie-pacing.json` 的读写。数据目录判定与路径解析统一归 [`crate::appdir`]，
+//! 调用方直接使用 `crate::appdir::data_path`，不再经本模块转发。
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -21,41 +14,7 @@ pub const PACING_RETRY_DEFAULT_SECS: u64 = 60;
 /// `pacing.go:22` —— 单请求总兜底预算。
 pub const PACING_MAX_WAIT_SECS: u64 = 30 * 60;
 
-/// 数据目录覆盖环境变量名 —— `appdir.go:26`（转发自 [`crate::appdir`]）。
-pub const DATA_DIR_ENV: &str = crate::appdir::DATA_DIR_ENV;
-
-/// 便携标记文件名 —— `appdir.go:24`（转发自 [`crate::appdir`]）。
-pub const PORTABLE_MARKER: &str = crate::appdir::PORTABLE_MARKER;
-
-/// `%APPDATA%` 下的数据目录名 —— `appdir.go:22`（转发自 [`crate::appdir`]）。
-pub const APP_NAME: &str = crate::appdir::APP_NAME;
-
-/// 数据目录（对齐 `appdir.dataDir()`）—— `appdir.go:84-98`。
-pub fn data_dir() -> PathBuf {
-    crate::appdir::data_dir()
-}
-
-/// 便携标记是否在 exe 同目录（**是文件、不是目录**）—— `appdir.go:33-36`。
-pub fn portable_marker_exists() -> bool {
-    crate::appdir::marker_exists()
-}
-
-/// 当前是否便携模式 —— `appdir.go:39`（由 [`crate::appdir::init`] 按 flag/标记解析）。
-pub fn portable() -> bool {
-    crate::appdir::portable()
-}
-
-/// 数据目录（不存在则建；失败退回 exe 同目录）—— `appdir.go:72-78`。
-pub fn data_dir_ensure() -> PathBuf {
-    crate::appdir::data_dir_ensure()
-}
-
-/// 数据目录下的某个文件路径 —— `appdir.go:82`。
-pub fn data_path(name: &str) -> PathBuf {
-    crate::appdir::data_path(name)
-}
-
-/// 429 兜底是否适用于该模型：`pacing.go:55-57`（**不分大小写**地找 "KIMI"）。
+/// 429 兜底是否适用于该模型：不分大小写地找 "KIMI"。
 pub fn is_pacing_model(model: &str) -> bool {
     model.to_uppercase().contains("KIMI")
 }
@@ -91,7 +50,7 @@ impl Pacer {
         let mut p = Pacer {
             enabled: AtomicBool::new(false),
             pending: AtomicI64::new(0),
-            path: Some(data_path("tuanjie-pacing.json")),
+            path: Some(crate::appdir::data_path("tuanjie-pacing.json")),
         };
         p.load();
         p

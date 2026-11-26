@@ -1,20 +1,16 @@
-//! rs-comate —— ProxyDeck Comate 插件（8786）的 Rust 重写（绞杀者路线 P2）。
+//! rs-comate —— ProxyDeck Comate 插件（8786）的 Rust 实现。
 //!
-//! 目标：等价替换 `internal/comate`（百度文心快码），先在测试端口独立跑通，不注册进
-//! `app/plugins.go`、不动 Go 构建、不碰任何现行服务端口（尤其 **8792 上跑着的 zulu**）。
-//!
-//! 端点（与 Go 的 `http.ServeMux` 三条同形）：
+//! 当前职责：把 Comate 登录态翻成本地 OpenAI 兼容接口。生产默认云直连；zulu serve
+//! 保留为兼容/黄金回放与兜底。端点与 Go `http.ServeMux` 同形：
 //! * `/health`               —— 本地应答，无登录态回 `{"status":"no_license"}`；**不看方法**
-//! * `/v1/models`            —— 本地应答，目录来自 `zulu list-model`（10 分钟缓存）或硬编码回退；**不看方法**
-//! * `/v1/chat/completions`  —— 扁平化 query → POST `/api/v1/conversations/init` → 翻回 OpenAI
-//!   （流式与非流式两条；见 `translate`）
+//! * `/v1/models`            —— 本地应答，目录来自云目录或 zulu `list-model`，失败回退硬编码；**不看方法**
+//! * `/v1/chat/completions`  —— 云直连或 zulu 会话 → OpenAI 响应（流式与非流式）
 //! * 其余路径 —— `ServeMux` 语义的 404/307（路径清洗重定向），见 `handle_fallback`
 //!
-//! 测试缝（生产默认值就是 Go 的常量）：
-//! * `AppState::from_env()` 读 `COMATE_CWD` / `COMATE_MODE` / `COMATE_ZULU` 与
-//!   `%USERPROFILE%\.comate\cli-login.json`，与 Go 同一套判定；
-//! * `upstream_base` / `zulu_health_url` / `zulu_serve_port` 三个字段供黄金回放指向假上游
-//!   与假健康端点——**生产构造里它们等于 `internal/comate` 的常量 8792**。
+//! 构造边界：生产用 [`AppState::from_env`]（默认 Cloud，`COMATE_TRANSPORT` 可显式选 Zulu）；
+//! 测试/回放用 [`AppState::for_cloud`] 或 [`AppState::for_zulu`]。旧 [`AppState::new`]
+//! 仍等价于 Zulu，避免破坏既有库消费者与黄金脚本。`upstream_base` / `zulu_health_url` /
+//! `zulu_serve_port` 可由回放覆盖；生产默认保持 8792 常量。
 
 pub mod cloud;
 pub mod cloud_chat;
@@ -116,7 +112,7 @@ pub const FALLBACK_MODELS: [&str; 15] = [
 #[derive(Parser, Debug)]
 #[command(name = "rs-comate", version, about = "ProxyDeck Comate 插件（Rust 重写）")]
 pub struct Args {
-    /// 与 Go 侧 `--plugin-comate` 同名，保持 GUI spawn 形态一致（本阶段不注册进 GUI，仅占位）。
+    /// 与 Go 侧 `--plugin-comate` 同名，保持 GUI spawn 形态一致。
     #[arg(long = "plugin-comate", default_value_t = false)]
     pub plugin_comate: bool,
 
@@ -186,8 +182,8 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// 显式构造（测试/黄金回放用，不读环境变量）。
-    pub fn new(
+    /// 显式构造 zulu 兼容路径（黄金回放与本地兜底）。
+    pub fn for_zulu(
         license_path: PathBuf,
         zulu_path: Option<PathBuf>,
         cwd_env: Option<String>,
@@ -212,6 +208,30 @@ impl AppState {
         }
     }
 
+    /// 显式构造云直连路径；zulu 字段仍保留供诊断/兼容使用。
+    pub fn for_cloud(
+        license_path: PathBuf,
+        zulu_path: Option<PathBuf>,
+        cwd_env: Option<String>,
+        mode_env: Option<String>,
+    ) -> Self {
+        Self {
+            transport: Transport::Cloud,
+            ..Self::for_zulu(license_path, zulu_path, cwd_env, mode_env)
+        }
+    }
+
+    /// 兼容入口：历史上 `new` 始终表示 zulu，保留给库消费者和黄金回放。
+    /// 新代码应显式调用 [`Self::for_zulu`] 或 [`Self::for_cloud`]。
+    pub fn new(
+        license_path: PathBuf,
+        zulu_path: Option<PathBuf>,
+        cwd_env: Option<String>,
+        mode_env: Option<String>,
+    ) -> Self {
+        Self::for_zulu(license_path, zulu_path, cwd_env, mode_env)
+    }
+
     /// 生产构造：登录态顺序 = `COMATE_LICENSE` → Comate IDE 的 settings.json → `cli-login.json`。
     ///
     /// 2026-11-15 更新后两者可能是不同账号：IDE 里那个才是用户当前在用/买会员的账号，
@@ -222,7 +242,7 @@ impl AppState {
             sources.push(zulu::LicenseSource::IdeSettings(p));
         }
         sources.push(zulu::LicenseSource::File(zulu::license_path()));
-        let mut st = Self::new(
+        let mut st = Self::for_zulu(
             zulu::license_path(),
             zulu::discover_zulu(std::env::var("COMATE_ZULU").ok().as_deref()),
             std::env::var("COMATE_CWD").ok(),
@@ -1670,6 +1690,37 @@ mod tests {
         assert_eq!(short_model_id("_leading-underscore"), "_leading-underscore");
         assert_eq!(short_model_id("no-suffix-model"), "no-suffix-model");
         assert_eq!(short_model_id(""), "");
+    }
+
+    #[test]
+    fn explicit_constructors_name_the_transport_and_legacy_new_stays_zulu() {
+        let license = PathBuf::from("synthetic-license.json");
+        let zulu = AppState::for_zulu(license.clone(), None, None, None);
+        assert_eq!(zulu.transport, Transport::Zulu);
+        assert_eq!(zulu.upstream_base, DEFAULT_UPSTREAM);
+
+        let cloud = AppState::for_cloud(license.clone(), None, None, None);
+        assert_eq!(cloud.transport, Transport::Cloud);
+        assert_eq!(cloud.cloud_base, cloud::CLOUD_BASE);
+
+        // 既有库消费者和黄金回放仍走 Zulu；兼容入口不得悄悄改成云直连。
+        let legacy = AppState::new(license, None, None, None);
+        assert_eq!(legacy.transport, Transport::Zulu);
+        assert_eq!(legacy.upstream_base, DEFAULT_UPSTREAM);
+    }
+
+    #[test]
+    fn transport_selection_defaults_to_cloud_and_keeps_explicit_zulu() {
+        const ENV: &str = "COMATE_TRANSPORT";
+        let old = std::env::var_os(ENV);
+        std::env::remove_var(ENV);
+        assert_eq!(Transport::from_env(), Transport::Cloud);
+        std::env::set_var(ENV, "zulu");
+        assert_eq!(Transport::from_env(), Transport::Zulu);
+        match old {
+            Some(value) => std::env::set_var(ENV, value),
+            None => std::env::remove_var(ENV),
+        }
     }
 
     #[test]

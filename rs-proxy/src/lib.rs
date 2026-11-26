@@ -55,8 +55,6 @@ pub struct Proxy {
     /// 本次请求打到上游的次数（Go 用闭包局部计数；这里是进程级原子计数，门禁读它）。
     /// **每个请求开始前由 handler 重置**。
     pub upstream_hits: AtomicUsize,
-    /// 出站 opencode.ai 的会话头（Go 在 `internal/tuanjie` 侧；COMMAND 代理不用，保留字段）。
-    pub opencode_session: Option<String>,
 }
 
 /// `/v1/usage` 的成功结果缓存。
@@ -77,7 +75,6 @@ impl Proxy {
             stats: Mutex::new(UsageStats::new("")),
             usage_cache: Mutex::new(UsageCache::default()),
             upstream_hits: AtomicUsize::new(0),
-            opencode_session: None,
         }
     }
 

@@ -930,7 +930,7 @@ impl BaselineStore {
 
     /// 生产构造：数据目录的 `tuanjie-baselines.json`。
     pub fn new() -> Self {
-        Self::load(Some(crate::pacing::data_path(BASELINES_FILE)))
+        Self::load(Some(crate::appdir::data_path(BASELINES_FILE)))
     }
 
     /// 当前内存态的全部键（有序）。

@@ -60,7 +60,7 @@ impl Stats {
     /// 生产构造：从数据目录的 `tuanjie-stats.json` 读回 —— `NewServer` 里的
     /// `s.statsPath = appdir.Path("tuanjie-stats.json")` + `s.loadStats()`（`server.go:81-82`）。
     pub fn new() -> Self {
-        Self::with_path(Some(crate::pacing::data_path("tuanjie-stats.json")))
+        Self::with_path(Some(crate::appdir::data_path("tuanjie-stats.json")))
     }
 
     /// 显式指定（或不指定）落盘路径 —— 测试用（Go 侧 `statsPath == ""` 时同样不读不写）。

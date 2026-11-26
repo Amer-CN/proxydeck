@@ -3,7 +3,8 @@
 ProxyDeck 的 OpenCode 插件（测试端口 **8784**）。把用户机器上真实的 `opencode serve`
 翻成本地 OpenAI 兼容接口，**不打包 opencode 本体**，Rust 侧只做协议翻译。
 
-第一版范围：纯文本对话（chat）。工具调用 / MCP 桥接、GUI 甲板、一键安装都放到第二版。
+当前范围：纯文本对话、按请求的 MCP 工具桥接、GUI 甲板与一键安装均已接入；插件只翻译
+本机 `opencode serve`，不打包 opencode 本体。
 
 ## 运行
 
@@ -33,7 +34,7 @@ curl -N -H 'content-type: application/json' -d '{"messages":[{"role":"user","con
 2. `%APPDATA%\ProxyDeck\opencode\` 下**最新版本目录**里的 `opencode.exe`
 3. `PATH` 上的 `opencode`
 4. 都没有 → `/health` 返回 `{"ok":false,"reason":"opencode_not_installed"}`，
-   `/v1/*` 返回 503。**第一版不做一键安装。**
+   `/v1/*` 返回 503；安装只由界面「一键安装」显式触发。
 
 默认**优先接管你已经在运行的 opencode**（TUI 的后台服务）：读
 `%LOCALAPPDATA%\state\opencode\service.json` / `~/.local/state/opencode/service.json`，

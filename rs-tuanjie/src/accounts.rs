@@ -135,7 +135,7 @@ impl AccountPool {
     /// 池账号用入池快照——否则池账号会拿错号发请求，无登录态的纯池部署全军覆没。
     pub fn new() -> Self {
         Self::with_path(
-            Some(crate::pacing::data_path(ACCOUNTS_FILE)),
+            Some(crate::appdir::data_path(ACCOUNTS_FILE)),
             production_token_provider,
         )
     }

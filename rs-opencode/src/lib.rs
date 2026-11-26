@@ -16,7 +16,8 @@
 //! * **权限询问一律 reject**：没有 approve 分支（见 `upstream::reply_permission`）。
 //! * **串行化**：全局 `Semaphore(1)`，opencode 免费档吃不了并发。
 //! * **429 明确报错**：撞限流的模型回 429 + retry-after，不会自动换模型（见 `models::ModelPool`）。
-//! * **第一版不做工具调用**：入站 `tools` 忽略；`permission.asked` 只拒绝。
+//! * **工具调用按请求桥接**：合法 `tools[]` 经本轮临时 MCP 桥返回 `tool_calls`；
+//!   `permission.asked` 仍固定 reject，不在插件侧执行客户端工具。
 pub mod config;
 pub mod datadir;
 pub mod discover;

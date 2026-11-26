@@ -150,8 +150,7 @@ async fn execute(State(st): State<Arc<FakeCloudState>>, body: String) -> Respons
 async fn cloud_app(cloud: &FakeCloud) -> (AppServer, TestDir) {
     let dir = TestDir::new("cloud-contract");
     let lic = write_license(&dir, "cli-login.json", "test-license-0001");
-    let mut st = AppState::new(lic, None, None, None);
-    st.transport = Transport::Cloud;
+    let mut st = AppState::for_cloud(lic, None, None, None);
     st.cloud_base = cloud.base.clone();
     let app = AppServer::start(Arc::new(st)).await;
     (app, dir)

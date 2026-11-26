@@ -17,7 +17,7 @@
 //! ## 差异（登记）
 //!
 //! 1. `waterFilePath()` 取 `exeDirForAccounts()` = `appdir.DataDir()`；本 crate 用
-//!    [`crate::pacing::data_path`]（同一条判定链，P8b 已登记）；
+//!    [`crate::appdir::data_path`]（同一数据目录判定链）；
 //! 2. `containsCI` 的 Go 实现是**字节级** `normalizeModelName` 后的子串查找；
 //!    Rust 侧同款（[`contains_ci`]），不做 Unicode 折叠——两者一致；
 //! 3. `probe_account` 里换取 key 的网络路径依赖 [`crate::client`] 的
@@ -167,7 +167,7 @@ impl Default for WaterCheck {
 impl WaterCheck {
     /// `LoadWater`（`water.go:76-88`）：从磁盘恢复。
     pub fn new() -> Self {
-        let path = Some(crate::pacing::data_path(WATER_FILE));
+        let path = Some(crate::appdir::data_path(WATER_FILE));
         Self::load(path)
     }
 
