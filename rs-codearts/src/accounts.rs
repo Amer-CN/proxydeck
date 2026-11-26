@@ -356,7 +356,9 @@ impl AccountManager {
                     .iter()
                     .any(|a| account.identity_aliases.contains(a))
                 || existing.identity() == incoming_identity
-                || (account.domain_id.as_deref().is_some_and(|d| !d.trim().is_empty())
+                || (existing.domain_id.is_some()
+                    && !account.display_name().is_empty()
+                    && existing.display_name() == account.display_name()
                     && existing.domain_id == account.domain_id)
         });
         let snapshot = if let Some(index) = matching {

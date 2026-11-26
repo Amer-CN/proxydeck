@@ -49,6 +49,23 @@ fn no_domain_same_name_accounts_keep_distinct_stable_ids() {
 }
 
 #[test]
+fn same_domain_different_names_stay_distinct_and_keep_own_credentials() {
+    let dir = temp_dir("same-domain");
+    let path = dir.join("codearts-accounts.json");
+    let manager = AccountManager::new(path);
+    let mut alice = account("AK-A", "alice");
+    alice.domain_id = Some("tenant-1".into());
+    let mut bob = account("AK-B", "bob");
+    bob.domain_id = Some("tenant-1".into());
+    let a = manager.upsert(alice).unwrap();
+    let b = manager.upsert(bob).unwrap();
+    assert_ne!(a.id, b.id, "同一 tenant 的不同用户不得互相覆盖");
+    assert_eq!(manager.snapshot(&a.id).unwrap().credentials.access_key, "AK-A");
+    assert_eq!(manager.snapshot(&b.id).unwrap().credentials.access_key, "AK-B");
+    assert_eq!(manager.load().unwrap().accounts.len(), 2);
+}
+
+#[test]
 fn ak_rotation_and_reload_preserve_id_aliases_and_other_accounts() {
     let dir = temp_dir("rotation");
     let path = dir.join("codearts-accounts.json");
