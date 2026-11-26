@@ -18,7 +18,8 @@
 | T4 | complete | A03 6/6；CodeArts 全 crate 62 passed / 0 failed；稳定 ID 替换突变 2 红后恢复 |
 | T5 | complete | A04/A05 13/13；CodeArts 全 crate 69 passed / 0 failed；版本复用突变 1 红后恢复 |
 | T6 | complete | A06 4/4；CodeArts 全 crate 73 passed / 0 failed；JSON 错误旁路突变 1 红后恢复 |
-| T7–T14 | pending | 未开始 |
+| T7 | complete | A07 3/3（含真实生产脚本）；JS 语法 4/4；ui_html 4/4；release_sync 1/1；防过期守卫突变 1 红后恢复 |
+| T8–T14 | pending | 未开始 |
 
 ## 基线与证据
 - 原树：HEAD `0daefd9d5cc218321a4ee7d36d1b6d9148221bd3`，分支 `main`，仅任务文档未提交。
@@ -103,6 +104,16 @@
 - A06 四场景：三种错误形态一致恢复、非流式晚错恢复/流式不重放、正常工具帧、客户端首字节后断开不重发。
 - 验证：`cargo test -p rs-codearts --locked -- --nocapture` → **73 passed / 0 failed / 0 ignored**。
 - 反向验证：旁路 HTTP200 JSON 错误检测后 A06 3 passed / 1 failed；恢复后 4/4。
+
+## T7 实施记录
+- 新增 UI 内 `<script id="pt-region-state">`：`PTApp.regionContext(pageId)` 返回冻结的 `{pluginId, region, port, generation}`，`onRegionChange` 通知，`isCurrent(context)` 是异步响应唯一提交门槛；`regionRequest` 把端口与 generation 绑定。
+- 删除 `accPort()` DOM 文本反解析与 200ms 点击/键盘跟随；WorkBuddy 账号池改为订阅区域状态，响应过期即丢弃。
+- `cbRegionApply` / `qoderRegionApply` 成为区域状态唯一写入点；`refreshPluginView` 的插件列表、模型、元数据、日志、统计与 WorkBuddy/Qoder/码道额度请求全部携带上下文，晚到响应不写新区域缓存。
+- `selectMode` 推进 generation，跨 IIFE 的 `window.refreshKeyLights` 查询改为 `PTApp.refreshKeyLights`。
+- 新增 `app/tests/ui-state.test.cjs`：从生产 HTML 提取 `#pt-region-state` 与 WorkBuddy 账号 IIFE 真脚本，最小 DOM/fetch 替身；覆盖冻结/通知/失效、CN 晚到丢弃 INT L、Qoder 晚到拒绝。
+- 新增 `tools/check-ui-js.cjs`：抽取全部内联脚本逐个 `node --check`，扫描集合为 0 或任一脚本语法错误即失败（实测 4 个脚本）。
+- 验证：`node --test app/tests/ui-state.test.cjs` 3/3；`node tools/check-ui-js.cjs` 4/4；同步副本与哈希后 `ui_html` 4/4、`release_sync` 1/1。
+- 反向验证：删掉 `accPull` 的 `isCurrent` 守卫，WorkBuddy 晚到用例转红；恢复后 3/3。
 
 ## 预检接口
 - T2→T3：流头只判完成度，不改变模型资格；两者在真实 HTTP 入口组合验证。

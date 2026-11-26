@@ -3080,19 +3080,14 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                 /* WorkBuddy 账号池区（第三期）：看池 / 重新扫描 / 提前恢复 / 停用启用 / 移除恢复。
                    自包含块——本文件的引擎与业务层脚本都在其后解析，绑定一律推迟到
                    DOMContentLoaded；不做 3 秒轮询（账号池状态变化慢，无在线/离线灯）。
-                   端口跟随当前区域：cbRegionApply 按区域改写 #cbEndpoint 文案，
-                   每次拉取实时解析该端口（默认 8787）。 */
+                   端口由 PTApp.regionContext('cb') 提供；
+                   异步响应只在 generation 仍当前时提交。 */
                 (function () {
                   'use strict';
                   function accEsc(s) {
                     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
                       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
                     });
-                  }
-                  function accPort() {
-                    var el = document.getElementById('cbEndpoint');
-                    var m = el ? String(el.textContent).match(/127\.0\.0\.1:(\d+)/) : null;
-                    return m ? m[1] : '8787';
                   }
                   function accFmt(ts) { /* MM-dd HH:mm（徽章「冷却中 · 至 …」用） */
                     function p(n) { return (n < 10 ? '0' : '') + n; }
@@ -3177,10 +3172,13 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     }).join('') + '</div>';
                   }
                   async function accPull(opts) {
+                    var context = window.PTApp.regionContext('cb');
                     try {
-                      var r = await fetch('http://127.0.0.1:' + accPort() + '/v1/accounts', opts);
-                      accRender(await r.json());
-                    } catch (e) { accOffline(); }
+                      var r = await fetch('http://127.0.0.1:' + context.port + '/v1/accounts', opts);
+                      var data = await r.json();
+                      if (!window.PTApp.isCurrent(context)) return;
+                      accRender(data);
+                    } catch (e) { if (window.PTApp.isCurrent(context)) accOffline(); }
                   }
                   function accLoad() { return accPull(); }
                   async function accRescan() {
@@ -3193,13 +3191,14 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     if (btn) btn.disabled = false;
                   }
                   async function accAction(body) {
+                    var context = window.PTApp.regionContext('cb');
                     try {
-                      await fetch('http://127.0.0.1:' + accPort() + '/v1/accounts', {
+                      await fetch('http://127.0.0.1:' + context.port + '/v1/accounts', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(body)
                       });
                     } catch (e) {}
-                    accLoad(); /* 与既有 rescan/clear_cool 同款就地刷新（不轮询） */
+                    if (window.PTApp.isCurrent(context)) accLoad();
                   }
                   function accBind() {
                     var rs = document.getElementById('cbAccRescan');
@@ -3227,26 +3226,10 @@ body.fax-standalone .fx-lights { -webkit-app-region: no-drag; app-region: no-dra
                     /* 统计区「↻ 刷新」连带重拉账号池（addEventListener 与其积分刷新 onclick 并存，不覆盖） */
                     var rf = document.getElementById('cbRefresh');
                     if (rf) rf.addEventListener('click', accLoad);
-                    /* 区域切换后重拉（第二期复审 P2）：cbRegionApply 切区只改 #cbEndpoint 文案，
-                       不通知本列表，会停在旧区域的池。真实切换控件是拨杆 [data-gear="cbRegion"]
-                       （无 id，无 cbRegionApply 按钮），click 在引擎改完端点文案后派发，再留
-                       200ms 等同 tick 的 refreshPluginView 跑完。元素不存在则静默不绑。
-                       键盘路径（拨杆聚焦后方向键）走引擎 keydown → gearSelect，不派发 click，
-                       故 keydown 与 click 并列监听（引擎代码一行不动）。 */
-                    var rg = document.querySelector('[data-gear="cbRegion"]');
-                    if (rg) {
-                      /* 去抖：click 与方向键连按只排一个 200ms 重拉，避免重复 accLoad */
-                      var accReloadTimer = null;
-                      var accReloadSoon = function () {
-                        if (accReloadTimer) clearTimeout(accReloadTimer);
-                        accReloadTimer = setTimeout(accLoad, 200);
-                      };
-                      rg.addEventListener('click', accReloadSoon);
-                      rg.addEventListener('keydown', function (ev) {
-                        if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' ||
-                            ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
-                          accReloadSoon();
-                        }
+                    /* 区域状态由 PTApp 单一所有者通知；不再从 DOM 反解析端口或等待 200ms。 */
+                    if (window.PTApp && window.PTApp.onRegionChange) {
+                      window.PTApp.onRegionChange(function (pageId) {
+                        if (pageId === 'cb') accLoad();
                       });
                     }
                     /* 进入 WorkBuddy 页签时拉一次（引擎全局接口，注册进 modeListeners） */
@@ -4073,6 +4056,53 @@ var SOUND_DATA = {
   "tick-fs626659": "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",
 };
 
+</script>
+<script id="pt-region-state">
+/* UI 区域上下文唯一所有者：generation 是异步响应提交门槛，DOM 只消费状态。 */
+(function () {
+  'use strict';
+  var generation = 0;
+  var contexts = Object.create(null);
+  var listeners = [];
+  var fetchImpl = null;
+  function contextFor(pageId) {
+    var value = contexts[pageId] || { pluginId: pageId, region: 'default', port: null };
+    return Object.freeze({
+      pluginId: value.pluginId,
+      region: value.region,
+      port: value.port,
+      generation: generation
+    });
+  }
+  function notify(pageId, current, previous) {
+    listeners.slice().forEach(function (handler) {
+      try { handler(pageId, current, previous); } catch (e) {}
+    });
+  }
+  var api = {
+    regionContext: contextFor,
+    onRegionChange: function (handler) { if (typeof handler === 'function') listeners.push(handler); },
+    isCurrent: function (context) { return !!context && context.generation === generation; },
+    setRegionContext: function (pageId, pluginId, region, port) {
+      var previous = contextFor(pageId);
+      contexts[pageId] = { pluginId: pluginId, region: region, port: port };
+      generation += 1;
+      var current = contextFor(pageId);
+      notify(pageId, current, previous);
+      return current;
+    },
+    _advanceRegionGeneration: function () { generation += 1; },
+    _setFetch: function (fn) { fetchImpl = fn; },
+    regionRequest: async function (context, path, options) {
+      if (!context || context.port == null) throw new Error('region context has no port');
+      var fetchFn = fetchImpl || window.fetch;
+      var response = await fetchFn('http://127.0.0.1:' + context.port + path, options);
+      if (!api.isCurrent(context)) throw new Error('stale region response');
+      return response;
+    }
+  };
+  window.PTApp = Object.assign(window.PTApp || {}, api);
+})();
 </script>
 <script>
 // pomme-ui i18n 字典：data-i18n 键 + JS 动态字符串，中/英双语（file:// 内联，无 fetch）
@@ -4965,6 +4995,7 @@ var PT_I18N = {
     }
     if (m === st.mode) return;
     st.mode = m;
+    PTApp._advanceRegionGeneration();
     noteFace(m);
     paint();
     /* 切甲板滚动回顶：.pt-deck-scroll 的 scrollTop 是 DOM 残留（无刻意记忆设计），
@@ -4974,7 +5005,7 @@ var PT_I18N = {
     play('modeChange');
     modeListeners.forEach(function (f) { try { f(m); } catch (e) {} });
     /* 第 30 轮：键面翻面后蓝灯跟随当前面（noteFace 改了 on-alt → 灯须重算） */
-    if (typeof window.refreshKeyLights === 'function') window.refreshKeyLights();
+    if (typeof PTApp.refreshKeyLights === 'function') PTApp.refreshKeyLights();
   }
   /* B类键位自由组合：键绑定由 rebuildKeys/bindKeyBtn 在重建时挂载（轮切多脸），此处仅做首屏重建 */
   rebuildKeys();
@@ -5355,7 +5386,7 @@ var PT_I18N = {
   })();
 
   /* ══════════════════ 12. 对外接口 ══════════════════ */
-  window.PTApp = {
+  window.PTApp = Object.assign(window.PTApp || {}, {
     /* 里程表 */
     buildOdo: buildOdo,
     odo: function (key, text) {
@@ -5406,7 +5437,7 @@ var PT_I18N = {
     fitStage: fitStage,
     /* 自绘窗口控制（无边框）：move/min/max/close；无桥接环境返回 false */
     windowCmd: windowCmd
-  };
+  });
 
   /* 传真机等业务作用域音效桥接：playFile 定义在本引擎 IIFE 内，业务层（另一 IIFE）引用不到；
      此处仅做一次导出（行为不变），供注水传真机按简报口径「直接用现有 playFile(name, gain)」。 */
@@ -7723,6 +7754,10 @@ var PT_I18N = {
   /* 码道甲板（8793）——COMMAND 第一键的副页，点火目标 8793 */
   md: { id: 'codearts', port: 8793, pfx: 'md', mode: 'md', uptime: null, phase: 'idle' }
   };
+  Object.keys(PV).forEach(function (pageId) {
+    var view = PV[pageId];
+    PTApp.setRegionContext(pageId, view.id, 'default', view.port);
+  });
 
   /* ---------------- WorkBuddy 甲板：国内版 ⇄ 国际版（同甲板区域切换，不增甲板/模式键） ----------------
      语义：切换本甲板绑定的插件 codebuddy(8787) ⇄ codebuddy-intl(8789)。
@@ -7740,6 +7775,7 @@ var PT_I18N = {
     var V = PV.cb;
     var wasRunning = V.phase === 'running' || V.phase === 'starting';
     V.id = r.id; V.port = r.port;
+    PTApp.setRegionContext('cb', r.id, regionName, r.port);
     /* 模型/元数据缓存是按上游口径算的，区域换了必须作废重探 */
     V.lastModels = null; V.lastMeta = null; V.metaMap = null; V.modelIds = null;
     var nameEl = $('cbRunName');
@@ -7791,6 +7827,7 @@ var PT_I18N = {
     var V = PV.qoder;
     var wasRunning = V.phase === 'running' || V.phase === 'starting';
     V.id = r.id; V.port = r.port;
+    PTApp.setRegionContext('qoder', r.id, regionName, r.port);
     /* 模型/元数据缓存是按上游口径算的，区域换了必须作废重探 */
     V.lastModels = null; V.lastMeta = null; V.metaMap = null; V.modelIds = null;
     var nameEl = $('qoderRunName');
@@ -8162,6 +8199,8 @@ var PT_I18N = {
   async function refreshPluginView(mode) {
     var V = PV[mode];
     if (!V) return;
+    var context = PTApp.regionContext(mode);
+    var pluginId = context.pluginId;
     /* oc：先探一次"用户自己开着的 opencode TUI"，与插件是否点火无关 */
     if (mode === 'oc') ocProbeTui();
     /* B类供应商显隐：隐藏页不展示不请求（矩阵/统计/日志一律不拉，后端不动） */
@@ -8170,7 +8209,8 @@ var PT_I18N = {
       try { if (!window.__provGet()[mode]) return; } catch (e) {}
     }
     var list = await call('PluginList');
-    var p = Array.isArray(list) ? list.find(function (x) { return x.id === V.id; }) : null;
+    if (!PTApp.isCurrent(context)) return;
+    var p = Array.isArray(list) ? list.find(function (x) { return x.id === pluginId; }) : null;
     var running = !!(p && p.healthy);
     var starting = !!(p && p.running && !p.healthy);
     setPluginPhase(V, running ? 'running' : starting ? 'starting' : 'idle');
@@ -8185,8 +8225,8 @@ var PT_I18N = {
          缓存），之后只有用户点「↻ 刷新」才现拉（refresh=1 旁路缓存）——3 秒一轮
          逐账号换 key 直打官网有封号隐患。面板重开时插件已在跑（本轮会话没有点火
          事件）不补拉，如实提示点刷新。其余插件保持原轮询行为。 */
-      if (V.mode !== 'tj') loadPluginModels(V, justIgnited);
-      else if (justIgnited) loadPluginModels(V, false);
+      if (V.mode !== 'tj') loadPluginModels(V, justIgnited, context);
+      else if (justIgnited) loadPluginModels(V, false, context);
       else if (!V.lastModels && !V.tjIdleHinted) {
         V.tjIdleHinted = true;
         var mcEl2 = $(V.pfx + 'ModelCount');
@@ -8194,15 +8234,15 @@ var PT_I18N = {
         var mlEl = $(V.pfx + 'ModelList');
         if (mlEl) mlEl.innerHTML = '<div class="pt-models-empty">// 模型矩阵未拉取 · 点右上「↻ 刷新」现拉<br>// 平时不轮询上游（封号防护）</div>';
       }
-      loadPluginMeta(V);
-      loadPluginStats(V, mode);
-      loadPluginLog(V);
+      loadPluginMeta(V, context);
+      loadPluginStats(V, mode, context);
+      loadPluginLog(V, context);
       if (mode === 'qoder' && justIgnited) {
         /* 点火拉一次官方额度（套餐+专属包），之后只显示缓存——
            平时轮询绝不碰官方接口，想手动更新点「↻ 刷新」 */
         (async function () {
-          try { await fetch('http://127.0.0.1:' + V.port + '/health?refresh=1'); } catch (e) {}
-          loadPluginStats(V, mode);
+          try { await PTApp.regionRequest(context, '/health?refresh=1'); } catch (e) {}
+          if (PTApp.isCurrent(context)) loadPluginStats(V, mode, context);
         })();
       }
       if (mode === 'tj') {
@@ -8257,7 +8297,8 @@ var PT_I18N = {
           var sel = $('cbQuotaUser');
           if (!sel) return;
           try {
-            var d = await (await fetch('http://127.0.0.1:' + V.port + '/v1/accounts', { signal: AbortSignal.timeout(3000) })).json();
+            var d = await (await PTApp.regionRequest(context, '/v1/accounts', { signal: AbortSignal.timeout(3000) })).json();
+            if (!PTApp.isCurrent(context)) return;
             var accs = d.accounts || [];
             if (accs.length <= 1) { /* ≤1 号无切换可言：收起下拉；区域感知——选中号失效重选 */
               sel.style.display = 'none';
@@ -8288,23 +8329,24 @@ var PT_I18N = {
               }
               cbQuotaUserId = sel.value;
             }
-            renderCodebuddyQuotaCache(V); /* 选中账号的缓存立刻上屏（不拉官网） */
+            if (PTApp.isCurrent(context)) renderCodebuddyQuotaCache(V); /* 选中账号的缓存立刻上屏（不拉官网） */
             sel.onchange = function () {
               cbQuotaUserId = sel.value;
-              loadCodebuddyQuota(V, false); /* 切账号拉一次，走后端 5 分钟缓存，不 force */
+              loadCodebuddyQuota(V, false, PTApp.regionContext('cb')); /* 切账号拉一次，走后端 5 分钟缓存，不 force */
             };
           } catch (e) {}
         })();
         /* WorkBuddy 积分同规矩：拉杆启动后拉一次 + 手动刷新，轮询不打官网 */
-        if (justIgnited) loadCodebuddyQuota(V, false);
-        else renderCodebuddyQuotaCache(V);
+        if (justIgnited) loadCodebuddyQuota(V, false, context);
+        else if (PTApp.isCurrent(context)) renderCodebuddyQuotaCache(V);
       }
       if (mode === 'qoder') {
         /* 屏体双灯：积分消耗（账本累计，服务端逐请求下发口径）+ 额度状态（配额错误检测）。
            剩余量在官方 WASM 签名墙后，代理侧拿不到——不放假数字。 */
         (async function () {
           try {
-            var h = await (await fetch('http://127.0.0.1:' + V.port + '/health', { signal: AbortSignal.timeout(3000) })).json();
+            var h = await (await PTApp.regionRequest(context, '/health', { signal: AbortSignal.timeout(3000) })).json();
+            if (!PTApp.isCurrent(context)) return;
             var c = h.credits || {};
             PTApp.dot('qoderCredits', running, false, '累计 ' + (c.spent || 0));
             PTApp.dot('qoderQuota', running && !c.quotaExceeded, false, c.quotaExceeded ? '额度耗尽' : '正常');
@@ -8444,20 +8486,22 @@ var PT_I18N = {
     });
   }
 
-  async function loadPluginModels(V, refresh) {
+  async function loadPluginModels(V, refresh, context) {
+    context = context || PTApp.regionContext(V.mode);
     /* B.AI 走 /model/matrix：服务端拿渠道配置的 key 拉上游并缓存。
        /v1/models 是纯透传，GUI 没有 key → 只会拿到上游 401，矩阵永远空。 */
     var isMatrix = V.mode === 'bai';
     if (V.mode === 'tj') V.tjIdleHinted = true; /* 已尝试过拉取：轮询不再用「未拉取」提示覆盖失败信息 */
     try {
-      var url = 'http://127.0.0.1:' + V.port + (isMatrix ? '/model/matrix' : '/v1/models');
+      var path = isMatrix ? '/model/matrix' : '/v1/models';
       /* tj 的 refresh=1 让后端旁路 5 分钟缓存，强制逐账号现拉官网（只在点火/手动刷新） */
-      if (V.mode === 'tj') url += '?full=true' + (refresh ? '&refresh=1' : '');
-      else if (isMatrix && refresh) url += '?refresh=1';
+      if (V.mode === 'tj') path += '?full=true' + (refresh ? '&refresh=1' : '');
+      else if (isMatrix && refresh) path += '?refresh=1';
       /* tj 每次拉取都要逐账号换 key 打官网（N 账号串行），3 秒不够；且已无 3 秒轮询兜底，
          超时会把矩阵留在 ERR——给足 60 秒（缓存命中时秒回，不占时间） */
-      var r = await fetch(url, { signal: AbortSignal.timeout(V.mode === 'tj' ? 60000 : 3000) });
+      var r = await PTApp.regionRequest(context, path, { signal: AbortSignal.timeout(V.mode === 'tj' ? 60000 : 3000) });
       var d = await r.json();
+      if (!PTApp.isCurrent(context)) return;
       var items = d.data || [];
       if (V.mode === 'vibex') {
         /* VIBEX 矩阵只收免费档（billing_tier==='lite'）；付费/试用不上甲板，后端照常保留 */
@@ -8547,6 +8591,7 @@ var PT_I18N = {
       renderModelChips(mlBox, groups, PLUGIN_VENDOR_COLORS, true, V);
       if (firstLoad) plog(V, 'net', '模型矩阵已装载 · ' + ids.length + ' 个模型');
     } catch (e) {
+      if (!PTApp.isCurrent(context)) return;
       var mc2 = $(V.pfx + 'ModelCount'), ml2 = $(V.pfx + 'ModelList');
       if (mc2) mc2.textContent = 'ERR';
       if (ml2) ml2.innerHTML = '<div class="pt-models-empty">// 拉取失败: ' + esc(e && e.message || e) +
@@ -8557,14 +8602,16 @@ var PT_I18N = {
     }
   }
 
-  async function loadPluginMeta(V) {
+  async function loadPluginMeta(V, context) {
+    context = context || PTApp.regionContext(V.mode);
     /* bai 没有 /model/info，这个路径会被透传代理原样打到 api.b.ai ——
        3 秒一轮的轮询等于持续对境外无意义请求（同刚修掉的 /v1/models 空打）；
        opencode 同样没有 /model/info（只有 /v1/models），别每轮白打一个 404。 */
     if (V.mode === 'bai' || V.mode === 'oc' || V.mode === 'md') return;
     try {
-      var r = await fetch('http://127.0.0.1:' + V.port + '/model/info', { signal: AbortSignal.timeout(3000) });
+      var r = await PTApp.regionRequest(context, '/model/info', { signal: AbortSignal.timeout(3000) });
       var list = await r.json();
+      if (!PTApp.isCurrent(context)) return;
       if (!Array.isArray(list) || !list.length) return;
       var sig = list.map(function (m) { return m.name + '|' + m.maxInput + '|' + m.maxOutput + '|' + (m.reasoning || '') + '|' + (m.credits || ''); }).join('');
       if (V.lastMeta === sig) return;
@@ -8710,13 +8757,16 @@ var PT_I18N = {
     });
     if (box.__sig !== h) { box.__sig = h; box.innerHTML = h; }
   }
-  async function loadMdAccounts(V) {
+  async function loadMdAccounts(V, context) {
+    context = context || PTApp.regionContext('md');
     bindMdAccounts();
     try {
-      var r = await fetch('http://127.0.0.1:' + V.port + '/accounts', { signal: AbortSignal.timeout(5000) });
+      var r = await PTApp.regionRequest(context, '/accounts', { signal: AbortSignal.timeout(5000) });
       var d = await r.json();
+      if (!PTApp.isCurrent(context)) return;
       renderMdAccounts(d.accounts || []);
     } catch (e) {
+      if (!PTApp.isCurrent(context)) return;
       var box = $('mdAccList');
       if (box) box.innerHTML = '<div class="pt-models-empty">// 插件未启动或拉取失败</div>';
     }
@@ -8758,17 +8808,20 @@ var PT_I18N = {
     if (rb && !rb.__bound) { rb.__bound = true; rb.onclick = function () { PV.md.accLoaded = false; PV.md.quotaLoaded = false; PV.md.lastModels = null; refreshPluginView('md'); plog(PV.md, 'sys', '手动刷新'); }; }
   }
 
-  async function loadPluginStats(V, mode) {
+  async function loadPluginStats(V, mode, context) {
+    context = context || PTApp.regionContext(V.mode);
+    var pluginId = context.pluginId;
     var t0 = performance.now();
     try {
-      var res = await fetch('http://127.0.0.1:' + V.port + '/health', { signal: AbortSignal.timeout(3000) });
+      var res = await PTApp.regionRequest(context, '/health', { signal: AbortSignal.timeout(3000) });
+      var h = await res.json();
+      if (!PTApp.isCurrent(context)) return;
       /* healthMs 直接取本次 /health 的网络耗时——原来为测延迟同一 tick 再打一遍
          /health（每甲板每 3s 双份请求），现在一次请求两个用途 */
-      if (V.id !== 'tuanjie') {
+      if (pluginId !== 'tuanjie') {
         V.healthMs = Math.round(performance.now() - t0);
         pSet(V, 'StHealth', V.healthMs + ' ms');
       }
-      var h = await res.json();
       if (typeof h.uptimeSec === 'number') {
         V.uptime = h.uptimeSec;
         PTApp.odo(mode + 'Uptime', fmtUptime(h.uptimeSec));
@@ -8817,7 +8870,7 @@ var PT_I18N = {
           ocInstallStartPolling();
         }
       }
-      if (V.id === 'tuanjie') { updateJudgeBanner(h); updateSeedBanner(h); }
+      if (pluginId === 'tuanjie') { updateJudgeBanner(h); updateSeedBanner(h); }
       if (V.mode === 'cb') {
         /* WorkBuddy 两区共用本甲板（cbRegion 决定 V.id），hy4 兜底状态条按区域画 */
         updateHy4Banner(h);
@@ -8857,20 +8910,21 @@ var PT_I18N = {
           pSet(V, 'StModelsSub', mdReady ? '码道 · 积分通道' : (h.reason || '未就绪'));
           PTApp.dot('mdModels', mdReady, !mdReady, mdReady ? h.models + ' 个' : '未就绪');
         }
-        if (mdReady && !V.accLoaded) { V.accLoaded = true; loadMdAccounts(V); }
+        if (mdReady && !V.accLoaded) { V.accLoaded = true; loadMdAccounts(V, context); }
         if (mdReady && !V.quotaLoaded) {
           V.quotaLoaded = true;
-          fetch('http://127.0.0.1:' + V.port + '/v1/quota', { signal: AbortSignal.timeout(5000) })
+          PTApp.regionRequest(context, '/v1/quota', { signal: AbortSignal.timeout(5000) })
             .then(function (r) { return r.json(); })
             .then(function (q) {
+              if (!PTApp.isCurrent(context)) return;
               var c = (q && q.credit) || {};
               var el = $('mdCredit');
               if (el) el.textContent = (c.remain == null ? '未知' : (c.remain + ' / ' + c.total));
             })
-            .catch(function () { var el = $('mdCredit'); if (el) el.textContent = '未知'; });
+            .catch(function () { if (PTApp.isCurrent(context)) { var el = $('mdCredit'); if (el) el.textContent = '未知'; } });
         }
       }
-    } catch (e) { V.healthMs = null; }
+    } catch (e) { if (PTApp.isCurrent(context)) V.healthMs = null; }
     /* 团结/WorkBuddy 积分卡都不轮询——拉杆启动拉一次 + 手动刷新，轮询只留本地（官网 429 保护） */
     /* 消耗 TOP：团结由 loadTuanjieQuota（启动/手动刷新）渲染积分口径，
        轮询不再重复打官网；其余插件用本地 token 统计 */
@@ -8878,8 +8932,9 @@ var PT_I18N = {
       var entries = null, bmode = 'tokens';
       /* bai 走本地 /v1/stats（插件侧自建统计，不再透传打到 api.b.ai 的境外空请求）；
          opencode 没有 /v1/stats（是协议翻译层，不落本地用量），别每 3 秒白打一个 404 */
-      if (V.id !== 'tuanjie' && V.mode !== 'oc' && V.mode !== 'md') {
-        var ds = await (await fetch('http://127.0.0.1:' + V.port + '/v1/stats', { signal: AbortSignal.timeout(3000) })).json();
+      if (pluginId !== 'tuanjie' && V.mode !== 'oc' && V.mode !== 'md') {
+        var ds = await (await PTApp.regionRequest(context, '/v1/stats', { signal: AbortSignal.timeout(3000) })).json();
+        if (!PTApp.isCurrent(context)) return;
         var models = ds.models || {};
         entries = Object.keys(models).map(function (name) {
           var m = models[name];
@@ -8901,8 +8956,9 @@ var PT_I18N = {
         renderBars(bbox, entries, bmode);
       }
     } catch (e) {
+      if (!PTApp.isCurrent(context)) return;
       var bw2 = $(V.pfx + 'Bars');
-      if (bw2 && V.id !== 'tuanjie') bw2.innerHTML = '<div class="bars-empty">// 统计暂不可用</div>';
+      if (bw2 && pluginId !== 'tuanjie') bw2.innerHTML = '<div class="bars-empty">// 统计暂不可用</div>';
     }
   }
 
@@ -8913,13 +8969,15 @@ var PT_I18N = {
   function cbQuotaCacheKey(uid) {
     return 'cbQuotaCache_' + (cbRegion === 'intl' ? 'intl' : 'cn') + '_' + (uid || cbQuotaUserId || '_default');
   }
-  async function loadCodebuddyQuota(V, force) {
+  async function loadCodebuddyQuota(V, force, context) {
+    context = context || PTApp.regionContext('cb');
     var params = [];
     if (cbQuotaUserId) params.push('uid=' + encodeURIComponent(cbQuotaUserId));
     if (force) params.push('refresh=1');
     var qs = params.length ? '?' + params.join('&') : '';
     try {
-      var q2 = await (await fetch('http://127.0.0.1:' + V.port + '/quota' + qs)).json();
+      var q2 = await (await PTApp.regionRequest(context, '/quota' + qs)).json();
+      if (!PTApp.isCurrent(context)) return;
       if (!q2 || q2.source === 'none') {
         /* 错误态如实上屏（选中死号 → 凭据失效态；其他错误 → 查询失败）；
            彻底没有 err（真无凭据）保持现状，不覆盖缓存画面，也不写 localStorage */
@@ -9058,8 +9116,10 @@ var PT_I18N = {
     } catch (e) {}
   }
 
-  async function loadPluginLog(V) {
-    var r = await call('PluginLog', V.id, 80);
+  async function loadPluginLog(V, context) {
+    context = context || PTApp.regionContext(V.mode);
+    var r = await call('PluginLog', context.pluginId, 80);
+    if (!PTApp.isCurrent(context)) return;
     if (r && r.ok && Array.isArray(r.lines) && r.lines.length && !V.logLoaded) {
       var box = $(V.pfx + 'Log');
       box.innerHTML = '';
